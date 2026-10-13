@@ -199,13 +199,21 @@ func TestConnectionEditBindings(t *testing.T) {
 
 func TestFilterAndSortBindings(t *testing.T) {
 	k := Default()
-	for key, want := range map[string]Action{"f": FilterValue, "F": FilterPrompt, "s": SortColumn} {
-		if a, res := k.Resolve(Grid, []string{key}); a != want || res != Matched {
-			t.Errorf("grid %s: %q %v", key, a, res)
+	for keys, want := range map[string]Action{
+		"f f": FilterEqual, "f !": FilterNotEqual, "f s": FilterContains, "f ~": FilterContains,
+		"f >": FilterGreater, "f <": FilterLess, "f n": FilterNull, "f N": FilterNotNull,
+		"f x": FilterClear, "F": FilterPrompt, "s": SortColumn,
+	} {
+		seq := strings.Fields(keys)
+		if a, res := k.Resolve(Grid, seq); a != want || res != Matched {
+			t.Errorf("grid %s: %q %v", keys, a, res)
 		}
-		if _, res := k.Resolve(Results, []string{key}); res == Matched {
-			t.Errorf("console results are not filtered: %s", key)
+		if _, res := k.Resolve(Results, seq); res == Matched {
+			t.Errorf("console results are not filtered: %s", keys)
 		}
+	}
+	if _, res := k.Resolve(Grid, []string{"f"}); res != Pending {
+		t.Errorf("f is a prefix: %v", res)
 	}
 }
 

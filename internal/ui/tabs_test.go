@@ -143,12 +143,12 @@ func TestDataTabFilterByValue(t *testing.T) {
 	b := newFakeBackend()
 	tab := loadedDataTab(t, b)
 	tab.Handle(keymap.Right) // name of user1
-	tab.Update(run(tab.Handle(keymap.FilterValue)))
+	tab.Update(run(tab.Handle(keymap.FilterEqual)))
 	if got, want := b.conn.lastQuery(), "SELECT * FROM `app`.`users` WHERE (`name` = 'user1'\n) ORDER BY `id` LIMIT 3 OFFSET 0"; got != want {
 		t.Fatalf("query = %q, want %q", got, want)
 	}
 	tab.Handle(keymap.Left)
-	tab.Update(run(tab.Handle(keymap.FilterValue)))
+	tab.Update(run(tab.Handle(keymap.FilterEqual)))
 	if got := b.conn.lastQuery(); !strings.Contains(got, "WHERE ((`name` = 'user1') AND `id` = '1'\n)") {
 		t.Fatalf("filters add up: %q", got)
 	}
