@@ -35,6 +35,7 @@ func (m childrenLoadedMsg) failure() (string, error)  { return m.node.Conn, m.er
 func (m pageLoadedMsg) failure() (string, error)      { return m.conn, m.err }
 func (m structureLoadedMsg) failure() (string, error) { return m.conn, m.err }
 func (m exportDoneMsg) failure() (string, error)      { return m.conn, m.err }
+func (m editsAppliedMsg) failure() (string, error)    { return m.conn, m.err }
 
 func (m runDoneMsg) failure() (string, error) {
 	if m.err != nil || len(m.results) == 0 {

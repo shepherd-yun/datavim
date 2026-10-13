@@ -129,7 +129,7 @@ func TestKeylessTables(t *testing.T) {
 	settings := config.Settings{PageSize: 2, MaxColumnWidth: 40}
 	ns := db.Namespace{Database: "app"}
 
-	tab := newDataTab(1, b, "prod", db.TableRef{Namespace: ns, Name: "users"}, settings)
+	tab := newDataTab(1, b, newFakeStore(), "prod", db.TableRef{Namespace: ns, Name: "users"}, settings)
 	tab.SetSize(60, 10)
 	tab.Update(run(tab.Init()))
 	if q := b.conn.lastQuery(); !strings.HasPrefix(q, `SELECT ctid::text, * FROM "users"`) {
@@ -142,7 +142,7 @@ func TestKeylessTables(t *testing.T) {
 		t.Fatalf("ctid is not shown:\n%s", v)
 	}
 
-	view := newDataTab(2, b, "prod", db.TableRef{Namespace: ns, Name: "active"}, settings)
+	view := newDataTab(2, b, newFakeStore(), "prod", db.TableRef{Namespace: ns, Name: "active"}, settings)
 	view.SetSize(60, 10)
 	view.Update(run(view.Init()))
 	if view.key.Kind != edit.NoKey || strings.HasPrefix(b.conn.lastQuery(), "SELECT ctid") {

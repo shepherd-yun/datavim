@@ -452,12 +452,21 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 }
 
 // canChange reports whether conn may be edited or deleted: not while a
-// console on it holds an open transaction.
+// console on it holds an open transaction or a table on it has unsaved
+// changes.
 func (m *Model) canChange(conn string) bool {
 	for _, t := range m.tabs {
-		if c, ok := t.(*consoleTab); ok && c.conn == conn && c.openTx() {
-			m.setStatus("a console on "+conn+" has an open transaction · :commit or :rollback first", true)
-			return false
+		switch t := t.(type) {
+		case *consoleTab:
+			if t.conn == conn && t.openTx() {
+				m.setStatus("a console on "+conn+" has an open transaction · :commit or :rollback first", true)
+				return false
+			}
+		case *dataTab:
+			if t.conn == conn && t.changes() > 0 {
+				m.setStatus(t.Title()+" on "+conn+" has unsaved changes · <space>w submits, U discards", true)
+				return false
+			}
 		}
 	}
 	return true
@@ -518,6 +527,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case runDoneMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
+	case editsAppliedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
 	default:
 		return
 	}
@@ -539,6 +550,11 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		return m.requestQuit(false)
 	case "qa!":
 		return m.requestQuit(true)
+	case "w", "write":
+		if d, ok := m.activeTab().(*dataTab); ok {
+			return d.submit()
+		}
+		m.setStatus("nothing to write: the active tab is not table data", true)
 	case "commit", "rollback":
 		if c, ok := m.activeTab().(*consoleTab); ok {
 			return c.endTx(cmd == "commit")
@@ -564,20 +580,47 @@ func (m *Model) requestClose(force bool) tea.Cmd {
 		}, "", closeTabConfirmedMsg{tabID: t.ID()})
 		return nil
 	}
+	if d, ok := t.(*dataTab); ok && d.changes() > 0 && !force {
+		m.overlay = overlay.NewConfirm("Unsaved changes", []string{
+			d.Title() + " has " + plural(d.changes(), "unsaved change") + ".",
+			"Closing the tab discards them.",
+		}, "", closeTabConfirmedMsg{tabID: t.ID()})
+		return nil
+	}
 	return m.closeTab(m.active)
 }
 
 // requestQuit quits, asking first when consoles hold open transactions
 // (unless force).
 func (m *Model) requestQuit(force bool) tea.Cmd {
-	if open := m.openTransactions(); len(open) > 0 && !force {
+	open, edits := m.openTransactions(), m.unsavedTables()
+	if force || len(open)+len(edits) == 0 {
+		return m.quit()
+	}
+	if len(edits) == 0 {
 		m.overlay = overlay.NewConfirm("Open transactions", []string{
 			"Uncommitted transactions in: " + strings.Join(open, ", ") + ".",
 			"Quitting rolls them back.",
 		}, "", quitConfirmedMsg{})
 		return nil
 	}
-	return m.quit()
+	lines := []string{"Unsaved changes in: " + strings.Join(edits, ", ") + "."}
+	if len(open) > 0 {
+		lines = append(lines, "Uncommitted transactions in: "+strings.Join(open, ", ")+".")
+	}
+	m.overlay = overlay.NewConfirm("Unsaved changes", append(lines, "Quitting discards them."), "", quitConfirmedMsg{})
+	return nil
+}
+
+// unsavedTables names the data tabs with staged changes: "users (3)".
+func (m *Model) unsavedTables() []string {
+	var out []string
+	for _, t := range m.tabs {
+		if d, ok := t.(*dataTab); ok && d.changes() > 0 {
+			out = append(out, fmt.Sprintf("%s (%d)", d.Title(), d.changes()))
+		}
+	}
+	return out
 }
 
 // openTransactions names the consoles with an uncommitted transaction.
@@ -719,7 +762,7 @@ func (m *Model) openTab(key string, rec history.Recent, create func(id int) tab)
 
 func (m *Model) openData(conn string, ref db.TableRef) tea.Cmd {
 	return tea.Batch(m.openTab(dataTabKey(conn, ref), history.Recent{Kind: history.RecentData, Conn: conn, Database: ref.Database, Schema: ref.Schema, Name: ref.Name}, func(id int) tab {
-		return newDataTab(id, m.backend, conn, ref, m.settings)
+		return newDataTab(id, m.backend, m.store, conn, ref, m.settings)
 	}), m.ensureMeta(conn, ref.Database))
 }
 

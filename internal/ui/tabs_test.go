@@ -17,7 +17,7 @@ var usersRef = db.TableRef{Namespace: db.Namespace{Database: "app"}, Name: "user
 
 func loadedDataTab(t *testing.T, b *fakeBackend) *dataTab {
 	t.Helper()
-	tab := newDataTab(1, b, "local", usersRef, config.Settings{PageSize: 2, MaxColumnWidth: 40})
+	tab := newDataTab(1, b, newFakeStore(), "local", usersRef, config.Settings{PageSize: 2, MaxColumnWidth: 40})
 	tab.SetSize(60, 10)
 	tab.Update(run(tab.Init()))
 	return tab

@@ -27,9 +27,10 @@ type fakeConn struct {
 	fail       map[string]error // statement text -> error
 	pingErr    error            // returned by every session Ping
 	sessions   []*fakeSession
-	catalogs   int   // Catalog calls
-	catalogErr error // returned by Catalog
-	noKey      bool  // Columns reports no primary key and Indexes none
+	catalogs   int              // Catalog calls
+	catalogErr error            // returned by Catalog
+	noKey      bool             // Columns reports no primary key and Indexes none
+	affected   map[string]int64 // statement text -> RowsAffected (default 1)
 }
 
 func (c *fakeConn) setNoKey(v bool) {
@@ -106,7 +107,19 @@ func (c *fakeConn) Exec(_ context.Context, q string, _ ...any) (db.ExecResult, e
 	if err := c.fail[q]; err != nil {
 		return db.ExecResult{}, err
 	}
+	if n, ok := c.affected[q]; ok {
+		return db.ExecResult{RowsAffected: n}, nil
+	}
 	return db.ExecResult{RowsAffected: 1}, nil
+}
+
+func (c *fakeConn) setAffected(q string, n int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.affected == nil {
+		c.affected = map[string]int64{}
+	}
+	c.affected[q] = n
 }
 
 func (c *fakeConn) execList() []string {
