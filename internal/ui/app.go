@@ -113,7 +113,11 @@ func (m *Model) View() tea.View {
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if f, ok := msg.(connFailure); ok {
-		defer m.noteConn(f.failure())
+		conn, err := f.failure()
+		defer m.noteConn(conn, err)
+		if o := sshPrompt(err); o != nil && m.overlay == nil {
+			m.overlay = o
+		}
 	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -129,6 +133,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.childrenLoaded(msg)
 	case overlay.PasswordSubmittedMsg:
 		return m, m.passwordSubmitted(msg)
+	case passphraseMsg:
+		return m, m.passphraseEntered(msg)
+	case hostTrustedMsg:
+		return m, m.hostTrusted(msg)
 	case overlay.CommandMsg:
 		return m, m.runCommand(msg.Text)
 	case quitConfirmedMsg:
@@ -351,6 +359,12 @@ func (m *Model) childrenLoaded(msg childrenLoadedMsg) tea.Cmd {
 		m.tree.CancelLoad(msg.node)
 		m.retryNode = msg.node
 		m.overlay = overlay.NewPassword(msg.node.Conn)
+		return nil
+	}
+	if sshPrompt(msg.err) != nil {
+		// The popup opened in Update; load again once it is answered.
+		m.tree.CancelLoad(msg.node)
+		m.retryNode = msg.node
 		return nil
 	}
 	m.tree.SetChildren(msg.node, msg.children, msg.err)

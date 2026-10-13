@@ -12,6 +12,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 )
@@ -163,6 +164,8 @@ type fakeBackend struct {
 	added        []config.Connection
 	addErr       error
 	lostConns    int
+	passphrases  []string
+	trusted      []string
 }
 
 func newFakeBackend() *fakeBackend {
@@ -347,4 +350,19 @@ func (f *fakeBackend) SetReadOnly(name string, ro bool) error {
 		}
 	}
 	return fmt.Errorf("unknown connection %q", name)
+}
+
+func (f *fakeBackend) SetPassphrase(path, passphrase string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.passphrases = append(f.passphrases, path+":"+passphrase)
+	f.connErr = nil
+}
+
+func (f *fakeBackend) TrustHost(e *tunnel.UnknownHostError) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.trusted = append(f.trusted, e.Host)
+	f.connErr = nil
+	return nil
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
 )
 
 // Backend is what the UI needs from the session layer.
@@ -22,4 +23,8 @@ type Backend interface {
 	// SetReadOnly switches a connection between read-only and read-write
 	// for this run only.
 	SetReadOnly(name string, ro bool) error
+	// SetPassphrase remembers an SSH key passphrase for this run.
+	SetPassphrase(path, passphrase string)
+	// TrustHost adds an SSH host key to known_hosts.
+	TrustHost(e *tunnel.UnknownHostError) error
 }
