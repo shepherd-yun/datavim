@@ -19,6 +19,17 @@ const (
 	widthSample = 1024
 )
 
+// Mark is how a cell is drawn besides its value: staged data edits.
+type Mark int
+
+const (
+	MarkNone     Mark = iota
+	MarkChanged       // a staged new value
+	MarkInserted      // a cell of a new row given a value
+	MarkDefault       // a cell of a new row left to the column default
+	MarkDeleted       // a cell of a row marked for deletion
+)
+
 // Model is a table with a cell cursor.
 type Model struct {
 	rs             *db.ResultSet
@@ -27,6 +38,9 @@ type Model struct {
 	row, col       int
 	rowOff, colOff int
 	width, height  int
+	marks          func(row, col int) Mark
+	sortCol        string
+	sortDesc       bool
 }
 
 // New builds a grid; rs may be nil.
@@ -43,18 +57,89 @@ func New(rs *db.ResultSet, maxColumnWidth int) *Model {
 func (m *Model) SetResult(rs *db.ResultSet) {
 	m.rs = rs
 	m.row, m.col, m.rowOff, m.colOff = 0, 0, 0, 0
+	m.measure()
+}
+
+// measure sizes the columns to their headers and cells.
+func (m *Model) measure() {
 	m.widths = nil
-	if rs == nil {
+	if m.rs == nil {
 		return
 	}
-	m.widths = make([]int, len(rs.Columns))
-	for c, col := range rs.Columns {
-		w := ansi.StringWidth(textutil.Sanitize(col.Name))
-		for _, r := range rs.Rows {
-			w = max(w, ansi.StringWidth(cellText(r[c])))
+	m.widths = make([]int, len(m.rs.Columns))
+	for c := range m.rs.Columns {
+		w := ansi.StringWidth(m.headerText(c))
+		for r, row := range m.rs.Rows {
+			_, text := m.look(r, c, row[c])
+			w = max(w, ansi.StringWidth(text))
 		}
 		m.widths[c] = textutil.Clamp(w, 1, m.maxColumnWidth)
 	}
+}
+
+// SetMarks sets how cells are marked (nil: no marks).
+func (m *Model) SetMarks(f func(row, col int) Mark) {
+	m.marks = f
+	m.measure()
+}
+
+// SetSort shows which column the rows are sorted by ("" for none).
+func (m *Model) SetSort(col string, desc bool) {
+	m.sortCol, m.sortDesc = col, desc
+	m.measure()
+}
+
+func (m *Model) headerText(c int) string {
+	name := m.rs.Columns[c].Name
+	text := textutil.Sanitize(name)
+	switch {
+	case name != m.sortCol || m.sortCol == "":
+	case m.sortDesc:
+		text += " ▼"
+	default:
+		text += " ▲"
+	}
+	return text
+}
+
+// look is a cell's style and text, its mark included.
+func (m *Model) look(r, c int, v db.Value) (lipgloss.Style, string) {
+	style, text := lipgloss.NewStyle(), cellText(v)
+	if v.Null {
+		style = theme.Null
+	}
+	mark := MarkNone
+	if m.marks != nil {
+		mark = m.marks(r, c)
+	}
+	switch mark {
+	case MarkChanged:
+		style = theme.Changed
+	case MarkInserted:
+		style = theme.Inserted
+	case MarkDefault:
+		style, text = theme.Null, "DEFAULT"
+	case MarkDeleted:
+		style = theme.Deleted
+	}
+	return style, text
+}
+
+// Position is the cursor's row and column.
+func (m *Model) Position() (row, col int) { return m.row, m.col }
+
+// SetCursor moves the cursor, clamped to the data.
+func (m *Model) SetCursor(row, col int) {
+	m.row, m.col = row, col
+	m.Move(0, 0)
+}
+
+// Column is the column under the cursor, also when there are no rows.
+func (m *Model) Column() (db.ColumnInfo, bool) {
+	if m.rs == nil || m.colCount() == 0 {
+		return db.ColumnInfo{}, false
+	}
+	return m.rs.Columns[m.col], true
 }
 
 // SetSize sets the drawing area.
@@ -154,7 +239,7 @@ func (m *Model) View(focused bool) string {
 	header := make([]string, len(cols))
 	rule := make([]string, len(cols))
 	for i, c := range cols {
-		header[i] = theme.Header.Render(textutil.Fit(textutil.Sanitize(m.rs.Columns[c].Name), m.widths[c]))
+		header[i] = theme.Header.Render(textutil.Fit(m.headerText(c), m.widths[c]))
 		rule[i] = strings.Repeat("─", m.widths[c])
 	}
 	lines := []string{
@@ -167,11 +252,7 @@ func (m *Model) View(focused bool) string {
 	for r := m.rowOff; r < m.RowCount() && len(lines) < m.height; r++ {
 		cells := make([]string, len(cols))
 		for i, c := range cols {
-			v := m.rs.Rows[r][c]
-			style := lipgloss.NewStyle()
-			if v.Null {
-				style = theme.Null
-			}
+			style, text := m.look(r, c, m.rs.Rows[r][c])
 			if r == m.row && c == m.col {
 				if focused {
 					style = style.Reverse(true)
@@ -179,7 +260,7 @@ func (m *Model) View(focused bool) string {
 					style = style.Underline(true)
 				}
 			}
-			cells[i] = style.Render(textutil.Fit(cellText(v), m.widths[c]))
+			cells[i] = style.Render(textutil.Fit(text, m.widths[c]))
 		}
 		lines = append(lines, strings.Join(cells, sepStyled))
 	}

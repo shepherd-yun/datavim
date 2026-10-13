@@ -1,12 +1,14 @@
 package grid
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
 
 func rs() *db.ResultSet {
@@ -258,5 +260,89 @@ func TestSelectColumn(t *testing.T) {
 	}
 	if m.SelectColumn("nope") || New(nil, 40).SelectColumn("id") {
 		t.Fatal("unknown column or no data")
+	}
+}
+func TestMarks(t *testing.T) {
+	m := New(rs(), 40)
+	m.SetMarks(func(r, c int) Mark {
+		switch {
+		case r == 0 && c == 1:
+			return MarkChanged
+		case r == 1 && c == 3:
+			return MarkDefault
+		case r == 1 && c == 0:
+			return MarkInserted
+		case r == 2:
+			return MarkDeleted
+		}
+		return MarkNone
+	})
+	m.SetSize(80, 10)
+	if lines := view(m, false); !strings.Contains(lines[3], "DEFAULT") || strings.Contains(lines[3], "NULL") {
+		t.Fatalf("a cell left to its default reads DEFAULT: %q", lines[3])
+	}
+	if style, _ := m.look(0, 1, db.Value{Text: "alice"}); !style.GetBold() || fmt.Sprint(style.GetForeground()) != fmt.Sprint(theme.Changed.GetForeground()) {
+		t.Error("changed cells are drawn in the Changed style")
+	}
+	if style, _ := m.look(1, 0, db.Value{Text: "2"}); fmt.Sprint(style.GetForeground()) != fmt.Sprint(theme.Inserted.GetForeground()) {
+		t.Error("new cells are drawn in the Inserted style")
+	}
+	if style, _ := m.look(2, 0, db.Value{Text: "3"}); !style.GetStrikethrough() {
+		t.Error("deleted rows are struck through")
+	}
+	if style, text := m.look(0, 0, db.Value{Null: true}); text != "NULL" || !style.GetItalic() {
+		t.Error("unmarked NULL keeps its style")
+	}
+}
+
+func TestDefaultWidensItsColumn(t *testing.T) {
+	m := New(&db.ResultSet{Columns: []db.ColumnInfo{{Name: "n"}}, Rows: [][]db.Value{{{Null: true}}}}, 40)
+	m.SetMarks(func(int, int) Mark { return MarkDefault })
+	m.SetSize(20, 5)
+	if got := view(m, false)[2]; !strings.HasPrefix(got, "DEFAULT") {
+		t.Fatalf("row = %q", got)
+	}
+}
+
+func TestSortArrow(t *testing.T) {
+	m := New(rs(), 40)
+	m.SetSize(80, 5)
+	m.SetSort("name", false)
+	if h := view(m, false)[0]; !strings.Contains(h, "name ▲") {
+		t.Fatalf("header = %q", h)
+	}
+	m.SetSort("name", true)
+	if h := view(m, false)[0]; !strings.Contains(h, "name ▼") {
+		t.Fatalf("header = %q", h)
+	}
+	m.SetSort("", false)
+	if h := view(m, false)[0]; strings.ContainsAny(h, "▲▼") {
+		t.Fatalf("header = %q", h)
+	}
+}
+
+func TestPositionAndSetCursor(t *testing.T) {
+	m := New(rs(), 40)
+	m.SetSize(80, 10)
+	m.SetCursor(2, 1)
+	if r, c := m.Position(); r != 2 || c != 1 {
+		t.Fatalf("position = %d,%d", r, c)
+	}
+	if _, v, _ := m.Cell(); v.Text != "bob" {
+		t.Fatalf("cell = %+v", v)
+	}
+	m.SetCursor(99, 99)
+	if r, c := m.Position(); r != 2 || c != 3 {
+		t.Fatalf("clamped position = %d,%d", r, c)
+	}
+	if col, ok := m.Column(); !ok || col.Name != "note" {
+		t.Fatalf("column = %+v %v", col, ok)
+	}
+	empty := New(&db.ResultSet{Columns: []db.ColumnInfo{{Name: "id"}}}, 40)
+	if col, ok := empty.Column(); !ok || col.Name != "id" {
+		t.Fatal("an empty result still has columns")
+	}
+	if _, _, ok := empty.Cell(); ok {
+		t.Fatal("but no cells")
 	}
 }
