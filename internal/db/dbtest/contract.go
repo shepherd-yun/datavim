@@ -12,6 +12,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/edit"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
 // Fixture describes the standard fixture and engine-specific bits of the contract.
@@ -21,6 +23,8 @@ type Fixture struct {
 	SleepSQL string
 	// OpenReadOnly opens another connection to the same database with ReadOnly set.
 	OpenReadOnly func(ctx context.Context) (db.Conn, error)
+	// Driver is the driver's name, "mysql" or "postgres".
+	Driver string
 }
 
 // RunContract checks conn against the standard fixture created in f.NS.
@@ -457,6 +461,136 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		if _, err := s.Query(ctx, "SELECT id FROM "+d.QualifiedName(ref("users"))); err != nil {
 			t.Fatalf("reads must still work: %v", err)
+		}
+	})
+
+	sd := sqlx.DialectOf(f.Driver)
+	read := func(t *testing.T, q string) *db.ResultSet {
+		t.Helper()
+		rs, err := conn.Query(ctx, q)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rs
+	}
+	apply := func(t *testing.T, stmts []string) error {
+		t.Helper()
+		s, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = s.Close() }()
+		return edit.Apply(ctx, s, sd, stmts)
+	}
+
+	t.Run("staged edits apply in one transaction", func(t *testing.T) {
+		table := ref("edit_users")
+		name := d.QualifiedName(table)
+		for _, q := range []string{
+			"CREATE TABLE " + name + " (id int PRIMARY KEY, name varchar(50), note varchar(50))",
+			"INSERT INTO " + name + " VALUES (1, 'a', NULL), (2, 'b', 'x')",
+		} {
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Fatal(err)
+			}
+		}
+		cols, err := conn.Meta().Columns(ctx, table)
+		if err != nil {
+			t.Fatal(err)
+		}
+		idx, err := conn.Meta().Indexes(ctx, table)
+		if err != nil {
+			t.Fatal(err)
+		}
+		key := edit.ChooseKey(sd, cols, idx, false)
+		if key.Kind != edit.PrimaryKey {
+			t.Fatalf("key = %+v", key)
+		}
+		target := edit.Target{Dialect: sd, Table: table, Key: key}
+		all := "SELECT * FROM " + name + " ORDER BY id"
+
+		rs := read(t, all)
+		tb := edit.New(rs.Columns, rs.Rows, nil)
+		tricky := "it's \\ \"q\" 李\nline"
+		_ = tb.SetCell(0, 1, db.Value{Text: tricky})
+		_ = tb.SetCell(0, 2, db.Value{Text: ""})
+		tb.Delete(1)
+		at := tb.InsertAfter(1)
+		_ = tb.SetCell(at, 0, db.Value{Text: "3"})
+		stmts, _, err := edit.Plan(tb, target)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := apply(t, stmts); err != nil {
+			t.Fatalf("%v\n%s", err, strings.Join(stmts, "\n"))
+		}
+		want := [][]db.Value{
+			{{Text: "1"}, {Text: tricky}, {Text: ""}},
+			{{Text: "3"}, {Null: true}, {Null: true}},
+		}
+		if diff := cmp.Diff(want, read(t, all).Rows); diff != "" {
+			t.Fatalf("rows (-want +got):\n%s", diff)
+		}
+
+		// A row deleted behind our back: its UPDATE finds nothing, and the
+		// UPDATE before it is rolled back too.
+		rs = read(t, all)
+		tb = edit.New(rs.Columns, rs.Rows, nil)
+		_ = tb.SetCell(0, 1, db.Value{Text: "first"})
+		_ = tb.SetCell(1, 1, db.Value{Text: "gone"})
+		if _, err := conn.Exec(ctx, "DELETE FROM "+name+" WHERE id = 3"); err != nil {
+			t.Fatal(err)
+		}
+		stmts, _, _ = edit.Plan(tb, target)
+		var ce *edit.CountError
+		if err := apply(t, stmts); !errors.As(err, &ce) || ce.Affected != 0 {
+			t.Fatalf("err = %v", err)
+		}
+		if got := read(t, all).Rows[0][1].Text; got != tricky {
+			t.Fatalf("the first UPDATE was rolled back: %q", got)
+		}
+	})
+
+	t.Run("rows without a key are located by their values or ctid", func(t *testing.T) {
+		table := ref("edit_bare")
+		name := d.QualifiedName(table)
+		for _, q := range []string{
+			"CREATE TABLE " + name + " (name varchar(50), n int)",
+			"INSERT INTO " + name + " VALUES ('dup', 1), ('dup', 1), ('other', NULL)",
+		} {
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Fatal(err)
+			}
+		}
+		cols, _ := conn.Meta().Columns(ctx, table)
+		idx, _ := conn.Meta().Indexes(ctx, table)
+		key := edit.ChooseKey(sd, cols, idx, false)
+		sel := "SELECT * FROM " + name + " ORDER BY name, n"
+		if key.Kind == edit.RowID {
+			sel = "SELECT ctid::text, * FROM " + name + " ORDER BY name, n"
+		}
+		rs := read(t, sel)
+		var ids []string
+		if key.Kind == edit.RowID {
+			for i, row := range rs.Rows {
+				ids = append(ids, row[0].Text)
+				rs.Rows[i] = row[1:]
+			}
+			rs.Columns = rs.Columns[1:]
+		}
+		tb := edit.New(rs.Columns, rs.Rows, ids)
+		_ = tb.SetCell(0, 1, db.Value{Text: "2"}) // one of two identical rows
+		tb.Delete(2)                              // n IS NULL (MySQL) or its ctid
+		stmts, warnings, err := edit.Plan(tb, edit.Target{Dialect: sd, Table: table, Key: key})
+		if err != nil || len(warnings) != 1 {
+			t.Fatalf("plan: %v %v", err, warnings)
+		}
+		if err := apply(t, stmts); err != nil {
+			t.Fatalf("%v\n%s", err, strings.Join(stmts, "\n"))
+		}
+		want := [][]db.Value{{{Text: "dup"}, {Text: "1"}}, {{Text: "dup"}, {Text: "2"}}}
+		if diff := cmp.Diff(want, read(t, "SELECT name, n FROM "+name+" ORDER BY name, n").Rows); diff != "" {
+			t.Fatalf("rows (-want +got):\n%s", diff)
 		}
 	})
 }

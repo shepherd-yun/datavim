@@ -71,6 +71,7 @@ func TestContract(t *testing.T) {
 		})
 	}
 	dbtest.RunContract(t, conn, dbtest.Fixture{
+		Driver:       "postgres",
 		NS:           db.Namespace{Database: "app", Schema: "app"},
 		SleepSQL:     "SELECT pg_sleep(30)",
 		OpenReadOnly: func(ctx context.Context) (db.Conn, error) { return open(ctx, true) },
