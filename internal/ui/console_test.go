@@ -648,3 +648,38 @@ func TestConsoleDDLReportsStaleCatalog(t *testing.T) {
 		t.Fatal("queries do not change the catalog")
 	}
 }
+
+func TestConsoleJumpsToErrorPosition(t *testing.T) {
+	b := newFakeBackend()
+	q := "SELECT '李' FORM t"
+	b.conn.setFail(q, &db.PositionError{Err: errors.New(`syntax error at or near "FORM"`), Offset: strings.Index(q, "FORM")})
+	c := newConsole(t, b, "local")
+	text := "select 1;\n" + q + ";"
+	c.editor.SetValue(text) // the cursor is in the second statement
+	cmd := c.Handle(keymap.RunStatement)
+	c.onResults = true // e.g. the user looked at the previous results meanwhile
+	runTab(t, c, cmd)
+	if got, want := c.editor.Offset(), strings.Index(text, "FORM"); got != want {
+		t.Fatalf("cursor at %d, want %d", got, want)
+	}
+	if !strings.Contains(c.status, "line 2, col 12") || !strings.Contains(c.status, "FORM") {
+		t.Fatalf("status = %q", c.status)
+	}
+	if c.onResults {
+		t.Error("the editor gets the focus")
+	}
+}
+
+func TestConsoleDoesNotJumpWhenTextChanged(t *testing.T) {
+	b := newFakeBackend()
+	q := "SELECT * FORM t"
+	b.conn.setFail(q, &db.PositionError{Err: errors.New("syntax error"), Offset: 9})
+	c := newConsole(t, b, "local")
+	c.editor.SetValue(q)
+	cmd := c.Handle(keymap.RunStatement)
+	c.editor.SetValue("something else")
+	runTab(t, c, cmd)
+	if strings.Contains(c.status, "line ") || c.editor.Offset() != len("something else") {
+		t.Fatalf("status %q, cursor %d", c.status, c.editor.Offset())
+	}
+}

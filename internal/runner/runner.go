@@ -109,6 +109,7 @@ func summary(sql string, info sqlx.Info) string {
 // Result is the outcome of one statement.
 type Result struct {
 	SQL       string
+	Start     int           // byte offset of the statement in the text it came from
 	Rows      *db.ResultSet // nil for statements without a result set
 	Truncated bool          // more than maxRows rows existed; only maxRows are kept
 	Affected  int64
@@ -125,6 +126,7 @@ func Run(ctx context.Context, q db.Querier, stmts []sqlx.Statement, d sqlx.Diale
 			break
 		}
 		r := RunOne(ctx, q, s.Text, d, maxRows)
+		r.Start = s.Start
 		out = append(out, r)
 		if r.Err != nil {
 			break

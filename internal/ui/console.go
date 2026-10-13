@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -69,9 +70,10 @@ type runDoneMsg struct {
 	err         error // opening the session failed
 	more        bool  // re-run of the shown statement with a higher limit
 	limit       int
-	readOnly    bool // the connection was read-only when the run started
-	reopened    bool // the session was reopened because readonly changed
-	began       bool // a BEGIN was injected before the statements (manual commit)
+	readOnly    bool   // the connection was read-only when the run started
+	reopened    bool   // the session was reopened because readonly changed
+	began       bool   // a BEGIN was injected before the statements (manual commit)
+	text        string // the editor text the statements came from; "" if they did not
 }
 
 type runTickMsg struct{ tabID, gen int }
@@ -122,6 +124,7 @@ type consoleTab struct {
 	pending   []sqlx.Statement // waiting for confirmation
 	last      *runner.Result   // the result set on screen
 	lastLimit int
+	runText   string // editor text of the run being started; "" for COMMIT, ROLLBACK and load-more
 	status    string
 	statusErr bool
 
@@ -328,6 +331,7 @@ func (t *consoleTab) endTx(commit bool) tea.Cmd {
 		if commit {
 			sql = "COMMIT"
 		}
+		t.runText = ""
 		return t.execute([]sqlx.Statement{{Text: sql}}, t.maxRows, false)
 	}
 	return nil
@@ -413,6 +417,7 @@ func (t *consoleTab) run(stmts []sqlx.Statement) tea.Cmd {
 		t.setStatus("nothing to run", true)
 		return nil
 	}
+	t.runText = t.editor.Value()
 	cfg, _ := t.backend.Connection(t.conn)
 	policy := runner.Policy{ReadOnly: cfg.IsReadOnly(), Prod: cfg.Env == config.EnvProd}
 	switch chk := runner.Guard(stmts, t.dialect, policy); chk.Verdict {
@@ -431,7 +436,7 @@ func (t *consoleTab) run(stmts []sqlx.Statement) tea.Cmd {
 func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.Cmd {
 	began := false
 	if t.manualTx && !t.inTx && sqlx.TransactionEffect(stmts[0].Text, t.dialect) == sqlx.TxNone {
-		stmts = append([]sqlx.Statement{{Text: beginSQL(t.dialect)}}, stmts...)
+		stmts = append([]sqlx.Statement{{Text: beginSQL(t.dialect), Start: -1, End: -1}}, stmts...)
 		began = true
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -441,11 +446,12 @@ func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.C
 	cfg, _ := t.backend.Connection(t.conn)
 	ro := cfg.IsReadOnly()
 	gen, id, b, conn, ns, d := t.gen, t.id, t.backend, t.conn, t.ns, t.dialect
+	text := t.runText
 	s, sessRO, inTx := t.session, t.sessionRO, t.inTx
 	t.session = nil // owned by the command until runDoneMsg hands it back
 	run := func() tea.Msg {
 		defer cancel()
-		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit, readOnly: ro, began: began}
+		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit, readOnly: ro, began: began, text: text}
 		if s != nil && sessRO != ro {
 			// :set [no]readonly changed the connection: the session's
 			// server-side read-only setting no longer matches.
@@ -494,6 +500,7 @@ func (t *consoleTab) loadMore() tea.Cmd {
 	case sqlx.Analyze(t.last.SQL, t.dialect).Kind != sqlx.Read:
 		t.setStatus("only read statements are re-run to load more rows", true)
 	default:
+		t.runText = ""
 		return t.execute([]sqlx.Statement{{Text: t.last.SQL}}, t.lastLimit+t.maxRows, true)
 	}
 	return nil
@@ -608,7 +615,7 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 	}
 	switch {
 	case last.Err != nil:
-		t.setStatus(errorText(last.Err), true)
+		t.setStatus(t.locateError(m.text, last), true)
 		t.showMessages = true
 	case shown == nil || len(shown.Rows.Columns) == 0:
 		t.setStatus(fmt.Sprintf("%d statement(s) ok", len(m.results)), false)
@@ -903,4 +910,22 @@ func (t *consoleTab) statusLine() string {
 		hint = "manual commit · :commit / :rollback · " + hint
 	}
 	return theme.Muted.Render(textutil.Fit(hint, t.width))
+}
+
+// locateError moves the editor cursor to where the server says r failed,
+// when the editor still holds the text that ran, and returns the status
+// line for the error.
+func (t *consoleTab) locateError(text string, r runner.Result) string {
+	msg := errorText(r.Err)
+	off, ok := db.ErrorOffset(r.Err)
+	if !ok || r.Start < 0 || text == "" || text != t.editor.Value() {
+		return msg
+	}
+	pos := min(r.Start+off, len(text))
+	t.editor.SetCursorOffset(pos)
+	t.onResults = false
+	before := text[:pos]
+	line := strings.Count(before, "\n") + 1
+	col := utf8.RuneCountInString(before[strings.LastIndexByte(before, '\n')+1:]) + 1
+	return fmt.Sprintf("line %d, col %d: %s", line, col, msg)
 }
