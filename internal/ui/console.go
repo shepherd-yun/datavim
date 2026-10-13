@@ -29,6 +29,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/sqlvim/internal/ui/vimedit"
 )
 
 const (
@@ -127,8 +128,9 @@ type consoleTab struct {
 	pending   []sqlx.Statement // waiting for confirmation
 	last      *runner.Result   // the result set on screen
 	lastLimit int
-	runText   string      // editor text of the run being started; "" for COMMIT, ROLLBACK and load-more
-	attempt   *runAttempt // the latest run, kept to retry it once a password is entered
+	runText   string                  // editor text of the run being started; "" for COMMIT, ROLLBACK and load-more
+	attempt   *runAttempt             // the latest run, kept to retry it once a password is entered
+	clipPaste *vimedit.ClipboardPaste // a "+p waiting for the clipboard
 	status    string
 	statusErr bool
 
@@ -218,13 +220,13 @@ func (t *consoleTab) Input(msg tea.Msg) tea.Cmd {
 		}
 	}
 	before := t.editor.Version()
-	t.editor.Update(msg)
+	cmd := t.effects(t.editor.Update(msg))
 	if t.editor.Version() == before || !t.editor.Insert() {
 		t.popup = nil // the cursor moved, or esc left INSERT mode
-		return nil
+		return cmd
 	}
 	t.suggest(false)
-	return t.scheduleDraft()
+	return tea.Batch(cmd, t.scheduleDraft())
 }
 
 // TakeKey gives a key pressed in NORMAL or VISUAL mode to the editor
@@ -240,10 +242,32 @@ func (t *consoleTab) TakeKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 		return nil, false
 	}
 	t.popup = nil
+	cmd := t.effects(res)
 	if t.editor.Version() != before {
-		return t.scheduleDraft(), true
+		cmd = tea.Batch(cmd, t.scheduleDraft())
 	}
-	return nil, true
+	return cmd, true
+}
+
+// effects carries out what the editor asked of the console: the system
+// clipboard for "+ and tab jumps for gt / gT.
+func (t *consoleTab) effects(res vimedit.Result) tea.Cmd {
+	var cmds []tea.Cmd
+	if res.Clipboard != nil {
+		cmds = append(cmds, copyToClipboard(*res.Clipboard))
+	}
+	if res.Paste != nil {
+		req, id := *res.Paste, t.id
+		t.clipPaste = &req
+		cmds = append(cmds, readClipboard(func(text string) tea.Msg {
+			return clipboardTextMsg{tabID: id, text: text}
+		}))
+	}
+	if res.Tab != nil {
+		j := *res.Tab
+		cmds = append(cmds, func() tea.Msg { return tabJumpMsg(j) })
+	}
+	return tea.Batch(cmds...)
 }
 
 func (t *consoleTab) Handle(a keymap.Action) tea.Cmd {
@@ -396,12 +420,28 @@ func (t *consoleTab) trackTx(results []runner.Result, sessionLost bool) {
 // ---- running ----
 
 func (t *consoleTab) runAtCursor() tea.Cmd {
+	if from, to, ok := t.editor.Selection(); ok {
+		t.editor.Escape()
+		return t.run(selectedStatements(t.editor.Value(), from, to, t.dialect))
+	}
 	s, ok := sqlx.At(sqlx.Split(t.editor.Value(), t.dialect), t.editor.Offset())
 	if !ok {
 		t.setStatus("nothing to run", true)
 		return nil
 	}
 	return t.run([]sqlx.Statement{s})
+}
+
+// selectedStatements splits the selected text [from, to) of text into
+// statements whose offsets point into text, so a failed statement's error
+// position still lands in the editor.
+func selectedStatements(text string, from, to int, d sqlx.Dialect) []sqlx.Statement {
+	stmts := sqlx.Split(text[from:to], d)
+	for i := range stmts {
+		stmts[i].Start += from
+		stmts[i].End += from
+	}
+	return stmts
 }
 
 func (t *consoleTab) run(stmts []sqlx.Statement) tea.Cmd {
@@ -517,6 +557,18 @@ func (t *consoleTab) Update(msg tea.Msg) tea.Cmd {
 		}
 	case runDoneMsg:
 		return t.done(m)
+	case clipboardTextMsg:
+		req := t.clipPaste
+		t.clipPaste = nil
+		switch {
+		case req == nil:
+		case m.text == "":
+			t.setStatus("the clipboard is empty or could not be read", true)
+		case !t.editor.PasteClipboard(*req, m.text):
+			t.setStatus("the text changed before the clipboard arrived · paste again", true)
+		default:
+			return t.scheduleDraft()
+		}
 	case draftLoadedMsg:
 		switch cur := t.editor.Value(); {
 		case m.text == "" || m.text == cur:
@@ -792,13 +844,21 @@ type (
 		text  string
 		err   error
 	}
+	// clipboardTextMsg is the system clipboard read for a "+p.
+	clipboardTextMsg struct {
+		tabID int
+		text  string
+	}
+	// tabJumpMsg is gt / gT in a console; the root model switches tabs.
+	tabJumpMsg vimedit.TabJump
 )
 
-func (m draftLoadedMsg) TabID() int { return m.tabID }
-func (m draftTickMsg) TabID() int   { return m.tabID }
-func (m editFileMsg) TabID() int    { return m.tabID }
-func (m editDoneMsg) TabID() int    { return m.tabID }
-func (m editTextMsg) TabID() int    { return m.tabID }
+func (m draftLoadedMsg) TabID() int   { return m.tabID }
+func (m draftTickMsg) TabID() int     { return m.tabID }
+func (m editFileMsg) TabID() int      { return m.tabID }
+func (m editDoneMsg) TabID() int      { return m.tabID }
+func (m editTextMsg) TabID() int      { return m.tabID }
+func (m clipboardTextMsg) TabID() int { return m.tabID }
 
 func (t *consoleTab) Init() tea.Cmd {
 	id, st, key := t.id, t.store, t.Key()
@@ -904,6 +964,9 @@ func (t *consoleTab) statusLine() string {
 		return theme.Muted.Render(textutil.Fit(textutil.Sanitize(t.status), t.width))
 	}
 	hint := "enter run · R run all · i insert · v select · u undo · ctrl+j results · <space>v $EDITOR"
+	if t.editor.Visual() {
+		hint = "enter runs the selection · y d c > < · esc cancel"
+	}
 	if t.manualTx {
 		hint = "manual commit · :commit / :rollback · " + hint
 	}

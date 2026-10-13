@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"sync"
+	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -465,4 +466,22 @@ func (s *fakeStore) Recent(limit int) ([]history.Recent, error) {
 		out = append(out, s.recents[i])
 	}
 	return out, nil
+}
+
+// The system clipboard is never touched by tests: copies are dropped
+// unless a test captures them, and reads answer nothing unless a test
+// fakes the clipboard.
+func init() {
+	copyToClipboard = func(string) tea.Cmd { return nil }
+	readClipboard = func(func(string) tea.Msg) tea.Cmd { return nil }
+}
+
+// fakeClipboard makes clipboard reads return text.
+func fakeClipboard(t *testing.T, text string) {
+	t.Helper()
+	old := readClipboard
+	readClipboard = func(done func(string) tea.Msg) tea.Cmd {
+		return func() tea.Msg { return done(text) }
+	}
+	t.Cleanup(func() { readClipboard = old })
 }

@@ -176,6 +176,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case openOverlayMsg:
 		m.overlay = msg.overlay
+	case tabJumpMsg:
+		return m, m.jumpTab(vimedit.TabJump(msg))
+	case tea.ClipboardMsg:
+		// the terminal's answer to an OSC 52 read, asked for by "+p in the active console
+		if c, ok := m.activeTab().(*consoleTab); ok {
+			return m, c.Update(clipboardTextMsg{tabID: c.id, text: msg.Content})
+		}
 	case tea.PasteMsg:
 		// Like keys, a paste goes to the command line, then a popup, then
 		// a console in insert mode.
@@ -746,6 +753,20 @@ func (m *Model) keyTakingTab() keyTaker {
 		return t
 	}
 	return nil
+}
+
+// jumpTab is gt / gT: to tab j.To (1-based), or j.By tabs on, wrapping.
+func (m *Model) jumpTab(j vimedit.TabJump) tea.Cmd {
+	n := len(m.tabs)
+	switch {
+	case n == 0 || j.To > n:
+		return nil
+	case j.To > 0:
+		m.gotoTab(j.To - 1)
+	default:
+		m.gotoTab(((m.active+j.By)%n + n) % n)
+	}
+	return m.touchActive()
 }
 
 // withEditorHelp adds the vim editor's keys after the console's bindings.
