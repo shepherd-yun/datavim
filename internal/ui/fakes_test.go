@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"strings"
 	"sync"
 	"testing"
 
@@ -28,6 +29,19 @@ type fakeConn struct {
 	sessions   []*fakeSession
 	catalogs   int   // Catalog calls
 	catalogErr error // returned by Catalog
+	noKey      bool  // Columns reports no primary key and Indexes none
+}
+
+func (c *fakeConn) setNoKey(v bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.noKey = v
+}
+
+func (c *fakeConn) keyless() bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.noKey
 }
 
 // slowQuery blocks until its context is cancelled.
@@ -49,6 +63,13 @@ func (c *fakeConn) Query(ctx context.Context, q string, _ ...any) (*db.ResultSet
 	for i := range rows {
 		rs.Rows = append(rs.Rows, []db.Value{{Text: strconv.Itoa(i + 1)}, {Text: fmt.Sprintf("user%d", i+1)}})
 	}
+	if strings.HasPrefix(q, "SELECT ctid::text, *") {
+		rs.Columns = append([]db.ColumnInfo{{Name: "ctid"}}, rs.Columns...)
+		for i := range rs.Rows {
+			rs.Rows[i] = append([]db.Value{{Text: fmt.Sprintf("(0,%d)", i+1)}}, rs.Rows[i]...)
+		}
+	}
+
 	return rs, nil
 }
 
@@ -134,11 +155,17 @@ func (fakeMeta) Tables(context.Context, db.Namespace) ([]db.Table, error) {
 	return []db.Table{{Name: "users"}, {Name: "active", Kind: db.TableKindView}}, nil
 }
 
-func (fakeMeta) Columns(context.Context, db.TableRef) ([]db.Column, error) {
+func (m fakeMeta) Columns(context.Context, db.TableRef) ([]db.Column, error) {
+	if m.c.keyless() {
+		return []db.Column{{Name: "id", Type: "bigint"}, {Name: "name", Type: "text", Nullable: true}}, nil
+	}
 	return []db.Column{{Name: "id", Type: "bigint", PrimaryKey: true}, {Name: "name", Type: "text", Nullable: true}}, nil
 }
 
-func (fakeMeta) Indexes(context.Context, db.TableRef) ([]db.Index, error) {
+func (m fakeMeta) Indexes(context.Context, db.TableRef) ([]db.Index, error) {
+	if m.c.keyless() {
+		return nil, nil
+	}
 	return []db.Index{{Name: "PRIMARY", Columns: []string{"id"}, Unique: true, Primary: true}}, nil
 }
 

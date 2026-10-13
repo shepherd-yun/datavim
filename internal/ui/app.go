@@ -794,6 +794,9 @@ func (m *Model) capturingTab() inputCapturer {
 }
 
 func (m *Model) mode() string {
+	if md, ok := m.overlay.(moder); ok {
+		return md.Mode() // the cell editor
+	}
 	if m.focus == focusTabs {
 		if md, ok := m.activeTab().(moder); ok {
 			return md.Mode()

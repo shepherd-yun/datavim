@@ -81,6 +81,12 @@ const (
 	FilterValue      Action = "filter.value"
 	FilterPrompt     Action = "filter.prompt"
 	SortColumn       Action = "sort.column"
+	EditCell         Action = "edit.cell"
+	InsertRow        Action = "edit.insert"
+	DeleteRow        Action = "edit.delete"
+	UndoEdit         Action = "edit.undo"
+	UndoAllEdits     Action = "edit.undoall"
+	SubmitEdits      Action = "edit.submit"
 )
 
 const (

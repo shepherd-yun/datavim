@@ -11,6 +11,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/edit"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
@@ -66,6 +67,8 @@ type pageLoadedMsg struct {
 	query   tableQuery
 	rs      *db.ResultSet
 	hasMore bool
+	meta    *tableMeta // read with the page when the tab did not know it yet
+	ids     []string   // PostgreSQL ctids, when rows are located by them
 	err     error
 }
 
@@ -95,17 +98,22 @@ type dataTab struct {
 	status     string // what the last key did; cleared by the next one
 	statusErr  bool
 	query      tableQuery
-	known      bool // query.key has been read from the catalog
+	known      bool        // meta (key, columns) has been read
+	cols       []db.Column // the table's columns, for types in the cell editor
+	key        edit.Key    // how rows are located
+	table      *edit.Table // the page with its staged changes
 	height     int
 	wantColumn string // column to put the cursor on once data is shown
 }
 
 func newDataTab(id int, b Backend, conn string, ref db.TableRef, s config.Settings) *dataTab {
 	cfg, _ := b.Connection(conn)
-	return &dataTab{
+	t := &dataTab{
 		id: id, backend: b, conn: conn, ref: ref, dialect: sqlx.DialectOf(cfg.Driver), pageSize: s.PageSize,
 		grid: grid.New(nil, s.MaxColumnWidth),
 	}
+	t.grid.SetMarks(t.mark)
+	return t
 }
 
 func (t *dataTab) ID() int                       { return t.id }
@@ -133,15 +141,18 @@ func (t *dataTab) load(page int, q tableQuery) tea.Cmd {
 		msg := pageLoadedMsg{tabID: id, conn: conn, page: page, query: q}
 		msg.err = withConn(ctx, b, conn, ref.Database, func(c db.Conn) error {
 			if !known {
-				cols, err := c.Meta().Columns(ctx, ref)
+				meta, err := readTableMeta(ctx, c.Meta(), d, ref)
 				if err != nil {
 					return err
 				}
-				msg.query.key = primaryKey(cols)
+				msg.meta = meta
+				msg.query.key = meta.order()
+				msg.query.rowID = meta.key.Kind == edit.RowID
 			}
 			var err error
-			msg.rs, msg.hasMore, err = fetchPage(ctx, c, d, ref, msg.query, page, size)
+			msg.rs, msg.ids, msg.hasMore, err = fetchPage(ctx, c, d, ref, msg.query, page, size)
 			return err
+
 		})
 		return msg
 	}
@@ -157,22 +168,73 @@ func primaryKey(cols []db.Column) []string {
 	return out
 }
 
-func fetchPage(ctx context.Context, c db.Conn, d sqlx.Dialect, ref db.TableRef, q tableQuery, page, size int) (*db.ResultSet, bool, error) {
+// tableMeta is what editing needs from the catalog.
+type tableMeta struct {
+	cols []db.Column
+	key  edit.Key
+}
+
+func readTableMeta(ctx context.Context, m db.MetaReader, d sqlx.Dialect, ref db.TableRef) (*tableMeta, error) {
+	cols, err := m.Columns(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	idx, err := m.Indexes(ctx, ref)
+	if err != nil {
+		return nil, err
+	}
+	view := false
+	if d == sqlx.Postgres && len(primaryKey(cols)) == 0 {
+		tables, err := m.Tables(ctx, ref.Namespace)
+		if err != nil {
+			return nil, err
+		}
+		for _, tb := range tables {
+			if tb.Name == ref.Name {
+				view = tb.Kind == db.TableKindView
+			}
+		}
+	}
+	return &tableMeta{cols: cols, key: edit.ChooseKey(d, cols, idx, view)}, nil
+}
+
+// order is the columns that keep pages stable: the key's, if it has any.
+func (tm *tableMeta) order() []string {
+	if tm.key.Kind == edit.PrimaryKey || tm.key.Kind == edit.UniqueKey {
+		return tm.key.Columns
+	}
+	return nil
+}
+
+// fetchPage reads one page; with q.rowID the leading ctid column is split
+// off into ids.
+func fetchPage(ctx context.Context, c db.Conn, d sqlx.Dialect, ref db.TableRef, q tableQuery, page, size int) (*db.ResultSet, []string, bool, error) {
 	rs, err := c.Query(ctx, c.Dialect().Paginate(q.sql(d, ref), size+1, page*size))
 	if err != nil {
-		return nil, false, err
+		return nil, nil, false, err
 	}
 	hasMore := len(rs.Rows) > size
 	if hasMore {
 		rs.Rows = rs.Rows[:size]
 	}
-	return rs, hasMore, nil
+	var ids []string
+	if q.rowID && len(rs.Columns) > 0 {
+		ids = make([]string, len(rs.Rows))
+		for i, row := range rs.Rows {
+			ids[i] = row[0].Text
+			rs.Rows[i] = row[1:]
+		}
+		rs.Columns = rs.Columns[1:]
+	}
+	return rs, ids, hasMore, nil
 }
 
 func (t *dataTab) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case pageLoadedMsg:
 		t.pageLoaded(m)
+	case cellEditedMsg:
+		t.cellEdited(m)
 	case filterMsg:
 		where := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(m.text), ";"))
 		return t.applyQuery(func(q *tableQuery) { q.where = where })
@@ -188,8 +250,13 @@ func (t *dataTab) pageLoaded(m pageLoadedMsg) {
 	}
 	t.err, t.page, t.hasMore = "", m.page, m.hasMore
 	t.query, t.known = m.query, true
+	if m.meta != nil {
+		t.cols, t.key = m.meta.cols, m.meta.key
+	}
+	t.table = edit.New(m.rs.Columns, m.rs.Rows, m.ids)
 	t.grid.SetSort(t.query.sort, t.query.desc)
-	t.grid.SetResult(m.rs)
+	t.grid.SetResult(t.table.Result())
+
 	if t.wantColumn != "" {
 		t.grid.SelectColumn(t.wantColumn)
 		t.wantColumn = ""
@@ -257,6 +324,14 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 		return cmd
 	}
 	switch a {
+	case keymap.NextPage, keymap.PrevPage, keymap.Refresh, keymap.FilterValue, keymap.FilterPrompt, keymap.SortColumn:
+		if n := t.changes(); n > 0 {
+			t.setStatus(plural(n, "unsaved change")+" · <space>w submits, U discards", true)
+			return nil
+		}
+	}
+
+	switch a {
 	case keymap.NextPage:
 		if t.hasMore && !t.loading {
 			return t.load(t.page+1, t.query)
@@ -297,6 +372,17 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 				q.sort, q.desc = "", false
 			}
 		})
+	case keymap.EditCell:
+		return t.editCell()
+	case keymap.InsertRow:
+		t.insertRow()
+	case keymap.DeleteRow:
+		t.deleteRow()
+	case keymap.UndoEdit:
+		t.undoEdit()
+	case keymap.UndoAllEdits:
+		t.undoAll()
+
 	}
 	return nil
 }
@@ -336,7 +422,12 @@ func (t *dataTab) statusLine() string {
 		}
 		return style.Render(textutil.Sanitize(t.status))
 	}
-	return theme.Muted.Render(textutil.Sanitize(t.pageInfo()))
+	info := textutil.Sanitize(t.pageInfo())
+	if n := t.changes(); n > 0 {
+		return theme.Accent.Render("● "+plural(n, "change")) + theme.Muted.Render(" · <space>w submit · U discard · "+info)
+	}
+	return theme.Muted.Render(info)
+
 }
 
 // pageInfo describes the rows shown: their numbers, filter, sort and paging.
