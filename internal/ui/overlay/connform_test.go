@@ -19,6 +19,7 @@ func TestConnFormSubmit(t *testing.T) {
 		"a", "p", "p", "tab", // user
 		"s", "3", "tab", // password
 		"s", "h", "o", "p", "tab", // database
+		"b", "a", "s", "t", "i", "o", "n", "tab", // ssh host
 		"l", "l", "tab", // env -> prod
 		"right", "enter", // save -> no, submit
 	}
@@ -34,6 +35,9 @@ func TestConnFormSubmit(t *testing.T) {
 	if got.Conn.Name != want.Name || got.Conn.Driver != want.Driver || got.Conn.Host != want.Host ||
 		got.Conn.Port != want.Port || got.Conn.User != want.User || got.Conn.Database != want.Database || got.Conn.Env != want.Env {
 		t.Fatalf("conn = %+v", got.Conn)
+	}
+	if got.Conn.SSH != "bastion" {
+		t.Fatalf("ssh = %q", got.Conn.SSH)
 	}
 	if got.Password != "s3" || got.Save {
 		t.Fatalf("password=%q save=%v", got.Password, got.Save)

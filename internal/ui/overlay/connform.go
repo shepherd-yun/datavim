@@ -35,6 +35,7 @@ const (
 	ffUser
 	ffPassword
 	ffDatabase
+	ffSSH
 	ffEnv
 	ffSave
 )
@@ -56,6 +57,7 @@ func NewConnForm() *ConnForm {
 		ffUser:     {label: "User"},
 		ffPassword: {label: "Password", secret: true},
 		ffDatabase: {label: "Database"},
+		ffSSH:      {label: "SSH host"},
 		ffEnv:      {label: "Env", choices: []string{"dev", "staging", "prod"}},
 		ffSave:     {label: "Save password", choices: []string{"yes", "no"}},
 	}}
@@ -108,7 +110,7 @@ func (f *ConnForm) submit() (Overlay, tea.Cmd) {
 	}
 	c, err := config.Normalize(config.Connection{
 		Name: f.text(ffName), Driver: f.value(ffDriver), Host: f.text(ffHost), Port: port,
-		User: f.text(ffUser), Database: f.text(ffDatabase), Env: config.Env(f.value(ffEnv)),
+		User: f.text(ffUser), Database: f.text(ffDatabase), SSH: f.text(ffSSH), Env: config.Env(f.value(ffEnv)),
 	})
 	if err != nil {
 		f.err = err.Error()
@@ -143,6 +145,7 @@ func (f *ConnForm) View(width, _ int) string {
 	if f.err != "" {
 		lines = append(lines, theme.Error.Render(textutil.Sanitize(f.err)))
 	}
+	lines = append(lines, theme.Muted.Render("SSH host: a Host alias from ~/.ssh/config (optional)"))
 	lines = append(lines, theme.Muted.Render("tab next · enter next/save · ctrl+s save · esc cancel"))
 	return theme.Box("New connection", strings.Join(lines, "\n"), w, len(lines)+2, true)
 }

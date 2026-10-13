@@ -260,3 +260,35 @@ func TestAppendConnectionCreatesPrivateFile(t *testing.T) {
 		t.Fatalf("perm = %o", perm)
 	}
 }
+
+func TestNormalizeSSH(t *testing.T) {
+	c, err := Normalize(Connection{Name: "a", Driver: "mysql", SSH: " bastion "})
+	if err != nil || c.SSH != "bastion" {
+		t.Fatalf("c = %+v, err = %v", c, err)
+	}
+	_, err = Normalize(Connection{Name: "a", Driver: "mysql", SSH: "ops@bastion -p 2222"})
+	if err == nil || !strings.Contains(err.Error(), "ssh") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestAppendConnectionWritesSSH(t *testing.T) {
+	dir := t.TempDir()
+	if _, err := AppendConnection(dir, Connection{Name: "remote", Driver: "postgres", SSH: "bastion"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AppendConnection(dir, Connection{Name: "local", Driver: "mysql"}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Connections[0].SSH != "bastion" || cfg.Connections[1].SSH != "" {
+		t.Fatalf("connections = %+v", cfg.Connections)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "connections.toml"))
+	if n := strings.Count(string(data), "ssh"); n != 1 {
+		t.Fatalf("an empty ssh key is left out; file:\n%s", data)
+	}
+}
