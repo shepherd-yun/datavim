@@ -82,6 +82,16 @@ type filterMsg struct {
 
 func (m filterMsg) TabID() int { return m.tabID }
 
+// filterValueMsg is a value typed for fs, f> or f<.
+type filterValueMsg struct {
+	tabID  int
+	action keymap.Action
+	col    db.ColumnInfo
+	text   string
+}
+
+func (m filterValueMsg) TabID() int { return m.tabID }
+
 type dataTab struct {
 	id       int
 	backend  Backend
@@ -250,6 +260,18 @@ func (t *dataTab) Update(msg tea.Msg) tea.Cmd {
 	case filterMsg:
 		where := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(m.text), ";"))
 		return t.applyQuery(func(q *tableQuery) { q.where = where })
+	case filterValueMsg:
+		if m.text == "" {
+			return nil
+		}
+		switch m.action {
+		case keymap.FilterContains:
+			return t.addFilter(containsFilter(t.dialect, m.col.Name, m.text))
+		case keymap.FilterGreater:
+			return t.addFilter(compareFilter(t.dialect, m.col, ">", db.Value{Text: m.text}))
+		case keymap.FilterLess:
+			return t.addFilter(compareFilter(t.dialect, m.col, "<", db.Value{Text: m.text}))
+		}
 	}
 	return nil
 }
@@ -336,7 +358,9 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 		return cmd
 	}
 	switch a {
-	case keymap.NextPage, keymap.PrevPage, keymap.Refresh, keymap.FilterValue, keymap.FilterPrompt, keymap.SortColumn:
+	case keymap.NextPage, keymap.PrevPage, keymap.Refresh, keymap.FilterPrompt, keymap.SortColumn,
+		keymap.FilterEqual, keymap.FilterNotEqual, keymap.FilterContains, keymap.FilterGreater,
+		keymap.FilterLess, keymap.FilterNull, keymap.FilterNotNull, keymap.FilterClear:
 		if n := t.changes(); n > 0 {
 			t.setStatus(plural(n, "unsaved change")+" · <space>w submits, U discards", true)
 			return nil
@@ -357,14 +381,31 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 			t.known = false
 			return t.load(t.page, t.query)
 		}
-	case keymap.FilterValue:
+	case keymap.FilterEqual, keymap.FilterNotEqual:
 		col, v, ok := t.grid.Cell()
 		if !ok {
 			t.setStatus("no cell to filter by", true)
 			return nil
 		}
-		cond := compareFilter(t.dialect, col, "=", v)
-		return t.applyQuery(func(q *tableQuery) { q.where = andFilter(q.where, cond) })
+		op := "="
+		if a == keymap.FilterNotEqual {
+			op = "<>"
+		}
+		return t.addFilter(compareFilter(t.dialect, col, op, v))
+	case keymap.FilterNull, keymap.FilterNotNull:
+		col, ok := t.grid.Column()
+		if !ok {
+			t.setStatus("no column to filter by", true)
+			return nil
+		}
+		return t.addFilter(nullFilter(t.dialect, col.Name, a == keymap.FilterNotNull))
+	case keymap.FilterContains, keymap.FilterGreater, keymap.FilterLess:
+		return t.filterValuePrompt(a)
+	case keymap.FilterClear:
+		if t.query.where == "" {
+			return nil
+		}
+		return t.applyQuery(func(q *tableQuery) { q.where = "" })
 	case keymap.FilterPrompt:
 		id := t.id
 		return openOverlay(overlay.NewPrompt("Filter "+t.ref.Name, "WHERE … (empty shows every row)", t.query.where,
@@ -417,6 +458,34 @@ func (t *dataTab) applyQuery(change func(*tableQuery)) tea.Cmd {
 		t.wantColumn = col.Name
 	}
 	return t.load(0, q)
+}
+
+// addFilter narrows the filter with cond.
+func (t *dataTab) addFilter(cond string) tea.Cmd {
+	return t.applyQuery(func(q *tableQuery) { q.where = andFilter(q.where, cond) })
+}
+
+var filterVerbs = map[keymap.Action]string{
+	keymap.FilterContains: "contains",
+	keymap.FilterGreater:  ">",
+	keymap.FilterLess:     "<",
+}
+
+// filterValuePrompt asks for the value of fs, f> or f<, starting from the
+// cell under the cursor.
+func (t *dataTab) filterValuePrompt(a keymap.Action) tea.Cmd {
+	col, ok := t.grid.Column()
+	if !ok {
+		t.setStatus("no column to filter by", true)
+		return nil
+	}
+	initial := ""
+	if _, v, ok := t.grid.Cell(); ok && !v.Null {
+		initial = v.Text
+	}
+	id := t.id
+	return openOverlay(overlay.NewPrompt("Filter "+t.ref.Name, col.Name+" "+filterVerbs[a]+" …", initial,
+		func(s string) tea.Msg { return filterValueMsg{tabID: id, action: a, col: col, text: s} }))
 }
 
 func (t *dataTab) View(focused bool) string {
