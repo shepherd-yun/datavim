@@ -9,6 +9,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/meta"
+	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 )
 
 // catalogTimeout bounds one catalog load.
@@ -87,8 +88,15 @@ func (m *Model) reloadMeta(conn, database string) tea.Cmd {
 }
 
 func (m *Model) metaLoaded(msg metaLoadedMsg) tea.Cmd {
-	m.catalogs.Finish(msg.key, msg.gen, msg.snap, msg.err)
-	return nil
+	if !m.catalogs.Finish(msg.key, msg.gen, msg.snap, msg.err) {
+		return nil
+	}
+	s, ok := m.overlay.(*overlay.Search)
+	if !ok {
+		return nil
+	}
+	s.SetNote(m.searchNote())
+	return m.runSearch(s.Requery())
 }
 
 // metaStale reloads a catalog that DDL changed, if it was ever loaded.
