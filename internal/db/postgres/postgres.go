@@ -57,6 +57,13 @@ func poolConfig(cfg db.ConnConfig) (*pgxpool.Config, error) {
 	cc.BuildContextWatcherHandler = func(pc *pgconn.PgConn) ctxwatch.Handler {
 		return &pgconn.CancelRequestContextWatcherHandler{Conn: pc, DeadlineDelay: cancelGrace}
 	}
+	if cfg.Dial != nil {
+		cc.DialFunc = pgconn.DialFunc(cfg.Dial)
+		// The host name is resolved by the SSH server, not locally.
+		cc.LookupFunc = func(_ context.Context, host string) ([]string, error) {
+			return []string{host}, nil
+		}
+	}
 	if cfg.ReadOnly {
 		if cc.RuntimeParams == nil {
 			cc.RuntimeParams = map[string]string{}

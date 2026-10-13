@@ -78,6 +78,9 @@ func dsnConfig(cfg db.ConnConfig) (*gomysql.Config, error) {
 		// Sent as "SET transaction_read_only = 1" on every new connection.
 		mc.Params["transaction_read_only"] = "1"
 	}
+	if cfg.Dial != nil {
+		mc.DialFunc = cfg.Dial
+	}
 	return mc, nil
 }
 

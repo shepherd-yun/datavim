@@ -4,10 +4,15 @@ package db
 import (
 	"context"
 	"errors"
+	"net"
 )
 
 // ErrNotFound is returned when a requested object does not exist.
 var ErrNotFound = errors.New("not found")
+
+// DialFunc opens the network connection to a server. SSH tunnels provide
+// one; nil dials directly.
+type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
 
 // ConnConfig is what a driver needs to open a connection.
 type ConnConfig struct {
@@ -19,6 +24,9 @@ type ConnConfig struct {
 	Params   map[string]string
 	// ReadOnly makes the server reject writes for every connection opened.
 	ReadOnly bool
+	// Dial, if set, opens every network connection (including PostgreSQL
+	// cancel requests and MySQL KILL QUERY connections).
+	Dial DialFunc
 }
 
 // Driver opens connections for one database engine.

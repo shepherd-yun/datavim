@@ -1,6 +1,10 @@
 package postgres
 
 import (
+	"context"
+	"errors"
+	"net"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -86,5 +90,28 @@ func TestPoolConfig(t *testing.T) {
 	}
 	if got := ro.ConnConfig.RuntimeParams["default_transaction_read_only"]; got != "on" {
 		t.Fatalf("default_transaction_read_only = %q", got)
+	}
+}
+
+func TestPoolConfigDialsThroughTunnel(t *testing.T) {
+	var dialed []string
+	dial := func(_ context.Context, network, addr string) (net.Conn, error) {
+		dialed = append(dialed, network+" "+addr)
+		return nil, errors.New("no network in unit tests")
+	}
+	pcfg, err := poolConfig(db.ConnConfig{Host: "db.internal", Port: 5432, User: "u", Dial: dial})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cc := pcfg.ConnConfig
+	addrs, err := cc.LookupFunc(context.Background(), "db.internal")
+	if err != nil || !slices.Equal(addrs, []string{"db.internal"}) {
+		t.Fatalf("lookup = %v, %v; names must be resolved on the far side of the tunnel", addrs, err)
+	}
+	if _, err := cc.DialFunc(context.Background(), "tcp", "db.internal:5432"); err == nil {
+		t.Fatal("dial error is passed through")
+	}
+	if !slices.Equal(dialed, []string{"tcp db.internal:5432"}) {
+		t.Fatalf("dialed = %v", dialed)
 	}
 }
