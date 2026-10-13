@@ -12,10 +12,15 @@ All notable changes to this project are documented here. The format follows
 - `<Space><Space>` searches tables, views, columns, routines, schemas and databases of the
   connection in context (`@` for every connection); `Enter` opens data, `Ctrl-s` the structure.
 - `<Space>e` lists recently opened tables, structures and consoles, kept across restarts.
-- Console completion for tables, columns, aliases and keywords, with quoting where needed.
+- Console completion for tables, columns, aliases and keywords, with quoting where needed
+  (every reserved word of the dialect); `↑`/`↓` pick a candidate, `Enter` accepts it.
+- Tabs and console runs on a connection whose password was not entered yet ask for it and
+  try again once it is entered.
 - Syntax highlighting in the console editor and in the structure view's DDL.
 - The console cursor jumps to the position of a syntax error reported by the server.
 - Catalogs load in the background; `<Space>r` and DDL in a console reload them.
+- Long consoles stay responsive: highlighting is cached per statement and edits no longer
+  re-render the whole text.
 - Edit (`e`) and delete (`dd`) connections from the tree. Only the connection's own block
   in `connections.toml` is rewritten, keeping comments, `params` and `readonly`; a saved
   password follows a rename and is removed with the connection.

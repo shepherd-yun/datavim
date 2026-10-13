@@ -683,3 +683,22 @@ func TestConsoleDoesNotJumpWhenTextChanged(t *testing.T) {
 		t.Fatalf("status %q, cursor %d", c.status, c.editor.Offset())
 	}
 }
+
+func TestConsoleAsksForThePasswordAndRunsAgain(t *testing.T) {
+	m, b := newTestModel(t)
+	b.needPassword = true
+	press(t, m, "space", "c") // a console on local, never connected
+	c := m.activeTab().(*consoleTab)
+	c.editor.SetValue("select 42")
+	press(t, m, "enter")
+	if !strings.Contains(screen(m), "Password for local") {
+		t.Fatalf("prompt not shown:\n%s", screen(m))
+	}
+	press(t, m, "s", "e", "c", "enter")
+	if q := b.conn.lastQuery(); q != "select 42" {
+		t.Fatalf("the statement runs once the password is entered; last query %q", q)
+	}
+	if c.statusErr {
+		t.Fatalf("status = %q", c.status)
+	}
+}
