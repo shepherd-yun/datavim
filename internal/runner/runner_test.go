@@ -64,16 +64,16 @@ func TestGuard(t *testing.T) {
 		{"update t set a = 1; insert into u values (1)", true, Reject, ""},
 	}
 	for _, c := range cases {
-		got := Guard(stmts(c.src), sqlx.MySQL, c.readOnly)
+		got := Guard(stmts(c.src), sqlx.MySQL, Policy{ReadOnly: c.readOnly})
 		if got.Verdict != c.verdict || got.Expect != c.expect {
 			t.Errorf("Guard(%q, ro=%v) = %+v; want verdict %d expect %q", c.src, c.readOnly, got, c.verdict, c.expect)
 		}
 	}
-	ro := Guard(stmts("delete from t where id = 1"), sqlx.MySQL, true)
+	ro := Guard(stmts("delete from t where id = 1"), sqlx.MySQL, Policy{ReadOnly: true})
 	if !strings.Contains(ro.Reason, "read-only") || ro.SQL != "delete from t where id = 1" {
 		t.Fatalf("reject = %+v", ro)
 	}
-	cf := Guard(stmts("update t set a = 1"), sqlx.MySQL, false)
+	cf := Guard(stmts("update t set a = 1"), sqlx.MySQL, Policy{})
 	if !strings.Contains(cf.Reason, "WHERE") || cf.SQL != "update t set a = 1" {
 		t.Fatalf("confirm = %+v", cf)
 	}
@@ -122,11 +122,41 @@ func TestRunStopsWhenCancelled(t *testing.T) {
 
 func TestGuardBlocksSwitchingBackToReadWrite(t *testing.T) {
 	stmts := sqlx.Split("set default_transaction_read_only = off; prepare s as delete from t; execute s;", sqlx.Postgres)
-	c := Guard(stmts, sqlx.Postgres, true)
+	c := Guard(stmts, sqlx.Postgres, Policy{ReadOnly: true})
 	if c.Verdict != Reject || c.SQL != "set default_transaction_read_only = off" {
 		t.Fatalf("check = %+v", c)
 	}
-	if c := Guard(stmts, sqlx.Postgres, false); c.Verdict != Allow {
+	if c := Guard(stmts, sqlx.Postgres, Policy{}); c.Verdict != Allow {
 		t.Fatalf("read-write connection: check = %+v", c)
+	}
+}
+
+func TestGuardProd(t *testing.T) {
+	prod := Policy{Prod: true}
+	if c := Guard(stmts("select * from t; begin; commit"), sqlx.MySQL, prod); c.Verdict != Allow {
+		t.Fatalf("reads and transaction control run without asking: %+v", c)
+	}
+	c := Guard(stmts("insert into t values (1); create table x (id int)"), sqlx.MySQL, prod)
+	if c.Verdict != Confirm || c.Expect != "" || !strings.Contains(c.Title, "PROD") {
+		t.Fatalf("check = %+v", c)
+	}
+	body := strings.Join(c.Body, "\n")
+	if !strings.Contains(body, "write t: insert into t values (1)") || !strings.Contains(body, "ddl: create table x (id int)") {
+		t.Fatalf("body:\n%s", body)
+	}
+	c = Guard(stmts("update t set a = 1"), sqlx.MySQL, prod)
+	if c.Verdict != Confirm || c.Expect != "t" || !strings.Contains(c.Title, "PROD") {
+		t.Fatalf("missing WHERE on prod still needs the table name: %+v", c)
+	}
+	c = Guard(stmts("delete from t where id = 1"), sqlx.MySQL, Policy{Prod: true, ReadOnly: true})
+	if c.Verdict != Reject || !strings.Contains(c.Reason, ":set noreadonly") {
+		t.Fatalf("read-only wins: %+v", c)
+	}
+}
+
+func TestGuardMissingWhereDialog(t *testing.T) {
+	c := Guard(stmts("update t set a = 1"), sqlx.MySQL, Policy{})
+	if c.Title != "Statement has no WHERE clause" || len(c.Body) != 3 || c.Body[2] != "update t set a = 1" {
+		t.Fatalf("check = %+v", c)
 	}
 }

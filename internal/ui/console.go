@@ -281,7 +281,8 @@ func (t *consoleTab) run(stmts []sqlx.Statement) tea.Cmd {
 		return nil
 	}
 	cfg, _ := t.backend.Connection(t.conn)
-	switch chk := runner.Guard(stmts, t.dialect, cfg.IsReadOnly()); chk.Verdict {
+	policy := runner.Policy{ReadOnly: cfg.IsReadOnly(), Prod: cfg.Env == config.EnvProd}
+	switch chk := runner.Guard(stmts, t.dialect, policy); chk.Verdict {
 	case runner.Reject:
 		t.log("✗ " + oneLine(chk.SQL) + " — " + chk.Reason)
 		t.setStatus(chk.Reason, true)
@@ -289,8 +290,7 @@ func (t *consoleTab) run(stmts []sqlx.Statement) tea.Cmd {
 	case runner.Confirm:
 		t.gen++
 		t.pending = stmts
-		return openOverlay(overlay.NewConfirm("Statement has no WHERE clause",
-			[]string{chk.Reason, "", chk.SQL}, chk.Expect, confirmRunMsg{tabID: t.id, gen: t.gen}))
+		return openOverlay(overlay.NewConfirm(chk.Title, chk.Body, chk.Expect, confirmRunMsg{tabID: t.id, gen: t.gen}))
 	}
 	return t.execute(stmts, t.maxRows, false)
 }

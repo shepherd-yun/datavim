@@ -5,6 +5,7 @@ package runner
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
@@ -20,48 +21,89 @@ const (
 	Confirm
 )
 
+// Policy is what the guard knows about the connection.
+type Policy struct {
+	ReadOnly bool // writes and DDL are rejected
+	Prod     bool // writes and DDL need confirming
+}
+
 // Check is the guard's decision for a batch of statements.
 type Check struct {
 	Verdict Verdict
-	Reason  string // Reject: why; Confirm: what is risky
-	Expect  string // Confirm: the text the user must type to go on
-	SQL     string // the statement that triggered the check
+	Reason  string   // Reject: why; Confirm: what is risky
+	SQL     string   // the statement that triggered the check
+	Title   string   // Confirm: dialog title
+	Body    []string // Confirm: dialog text
+	Expect  string   // Confirm: the text the user must type; empty means pressing y
 }
 
-// Guard applies the v0.2 safety rules (spec §5.3): writes and DDL are
-// rejected on read-only connections; an UPDATE or DELETE without WHERE needs
-// its table name typed. A rejection wins over any confirmation.
-func Guard(stmts []sqlx.Statement, d sqlx.Dialect, readOnly bool) Check {
-	var confirm *Check
+// Guard applies the safety rules of spec §5.3. A rejection wins over any
+// confirmation, and a missing WHERE (type the table name) wins over the prod
+// confirmation (press y).
+func Guard(stmts []sqlx.Statement, d sqlx.Dialect, p Policy) Check {
+	var missing *Check
+	var writes []string
+	firstWrite := ""
 	for _, s := range stmts {
 		info := sqlx.Analyze(s.Text, d)
-		if readOnly && (info.Kind == sqlx.Write || info.Kind == sqlx.DDL) {
+		write := info.Kind == sqlx.Write || info.Kind == sqlx.DDL
+		if p.ReadOnly && write {
 			return Check{
 				Verdict: Reject, SQL: s.Text,
-				Reason: fmt.Sprintf("read-only connection: %s statements are blocked (set readonly = false in connections.toml to allow them)", info.Kind),
+				Reason: fmt.Sprintf("read-only connection: %s statements are blocked (:set noreadonly allows them for this session)", info.Kind),
 			}
 		}
-		if readOnly && sqlx.UnlocksReadOnly(s.Text, d) {
+		if p.ReadOnly && sqlx.UnlocksReadOnly(s.Text, d) {
 			return Check{
 				Verdict: Reject, SQL: s.Text,
-				Reason: "read-only connection: switching the session to read-write is blocked (set readonly = false in connections.toml)",
+				Reason: "read-only connection: switching the session to read-write is blocked (use :set noreadonly)",
 			}
 		}
-		if info.MissingWhere && confirm == nil {
+		if info.MissingWhere && missing == nil {
 			target, expect := info.Target, info.Target
 			if target == "" {
 				target, expect = "the table", "yes"
 			}
-			confirm = &Check{
-				Verdict: Confirm, SQL: s.Text, Expect: expect,
-				Reason: fmt.Sprintf("This statement has no WHERE clause and changes every row of %s.", target),
+			reason := fmt.Sprintf("This statement has no WHERE clause and changes every row of %s.", target)
+			missing = &Check{
+				Verdict: Confirm, SQL: s.Text, Expect: expect, Reason: reason,
+				Title: "Statement has no WHERE clause", Body: []string{reason, "", s.Text},
 			}
 		}
+		if p.Prod && write {
+			if firstWrite == "" {
+				firstWrite = s.Text
+			}
+			writes = append(writes, summary(s.Text, info))
+		}
 	}
-	if confirm != nil {
-		return *confirm
+	switch {
+	case missing != nil && p.Prod:
+		missing.Title = "PROD · " + missing.Title
+		missing.Body = append(missing.Body, "", "This is a PROD connection.")
+		return *missing
+	case missing != nil:
+		return *missing
+	case len(writes) > 0:
+		reason := fmt.Sprintf("%d statement(s) will change a PROD database:", len(writes))
+		return Check{
+			Verdict: Confirm, SQL: firstWrite, Reason: reason, Title: "Write to PROD",
+			Body: append([]string{reason, ""}, writes...),
+		}
 	}
 	return Check{Verdict: Allow}
+}
+
+// summary is one line of the prod confirmation: kind, table and statement.
+func summary(sql string, info sqlx.Info) string {
+	s := strings.Join(strings.Fields(sql), " ")
+	if r := []rune(s); len(r) > 60 {
+		s = string(r[:59]) + "…"
+	}
+	if info.Target != "" {
+		return fmt.Sprintf("%s %s: %s", info.Kind, info.Target, s)
+	}
+	return fmt.Sprintf("%s: %s", info.Kind, s)
 }
 
 // Result is the outcome of one statement.
