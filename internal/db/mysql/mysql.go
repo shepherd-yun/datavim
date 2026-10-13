@@ -4,8 +4,10 @@ package mysql
 import (
 	"context"
 	"database/sql"
+	"database/sql/driver"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"net"
 	"net/url"
 	"strconv"
@@ -52,21 +54,65 @@ func dsnConfig(cfg db.ConnConfig) (*gomysql.Config, error) {
 	mc.DBName = cfg.Database
 	mc.InterpolateParams = true
 	mc.Timeout = 10 * time.Second
-	if len(cfg.Params) == 0 {
-		return mc, nil
+	if len(cfg.Params) > 0 {
+		// Round-trip through the DSN so special keys (tls, charset, ...) are
+		// parsed by the driver exactly as in a hand-written DSN.
+		q := url.Values{}
+		for k, v := range cfg.Params {
+			q.Set(k, v)
+		}
+		dsn := mc.FormatDSN()
+		sep := "?"
+		if strings.Contains(dsn[strings.LastIndex(dsn, "/"):], "?") {
+			sep = "&"
+		}
+		var err error
+		if mc, err = gomysql.ParseDSN(dsn + sep + q.Encode()); err != nil {
+			return nil, err
+		}
 	}
-	// Round-trip through the DSN so special keys (tls, charset, ...) are parsed
-	// by the driver exactly as in a hand-written DSN.
-	q := url.Values{}
-	for k, v := range cfg.Params {
-		q.Set(k, v)
+	if cfg.ReadOnly {
+		if mc.Params == nil {
+			mc.Params = map[string]string{}
+		}
+		// Sent as "SET transaction_read_only = 1" on every new connection.
+		mc.Params["transaction_read_only"] = "1"
 	}
-	dsn := mc.FormatDSN()
-	sep := "?"
-	if strings.Contains(dsn[strings.LastIndex(dsn, "/"):], "?") {
-		sep = "&"
+	return mc, nil
+}
+
+func isBadConn(err error) bool {
+	return errors.Is(err, driver.ErrBadConn) || errors.Is(err, gomysql.ErrInvalidConn)
+}
+
+// wrap marks dead-connection errors with db.ErrConnLost.
+func wrap(err error) error {
+	if isBadConn(err) {
+		return fmt.Errorf("%w: %w", db.ErrConnLost, err)
 	}
-	return gomysql.ParseDSN(dsn + sep + q.Encode())
+	return err
+}
+
+func (c *conn) Exec(ctx context.Context, query string, args ...any) (db.ExecResult, error) {
+	res, err := c.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return db.ExecResult{}, wrap(err)
+	}
+	n, err := res.RowsAffected()
+	return db.ExecResult{RowsAffected: n}, err
+}
+
+func (c *conn) Query(ctx context.Context, query string, args ...any) (*db.ResultSet, error) {
+	rs, err := db.Collect(func(onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
+		return stream(ctx, c.db, query, args, onColumns, onRow, func() {})
+	})
+	return rs, wrap(err)
+}
+
+func (c *conn) Stream(ctx context.Context, query string, onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	return wrap(stream(ctx, c.db, query, nil, onColumns, onRow, cancel))
 }
 
 // displayText shows non-UTF-8 (binary) values as hex.
@@ -83,29 +129,8 @@ func (c *conn) Dialect() db.Dialect { return dialect{} }
 func (c *conn) Meta() db.MetaReader { return meta{c: c} }
 func (c *conn) Close() error        { return c.db.Close() }
 
-func (c *conn) Exec(ctx context.Context, query string, args ...any) (db.ExecResult, error) {
-	res, err := c.db.ExecContext(ctx, query, args...)
-	if err != nil {
-		return db.ExecResult{}, err
-	}
-	n, err := res.RowsAffected()
-	return db.ExecResult{RowsAffected: n}, err
-}
-
 type queryer interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-}
-
-func (c *conn) Query(ctx context.Context, query string, args ...any) (*db.ResultSet, error) {
-	return db.Collect(func(onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
-		return stream(ctx, c.db, query, args, onColumns, onRow, func() {})
-	})
-}
-
-func (c *conn) Stream(ctx context.Context, query string, onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	return stream(ctx, c.db, query, nil, onColumns, onRow, cancel)
 }
 
 // stream reads rows as text. When onRow returns db.ErrStop, abandon is called

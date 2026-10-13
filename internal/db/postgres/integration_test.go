@@ -63,5 +63,15 @@ func TestContract(t *testing.T) {
 			t.Fatalf("fixture %q: %v", stmt, err)
 		}
 	}
-	dbtest.RunContract(t, conn, db.Namespace{Database: "app", Schema: "app"})
+	open := func(ctx context.Context, readOnly bool) (db.Conn, error) {
+		return postgres.Driver{}.Open(ctx, db.ConnConfig{
+			Host: host, Port: port, User: "sqlvim", Password: password, Database: "app",
+			Params: map[string]string{"sslmode": "disable"}, ReadOnly: readOnly,
+		})
+	}
+	dbtest.RunContract(t, conn, dbtest.Fixture{
+		NS:           db.Namespace{Database: "app", Schema: "app"},
+		SleepSQL:     "SELECT pg_sleep(30)",
+		OpenReadOnly: func(ctx context.Context) (db.Conn, error) { return open(ctx, true) },
+	})
 }

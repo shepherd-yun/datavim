@@ -7,16 +7,27 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 )
 
-// RunContract checks conn against the standard fixture created in ns.
-func RunContract(t *testing.T, conn db.Conn, ns db.Namespace) {
+// Fixture describes the standard fixture and engine-specific bits of the contract.
+type Fixture struct {
+	NS db.Namespace
+	// SleepSQL is a query that runs for at least 30 seconds.
+	SleepSQL string
+	// OpenReadOnly opens another connection to the same database with ReadOnly set.
+	OpenReadOnly func(ctx context.Context) (db.Conn, error)
+}
+
+// RunContract checks conn against the standard fixture created in f.NS.
+func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	t.Helper()
 	ctx := context.Background()
+	ns := f.NS
 	d := conn.Dialect()
 	ref := func(name string) db.TableRef { return db.TableRef{Namespace: ns, Name: name} }
 
@@ -227,6 +238,100 @@ func RunContract(t *testing.T, conn db.Conn, ns db.Namespace) {
 			func([]db.Value) error { return errors.New("no rows expected") })
 		if err != nil || len(cols) != 2 {
 			t.Fatalf("empty result: cols=%v err=%v", cols, err)
+		}
+	})
+
+	t.Run("Session keeps state, survives cancel and early stop", func(t *testing.T) {
+		s, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = s.Close() }()
+		for _, q := range []string{"CREATE TEMPORARY TABLE sqlvim_tmp (id int)", "INSERT INTO sqlvim_tmp VALUES (1), (2)"} {
+			if _, err := s.Exec(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		countTmp := func() int {
+			t.Helper()
+			rs, err := s.Query(ctx, "SELECT id FROM sqlvim_tmp")
+			if err != nil {
+				t.Fatalf("session lost its state: %v", err)
+			}
+			return len(rs.Rows)
+		}
+		if n := countTmp(); n != 2 {
+			t.Fatalf("rows = %d", n)
+		}
+
+		cctx, cancel := context.WithCancel(ctx)
+		time.AfterFunc(300*time.Millisecond, cancel)
+		start := time.Now()
+		err = s.Stream(cctx, f.SleepSQL, func([]db.ColumnInfo) {}, func([]db.Value) error { return nil })
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled stream err = %v", err)
+		}
+		if el := time.Since(start); el > 10*time.Second {
+			t.Fatalf("cancel took %v", el)
+		}
+		if n := countTmp(); n != 2 {
+			t.Fatalf("after cancel rows = %d", n)
+		}
+
+		var got int
+		err = s.Stream(ctx, "SELECT id FROM sqlvim_tmp ORDER BY id", func([]db.ColumnInfo) {}, func([]db.Value) error {
+			got++
+			return db.ErrStop
+		})
+		if err != nil || got != 1 {
+			t.Fatalf("early stop: got=%d err=%v", got, err)
+		}
+		if n := countTmp(); n != 2 {
+			t.Fatalf("after early stop rows = %d", n)
+		}
+		if err := s.Ping(ctx); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("pooled queries do not see session state", func(t *testing.T) {
+		s, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Exec(ctx, "CREATE TEMPORARY TABLE sqlvim_private (id int)"); err != nil {
+			t.Fatal(err)
+		}
+		if err := s.Close(); err != nil {
+			t.Fatal(err)
+		}
+		for range 4 { // touch every pooled connection
+			if _, err := conn.Query(ctx, "SELECT * FROM sqlvim_private"); err == nil {
+				t.Fatal("a closed session's temporary table leaked into the pool")
+			}
+		}
+	})
+
+	t.Run("ReadOnly connections reject writes on the server", func(t *testing.T) {
+		ro, err := f.OpenReadOnly(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = ro.Close() }()
+		update := "UPDATE " + d.QualifiedName(ref("users")) + " SET note = 'x' WHERE id = 1"
+		if _, err := ro.Exec(ctx, update); err == nil {
+			t.Fatal("pooled write succeeded on a read-only connection")
+		}
+		s, err := ro.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = s.Close() }()
+		if _, err := s.Exec(ctx, update); err == nil {
+			t.Fatal("session write succeeded on a read-only connection")
+		}
+		if _, err := s.Query(ctx, "SELECT id FROM "+d.QualifiedName(ref("users"))); err != nil {
+			t.Fatalf("reads must still work: %v", err)
 		}
 	})
 }

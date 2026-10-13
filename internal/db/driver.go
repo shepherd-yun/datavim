@@ -17,6 +17,8 @@ type ConnConfig struct {
 	Password string
 	Database string
 	Params   map[string]string
+	// ReadOnly makes the server reject writes for every connection opened.
+	ReadOnly bool
 }
 
 // Driver opens connections for one database engine.
@@ -44,8 +46,21 @@ type Querier interface {
 // Conn is an open, pooled connection. It is safe for concurrent use.
 type Conn interface {
 	Querier
+	// Session reserves a dedicated server connection (see Session).
+	Session(ctx context.Context) (Session, error)
 	Meta() MetaReader
 	Dialect() Dialect
+	Close() error
+}
+
+// Session is one dedicated server connection, as used by a console: session
+// state (variables, temporary tables, USE, search_path) persists across calls.
+// Cancelling the context of a running call stops the statement on the server
+// and returns ctx.Err(); the session stays usable. Errors caused by a dead
+// connection wrap ErrConnLost. Not safe for concurrent use.
+type Session interface {
+	Querier
+	Ping(ctx context.Context) error
 	Close() error
 }
 

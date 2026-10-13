@@ -59,5 +59,13 @@ func TestContract(t *testing.T) {
 			t.Fatalf("fixture %q: %v", stmt, err)
 		}
 	}
-	dbtest.RunContract(t, conn, db.Namespace{Database: "app"})
+	dbtest.RunContract(t, conn, dbtest.Fixture{
+		NS:       db.Namespace{Database: "app"},
+		SleepSQL: "SELECT SLEEP(30)",
+		OpenReadOnly: func(ctx context.Context) (db.Conn, error) {
+			return mysql.Driver{}.Open(ctx, db.ConnConfig{
+				Host: host, Port: port, User: "root", Password: password, Database: "app", ReadOnly: true,
+			})
+		},
+	})
 }

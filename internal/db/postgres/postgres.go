@@ -8,8 +8,11 @@ import (
 	"net"
 	"net/url"
 	"strconv"
+	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgconn/ctxwatch"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
@@ -21,13 +24,16 @@ type Driver struct{}
 func (Driver) Name() string         { return "postgres" }
 func (Driver) DatabaseScoped() bool { return true }
 
+// cancelGrace is how long a cancelled statement may take to stop before the
+// connection is dropped.
+const cancelGrace = 5 * time.Second
+
 // Open connects and pings the server.
 func (Driver) Open(ctx context.Context, cfg db.ConnConfig) (db.Conn, error) {
-	pcfg, err := pgxpool.ParseConfig(connString(cfg))
+	pcfg, err := poolConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
-	pcfg.MaxConns = 4
 	pool, err := pgxpool.NewWithConfig(ctx, pcfg)
 	if err != nil {
 		return nil, err
@@ -37,6 +43,27 @@ func (Driver) Open(ctx context.Context, cfg db.ConnConfig) (db.Conn, error) {
 		return nil, err
 	}
 	return &conn{pool: pool, database: pcfg.ConnConfig.Database}, nil
+}
+
+func poolConfig(cfg db.ConnConfig) (*pgxpool.Config, error) {
+	pcfg, err := pgxpool.ParseConfig(connString(cfg))
+	if err != nil {
+		return nil, err
+	}
+	pcfg.MaxConns = 4
+	cc := pcfg.ConnConfig
+	// Cancelling a context sends a cancel request and keeps the connection,
+	// instead of pgx's default of closing it.
+	cc.BuildContextWatcherHandler = func(pc *pgconn.PgConn) ctxwatch.Handler {
+		return &pgconn.CancelRequestContextWatcherHandler{Conn: pc, DeadlineDelay: cancelGrace}
+	}
+	if cfg.ReadOnly {
+		if cc.RuntimeParams == nil {
+			cc.RuntimeParams = map[string]string{}
+		}
+		cc.RuntimeParams["default_transaction_read_only"] = "on"
+	}
+	return pcfg, nil
 }
 
 func connString(cfg db.ConnConfig) string {
