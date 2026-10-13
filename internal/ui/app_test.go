@@ -13,6 +13,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/history"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
@@ -528,5 +529,169 @@ func TestProdConnectionIsRed(t *testing.T) {
 	}
 	if !strings.Contains(prod.render(), redCorner) {
 		t.Fatal("the tab area stays red while it shows a prod tab")
+	}
+}
+
+// command types :text and enter.
+func command(t *testing.T, m *Model, text string) (quit bool) {
+	t.Helper()
+	keys := []string{":"}
+	for _, r := range text {
+		if r == ' ' {
+			keys = append(keys, "space")
+		} else {
+			keys = append(keys, string(r))
+		}
+	}
+	return press(t, m, append(keys, "enter")...)
+}
+
+// openLocalConsole opens a console on the local connection from the tree.
+func openLocalConsole(t *testing.T, m *Model) *consoleTab {
+	t.Helper()
+	press(t, m, "space", "c")
+	c, ok := m.activeTab().(*consoleTab)
+	if !ok {
+		t.Fatalf("console not opened:\n%s", screen(m))
+	}
+	return c
+}
+
+func runInConsole(t *testing.T, m *Model, c *consoleTab, sql string) {
+	t.Helper()
+	c.editor.SetValue(sql)
+	drain(t, m, c.Handle(keymap.RunStatement))
+}
+
+// openTxConsole opens a local console in manual commit with one uncommitted insert.
+func openTxConsole(t *testing.T, m *Model) *consoleTab {
+	t.Helper()
+	c := openLocalConsole(t, m)
+	press(t, m, "space", "t")
+	runInConsole(t, m, c, "insert into t values (1)")
+	if !c.openTx() {
+		t.Fatal("transaction not open")
+	}
+	return c
+}
+
+func TestToggleTxNeedsAConsole(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "space", "t")
+	if s := statusLine(m); !strings.Contains(s, "console") {
+		t.Fatalf("status: %s", s)
+	}
+}
+
+func TestManualCommitFromTheUI(t *testing.T) {
+	m, b := newTestModel(t)
+	c := openLocalConsole(t, m)
+	press(t, m, "space", "t")
+	if !c.manualTx || !strings.Contains(statusLine(m), "TX") {
+		t.Fatalf("manual=%v status: %s", c.manualTx, statusLine(m))
+	}
+	runInConsole(t, m, c, "insert into t values (1)")
+	if s := statusLine(m); !strings.Contains(s, "TX 1") {
+		t.Fatalf("status: %s", s)
+	}
+	command(t, m, "commit")
+	if got := b.conn.execList(); got[len(got)-1] != "COMMIT" {
+		t.Fatalf("execs = %v", got)
+	}
+	if s := statusLine(m); strings.Contains(s, "TX 1") {
+		t.Fatalf("status after commit: %s", s)
+	}
+	command(t, m, "rollback")
+	if !strings.Contains(screen(m), "no open transaction") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+func TestCommitOutsideAConsole(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	command(t, m, "commit")
+	if s := statusLine(m); !strings.Contains(s, "not a console") {
+		t.Fatalf("status: %s", s)
+	}
+}
+
+func TestQuitAsksWithOpenTransaction(t *testing.T) {
+	m, _ := newTestModel(t)
+	openTxConsole(t, m)
+	if command(t, m, "qa") {
+		t.Fatal(":qa asks first")
+	}
+	if !strings.Contains(screen(m), "Open transactions") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	if press(t, m, "n") {
+		t.Fatal("n keeps sqlvim running")
+	}
+	command(t, m, "qa")
+	if !press(t, m, "y") {
+		t.Fatal("y quits")
+	}
+
+	forced, _ := newTestModel(t)
+	openTxConsole(t, forced)
+	if !command(t, forced, "qa!") {
+		t.Fatal(":qa! quits without asking")
+	}
+}
+
+func TestCloseTabAsksWithOpenTransaction(t *testing.T) {
+	m, _ := newTestModel(t)
+	openTxConsole(t, m)
+	command(t, m, "q")
+	if len(m.tabs) != 1 || !strings.Contains(screen(m), "Open transaction") {
+		t.Fatalf("tabs=%d screen:\n%s", len(m.tabs), screen(m))
+	}
+	press(t, m, "y")
+	if len(m.tabs) != 0 {
+		t.Fatal("y closes the console")
+	}
+
+	forced, _ := newTestModel(t)
+	openTxConsole(t, forced)
+	command(t, forced, "q!")
+	if len(forced.tabs) != 0 {
+		t.Fatal(":q! closes without asking")
+	}
+}
+
+func TestSetReadOnlyCommands(t *testing.T) {
+	m, b := newTestModel(t)
+	press(t, m, "j") // prod: read-only by default
+	command(t, m, "set noreadonly")
+	if cfg, _ := b.Connection("prod"); cfg.IsReadOnly() {
+		t.Fatal(":set noreadonly unlocks the selected connection")
+	}
+	if s := statusLine(m); strings.Contains(s, " RO ") || !strings.Contains(s, "read-write") {
+		t.Fatalf("status: %s", s)
+	}
+	command(t, m, "set ro")
+	if cfg, _ := b.Connection("prod"); !cfg.IsReadOnly() {
+		t.Fatal(":set ro locks it again")
+	}
+	command(t, m, "set ro")
+	if s := statusLine(m); !strings.Contains(s, "already") {
+		t.Fatalf("status: %s", s)
+	}
+	command(t, m, "set bogus")
+	if s := statusLine(m); !strings.Contains(s, "unknown option") {
+		t.Fatalf("status: %s", s)
+	}
+}
+
+func TestSetReadOnlyBlockedByOpenTransaction(t *testing.T) {
+	m, b := newTestModel(t)
+	openTxConsole(t, m)
+	command(t, m, "set readonly")
+	if cfg, _ := b.Connection("local"); cfg.IsReadOnly() {
+		t.Fatal("not switched while a transaction is open")
+	}
+	if s := statusLine(m); !strings.Contains(s, "open transaction") {
+		t.Fatalf("status: %s", s)
 	}
 }

@@ -168,3 +168,12 @@ func TestCopyAndExportActions(t *testing.T) {
 		t.Fatal("Quit is not an export action")
 	}
 }
+
+func TestToggleTxBinding(t *testing.T) {
+	k := Default()
+	for _, ctx := range []Context{Console, Results, Tree, Grid} {
+		if a, res := k.Resolve(ctx, []string{"space", "t"}); a != ToggleTx || res != Matched {
+			t.Errorf("%s: got %q %v", ctx, a, res)
+		}
+	}
+}
