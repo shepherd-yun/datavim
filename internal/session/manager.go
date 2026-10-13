@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
@@ -22,11 +23,14 @@ type connKey struct {
 
 // Manager opens connections lazily and reuses them. Safe for concurrent use.
 type Manager struct {
-	conns   []config.Connection
 	drivers map[string]db.Driver
 	secrets secret.Store
 
+	// Persist, if set, saves connections added with AddConnection.
+	Persist func(config.Connection) error
+
 	mu        sync.Mutex
+	conns     []config.Connection
 	passwords map[string]string
 	open      map[connKey]db.Conn
 }
@@ -46,8 +50,67 @@ func NewManager(conns []config.Connection, secrets secret.Store, drivers ...db.D
 	return m
 }
 
-// Connections returns the configured connections in file order.
-func (m *Manager) Connections() []config.Connection { return m.conns }
+// Connections returns the configured connections in order.
+func (m *Manager) Connections() []config.Connection {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return slices.Clone(m.conns)
+}
+
+// Connection returns the named connection's configuration.
+func (m *Manager) Connection(name string) (config.Connection, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, c := range m.conns {
+		if c.Name == name {
+			return c, true
+		}
+	}
+	return config.Connection{}, false
+}
+
+// AddConnection validates, persists and registers a new connection, then
+// remembers its password (saving it to the keychain when save is set).
+func (m *Manager) AddConnection(c config.Connection, password string, save bool) error {
+	c, err := config.Normalize(c)
+	if err != nil {
+		return err
+	}
+	if _, ok := m.drivers[c.Driver]; !ok {
+		return fmt.Errorf("connection %q: driver %q not available", c.Name, c.Driver)
+	}
+	if _, ok := m.Connection(c.Name); ok {
+		return fmt.Errorf("connection %q already exists", c.Name)
+	}
+	if m.Persist != nil {
+		if err := m.Persist(c); err != nil {
+			return err
+		}
+	}
+	m.mu.Lock()
+	m.conns = append(m.conns, c)
+	m.mu.Unlock()
+	if password == "" {
+		return nil
+	}
+	return m.SetPassword(c.Name, password, save)
+}
+
+// Reset closes every open connection of name; the next Conn reconnects.
+func (m *Manager) Reset(name string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.resetLocked(name)
+}
+
+func (m *Manager) resetLocked(name string) {
+	for k, c := range m.open {
+		if k.conn == name {
+			_ = c.Close()
+			delete(m.open, k)
+		}
+	}
+}
 
 // Conn returns an open connection to database ("" means the configured default).
 func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, error) {
@@ -79,7 +142,7 @@ func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, err
 	}
 	c, err = drv.Open(ctx, db.ConnConfig{
 		Host: cfg.Host, Port: cfg.Port, User: cfg.User, Password: pw,
-		Database: database, Params: cfg.Params,
+		Database: database, Params: cfg.Params, ReadOnly: cfg.IsReadOnly(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("connect %s: %w", name, err)
@@ -100,12 +163,7 @@ func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, err
 func (m *Manager) SetPassword(name, password string, save bool) error {
 	m.mu.Lock()
 	m.passwords[name] = password
-	for k, c := range m.open {
-		if k.conn == name {
-			_ = c.Close()
-			delete(m.open, k)
-		}
-	}
+	m.resetLocked(name)
 	m.mu.Unlock()
 	if save {
 		return m.secrets.Set(name, password)
@@ -124,16 +182,15 @@ func (m *Manager) CloseAll() {
 }
 
 func (m *Manager) lookup(name string) (config.Connection, db.Driver, error) {
-	for _, c := range m.conns {
-		if c.Name == name {
-			drv, ok := m.drivers[c.Driver]
-			if !ok {
-				return c, nil, fmt.Errorf("connection %q: driver %q not available", name, c.Driver)
-			}
-			return c, drv, nil
-		}
+	c, ok := m.Connection(name)
+	if !ok {
+		return config.Connection{}, nil, fmt.Errorf("unknown connection %q", name)
 	}
-	return config.Connection{}, nil, fmt.Errorf("unknown connection %q", name)
+	drv, ok := m.drivers[c.Driver]
+	if !ok {
+		return c, nil, fmt.Errorf("connection %q: driver %q not available", name, c.Driver)
+	}
+	return c, drv, nil
 }
 
 func (m *Manager) password(name string) (string, error) {
