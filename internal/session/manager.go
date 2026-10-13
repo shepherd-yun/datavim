@@ -147,8 +147,11 @@ func (m *Manager) Reset(name string) {
 func (m *Manager) resetLocked(name string) {
 	for k, c := range m.open {
 		if k.conn == name {
-			_ = c.Close()
 			delete(m.open, k)
+			// A pgx pool's Close waits for borrowed sessions, and an idle
+			// console keeps one until its next run: retire the pool without
+			// blocking the caller (often the UI).
+			go func() { _ = c.Close() }()
 		}
 	}
 }
