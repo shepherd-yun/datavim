@@ -79,7 +79,12 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `0` / `$` | Grid: first / last column |
 | `zh` `zl` / `zH` `zL` | Scroll a grid sideways by half a screen / one column |
 | `K` | Show full cell value |
-| `f` / `F` | Table data: filter by the cell's value / edit the filter (`WHERE …`) |
+| `ff` / `f!` | Filter: the column equals / is not the cell's value (NULL → `IS NULL` / `IS NOT NULL`) |
+| `fs` or `f~` | Filter: the column contains… (asks, starting from the cell; ignores case; `%` `_` match themselves) |
+| `f>` / `f<` | Filter: the column is greater / less than… (asks, starting from the cell) |
+| `fn` / `fN` | Filter: the column is / is not NULL |
+| `fx` | Clear the filter |
+| `F` | Edit the filter as SQL (`WHERE …`): starts from the column, `Tab` completes column names and keywords |
 | `s` | Table data: sort by the column — ascending, descending, off |
 | `i` / `Enter` | Table data: edit the cell in a vim editor (`Enter` saves, `Ctrl-n` NULL, `Esc` NORMAL / cancel) |
 | `o` / `dd` | Table data: add a row below / mark the row for deletion |
@@ -110,6 +115,9 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `<Space>e` | Recently opened tables, structures and consoles |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (`Ctrl-n` / `Ctrl-p` open the popup when closed) |
 | `Enter` / `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes the popup, a second `Esc` leaves insert mode) |
+
+Filters made with `f…` are added with `AND`; `F` shows and edits the whole condition. Text inputs
+take readline keys: `←` `→`, `Home` `End` / `Ctrl-a` `Ctrl-e`, `Alt-b` `Alt-f`, `Ctrl-w`, `Ctrl-u`, `Ctrl-k`.
 
 Press `<Space>` and wait to see every leader key.
 Ghostty users can map Cmd shortcuts to leader keys: [docs/examples/ghostty.conf](docs/examples/ghostty.conf).

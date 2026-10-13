@@ -8,6 +8,16 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 - `H` / `L` switch to the previous / next tab, wrapping around, from any pane or tab.
+- `f` is a quick filter menu for the current column: `ff` equals, `f!` not equal, `fs` / `f~`
+  contains, `f>` / `f<` greater / less than, `fn` / `fN` NULL / not NULL, `fx` clears.
+- `F` starts from the cursor's column, completes column names and keywords with `Tab`, keeps
+  the prompt open on a malformed filter, and brings back a filter the server rejected.
+- Text inputs (prompts, `:` and `/`, the connection form, passwords) move the cursor with
+  readline keys: `←` `→`, `Home` `End`, `Ctrl-a` `Ctrl-e`, `Alt-b` `Alt-f`, `Ctrl-w`, `Ctrl-k`.
+
+### Changed
+- `f` alone no longer filters; `ff` filters by the cell's value.
+- `Ctrl-u` in a text input deletes to the start of the line instead of clearing it.
 
 ### Fixed
 - `gt` / `gT` switch tabs in table data, structure and console result tabs and in the tree,
