@@ -138,3 +138,15 @@ func TestLocate(t *testing.T) {
 		t.Fatal("nil stays nil")
 	}
 }
+
+func TestDSNConfigCountsMatchedRows(t *testing.T) {
+	for _, params := range []map[string]string{nil, {"clientFoundRows": "false"}} {
+		mc, err := dsnConfig(db.ConnConfig{Host: "h", Port: 3306, User: "u", Params: params})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !mc.ClientFoundRows {
+			t.Errorf("params=%v: UPDATE must report matched rows, data edits rely on it", params)
+		}
+	}
+}

@@ -90,6 +90,16 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 	})
 
+	t.Run("Exec counts matched rows, not changed rows", func(t *testing.T) {
+		res, err := conn.Exec(ctx, "UPDATE "+d.QualifiedName(ref("users"))+" SET name = name WHERE id = 1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if res.RowsAffected != 1 {
+			t.Fatalf("RowsAffected = %d, want 1: data edits check that each statement found its row", res.RowsAffected)
+		}
+	})
+
 	t.Run("quoted identifiers and pagination", func(t *testing.T) {
 		for _, name := range []string{"order", "MixedCase"} {
 			if _, err := conn.Query(ctx, "SELECT * FROM "+d.QualifiedName(ref(name))); err != nil {
