@@ -9,16 +9,17 @@ import (
 )
 
 var special = map[string]tea.KeyPressMsg{
-	"enter":     {Code: tea.KeyEnter},
-	"esc":       {Code: tea.KeyEscape},
-	"tab":       {Code: tea.KeyTab},
-	"shift+tab": {Code: tea.KeyTab, Mod: tea.ModShift},
-	"backspace": {Code: tea.KeyBackspace},
-	"space":     {Code: tea.KeySpace, Text: " "},
-	"up":        {Code: tea.KeyUp},
-	"down":      {Code: tea.KeyDown},
-	"left":      {Code: tea.KeyLeft},
-	"right":     {Code: tea.KeyRight},
+	"enter":      {Code: tea.KeyEnter},
+	"ctrl+enter": {Code: tea.KeyEnter, Mod: tea.ModCtrl},
+	"esc":        {Code: tea.KeyEscape},
+	"tab":        {Code: tea.KeyTab},
+	"shift+tab":  {Code: tea.KeyTab, Mod: tea.ModShift},
+	"backspace":  {Code: tea.KeyBackspace},
+	"space":      {Code: tea.KeySpace, Text: " "},
+	"up":         {Code: tea.KeyUp},
+	"down":       {Code: tea.KeyDown},
+	"left":       {Code: tea.KeyLeft},
+	"right":      {Code: tea.KeyRight},
 }
 
 // Key builds a key press whose String() is s, e.g. "j", "G", "ctrl+d", "enter".

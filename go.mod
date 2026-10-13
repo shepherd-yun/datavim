@@ -3,6 +3,7 @@ module github.com/shepherd-yun/sqlvim
 go 1.26.0
 
 require (
+	charm.land/bubbles/v2 v2.2.1
 	charm.land/bubbletea/v2 v2.1.0
 	charm.land/lipgloss/v2 v2.0.6
 	github.com/charmbracelet/x/ansi v0.11.9
@@ -23,6 +24,7 @@ require (
 	filippo.io/edwards25519 v1.2.0 // indirect
 	github.com/Azure/go-ansiterm v0.0.0-20250102033503-faa5f7b0171c // indirect
 	github.com/Microsoft/go-winio v0.6.2 // indirect
+	github.com/atotto/clipboard v0.1.4 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
