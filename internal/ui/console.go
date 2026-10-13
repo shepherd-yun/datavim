@@ -20,8 +20,10 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/runner"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/editor"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
@@ -97,6 +99,9 @@ type consoleTab struct {
 	timings   timings
 	catalogs  *meta.Cache // shared with the root model; UI goroutine only
 	metaKey   meta.Key
+	defNS     db.Namespace    // where unqualified table names resolve
+	popup     *complete.Model // completion popup; nil when closed
+	popStart  int             // byte offset the popup's word starts at
 
 	editor       *editor.Model
 	grid         *grid.Model
@@ -126,12 +131,15 @@ type consoleTab struct {
 func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn string, ns db.Namespace, s config.Settings, tm timings) *consoleTab {
 	cfg, _ := b.Connection(conn)
 	key, _ := metaKeyFor(b, conn, ns.Database)
-	return &consoleTab{
-		id: id, backend: b, store: st, conn: conn, ns: ns, dialect: sqlx.DialectOf(cfg.Driver),
+	d := sqlx.DialectOf(cfg.Driver)
+	t := &consoleTab{
+		id: id, backend: b, store: st, conn: conn, ns: ns, dialect: d,
 		maxRows: s.MaxRows, timings: tm, editorCmd: s.EditorCommand(os.Getenv),
-		catalogs: catalogs, metaKey: key,
+		catalogs: catalogs, metaKey: key, defNS: defaultNamespace(cfg, key, ns),
 		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth),
 	}
+	t.editor.SetHighlighter(func(src string) []highlight.Span { return highlight.SQL(src, d) })
+	return t
 }
 
 func (t *consoleTab) ID() int     { return t.id }
@@ -191,11 +199,15 @@ func (t *consoleTab) log(line string) {
 
 func (t *consoleTab) Input(msg tea.Msg) tea.Cmd {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
+		if cmd, used := t.popupKey(k.String()); used {
+			return cmd
+		}
 		switch k.String() {
 		case "esc":
 			t.editor.ExitInsert()
 			return nil
 		case "ctrl+enter", "ctrl+j":
+			t.popup = nil
 			return t.runAtCursor()
 		case "ctrl+c":
 			return t.cancelRun()
@@ -203,10 +215,12 @@ func (t *consoleTab) Input(msg tea.Msg) tea.Cmd {
 	}
 	before := t.editor.Value()
 	cmd := t.editor.Update(msg)
-	if t.editor.Value() != before {
-		return tea.Batch(cmd, t.scheduleDraft())
+	if t.editor.Value() == before {
+		t.popup = nil // the cursor moved
+		return cmd
 	}
-	return cmd
+	t.suggest(false)
+	return tea.Batch(cmd, t.scheduleDraft())
 }
 
 func (t *consoleTab) Handle(a keymap.Action) tea.Cmd {
@@ -847,7 +861,7 @@ func (t *consoleTab) View(focused bool) string {
 		parts = append(parts, textutil.PadLines(t.grid.View(focused && t.onResults), resultsH))
 	}
 	parts = append(parts, t.statusLine())
-	return strings.Join(parts, "\n")
+	return t.drawPopup(strings.Join(parts, "\n"))
 }
 
 func (t *consoleTab) separator() string {
