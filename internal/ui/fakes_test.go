@@ -336,3 +336,15 @@ func (f *fakeBackend) resetList() []string {
 	defer f.mu.Unlock()
 	return slices.Clone(f.resets)
 }
+
+func (f *fakeBackend) SetReadOnly(name string, ro bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for i := range f.conns {
+		if f.conns[i].Name == name {
+			f.conns[i].ReadOnly = &ro
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown connection %q", name)
+}

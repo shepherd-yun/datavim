@@ -396,3 +396,59 @@ func TestExternalEdit(t *testing.T) {
 		t.Fatal("temp file removed after a failed edit too")
 	}
 }
+
+func TestConsoleProdWritesNeedConfirmation(t *testing.T) {
+	b := newFakeBackend()
+	if err := b.SetReadOnly("prod", false); err != nil {
+		t.Fatal(err)
+	}
+	c := newConsole(t, b, "prod")
+	c.editor.SetValue("select 1")
+	runTab(t, c, c.Handle(keymap.RunStatement))
+	if got := b.conn.lastQuery(); got != "select 1" {
+		t.Fatalf("reads run without asking: %q", got)
+	}
+	c.editor.SetValue("insert into t values (1)")
+	other := runTab(t, c, c.Handle(keymap.RunStatement))
+	if len(other) != 1 {
+		t.Fatalf("messages = %#v", other)
+	}
+	o := other[0].(openOverlayMsg).overlay
+	if v := ansi.Strip(o.View(80, 20)); !strings.Contains(v, "PROD") || !strings.Contains(v, "write t: insert into t values (1)") {
+		t.Fatalf("confirm:\n%s", v)
+	}
+	if slices.Contains(b.conn.execList(), "insert into t values (1)") {
+		t.Fatal("nothing runs before confirming")
+	}
+	_, cmd := o.HandleKey(uitest.Key("y"))
+	runTab(t, c, cmd)
+	if !slices.Contains(b.conn.execList(), "insert into t values (1)") {
+		t.Fatalf("execs = %v", b.conn.execList())
+	}
+}
+
+func TestConsoleReopensSessionWhenReadOnlyChanges(t *testing.T) {
+	b := newFakeBackend()
+	c := newConsole(t, b, "local")
+	c.editor.SetValue("select 1")
+	runTab(t, c, c.Handle(keymap.RunStatement))
+	first := c.session.(*fakeSession)
+	if err := b.SetReadOnly("local", true); err != nil {
+		t.Fatal(err)
+	}
+	runTab(t, c, c.Handle(keymap.RunStatement))
+	b.conn.mu.Lock()
+	closed := first.closed
+	b.conn.mu.Unlock()
+	if n := b.conn.sessionCount(); n != 2 || !closed {
+		t.Fatalf("sessions = %d, first closed = %v", n, closed)
+	}
+	c.Handle(keymap.ToggleMessages)
+	if v := consoleView(c); !strings.Contains(v, "reopened read-only") {
+		t.Fatalf("view:\n%s", v)
+	}
+	runTab(t, c, c.Handle(keymap.RunStatement))
+	if n := b.conn.sessionCount(); n != 2 {
+		t.Fatalf("sessions = %d: no reopen while the setting is unchanged", n)
+	}
+}
