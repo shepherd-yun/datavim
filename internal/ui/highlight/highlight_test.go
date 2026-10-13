@@ -54,3 +54,60 @@ func TestSQLEdgeCases(t *testing.T) {
 		}
 	}
 }
+
+func classesOf(src string, spans []Span) []Class {
+	out := make([]Class, len(src))
+	for _, s := range spans {
+		for i := s.Start; i < s.End; i++ {
+			out[i] = s.Class
+		}
+	}
+	return out
+}
+
+func TestHighlighterMatchesSQL(t *testing.T) {
+	src := "-- top\nSELECT 'a;b', 1 FROM t;\n/* x; */ UPDATE t SET n = 2 WHERE id = 3;\n\nselect \"q;\" from u"
+	for _, d := range []sqlx.Dialect{sqlx.MySQL, sqlx.Postgres} {
+		got := NewHighlighter(d).Spans(src)
+		want := SQL(src, d)
+		if got, want := classesOf(src, got), classesOf(src, want); !equalClasses(got, want) {
+			t.Fatalf("dialect %d: classes differ\n got %v\nwant %v", d, got, want)
+		}
+		at := 0
+		for _, s := range NewHighlighter(d).Spans(src) {
+			if s.Start != at || s.End <= s.Start {
+				t.Fatalf("spans must cover the text in order")
+			}
+			at = s.End
+		}
+		if at != len(src) {
+			t.Fatalf("spans end at %d", at)
+		}
+	}
+	if NewHighlighter(sqlx.MySQL).Spans("") != nil {
+		t.Fatal("empty text has no spans")
+	}
+}
+
+func equalClasses(a, b []Class) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func TestHighlighterReusesUnchangedStatements(t *testing.T) {
+	h := NewHighlighter(sqlx.MySQL)
+	src := bigConsole(200)
+	h.Spans(src)
+	before := h.misses
+	h.Spans(src + "SELECT 1")
+	if n := h.misses - before; n > 2 {
+		t.Fatalf("an edit at the end re-highlighted %d segments", n)
+	}
+}
