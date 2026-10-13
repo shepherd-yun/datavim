@@ -301,6 +301,7 @@ func TestTypingEditsKeepTheCursor(t *testing.T) {
 		t.Fatalf("paste: %q at %d", m.Value(), m.Offset())
 	}
 }
+
 func TestPlaceholderAndAppendAtEnd(t *testing.T) {
 	m := New()
 	m.SetSize(40, 3)

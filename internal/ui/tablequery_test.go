@@ -16,8 +16,11 @@ func TestTableQuerySQL(t *testing.T) {
 	}{
 		{sqlx.MySQL, tableQuery{}, "SELECT * FROM `app`.`users`"},
 		{sqlx.MySQL, tableQuery{key: []string{"id"}}, "SELECT * FROM `app`.`users` ORDER BY `id`"},
-		{sqlx.MySQL, tableQuery{where: "n > 1", sort: "name", desc: true, key: []string{"id"}},
-			"SELECT * FROM `app`.`users` WHERE (n > 1\n) ORDER BY `name` DESC, `id`"},
+		{
+			sqlx.MySQL,
+			tableQuery{where: "n > 1", sort: "name", desc: true, key: []string{"id"}},
+			"SELECT * FROM `app`.`users` WHERE (n > 1\n) ORDER BY `name` DESC, `id`",
+		},
 		{sqlx.MySQL, tableQuery{sort: "id", key: []string{"id"}}, "SELECT * FROM `app`.`users` ORDER BY `id`"},
 		{sqlx.Postgres, tableQuery{rowID: true, sort: "name"}, `SELECT ctid::text, * FROM "public"."users" ORDER BY "name"`},
 	} {

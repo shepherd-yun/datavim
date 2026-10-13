@@ -196,6 +196,7 @@ func TestConnectionEditBindings(t *testing.T) {
 		t.Errorf("dd: %q %v", a, res)
 	}
 }
+
 func TestFilterAndSortBindings(t *testing.T) {
 	k := Default()
 	for key, want := range map[string]Action{"f": FilterValue, "F": FilterPrompt, "s": SortColumn} {
@@ -207,6 +208,7 @@ func TestFilterAndSortBindings(t *testing.T) {
 		}
 	}
 }
+
 func TestEditBindings(t *testing.T) {
 	k := Default()
 	for keys, want := range map[string]Action{

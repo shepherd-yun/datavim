@@ -148,6 +148,7 @@ func TestExpandHome(t *testing.T) {
 		}
 	}
 }
+
 func TestExportWholeTableKeepsFilterAndSort(t *testing.T) {
 	m, b := newTestModel(t)
 	dir := t.TempDir()

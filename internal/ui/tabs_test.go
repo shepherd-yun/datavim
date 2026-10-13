@@ -114,6 +114,7 @@ func TestTabKeys(t *testing.T) {
 		t.Fatal("tables in different databases are distinct")
 	}
 }
+
 func TestDataTabSortCycles(t *testing.T) {
 	b := newFakeBackend()
 	tab := loadedDataTab(t, b)
