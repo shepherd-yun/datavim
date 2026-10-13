@@ -6,6 +6,8 @@ import (
 
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
 )
 
 func TestBox(t *testing.T) {
@@ -44,5 +46,27 @@ func TestFrameDangerIsRed(t *testing.T) {
 	}
 	if ansi.Strip(Frame("t", "x", 10, 3, false, true)) != ansi.Strip(Box("t", "x", 10, 3, false)) {
 		t.Error("only the color differs")
+	}
+}
+
+func TestHighlightLines(t *testing.T) {
+	src := "SELECT 1 -- c\nFROM t"
+	spans := []highlight.Span{
+		{Start: 0, End: 6, Class: highlight.Keyword},
+		{Start: 6, End: 9, Class: highlight.Plain},
+		{Start: 9, End: 14, Class: highlight.Comment}, // "-- c\n" crosses the line break
+		{Start: 14, End: 18, Class: highlight.Keyword},
+		{Start: 18, End: 20, Class: highlight.Plain},
+	}
+	lines := HighlightLines(src, spans)
+	if len(lines) != 2 || ansi.Strip(lines[0]) != "SELECT 1 -- c" || ansi.Strip(lines[1]) != "FROM t" {
+		t.Fatalf("lines = %q", lines)
+	}
+	if !strings.Contains(lines[0], Syntax(highlight.Keyword).Render("SELECT")) ||
+		!strings.Contains(lines[1], Syntax(highlight.Keyword).Render("FROM")) {
+		t.Fatalf("keywords are styled: %q", lines)
+	}
+	if got := HighlightLines("", nil); len(got) != 1 || got[0] != "" {
+		t.Fatalf("empty: %q", got)
 	}
 }

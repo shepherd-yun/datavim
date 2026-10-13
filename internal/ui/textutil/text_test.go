@@ -81,3 +81,9 @@ func TestClamp(t *testing.T) {
 		t.Fatal("clamp")
 	}
 }
+
+func TestSanitizeText(t *testing.T) {
+	if got := SanitizeText("a\tb\r\n\x1b[31mc\n"); got != "a b\n�[31mc\n" {
+		t.Fatalf("SanitizeText = %q", got)
+	}
+}
