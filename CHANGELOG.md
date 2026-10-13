@@ -7,7 +7,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- `zH` / `zL` scroll a grid half a screen sideways.
+- `zH` / `zL` scroll a grid one column sideways.
+
+### Changed
+- `zh` / `zl` scroll a grid half a screen sideways instead of one column.
 
 ## [0.5.0] - 2026-10-14
 

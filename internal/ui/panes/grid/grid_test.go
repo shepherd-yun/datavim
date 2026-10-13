@@ -124,7 +124,7 @@ func TestScrollColumns(t *testing.T) {
 	m.SetSize(14, 10) // id(2) + name(5) fit; email(7) does not
 	m.ScrollColumns(1)
 	if !strings.HasPrefix(view(m, true)[0], "name") {
-		t.Fatalf("zl scrolls one column: %q", view(m, true)[0])
+		t.Fatalf("zL scrolls one column: %q", view(m, true)[0])
 	}
 	if col, _, _ := m.Cell(); col.Name != "name" {
 		t.Fatalf("cursor pulled into view, got %s", col.Name)
@@ -159,7 +159,7 @@ func TestScrollHalf(t *testing.T) {
 	m.SetSize(30, 10) // each column is 4 wide plus a 3-wide separator: half a view is two columns
 	m.ScrollHalf(1)
 	if !strings.HasPrefix(view(m, true)[0], "c2") {
-		t.Fatalf("zL scrolls half a view: %q", view(m, true)[0])
+		t.Fatalf("zl scrolls half a view: %q", view(m, true)[0])
 	}
 	if col, _, _ := m.Cell(); col.Name != "c2" {
 		t.Fatalf("cursor pulled into view, got %s", col.Name)
@@ -167,7 +167,7 @@ func TestScrollHalf(t *testing.T) {
 	m.ScrollHalf(1)
 	m.ScrollHalf(-1)
 	if !strings.HasPrefix(view(m, true)[0], "c2") {
-		t.Fatalf("zH scrolls back half a view: %q", view(m, true)[0])
+		t.Fatalf("zh scrolls back half a view: %q", view(m, true)[0])
 	}
 	m.ScrollHalf(-1)
 	m.ScrollHalf(-1)
