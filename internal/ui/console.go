@@ -68,6 +68,7 @@ type runDoneMsg struct {
 	limit       int
 	readOnly    bool // the connection was read-only when the run started
 	reopened    bool // the session was reopened because readonly changed
+	began       bool // a BEGIN was injected before the statements (manual commit)
 }
 
 type runTickMsg struct{ tabID, gen int }
@@ -102,6 +103,10 @@ type consoleTab struct {
 
 	session   db.Session
 	sessionRO bool // the connection was read-only when session was opened
+	manualTx  bool // <space>t: statements run in a transaction until :commit / :rollback
+	inTx      bool // the session has an open transaction
+	txWrites  int  // writes run in the open transaction
+	txAborted bool // PostgreSQL: a statement failed, only ROLLBACK works now
 	running   bool
 	cancel    context.CancelFunc
 	started   time.Time
@@ -263,6 +268,112 @@ func (t *consoleTab) editorAction(a keymap.Action) tea.Cmd {
 	return nil
 }
 
+// errTxLost reports a connection that dropped during a transaction: the
+// server rolled the transaction back, so the console neither retries nor
+// reconnects until the user runs again.
+var errTxLost = errors.New("transaction lost: the connection dropped and the server rolled back its uncommitted changes · run again to reconnect")
+
+func beginSQL(d sqlx.Dialect) string {
+	if d == sqlx.Postgres {
+		return "BEGIN"
+	}
+	return "START TRANSACTION"
+}
+
+// toggleTx switches between autocommit and manual commit.
+func (t *consoleTab) toggleTx() tea.Cmd {
+	if t.manualTx && t.inTx {
+		t.setStatus("a transaction is open · :commit or :rollback first", true)
+		return nil
+	}
+	t.manualTx = !t.manualTx
+	if t.manualTx {
+		t.setStatus("manual commit: statements run in a transaction until :commit or :rollback", false)
+	} else {
+		t.setStatus("autocommit", false)
+	}
+	return nil
+}
+
+// endTx runs COMMIT or ROLLBACK for :commit and :rollback.
+func (t *consoleTab) endTx(commit bool) tea.Cmd {
+	switch {
+	case t.running:
+		t.setStatus("a query is already running · ctrl+c to cancel", true)
+	case !t.inTx:
+		t.setStatus("no open transaction", true)
+	case commit && t.txAborted:
+		t.setStatus("the transaction failed and cannot be committed · :rollback", true)
+	default:
+		sql := "ROLLBACK"
+		if commit {
+			sql = "COMMIT"
+		}
+		return t.execute([]sqlx.Statement{{Text: sql}}, t.maxRows, false)
+	}
+	return nil
+}
+
+// TxStatus is the status bar badge for the console's transaction.
+func (t *consoleTab) TxStatus() string {
+	switch {
+	case t.txAborted:
+		return "TX failed · :rollback"
+	case t.inTx:
+		return fmt.Sprintf("TX %d", t.txWrites)
+	case t.manualTx:
+		return "TX"
+	}
+	return ""
+}
+
+func (t *consoleTab) openTx() bool { return t.inTx }
+
+func (t *consoleTab) clearTx() { t.inTx, t.txWrites, t.txAborted = false, 0, false }
+
+// trackTx follows the transaction through the statements that ran.
+// sessionLost means the session died during the run.
+func (t *consoleTab) trackTx(results []runner.Result, sessionLost bool) {
+	for _, r := range results {
+		if r.Err != nil {
+			// PostgreSQL refuses everything but ROLLBACK after an error in a transaction.
+			if t.inTx && t.dialect == sqlx.Postgres && !db.IsConnLost(r.Err) {
+				t.txAborted = true
+			}
+			continue
+		}
+		switch sqlx.TransactionEffect(r.SQL, t.dialect) {
+		case sqlx.TxBegin:
+			t.inTx, t.txWrites, t.txAborted = true, 0, false
+			continue
+		case sqlx.TxEnd:
+			t.clearTx()
+			continue
+		case sqlx.TxResume:
+			t.txAborted = false
+			continue
+		}
+		if !t.inTx {
+			continue
+		}
+		switch sqlx.Analyze(r.SQL, t.dialect).Kind {
+		case sqlx.Write:
+			t.txWrites++
+		case sqlx.DDL:
+			if t.dialect == sqlx.MySQL {
+				t.log("MySQL committed the open transaction implicitly before " + oneLine(r.SQL))
+				t.clearTx()
+			} else {
+				t.txWrites++
+			}
+		}
+	}
+	if sessionLost && t.inTx {
+		t.log("✗ " + errTxLost.Error())
+		t.clearTx()
+	}
+}
+
 // ---- running ----
 
 func (t *consoleTab) runAtCursor() tea.Cmd {
@@ -299,17 +410,23 @@ func (t *consoleTab) run(stmts []sqlx.Statement) tea.Cmd {
 }
 
 func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.Cmd {
+	began := false
+	if t.manualTx && !t.inTx && sqlx.TransactionEffect(stmts[0].Text, t.dialect) == sqlx.TxNone {
+		stmts = append([]sqlx.Statement{{Text: beginSQL(t.dialect)}}, stmts...)
+		began = true
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.gen++
 	t.running, t.cancel, t.started = true, cancel, time.Now()
 	t.setStatus("", false)
 	cfg, _ := t.backend.Connection(t.conn)
 	ro := cfg.IsReadOnly()
-	gen, id, b, conn, ns, d, s, sessRO := t.gen, t.id, t.backend, t.conn, t.ns, t.dialect, t.session, t.sessionRO
+	gen, id, b, conn, ns, d := t.gen, t.id, t.backend, t.conn, t.ns, t.dialect
+	s, sessRO, inTx := t.session, t.sessionRO, t.inTx
 	t.session = nil // owned by the command until runDoneMsg hands it back
 	run := func() tea.Msg {
 		defer cancel()
-		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit, readOnly: ro}
+		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit, readOnly: ro, began: began}
 		if s != nil && sessRO != ro {
 			// :set [no]readonly changed the connection: the session's
 			// server-side read-only setting no longer matches.
@@ -317,7 +434,7 @@ func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.C
 			s = nil
 			msg.reopened = true
 		}
-		sess, reconnected, err := ensureSession(ctx, b, conn, ns, s)
+		sess, reconnected, err := ensureSession(ctx, b, conn, ns, s, inTx)
 		msg.reconnected = reconnected
 		if err != nil {
 			msg.err = err
@@ -435,6 +552,10 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 		}
 		t.log("session reopened " + mode + " (session state such as temporary tables was reset)")
 	}
+	if errors.Is(m.err, errTxLost) {
+		t.clearTx()
+	}
+	t.trackTx(m.results, m.session == nil && m.err == nil)
 	if m.err != nil {
 		text := m.err.Error()
 		if errors.Is(m.err, session.ErrPasswordRequired) {
@@ -476,7 +597,11 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 	default:
 		t.showMessages = false
 	}
-	return t.record(m.results)
+	recorded := m.results
+	if m.began && len(recorded) > 0 {
+		recorded = recorded[1:] // the injected BEGIN is not history
+	}
+	return t.record(recorded)
 }
 
 func (t *consoleTab) record(results []runner.Result) tea.Cmd {
@@ -540,8 +665,9 @@ func oneLine(sql string) string {
 
 // ensureSession returns a live session: s if it still answers a ping,
 // otherwise a newly opened one (reconnected reports that). Statements are
-// never retried here.
-func ensureSession(ctx context.Context, b Backend, conn string, ns db.Namespace, s db.Session) (db.Session, bool, error) {
+// never retried here. Inside a transaction a dead session is not replaced:
+// the transaction is gone, and the caller reports errTxLost.
+func ensureSession(ctx context.Context, b Backend, conn string, ns db.Namespace, s db.Session, inTx bool) (db.Session, bool, error) {
 	if s != nil {
 		pctx, cancel := context.WithTimeout(ctx, pingTimeout)
 		err := s.Ping(pctx)
@@ -549,8 +675,11 @@ func ensureSession(ctx context.Context, b Backend, conn string, ns db.Namespace,
 		if err == nil {
 			return s, false, nil
 		}
-		slog.Info("console session lost, reconnecting", "conn", conn, "err", err)
+		slog.Info("console session lost", "conn", conn, "in_transaction", inTx, "err", err)
 		_ = s.Close()
+		if inTx {
+			return nil, false, errTxLost
+		}
 	}
 	reconnected := s != nil
 	ns2, err := openSession(ctx, b, conn, ns)
@@ -739,5 +868,9 @@ func (t *consoleTab) statusLine() string {
 	case t.status != "":
 		return theme.Muted.Render(textutil.Fit(textutil.Sanitize(t.status), t.width))
 	}
-	return theme.Muted.Render(textutil.Fit("enter run · R run all · i insert · ctrl+j results · <space>v $EDITOR", t.width))
+	hint := "enter run · R run all · i insert · ctrl+j results · <space>v $EDITOR"
+	if t.manualTx {
+		hint = "manual commit · :commit / :rollback · " + hint
+	}
+	return theme.Muted.Render(textutil.Fit(hint, t.width))
 }
