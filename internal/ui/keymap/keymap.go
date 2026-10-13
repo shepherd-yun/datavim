@@ -87,6 +87,8 @@ const (
 	UndoEdit         Action = "edit.undo"
 	UndoAllEdits     Action = "edit.undoall"
 	SubmitEdits      Action = "edit.submit"
+	NextTab          Action = "tab.next"
+	PrevTab          Action = "tab.prev"
 )
 
 const (

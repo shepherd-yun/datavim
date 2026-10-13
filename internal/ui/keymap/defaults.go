@@ -41,6 +41,12 @@ func DefaultBindings() []Binding {
 	} {
 		b = append(b, Binding{Global, keys(LeaderToken, "x", e.key), ExportAs(e.format), e.desc})
 	}
+	b = append(b,
+		Binding{Global, keys("L"), NextTab, "Next tab (wraps)"},
+		Binding{Global, keys("g", "t"), NextTab, "Next tab (wraps)"},
+		Binding{Global, keys("H"), PrevTab, "Previous tab (wraps)"},
+		Binding{Global, keys("g", "T"), PrevTab, "Previous tab (wraps)"},
+	)
 	for n := 1; n <= 9; n++ {
 		b = append(b, Binding{Global, keys(strconv.Itoa(n)), GotoTab(n), "Go to tab " + strconv.Itoa(n)})
 	}

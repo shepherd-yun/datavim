@@ -6,6 +6,13 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `H` / `L` switch to the previous / next tab, wrapping around, from any pane or tab.
+
+### Fixed
+- `gt` / `gT` switch tabs in table data, structure and console result tabs and in the tree,
+  not only in the console editor, and wrap around like `H` / `L`.
+
 ## [0.6.0] - 2026-10-14
 
 ### Added

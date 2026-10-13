@@ -73,6 +73,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `h` | Collapse / go to parent |
 | `Tab`, `Ctrl-h` `Ctrl-l` | Switch pane |
 | `1`–`9` | Go to tab (in the console editor digits are counts: use `gt` / `gT` / `{n}gt`) |
+| `H` `L`, `gT` `gt` | Previous / next tab, wrapping around (from any pane or tab) |
 | `/` `n` `N` | Search in the tree or a result grid |
 | `[` `]` | Previous / next page (data), section (structure); `]` loads more console rows |
 | `0` / `$` | Grid: first / last column |
@@ -120,8 +121,8 @@ motions `h j k l w b e W B E 0 ^ $ gg G f F t T % { }` and `Ctrl-d` `Ctrl-u`; op
 `d c y > <` with a motion, a text object (`iw aw i" a" i' a' i( a( i[ a[ i{ a{`) or doubled
 (`dd` `cc` `yy` `>>` `<<`); `x D C p P o O i a I A`; `u` / `Ctrl-r` undo and redo; `.`
 repeats the last change; counts (`3dd`, `2dw`); registers `"a`–`"z`, and `"+` for the
-system clipboard. In the editor the digits are counts, so `gt` / `gT` / `{n}gt` switch
-tabs. `Enter` in VISUAL mode runs the selected statements. `>` and `<` indent by four
+system clipboard. In the editor the digits are counts, so `gt` / `gT` / `{n}gt` or `H` / `L`
+switch tabs. `Enter` in VISUAL mode runs the selected statements. `>` and `<` indent by four
 spaces; `Tab` in INSERT mode types four spaces.
 
 Not built in: macros, ex ranges, windows, `/` search — `<Space>v` opens the console in

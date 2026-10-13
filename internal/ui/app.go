@@ -357,6 +357,10 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		m.setFocus(focusTree)
 	case keymap.FocusRight:
 		m.setFocus(focusTabs)
+	case keymap.NextTab:
+		return m.jumpTab(vimedit.TabJump{By: 1})
+	case keymap.PrevTab:
+		return m.jumpTab(vimedit.TabJump{By: -1})
 	case keymap.ToggleTree:
 		m.toggleTree()
 	case keymap.YankCell, keymap.YankRow:
@@ -798,7 +802,7 @@ func (m *Model) keyTakingTab() keyTaker {
 	return nil
 }
 
-// jumpTab is gt / gT: to tab j.To (1-based), or j.By tabs on, wrapping.
+// jumpTab is gt / gT / H / L: to tab j.To (1-based), or j.By tabs on, wrapping.
 func (m *Model) jumpTab(j vimedit.TabJump) tea.Cmd {
 	n := len(m.tabs)
 	switch {
