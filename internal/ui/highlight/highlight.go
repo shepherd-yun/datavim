@@ -2,6 +2,8 @@
 package highlight
 
 import (
+	"strings"
+
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 
@@ -57,6 +59,7 @@ func SQL(src string, d sqlx.Dialect) []Span {
 	}
 	var out []Span
 	off := 0
+	quoted := false // inside a MySQL `quoted identifier`
 	for t := it(); t != chroma.EOF; t = it() {
 		end := off + len(t.Value)
 		if end > len(src) || src[off:end] != t.Value {
@@ -66,6 +69,15 @@ func SQL(src string, d sqlx.Dialect) []Span {
 			continue
 		}
 		c := classOf(t.Type)
+		// Chroma lexes `name` as operator, name (or keyword), operator; the
+		// whole quoted identifier is a plain name. Each backtick toggles,
+		// so an escaped `` inside one keeps it open.
+		if t.Type == chroma.Operator && strings.Trim(t.Value, "`") == "" {
+			quoted = quoted != (len(t.Value)%2 == 1)
+			c = Plain
+		} else if quoted {
+			c = Plain
+		}
 		if n := len(out); n > 0 && out[n-1].Class == c {
 			out[n-1].End = end
 		} else {
@@ -87,6 +99,8 @@ func classOf(t chroma.TokenType) Class {
 		return Builtin
 	case t == chroma.LiteralStringName: // PostgreSQL "quoted identifiers"
 		return Plain
+	case t == chroma.NameConstant: // NULL, TRUE, FALSE in MySQL
+		return Keyword
 	case t.InCategory(chroma.Keyword):
 		return Keyword
 	case t.InCategory(chroma.Comment):
