@@ -41,6 +41,12 @@ func Guard(stmts []sqlx.Statement, d sqlx.Dialect, readOnly bool) Check {
 				Reason: fmt.Sprintf("read-only connection: %s statements are blocked (set readonly = false in connections.toml to allow them)", info.Kind),
 			}
 		}
+		if readOnly && sqlx.UnlocksReadOnly(s.Text, d) {
+			return Check{
+				Verdict: Reject, SQL: s.Text,
+				Reason: "read-only connection: switching the session to read-write is blocked (set readonly = false in connections.toml)",
+			}
+		}
 		if info.MissingWhere && confirm == nil {
 			target, expect := info.Target, info.Target
 			if target == "" {

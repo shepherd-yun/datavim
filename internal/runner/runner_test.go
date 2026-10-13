@@ -119,3 +119,14 @@ func TestRunStopsWhenCancelled(t *testing.T) {
 		t.Fatalf("res=%v ran=%v", res, q.ran)
 	}
 }
+
+func TestGuardBlocksSwitchingBackToReadWrite(t *testing.T) {
+	stmts := sqlx.Split("set default_transaction_read_only = off; prepare s as delete from t; execute s;", sqlx.Postgres)
+	c := Guard(stmts, sqlx.Postgres, true)
+	if c.Verdict != Reject || c.SQL != "set default_transaction_read_only = off" {
+		t.Fatalf("check = %+v", c)
+	}
+	if c := Guard(stmts, sqlx.Postgres, false); c.Verdict != Allow {
+		t.Fatalf("read-write connection: check = %+v", c)
+	}
+}

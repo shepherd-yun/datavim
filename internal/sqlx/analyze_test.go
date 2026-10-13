@@ -66,3 +66,30 @@ func TestKindString(t *testing.T) {
 		}
 	}
 }
+
+func TestUnlocksReadOnly(t *testing.T) {
+	cases := []struct {
+		d    Dialect
+		sql  string
+		want bool
+	}{
+		{Postgres, "set default_transaction_read_only = off", true},
+		{Postgres, "SET SESSION CHARACTERISTICS AS TRANSACTION READ WRITE", true},
+		{Postgres, "set /* x */ transaction_read_only to off", true},
+		{Postgres, "select set_config('default_transaction_read_only', 'off', false)", true},
+		{Postgres, "begin read/**/write", true},
+		{MySQL, "SET SESSION TRANSACTION READ WRITE", true},
+		{MySQL, "set transaction_read_only = 0", true},
+		{MySQL, "set @@session.tx_read_only = default", true},
+		{MySQL, "start transaction read write", true},
+		{Postgres, "select 1", false},
+		{Postgres, "set search_path to app", false},
+		{Postgres, "start transaction read only", false},
+		{MySQL, "select 'read write' as phrase", false},
+	}
+	for _, c := range cases {
+		if got := UnlocksReadOnly(c.sql, c.d); got != c.want {
+			t.Errorf("UnlocksReadOnly(%q) = %v, want %v", c.sql, got, c.want)
+		}
+	}
+}
