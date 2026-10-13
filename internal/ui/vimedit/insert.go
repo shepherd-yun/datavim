@@ -60,7 +60,11 @@ func (e *Editor) insertKey(k Key) {
 		case "end":
 			e.cur.Col = b.lineLen(l)
 		}
-		e.hist.commit() // moving starts a new undo step
+		// moving starts a new undo step; . repeats what is typed from here
+		e.hist.commit()
+		if e.rec != nil {
+			e.rec = &change{cmd: cmd{op: "i"}}
+		}
 		return
 	default:
 		if k.Text == "" {
@@ -68,7 +72,10 @@ func (e *Editor) insertKey(k Key) {
 			return
 		}
 		e.typeText(k.Text)
+		e.record(typed{text: k.Text})
+		return
 	}
+	e.record(typed{key: k.Name})
 }
 
 func (e *Editor) typeText(s string) { e.cur = e.change(e.cur, e.cur, s) }
@@ -84,6 +91,9 @@ func (e *Editor) backspace() {
 func (e *Editor) stopInsert() {
 	e.mode = Normal
 	e.hist.commit()
+	if e.rec != nil && !e.replay {
+		e.dot, e.rec = e.rec, nil
+	}
 	if e.cur.Col > 0 {
 		e.cur.Col--
 	}

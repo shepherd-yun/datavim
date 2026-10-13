@@ -95,6 +95,10 @@ type Editor struct {
 	hist history
 	pend pending
 	res  Result
+
+	dot    *change // the last change, for .
+	rec    *change // the change in progress until its INSERT session ends
+	replay bool    // . is running: do not record
 }
 
 // New returns an empty editor in NORMAL mode.
@@ -134,7 +138,7 @@ func (e *Editor) SetText(s string) {
 	e.buf = newBuffer(s)
 	e.buf.version = v + 1
 	e.hist.reset()
-	e.pend = pending{}
+	e.pend, e.rec = pending{}, nil
 	e.SetCursor(e.buf.end())
 }
 
@@ -152,6 +156,7 @@ func (e *Editor) ReplaceAll(s string) {
 func (e *Editor) InsertText(s string) {
 	if e.mode == Insert {
 		e.typeText(s)
+		e.record(typed{text: s})
 		return
 	}
 	end := e.change(e.cur, e.cur, s)
@@ -165,7 +170,9 @@ func (e *Editor) ReplaceBeforeCursor(start int, s string) {
 	off := e.Offset()
 	start = min(max(start, 0), off)
 	e.replaceBefore(off-start, s)
-	if e.mode != Insert {
+	if e.mode == Insert {
+		e.record(typed{text: s, back: off - start})
+	} else {
 		e.hist.commit()
 		e.fit()
 	}

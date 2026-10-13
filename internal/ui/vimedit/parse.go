@@ -91,7 +91,7 @@ func (e *Editor) normalKey(k Key) {
 // operator.
 func isCommand(name string) bool {
 	switch name {
-	case "x", "p", "P", "D", "C", "o", "O", "i", "a", "I", "A", "u", "ctrl+r",
+	case "x", "p", "P", "D", "C", "o", "O", "i", "a", "I", "A", "u", "ctrl+r", ".",
 		"ctrl+d", "ctrl+u":
 		return true
 	}
