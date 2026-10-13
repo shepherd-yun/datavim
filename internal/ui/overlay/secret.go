@@ -36,7 +36,7 @@ func (s *Secret) View(width, _ int) string {
 	w := max(min(width-4, 70), 20)
 	body := textutil.Wrap(textutil.Sanitize(s.label), w-2)
 	body = append(body,
-		"> "+strings.Repeat("•", s.input.Len())+"█",
+		"> "+s.input.ViewMasked(w-4, '•'),
 		"",
 		theme.Muted.Render("enter ok · esc cancel"),
 	)

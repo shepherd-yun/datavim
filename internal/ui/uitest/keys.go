@@ -20,6 +20,11 @@ var special = map[string]tea.KeyPressMsg{
 	"down":       {Code: tea.KeyDown},
 	"left":       {Code: tea.KeyLeft},
 	"right":      {Code: tea.KeyRight},
+	"home":       {Code: tea.KeyHome},
+	"end":        {Code: tea.KeyEnd},
+	"delete":     {Code: tea.KeyDelete},
+	"alt+left":   {Code: tea.KeyLeft, Mod: tea.ModAlt},
+	"alt+right":  {Code: tea.KeyRight, Mod: tea.ModAlt},
 }
 
 // Key builds a key press whose String() is s, e.g. "j", "G", "ctrl+d", "enter".
@@ -30,6 +35,10 @@ func Key(s string) tea.KeyPressMsg {
 	if rest, ok := strings.CutPrefix(s, "ctrl+"); ok {
 		r, _ := utf8.DecodeRuneInString(rest)
 		return tea.KeyPressMsg{Code: r, Mod: tea.ModCtrl}
+	}
+	if rest, ok := strings.CutPrefix(s, "alt+"); ok {
+		r, _ := utf8.DecodeRuneInString(rest)
+		return tea.KeyPressMsg{Code: r, Mod: tea.ModAlt}
 	}
 	r, _ := utf8.DecodeRuneInString(s)
 	return tea.KeyPressMsg{Code: r, Text: s}

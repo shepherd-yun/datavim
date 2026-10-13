@@ -4,9 +4,7 @@ import (
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
-	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
 
@@ -35,13 +33,9 @@ func (p *Prompt) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 
 func (p *Prompt) View(width, _ int) string {
 	w := max(min(width-4, 80), 20)
-	value := textutil.Sanitize(p.input.String()) + "█"
-	if room := w - 4; ansi.StringWidth(value) > room {
-		value = "…" + ansi.TruncateLeft(value, ansi.StringWidth(value)-room+1, "")
-	}
 	body := strings.Join([]string{
 		p.label,
-		"> " + value,
+		"> " + p.input.View(w-4),
 		"",
 		theme.Muted.Render("enter ok · esc cancel"),
 	}, "\n")

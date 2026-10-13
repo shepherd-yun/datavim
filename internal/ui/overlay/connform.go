@@ -160,19 +160,20 @@ func (f *ConnForm) View(width, _ int) string {
 	lines := make([]string, 0, len(f.fields)+4)
 	for i, fd := range f.fields {
 		var v string
+		label := fmt.Sprintf("%-14s", fd.label)
 		switch {
 		case fd.choices != nil:
 			v = "‹ " + fd.choices[fd.choice] + " ›"
+		case i == f.cur && fd.secret:
+			v = fd.input.ViewMasked(w-16, '•')
+		case i == f.cur:
+			v = fd.input.View(w - 16)
 		case fd.secret:
 			v = strings.Repeat("•", fd.input.Len())
 		default:
 			v = textutil.Sanitize(fd.input.String())
 		}
-		label := fmt.Sprintf("%-14s", fd.label)
 		if i == f.cur {
-			if fd.choices == nil {
-				v += "█"
-			}
 			label = theme.ActiveTab.Render(label)
 		}
 		lines = append(lines, label+v)
