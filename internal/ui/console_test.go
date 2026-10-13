@@ -452,3 +452,184 @@ func TestConsoleReopensSessionWhenReadOnlyChanges(t *testing.T) {
 		t.Fatalf("sessions = %d: no reopen while the setting is unchanged", n)
 	}
 }
+
+func runSQL(t *testing.T, c *consoleTab, sql string) {
+	t.Helper()
+	c.editor.SetValue(sql)
+	runTab(t, c, c.Handle(keymap.RunStatement))
+}
+
+func countOf(list []string, s string) int {
+	n := 0
+	for _, v := range list {
+		if v == s {
+			n++
+		}
+	}
+	return n
+}
+
+func TestConsoleManualCommit(t *testing.T) {
+	b := newFakeBackend()
+	c, st := newConsoleWithStore(t, b, "local")
+	c.toggleTx()
+	if got := c.TxStatus(); got != "TX" {
+		t.Fatalf("manual mode, no transaction yet: %q", got)
+	}
+	runSQL(t, c, "insert into t values (1)")
+	runSQL(t, c, "update t set a = 1 where id = 1")
+	want := []string{"USE `app`", "START TRANSACTION", "insert into t values (1)", "update t set a = 1 where id = 1"}
+	if got := b.conn.execList(); !slices.Equal(got, want) {
+		t.Fatalf("execs = %v", got)
+	}
+	if got := c.TxStatus(); got != "TX 2" {
+		t.Fatalf("status = %q", got)
+	}
+	runTab(t, c, c.endTx(true))
+	if got := b.conn.execList(); got[len(got)-1] != "COMMIT" {
+		t.Fatalf("execs = %v", got)
+	}
+	if got := c.TxStatus(); got != "TX" {
+		t.Fatalf("after commit: %q", got)
+	}
+	st.mu.Lock()
+	var recorded []string
+	for _, e := range st.entries {
+		recorded = append(recorded, e.SQL)
+	}
+	st.mu.Unlock()
+	if slices.Contains(recorded, "START TRANSACTION") || !slices.Contains(recorded, "COMMIT") {
+		t.Fatalf("history = %v; the injected BEGIN is not recorded", recorded)
+	}
+	c.toggleTx()
+	if got := c.TxStatus(); got != "" {
+		t.Fatalf("autocommit: %q", got)
+	}
+}
+
+func TestConsoleToggleOffNeedsCommit(t *testing.T) {
+	b := newFakeBackend()
+	c := newConsole(t, b, "local")
+	c.toggleTx()
+	runSQL(t, c, "insert into t values (1)")
+	c.toggleTx()
+	if !c.manualTx || !strings.Contains(consoleView(c), ":commit or :rollback") {
+		t.Fatalf("manual=%v view:\n%s", c.manualTx, consoleView(c))
+	}
+	if !c.openTx() {
+		t.Fatal("openTx")
+	}
+}
+
+func TestConsoleTracksTypedTransactionStatements(t *testing.T) {
+	b := newFakeBackend()
+	c := newConsole(t, b, "local")
+	steps := []struct{ sql, want string }{
+		{"begin", "TX 0"},
+		{"delete from t where id = 1", "TX 1"},
+		{"commit", ""},
+		{"start transaction", "TX 0"},
+		{"insert into t values (1)", "TX 1"},
+		{"commit and chain", "TX 0"},
+		{"rollback", ""},
+	}
+	for _, s := range steps {
+		runSQL(t, c, s.sql)
+		if got := c.TxStatus(); got != s.want {
+			t.Fatalf("after %q: status = %q, want %q", s.sql, got, s.want)
+		}
+	}
+	if n := countOf(b.conn.execList(), "START TRANSACTION"); n != 0 {
+		t.Fatal("autocommit mode never injects BEGIN")
+	}
+}
+
+func TestConsoleMySQLDDLCommitsImplicitly(t *testing.T) {
+	b := newFakeBackend()
+	c := newConsole(t, b, "local")
+	c.toggleTx()
+	runSQL(t, c, "insert into t values (1)")
+	runSQL(t, c, "create table x (id int)")
+	if got := c.TxStatus(); got != "TX" {
+		t.Fatalf("status = %q", got)
+	}
+	// A statement without a result set already shows the messages pane.
+	if !strings.Contains(consoleView(c), "implicitly") {
+		t.Fatalf("view:\n%s", consoleView(c))
+	}
+	runSQL(t, c, "insert into t values (2)")
+	if n := countOf(b.conn.execList(), "START TRANSACTION"); n != 2 {
+		t.Fatalf("START TRANSACTION ran %d times, want 2", n)
+	}
+}
+
+func TestConsolePostgresFailedStatementAbortsTx(t *testing.T) {
+	b := newFakeBackend()
+	b.conns = append(b.conns, config.Connection{Name: "pgdev", Driver: "postgres", Env: config.EnvDev})
+	c := newConsole(t, b, "pgdev")
+	c.toggleTx()
+	runSQL(t, c, "insert into t values (1)")
+	b.conn.setFail("insert into t values (2)", errors.New("duplicate key"))
+	runSQL(t, c, "insert into t values (2)")
+	if got := c.TxStatus(); got != "TX failed · :rollback" {
+		t.Fatalf("status = %q", got)
+	}
+	runSQL(t, c, "rollback to savepoint s1")
+	if got := c.TxStatus(); got != "TX 1" {
+		t.Fatalf("ROLLBACK TO SAVEPOINT recovers: %q", got)
+	}
+	runSQL(t, c, "insert into t values (2)")
+	before := len(b.conn.execList())
+	runTab(t, c, c.endTx(true))
+	if len(b.conn.execList()) != before || !strings.Contains(consoleView(c), ":rollback") {
+		t.Fatalf("a failed transaction is not committed; view:\n%s", consoleView(c))
+	}
+	runTab(t, c, c.endTx(false))
+	if got := b.conn.execList(); got[len(got)-1] != "ROLLBACK" || c.TxStatus() != "TX" {
+		t.Fatalf("execs = %v, status = %q", got, c.TxStatus())
+	}
+	if got := b.conn.execList(); got[0] != "BEGIN" {
+		t.Fatalf("PostgreSQL starts with BEGIN: %v", got)
+	}
+}
+
+func TestConsoleTransactionLostOnDisconnect(t *testing.T) {
+	b := newFakeBackend()
+	c := newConsole(t, b, "local")
+	c.toggleTx()
+	runSQL(t, c, "insert into t values (1)")
+	b.conn.mu.Lock()
+	b.conn.pingErr = fmt.Errorf("read: %w", io.EOF)
+	b.conn.mu.Unlock()
+	runSQL(t, c, "select 1")
+	if got := b.conn.lastQuery(); got != "" {
+		t.Fatalf("nothing runs once the transaction is lost, ran %q", got)
+	}
+	if c.session != nil || c.TxStatus() != "TX" {
+		t.Fatalf("session = %v, status = %q", c.session, c.TxStatus())
+	}
+	if v := consoleView(c); !strings.Contains(v, "transaction lost") {
+		t.Fatalf("view:\n%s", v)
+	}
+	b.conn.mu.Lock()
+	b.conn.pingErr = nil
+	b.conn.mu.Unlock()
+	runSQL(t, c, "select 1")
+	if b.conn.sessionCount() != 2 || b.conn.lastQuery() != "select 1" {
+		t.Fatalf("sessions = %d, last query = %q", b.conn.sessionCount(), b.conn.lastQuery())
+	}
+	if n := countOf(b.conn.execList(), "START TRANSACTION"); n != 2 {
+		t.Fatalf("a new transaction starts on the new session: %d", n)
+	}
+}
+
+func TestConsoleEndTxWithoutTransaction(t *testing.T) {
+	b := newFakeBackend()
+	c := newConsole(t, b, "local")
+	if cmd := c.endTx(true); cmd != nil {
+		t.Fatal("nothing to commit")
+	}
+	if !strings.Contains(consoleView(c), "no open transaction") {
+		t.Fatalf("view:\n%s", consoleView(c))
+	}
+}
