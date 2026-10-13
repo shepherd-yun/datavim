@@ -4,6 +4,7 @@ import (
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -28,5 +29,20 @@ func TestBoxLongTitleAndTinySizes(t *testing.T) {
 	}
 	if Box("t", "x", 1, 5, false) != "" || Box("t", "x", 5, 1, false) != "" {
 		t.Error("too small boxes render nothing")
+	}
+}
+
+func TestFrameDangerIsRed(t *testing.T) {
+	red := lipgloss.NewStyle().Foreground(ColorError).Render("┌")
+	for _, focused := range []bool{false, true} {
+		if got := Frame("t", "x", 10, 3, focused, true); !strings.HasPrefix(got, red) {
+			t.Errorf("focused=%v: danger frame is not red: %q", focused, got)
+		}
+		if got := Box("t", "x", 10, 3, focused); strings.HasPrefix(got, red) {
+			t.Errorf("focused=%v: plain box is red", focused)
+		}
+	}
+	if ansi.Strip(Frame("t", "x", 10, 3, false, true)) != ansi.Strip(Box("t", "x", 10, 3, false)) {
+		t.Error("only the color differs")
 	}
 }

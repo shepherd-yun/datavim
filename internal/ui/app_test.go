@@ -8,10 +8,12 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/history"
+	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
@@ -482,5 +484,49 @@ func TestEmptyConfigShowsHowToAddAConnection(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	if s := screen(m); !strings.Contains(s, "No connections") || !strings.Contains(s, "<space>n") {
 		t.Fatalf("screen:\n%s", s)
+	}
+}
+
+func statusLine(m *Model) string {
+	lines := strings.Split(screen(m), "\n")
+	return lines[len(lines)-1]
+}
+
+// openProdUsers expands prod -> app and opens the users table.
+func openProdUsers(t *testing.T, m *Model) {
+	t.Helper()
+	press(t, m, "j", "l", "j", "l", "j", "l")
+}
+
+func TestProdConnectionIsRed(t *testing.T) {
+	redCorner := lipgloss.NewStyle().Foreground(theme.ColorError).Render("┌")
+
+	dev, _ := newTestModel(t)
+	openUsers(t, dev)
+	if s := statusLine(dev); strings.Contains(s, "[PROD]") || strings.Contains(s, " RO ") {
+		t.Fatalf("dev status: %s", s)
+	}
+	if strings.Contains(dev.render(), redCorner) {
+		t.Fatal("dev tabs are not framed in red")
+	}
+
+	prod, _ := newTestModel(t)
+	openProdUsers(t, prod)
+	if _, ok := prod.activeTab().(*dataTab); !ok {
+		t.Fatalf("prod users not opened:\n%s", screen(prod))
+	}
+	if s := statusLine(prod); !strings.Contains(s, "[PROD]") || !strings.Contains(s, " RO ") {
+		t.Fatalf("prod status: %s", s)
+	}
+	out := prod.render()
+	if !strings.Contains(out, redCorner) || !strings.Contains(out, theme.ProdMode.Render(" NORMAL ")) {
+		t.Fatal("prod tab frame and mode block are red")
+	}
+	press(t, prod, "ctrl+h", "g", "g") // tree focus on local: the status bar follows the tree selection
+	if s := statusLine(prod); strings.Contains(s, "[PROD]") {
+		t.Fatalf("status for local: %s", s)
+	}
+	if !strings.Contains(prod.render(), redCorner) {
+		t.Fatal("the tab area stays red while it shows a prod tab")
 	}
 }

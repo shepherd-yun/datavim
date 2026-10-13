@@ -19,6 +19,8 @@ var (
 	Muted       = lipgloss.NewStyle().Foreground(ColorBorder)
 	Error       = lipgloss.NewStyle().Foreground(ColorError)
 	Prod        = lipgloss.NewStyle().Foreground(ColorError).Bold(true)
+	ProdMode    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(ColorError)
+	Accent      = lipgloss.NewStyle().Bold(true).Foreground(ColorAccent)
 	Title       = lipgloss.NewStyle().Bold(true)
 	Selected    = lipgloss.NewStyle().Reverse(true)
 	SelectedDim = lipgloss.NewStyle().Underline(true)
@@ -30,12 +32,21 @@ var (
 
 // Box frames body with a titled border of exactly width x height cells.
 func Box(title, body string, width, height int, focused bool) string {
+	return Frame(title, body, width, height, focused, false)
+}
+
+// Frame is Box with a red border when danger is set (a prod connection),
+// whatever the focus.
+func Frame(title, body string, width, height int, focused, danger bool) string {
 	if width < 2 || height < 2 {
 		return ""
 	}
 	inner := width - 2
 	border := lipgloss.NewStyle().Foreground(ColorBorder)
-	if focused {
+	switch {
+	case danger:
+		border = border.Foreground(ColorError)
+	case focused:
 		border = border.Foreground(ColorFocus)
 	}
 
