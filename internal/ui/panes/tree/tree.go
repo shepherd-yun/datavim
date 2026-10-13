@@ -36,9 +36,9 @@ type Node struct {
 	parent *Node
 }
 
-func (n *Node) Parent() *Node        { return n.parent }
-func (n *Node) Expandable() bool     { return n.Kind <= KindSchema }
-func (n *Node) IsTable() bool        { return n.Kind == KindTable || n.Kind == KindView }
+func (n *Node) Parent() *Node         { return n.parent }
+func (n *Node) Expandable() bool      { return n.Kind <= KindSchema }
+func (n *Node) IsTable() bool         { return n.Kind == KindTable || n.Kind == KindView }
 func (n *Node) TableRef() db.TableRef { return db.TableRef{Namespace: n.NS, Name: n.Name} }
 
 type row struct {

@@ -21,7 +21,7 @@ func (m meta) Databases(ctx context.Context) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []string
 	for rows.Next() {
 		var s string
@@ -42,7 +42,7 @@ func (m meta) Tables(ctx context.Context, ns db.Namespace) ([]db.Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []db.Table
 	for rows.Next() {
 		var t db.Table
@@ -69,7 +69,7 @@ func (m meta) Columns(ctx context.Context, t db.TableRef) ([]db.Column, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []db.Column
 	for rows.Next() {
 		var c db.Column
@@ -96,7 +96,7 @@ func (m meta) Indexes(ctx context.Context, t db.TableRef) ([]db.Index, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []db.Index
 	for rows.Next() {
 		var name, col string
@@ -122,7 +122,7 @@ func (m meta) ForeignKeys(ctx context.Context, t db.TableRef) ([]db.ForeignKey, 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var out []db.ForeignKey
 	for rows.Next() {
 		var name, col, refDB, refTable, refCol string
@@ -154,7 +154,7 @@ func (m meta) DDL(ctx context.Context, t db.TableRef) (string, error) {
 		}
 		return "", err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	cols, err := rows.Columns()
 	if err != nil {
 		return "", err

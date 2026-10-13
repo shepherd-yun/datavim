@@ -53,13 +53,17 @@ func (fakeMeta) Schemas(context.Context, string) ([]string, error) { return nil,
 func (fakeMeta) Tables(context.Context, db.Namespace) ([]db.Table, error) {
 	return []db.Table{{Name: "users"}, {Name: "active", Kind: db.TableKindView}}, nil
 }
+
 func (fakeMeta) Columns(context.Context, db.TableRef) ([]db.Column, error) {
 	return []db.Column{{Name: "id", Type: "bigint", PrimaryKey: true}, {Name: "name", Type: "text", Nullable: true}}, nil
 }
+
 func (fakeMeta) Indexes(context.Context, db.TableRef) ([]db.Index, error) {
 	return []db.Index{{Name: "PRIMARY", Columns: []string{"id"}, Unique: true, Primary: true}}, nil
 }
+
 func (fakeMeta) ForeignKeys(context.Context, db.TableRef) ([]db.ForeignKey, error) { return nil, nil }
+
 func (fakeMeta) DDL(_ context.Context, t db.TableRef) (string, error) {
 	if t.Name == "missing" {
 		return "", fmt.Errorf("%s: %w", t.Name, db.ErrNotFound)
@@ -73,7 +77,10 @@ func (fakeDialect) QuoteIdent(s string) string { return db.Quote(s, '`') }
 func (d fakeDialect) QualifiedName(t db.TableRef) string {
 	return d.QuoteIdent(t.Database) + "." + d.QuoteIdent(t.Name)
 }
-func (fakeDialect) Paginate(q string, limit, offset int) string { return db.LimitOffset(q, limit, offset) }
+
+func (fakeDialect) Paginate(q string, limit, offset int) string {
+	return db.LimitOffset(q, limit, offset)
+}
 
 type fakeBackend struct {
 	mu           sync.Mutex

@@ -63,9 +63,9 @@ type conn struct {
 	database string
 }
 
-func (c *conn) Dialect() db.Dialect   { return dialect{} }
-func (c *conn) Meta() db.MetaReader   { return meta{c: c} }
-func (c *conn) Close() error          { c.pool.Close(); return nil }
+func (c *conn) Dialect() db.Dialect { return dialect{} }
+func (c *conn) Meta() db.MetaReader { return meta{c: c} }
+func (c *conn) Close() error        { c.pool.Close(); return nil }
 
 func (c *conn) Exec(ctx context.Context, sql string, args ...any) (db.ExecResult, error) {
 	tag, err := c.pool.Exec(ctx, sql, args...)
