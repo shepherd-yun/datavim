@@ -9,7 +9,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - `H` / `L` switch to the previous / next tab, wrapping around, from any pane or tab.
 - `f` is a quick filter menu for the current column: `ff` equals, `f!` not equal, `fs` / `f~`
-  contains, `f>` / `f<` greater / less than, `fn` / `fN` NULL / not NULL, `fx` clears.
+  contains, `fl` LIKE a typed pattern (`%` and `_` are wildcards), `f>` / `f<` greater / less
+  than, `fn` / `fN` NULL / not NULL, `fx` clears.
 - `F` starts from the cursor's column, completes column names and keywords with `Tab`, keeps
   the prompt open on a malformed filter, and brings back a filter the server rejected.
 - Text inputs (prompts, `:` and `/`, the connection form, passwords) move the cursor with

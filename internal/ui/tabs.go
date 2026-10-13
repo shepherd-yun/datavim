@@ -90,7 +90,7 @@ func normFilter(s string) string {
 	return strings.TrimSpace(strings.TrimRight(strings.TrimSpace(s), ";"))
 }
 
-// filterValueMsg is a value typed for fs, f> or f<.
+// filterValueMsg is a value typed for fs, fl, f> or f<.
 type filterValueMsg struct {
 	tabID  int
 	action keymap.Action
@@ -276,6 +276,8 @@ func (t *dataTab) Update(msg tea.Msg) tea.Cmd {
 		switch m.action {
 		case keymap.FilterContains:
 			return t.addFilter(containsFilter(t.dialect, m.col.Name, m.text))
+		case keymap.FilterLike:
+			return t.addFilter(likeFilter(t.dialect, m.col.Name, m.text))
 		case keymap.FilterGreater:
 			return t.addFilter(compareFilter(t.dialect, m.col, ">", db.Value{Text: m.text}))
 		case keymap.FilterLess:
@@ -372,7 +374,7 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 	}
 	switch a {
 	case keymap.NextPage, keymap.PrevPage, keymap.Refresh, keymap.FilterPrompt, keymap.SortColumn,
-		keymap.FilterEqual, keymap.FilterNotEqual, keymap.FilterContains, keymap.FilterGreater,
+		keymap.FilterEqual, keymap.FilterNotEqual, keymap.FilterContains, keymap.FilterLike, keymap.FilterGreater,
 		keymap.FilterLess, keymap.FilterNull, keymap.FilterNotNull, keymap.FilterClear:
 		if n := t.changes(); n > 0 {
 			t.setStatus(plural(n, "unsaved change")+" · <space>w submits, U discards", true)
@@ -412,7 +414,7 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 			return nil
 		}
 		return t.addFilter(nullFilter(t.dialect, col.Name, a == keymap.FilterNotNull))
-	case keymap.FilterContains, keymap.FilterGreater, keymap.FilterLess:
+	case keymap.FilterContains, keymap.FilterLike, keymap.FilterGreater, keymap.FilterLess:
 		return t.filterValuePrompt(a)
 	case keymap.FilterClear:
 		if t.query.where == "" {
@@ -478,12 +480,13 @@ func (t *dataTab) addFilter(cond string) tea.Cmd {
 
 var filterVerbs = map[keymap.Action]string{
 	keymap.FilterContains: "contains",
+	keymap.FilterLike:     "LIKE",
 	keymap.FilterGreater:  ">",
 	keymap.FilterLess:     "<",
 }
 
-// filterValuePrompt asks for the value of fs, f> or f<, starting from the
-// cell under the cursor.
+// filterValuePrompt asks for the value of fs, fl, f> or f<, starting from
+// the cell under the cursor (wrapped in % for fl).
 func (t *dataTab) filterValuePrompt(a keymap.Action) tea.Cmd {
 	col, ok := t.grid.Column()
 	if !ok {
@@ -494,8 +497,13 @@ func (t *dataTab) filterValuePrompt(a keymap.Action) tea.Cmd {
 	if _, v, ok := t.grid.Cell(); ok && !v.Null {
 		initial = v.Text
 	}
+	label := col.Name + " " + filterVerbs[a] + " …"
+	if a == keymap.FilterLike {
+		initial = "%" + initial + "%"
+		label += "  % any text · _ one character"
+	}
 	id := t.id
-	return openOverlay(overlay.NewPrompt("Filter "+t.ref.Name, col.Name+" "+filterVerbs[a]+" …", initial,
+	return openOverlay(overlay.NewPrompt("Filter "+t.ref.Name, label, initial,
 		func(s string) tea.Msg { return filterValueMsg{tabID: id, action: a, col: col, text: s} }))
 }
 

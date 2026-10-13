@@ -202,7 +202,7 @@ func TestFilterAndSortBindings(t *testing.T) {
 	for keys, want := range map[string]Action{
 		"f f": FilterEqual, "f !": FilterNotEqual, "f s": FilterContains, "f ~": FilterContains,
 		"f >": FilterGreater, "f <": FilterLess, "f n": FilterNull, "f N": FilterNotNull,
-		"f x": FilterClear, "F": FilterPrompt, "s": SortColumn,
+		"f x": FilterClear, "f l": FilterLike, "F": FilterPrompt, "s": SortColumn,
 	} {
 		seq := strings.Fields(keys)
 		if a, res := k.Resolve(Grid, seq); a != want || res != Matched {

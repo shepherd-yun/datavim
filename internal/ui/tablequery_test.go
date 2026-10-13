@@ -92,3 +92,15 @@ func TestContainsFilterIsOneCondition(t *testing.T) {
 		}
 	}
 }
+
+func TestLikeFilterKeepsWildcards(t *testing.T) {
+	for i, c := range []struct{ got, want string }{
+		{likeFilter(sqlx.MySQL, "name", "a%b_c"), "`name` LIKE 'a%b_c'"},
+		{likeFilter(sqlx.Postgres, "name", "a%b_c"), `"name"::text ILIKE 'a%b_c'`},
+		{likeFilter(sqlx.MySQL, "name", `it's`), "`name` LIKE 'it''s'"},
+	} {
+		if c.got != c.want {
+			t.Errorf("%d: got %s, want %s", i, c.got, c.want)
+		}
+	}
+}
