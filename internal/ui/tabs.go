@@ -141,8 +141,8 @@ func primaryKey(cols []db.Column) []string {
 	return out
 }
 
-func fetchPage(ctx context.Context, c db.Conn, ref db.TableRef, orderBy []string, page, size int) (*db.ResultSet, bool, error) {
-	d := c.Dialect()
+// selectAll is the table-data query in primary-key order.
+func selectAll(d db.Dialect, ref db.TableRef, orderBy []string) string {
 	q := "SELECT * FROM " + d.QualifiedName(ref)
 	if len(orderBy) > 0 {
 		quoted := make([]string, len(orderBy))
@@ -151,7 +151,12 @@ func fetchPage(ctx context.Context, c db.Conn, ref db.TableRef, orderBy []string
 		}
 		q += " ORDER BY " + strings.Join(quoted, ", ")
 	}
-	rs, err := c.Query(ctx, d.Paginate(q, size+1, page*size))
+	return q
+}
+
+func fetchPage(ctx context.Context, c db.Conn, ref db.TableRef, orderBy []string, page, size int) (*db.ResultSet, bool, error) {
+	d := c.Dialect()
+	rs, err := c.Query(ctx, d.Paginate(selectAll(d, ref, orderBy), size+1, page*size))
 	if err != nil {
 		return nil, false, err
 	}

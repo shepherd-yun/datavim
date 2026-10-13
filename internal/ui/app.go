@@ -3,6 +3,7 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -12,6 +13,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/export"
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
@@ -44,6 +46,7 @@ type whichKeyMsg struct{ gen int }
 type Model struct {
 	backend  Backend
 	store    Store
+	home     string
 	settings config.Settings
 	keys     *keymap.Keymap
 
@@ -74,6 +77,7 @@ type Model struct {
 
 // New builds the root model with one tree root per configured connection.
 func New(b Backend, st Store, settings config.Settings) *Model {
+	home, _ := os.UserHomeDir()
 	conns := b.Connections()
 	roots := make([]*tree.Node, len(conns))
 	for i, c := range conns {
@@ -82,6 +86,7 @@ func New(b Backend, st Store, settings config.Settings) *Model {
 	return &Model{
 		backend:       b,
 		store:         st,
+		home:          home,
 		settings:      settings,
 		keys:          keymap.Default(),
 		showTree:      true,
@@ -126,6 +131,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.historyLoaded(msg)
 	case historyPickedMsg:
 		return m, m.useHistory(msg.entry)
+	case exportScopeMsg:
+		m.exportScope(msg)
+	case exportPathMsg:
+		return m, m.exportTo(msg)
+	case exportDoneMsg:
+		m.exportDone(msg)
 	case overlay.SearchMsg:
 		m.lastSearch = msg.Text
 		m.find(true)
@@ -200,6 +211,12 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		m.gotoTab(n - 1)
 		return nil
 	}
+	if f, ok := keymap.CopyFormat(a); ok {
+		return m.copyAs(export.Format(f))
+	}
+	if f, ok := keymap.ExportFormat(a); ok {
+		return m.exportAs(export.Format(f))
+	}
 	switch a {
 	case keymap.Quit:
 		return m.quit()
@@ -239,6 +256,8 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		m.setFocus(focusTabs)
 	case keymap.ToggleTree:
 		m.toggleTree()
+	case keymap.YankCell, keymap.YankRow:
+		return m.yank(a)
 	case keymap.OpenStructure:
 		return m.openStructureFromContext()
 	default:
