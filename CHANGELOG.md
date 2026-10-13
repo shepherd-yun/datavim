@@ -4,6 +4,21 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [0.3.0] - 2026-10-13
+
+### Added
+- SSH tunnels from `~/.ssh/config` (`ssh = "<Host>"`): ssh-agent and key files, passphrase
+  prompts, ProxyJump chains, known_hosts checks with a fingerprint prompt for new hosts,
+  keepalive and automatic reconnect. No local port is opened.
+- Production connections: red tab frame, `[PROD]` status, confirmation before writes and DDL.
+- `:set noreadonly` / `:set readonly` for the current session.
+- Manual commit mode (`<Space>t`) with `TX n` in the status bar, `:commit` / `:rollback`,
+  and a prompt before quitting or closing a console with an open transaction.
+- SSH host field in the new connection form.
+
+### Changed
+- `:q!` / `:qa!` skip the open-transaction prompt.
+
 ## [0.2.0] - 2026-10-13
 
 ### Added

@@ -7,6 +7,7 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/user"
 	"path/filepath"
 
 	tea "charm.land/bubbletea/v2"
@@ -14,6 +15,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db/mysql"
 	"github.com/shepherd-yun/sqlvim/internal/db/postgres"
+	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/secret"
 	"github.com/shepherd-yun/sqlvim/internal/session"
@@ -68,7 +70,18 @@ func run(args []string, stdout io.Writer) error {
 	}
 	defer func() { _ = st.Close() }()
 
-	mgr := newManager(cfg, dir)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	tunnels := tunnel.NewPool(tunnel.Options{
+		ConfigFile:  filepath.Join(home, ".ssh", "config"),
+		Env:         tunnel.Env{Home: home, User: localUser()},
+		AgentSocket: os.Getenv("SSH_AUTH_SOCK"),
+	})
+	defer tunnels.Close()
+
+	mgr := newManager(cfg, dir, tunnels)
 	defer mgr.CloseAll()
 
 	slog.Info("starting", "version", version, "connections", len(cfg.Connections))
@@ -112,12 +125,21 @@ func openStore(stateDir string) (*history.Store, error) {
 }
 
 // newManager builds the session manager; connections added in the UI are
-// appended to dir/connections.toml.
-func newManager(cfg *config.Config, dir string) *session.Manager {
+// appended to dir/connections.toml, and ssh connections use tunnels.
+func newManager(cfg *config.Config, dir string, tunnels session.Tunneler) *session.Manager {
 	mgr := session.NewManager(cfg.Connections, secret.Keyring{}, mysql.Driver{}, postgres.Driver{})
 	mgr.Persist = func(c config.Connection) error {
 		_, err := config.AppendConnection(dir, c)
 		return err
 	}
+	mgr.Tunnels = tunnels
 	return mgr
+}
+
+// localUser is the default SSH user, as for ssh(1).
+func localUser() string {
+	if u, err := user.Current(); err == nil && u.Username != "" {
+		return u.Username
+	}
+	return os.Getenv("USER")
 }
