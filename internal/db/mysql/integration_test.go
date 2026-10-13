@@ -61,6 +61,7 @@ func TestContract(t *testing.T) {
 		}
 	}
 	dbtest.RunContract(t, conn, dbtest.Fixture{
+		Driver:   "mysql",
 		NS:       db.Namespace{Database: "app"},
 		SleepSQL: "SELECT SLEEP(30)",
 		OpenReadOnly: func(ctx context.Context) (db.Conn, error) {
