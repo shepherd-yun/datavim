@@ -127,3 +127,84 @@ func TestWhichKey(t *testing.T) {
 		t.Fatalf("box:\n%s", box)
 	}
 }
+
+type okMsg struct{ n int }
+
+func TestSearchLine(t *testing.T) {
+	o, msg := send(t, NewSearchLine(), "u", "s", "enter")
+	if o != nil || msg != (SearchMsg{Text: "us"}) {
+		t.Fatalf("o=%v msg=%#v", o, msg)
+	}
+	s := NewSearchLine()
+	s.HandleKey(uitest.Key("x"))
+	if !strings.HasPrefix(ansi.Strip(s.View(20, 1)), "/x") {
+		t.Fatal("search line shows /")
+	}
+}
+
+func TestConfirmYesNo(t *testing.T) {
+	c := NewConfirm("Run?", []string{"DROP TABLE t"}, "", okMsg{1})
+	if v := ansi.Strip(c.View(80, 20)); !strings.Contains(v, "DROP TABLE t") || !strings.Contains(v, "y confirm") {
+		t.Fatalf("view:\n%s", v)
+	}
+	if o, msg := send(t, c, "x"); o == nil || msg != nil {
+		t.Fatal("other keys are ignored")
+	}
+	if o, msg := send(t, c, "y"); o != nil || msg != (okMsg{1}) {
+		t.Fatalf("y: o=%v msg=%v", o, msg)
+	}
+	if o, msg := send(t, NewConfirm("Run?", nil, "", okMsg{1}), "n"); o != nil || msg != nil {
+		t.Fatal("n cancels")
+	}
+}
+
+func TestConfirmTypedText(t *testing.T) {
+	c := NewConfirm("No WHERE", []string{"delete from users"}, "users", okMsg{2})
+	o, msg := send(t, c, "y")
+	if o == nil || msg != nil {
+		t.Fatal("y alone does not confirm when a word is expected")
+	}
+	o, msg = send(t, c, "backspace", "u", "s", "e", "r", "enter")
+	if o == nil || msg != nil || !strings.Contains(ansi.Strip(o.View(80, 20)), "does not match") {
+		t.Fatal("a wrong word keeps the box open with an error")
+	}
+	o, msg = send(t, o, "s", "enter")
+	if o != nil || msg != (okMsg{2}) {
+		t.Fatalf("o=%v msg=%v", o, msg)
+	}
+	if o, msg := send(t, NewConfirm("x", nil, "t", okMsg{}), "esc"); o != nil || msg != nil {
+		t.Fatal("esc cancels")
+	}
+}
+
+func TestPrompt(t *testing.T) {
+	p := NewPrompt("Export", "Save to:", "/tmp/a.csv", func(s string) tea.Msg { return CommandMsg{Text: s} })
+	o, msg := send(t, p, "backspace", "backspace", "backspace", "t", "s", "v", "enter")
+	if o != nil || msg != (CommandMsg{Text: "/tmp/a.tsv"}) {
+		t.Fatalf("o=%v msg=%#v", o, msg)
+	}
+	long := NewPrompt("Export", "Save to:", "/very/long/path/"+strings.Repeat("d", 80)+"/end.csv", nil)
+	if v := ansi.Strip(long.View(40, 10)); !strings.Contains(v, "end.csv") {
+		t.Fatalf("long values show their end:\n%s", v)
+	}
+	if o, _ := send(t, long, "esc"); o != nil {
+		t.Fatal("esc cancels")
+	}
+}
+
+func TestChoice(t *testing.T) {
+	pick := func(i int) tea.Msg { return okMsg{i} }
+	c := NewChoice("Export", []string{"Current page", "Whole table"}, pick)
+	if v := ansi.Strip(c.View(60, 10)); !strings.Contains(v, "> Current page") {
+		t.Fatalf("view:\n%s", v)
+	}
+	if o, msg := send(t, c, "j", "enter"); o != nil || msg != (okMsg{1}) {
+		t.Fatalf("o=%v msg=%v", o, msg)
+	}
+	if o, msg := send(t, NewChoice("x", []string{"a", "b"}, pick), "k", "k", "enter"); o != nil || msg != (okMsg{0}) {
+		t.Fatalf("clamped: %v", msg)
+	}
+	if o, msg := send(t, NewChoice("x", []string{"a", "b"}, pick), "2"); o != nil || msg != (okMsg{1}) {
+		t.Fatalf("digits pick directly: %v", msg)
+	}
+}
