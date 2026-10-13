@@ -13,15 +13,37 @@ func DefaultBindings() []Binding {
 		{Global, keys("ctrl+l"), FocusRight, "Focus tabs"},
 		{Global, keys("?"), Help, "Help"},
 		{Global, keys(":"), CommandLine, "Command line"},
-		{Global, keys("ctrl+c"), Quit, "Quit"},
+		{Global, keys("ctrl+c"), Cancel, "Cancel query"},
 		{Global, keys(LeaderToken, "b"), ToggleTree, "Toggle tree"},
 		{Global, keys(LeaderToken, "s"), OpenStructure, "Open structure"},
 		{Global, keys(LeaderToken, "r"), Refresh, "Refresh"},
+		{Global, keys(LeaderToken, "c"), OpenConsole, "Open console"},
+		{Global, keys(LeaderToken, "n"), NewConnection, "New connection"},
+		{Global, keys(LeaderToken, "h"), History, "SQL history"},
+	}
+	for _, c := range []struct{ key, format, desc string }{
+		{"t", "tsv", "Copy as TSV"},
+		{"c", "csv", "Copy as CSV"},
+		{"j", "json", "Copy as JSON"},
+		{"m", "md", "Copy as Markdown"},
+		{"i", "sql", "Copy as INSERT"},
+	} {
+		b = append(b, Binding{Global, keys(LeaderToken, "y", c.key), CopyAs(c.format), c.desc})
+	}
+	for _, e := range []struct{ key, format, desc string }{
+		{"c", "csv", "Export as CSV"},
+		{"j", "json", "Export as JSON"},
+		{"s", "sql", "Export as SQL"},
+		{"x", "xlsx", "Export as xlsx"},
+	} {
+		b = append(b, Binding{Global, keys(LeaderToken, "x", e.key), ExportAs(e.format), e.desc})
 	}
 	for n := 1; n <= 9; n++ {
 		b = append(b, Binding{Global, keys(strconv.Itoa(n)), GotoTab(n), "Go to tab " + strconv.Itoa(n)})
 	}
+
 	b = append(b, vertical(Tree)...)
+	b = append(b, search(Tree)...)
 	b = append(b,
 		Binding{Tree, keys("l"), Expand, "Expand / open"},
 		Binding{Tree, keys("enter"), Expand, "Expand / open"},
@@ -30,18 +52,37 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("left"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("p"), Password, "Enter password"},
 	)
-	b = append(b, vertical(Grid)...)
+
+	b = append(b, gridBindings(Grid)...)
 	b = append(b,
-		Binding{Grid, keys("h"), Left, "Move left"},
-		Binding{Grid, keys("left"), Left, "Move left"},
-		Binding{Grid, keys("l"), Right, "Move right"},
-		Binding{Grid, keys("right"), Right, "Move right"},
-		Binding{Grid, keys("0"), LineStart, "First column"},
-		Binding{Grid, keys("$"), LineEnd, "Last column"},
 		Binding{Grid, keys("["), PrevPage, "Previous page"},
 		Binding{Grid, keys("]"), NextPage, "Next page"},
-		Binding{Grid, keys("K"), CellDetail, "Show cell value"},
 	)
+
+	b = append(b, gridBindings(Results)...)
+	b = append(b,
+		Binding{Results, keys("]"), LoadMore, "Load more rows"},
+		Binding{Results, keys("M"), ToggleMessages, "Toggle messages"},
+		Binding{Results, keys("ctrl+k"), FocusEditor, "Focus editor"},
+	)
+
+	b = append(b, vertical(Console)...)
+	b = append(b,
+		Binding{Console, keys("h"), Left, "Move left"},
+		Binding{Console, keys("left"), Left, "Move left"},
+		Binding{Console, keys("l"), Right, "Move right"},
+		Binding{Console, keys("right"), Right, "Move right"},
+		Binding{Console, keys("0"), LineStart, "Line start"},
+		Binding{Console, keys("$"), LineEnd, "Line end"},
+		Binding{Console, keys("i"), InsertMode, "Insert"},
+		Binding{Console, keys("a"), Append, "Append"},
+		Binding{Console, keys("enter"), RunStatement, "Run statement under cursor"},
+		Binding{Console, keys("R"), RunAll, "Run all statements"},
+		Binding{Console, keys("ctrl+j"), FocusResults, "Focus results"},
+		Binding{Console, keys("M"), ToggleMessages, "Toggle messages"},
+		Binding{Console, keys(LeaderToken, "v"), ExternalEdit, "Edit in $EDITOR"},
+	)
+
 	b = append(b, vertical(Structure)...)
 	b = append(b,
 		Binding{Structure, keys("["), PrevSection, "Previous section"},
@@ -61,4 +102,31 @@ func vertical(ctx Context) []Binding {
 		{ctx, keys("ctrl+d"), HalfPageDown, "Half page down"},
 		{ctx, keys("ctrl+u"), HalfPageUp, "Half page up"},
 	}
+}
+
+func search(ctx Context) []Binding {
+	return []Binding{
+		{ctx, keys("/"), Search, "Search"},
+		{ctx, keys("n"), SearchNext, "Next match"},
+		{ctx, keys("N"), SearchPrev, "Previous match"},
+	}
+}
+
+// gridBindings are shared by the table-data grid and console results.
+func gridBindings(ctx Context) []Binding {
+	b := vertical(ctx)
+	b = append(b, search(ctx)...)
+	return append(b,
+		Binding{ctx, keys("h"), Left, "Move left"},
+		Binding{ctx, keys("left"), Left, "Move left"},
+		Binding{ctx, keys("l"), Right, "Move right"},
+		Binding{ctx, keys("right"), Right, "Move right"},
+		Binding{ctx, keys("0"), LineStart, "First column"},
+		Binding{ctx, keys("$"), LineEnd, "Last column"},
+		Binding{ctx, keys("z", "h"), ScrollLeft, "Scroll left"},
+		Binding{ctx, keys("z", "l"), ScrollRight, "Scroll right"},
+		Binding{ctx, keys("y", "l"), YankCell, "Copy cell"},
+		Binding{ctx, keys("y", "y"), YankRow, "Copy row"},
+		Binding{ctx, keys("K"), CellDetail, "Show cell value"},
+	)
 }

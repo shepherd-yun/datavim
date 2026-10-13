@@ -17,41 +17,80 @@ const (
 	Tree      Context = "tree"
 	Grid      Context = "grid"
 	Structure Context = "structure"
+	Console   Context = "console"
+	Results   Context = "results"
 )
 
 // Action is what a key sequence does.
 type Action string
 
 const (
-	Quit          Action = "app.quit"
-	CommandLine   Action = "app.cmdline"
-	Help          Action = "app.help"
-	FocusNext     Action = "focus.next"
-	FocusPrev     Action = "focus.prev"
-	FocusLeft     Action = "focus.left"
-	FocusRight    Action = "focus.right"
-	ToggleTree    Action = "tree.toggle"
-	OpenStructure Action = "structure.open"
-	Refresh       Action = "refresh"
-	Down          Action = "move.down"
-	Up            Action = "move.up"
-	Left          Action = "move.left"
-	Right         Action = "move.right"
-	Top           Action = "move.top"
-	Bottom        Action = "move.bottom"
-	HalfPageDown  Action = "move.halfpage.down"
-	HalfPageUp    Action = "move.halfpage.up"
-	LineStart     Action = "move.linestart"
-	LineEnd       Action = "move.lineend"
-	Expand        Action = "tree.expand"
-	Collapse      Action = "tree.collapse"
-	Password      Action = "conn.password"
-	PrevPage      Action = "page.prev"
-	NextPage      Action = "page.next"
-	CellDetail    Action = "cell.detail"
-	PrevSection   Action = "section.prev"
-	NextSection   Action = "section.next"
+	Quit           Action = "app.quit"
+	CommandLine    Action = "app.cmdline"
+	Help           Action = "app.help"
+	FocusNext      Action = "focus.next"
+	FocusPrev      Action = "focus.prev"
+	FocusLeft      Action = "focus.left"
+	FocusRight     Action = "focus.right"
+	ToggleTree     Action = "tree.toggle"
+	OpenStructure  Action = "structure.open"
+	Refresh        Action = "refresh"
+	Down           Action = "move.down"
+	Up             Action = "move.up"
+	Left           Action = "move.left"
+	Right          Action = "move.right"
+	Top            Action = "move.top"
+	Bottom         Action = "move.bottom"
+	HalfPageDown   Action = "move.halfpage.down"
+	HalfPageUp     Action = "move.halfpage.up"
+	LineStart      Action = "move.linestart"
+	LineEnd        Action = "move.lineend"
+	Expand         Action = "tree.expand"
+	Collapse       Action = "tree.collapse"
+	Password       Action = "conn.password"
+	PrevPage       Action = "page.prev"
+	NextPage       Action = "page.next"
+	CellDetail     Action = "cell.detail"
+	PrevSection    Action = "section.prev"
+	NextSection    Action = "section.next"
+	Cancel         Action = "query.cancel"
+	OpenConsole    Action = "console.open"
+	NewConnection  Action = "conn.new"
+	History        Action = "history.open"
+	ExternalEdit   Action = "editor.external"
+	InsertMode     Action = "editor.insert"
+	Append         Action = "editor.append"
+	RunStatement   Action = "sql.run"
+	RunAll         Action = "sql.runall"
+	FocusResults   Action = "console.results"
+	FocusEditor    Action = "console.editor"
+	ToggleMessages Action = "console.messages"
+	LoadMore       Action = "results.more"
+	Search         Action = "search.start"
+	SearchNext     Action = "search.next"
+	SearchPrev     Action = "search.prev"
+	ScrollLeft     Action = "scroll.left"
+	ScrollRight    Action = "scroll.right"
+	YankCell       Action = "yank.cell"
+	YankRow        Action = "yank.row"
 )
+
+const (
+	copyPrefix   = "copy."
+	exportPrefix = "export."
+)
+
+// CopyAs is the action that copies the result in format (e.g. "csv").
+func CopyAs(format string) Action { return Action(copyPrefix + format) }
+
+// CopyFormat extracts the format from a CopyAs action.
+func CopyFormat(a Action) (string, bool) { return strings.CutPrefix(string(a), copyPrefix) }
+
+// ExportAs is the action that exports the result in format (e.g. "xlsx").
+func ExportAs(format string) Action { return Action(exportPrefix + format) }
+
+// ExportFormat extracts the format from an ExportAs action.
+func ExportFormat(a Action) (string, bool) { return strings.CutPrefix(string(a), exportPrefix) }
 
 const tabPrefix = "tab.goto."
 
