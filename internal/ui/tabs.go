@@ -86,6 +86,7 @@ type dataTab struct {
 	orderBy    []string
 	orderKnown bool
 	height     int
+	wantColumn string // column to put the cursor on once data is shown
 }
 
 func newDataTab(id int, b Backend, conn string, ref db.TableRef, s config.Settings) *dataTab {
@@ -180,7 +181,19 @@ func (t *dataTab) Update(msg tea.Msg) tea.Cmd {
 	t.err, t.page, t.hasMore = "", m.page, m.hasMore
 	t.orderBy, t.orderKnown = m.orderBy, true
 	t.grid.SetResult(m.rs)
+	if t.wantColumn != "" {
+		t.grid.SelectColumn(t.wantColumn)
+		t.wantColumn = ""
+	}
 	return nil
+}
+
+// focusColumn puts the cursor on the column called name, now or once the
+// data has loaded.
+func (t *dataTab) focusColumn(name string) {
+	if !t.grid.SelectColumn(name) {
+		t.wantColumn = name
+	}
 }
 
 // gridAction handles the cursor, scroll and cell-detail actions every grid shares.

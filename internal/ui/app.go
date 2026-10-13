@@ -82,6 +82,10 @@ type Model struct {
 
 	timings    timings
 	lastSearch string
+	searchConn string // connection the global search is scoped to
+	searchKey  meta.Key
+	searchHits []meta.Hit // the rows the search popup shows
+	revealing  *revealTarget
 }
 
 // New builds the root model with one tree root per configured connection.
@@ -138,6 +142,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.metaLoaded(msg)
 	case metaStaleMsg:
 		return m, m.metaStale(msg)
+	case overlay.SearchQueryMsg:
+		return m, m.runSearch(msg.Text, msg.Gen)
+	case searchResultsMsg:
+		m.searchResults(msg)
+	case overlay.SearchPickMsg:
+		return m, m.searchPicked(msg)
+	case routineLoadedMsg:
+		m.routineLoaded(msg)
 	case overlay.PasswordSubmittedMsg:
 		return m, m.passwordSubmitted(msg)
 	case passphraseMsg:
@@ -164,6 +176,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.cmdline.Paste(msg.Content)
 		case ok:
 			p.Paste(msg.Content)
+			if s, isSearch := m.overlay.(*overlay.Search); isSearch {
+				return m, m.runSearch(s.Requery())
+			}
 		case m.overlay != nil:
 		default:
 			if c := m.capturingTab(); c != nil {
@@ -319,6 +334,8 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		m.toggleTree()
 	case keymap.YankCell, keymap.YankRow:
 		return m.yank(a)
+	case keymap.GlobalSearch:
+		return m.openSearch()
 	case keymap.NewConnection:
 		m.overlay = overlay.NewConnForm()
 	case keymap.Refresh:
@@ -433,9 +450,9 @@ func (m *Model) childrenLoaded(msg childrenLoadedMsg) tea.Cmd {
 	m.tree.SetChildren(msg.node, msg.children, msg.err)
 	if msg.err != nil {
 		m.setStatus(msg.err.Error(), true)
-		return nil
+		return m.continueReveal(msg)
 	}
-	return m.ensureMeta(msg.node.Conn, msg.node.NS.Database)
+	return tea.Batch(m.ensureMeta(msg.node.Conn, msg.node.NS.Database), m.continueReveal(msg))
 }
 
 func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
