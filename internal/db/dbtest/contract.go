@@ -62,6 +62,24 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 	})
 
+	t.Run("syntax errors point into the statement", func(t *testing.T) {
+		q := "SELECT *\nFORM " + d.QualifiedName(ref("users"))
+		_, err := conn.Query(ctx, q)
+		off, ok := db.ErrorOffset(err)
+		if !ok || !strings.HasPrefix(q[off:], "FORM") {
+			t.Fatalf("Query: offset %d, %v (err %v)", off, ok, err)
+		}
+		s, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = s.Close() }()
+		_, err = s.Exec(ctx, q)
+		if off, ok := db.ErrorOffset(err); !ok || !strings.HasPrefix(q[off:], "FORM") {
+			t.Fatalf("Session.Exec: offset %d, %v (err %v)", off, ok, err)
+		}
+	})
+
 	t.Run("Exec reports rows affected", func(t *testing.T) {
 		res, err := conn.Exec(ctx, "UPDATE "+d.QualifiedName(ref("users"))+" SET note = 'x' WHERE id = 99")
 		if err != nil {

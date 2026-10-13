@@ -83,7 +83,7 @@ func (s *session) Exec(ctx context.Context, query string, args ...any) (db.ExecR
 	err := s.run(ctx, func(ctx context.Context) error {
 		r, err := s.c.ExecContext(ctx, query, args...)
 		if err != nil {
-			return err
+			return locate(err, query)
 		}
 		res.RowsAffected, err = r.RowsAffected()
 		return err
