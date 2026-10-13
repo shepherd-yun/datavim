@@ -65,6 +65,13 @@ func DefaultBindings() []Binding {
 		Binding{Grid, keys("f"), FilterValue, "Filter by this value"},
 		Binding{Grid, keys("F"), FilterPrompt, "Edit the filter (WHERE)"},
 		Binding{Grid, keys("s"), SortColumn, "Sort by column: asc, desc, off"},
+		Binding{Grid, keys("i"), EditCell, "Edit cell"},
+		Binding{Grid, keys("enter"), EditCell, "Edit cell"},
+		Binding{Grid, keys("o"), InsertRow, "Add a row below"},
+		Binding{Grid, keys("d", "d"), DeleteRow, "Delete row"},
+		Binding{Grid, keys("u"), UndoEdit, "Undo the last change"},
+		Binding{Grid, keys("U"), UndoAllEdits, "Discard every change"},
+		Binding{Grid, keys(LeaderToken, "w"), SubmitEdits, "Submit changes (:w)"},
 	)
 
 	b = append(b, gridBindings(Results)...)

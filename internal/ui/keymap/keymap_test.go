@@ -207,3 +207,18 @@ func TestFilterAndSortBindings(t *testing.T) {
 		}
 	}
 }
+func TestEditBindings(t *testing.T) {
+	k := Default()
+	for keys, want := range map[string]Action{
+		"i": EditCell, "enter": EditCell, "o": InsertRow, "d d": DeleteRow,
+		"u": UndoEdit, "U": UndoAllEdits, "space w": SubmitEdits,
+	} {
+		seq := strings.Fields(keys)
+		if a, res := k.Resolve(Grid, seq); a != want || res != Matched {
+			t.Errorf("grid %s: %q %v", keys, a, res)
+		}
+		if a, res := k.Resolve(Results, seq); res == Matched && a == want {
+			t.Errorf("console results are read-only: %s", keys)
+		}
+	}
+}
