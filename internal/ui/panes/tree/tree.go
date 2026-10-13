@@ -64,6 +64,9 @@ func New(roots []*Node) *Model {
 	return m
 }
 
+// Roots returns the connection nodes.
+func (m *Model) Roots() []*Node { return m.roots }
+
 // SetHeight sets the number of visible rows.
 func (m *Model) SetHeight(h int) { m.height = max(h, 0) }
 

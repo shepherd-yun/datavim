@@ -16,6 +16,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/history"
+	"github.com/shepherd-yun/sqlvim/internal/meta"
 	"github.com/shepherd-yun/sqlvim/internal/runner"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
@@ -94,6 +95,8 @@ type consoleTab struct {
 	dialect   sqlx.Dialect
 	maxRows   int
 	timings   timings
+	catalogs  *meta.Cache // shared with the root model; UI goroutine only
+	metaKey   meta.Key
 
 	editor       *editor.Model
 	grid         *grid.Model
@@ -120,11 +123,13 @@ type consoleTab struct {
 	width, height, editorH int
 }
 
-func newConsoleTab(id int, b Backend, st Store, conn string, ns db.Namespace, s config.Settings, tm timings) *consoleTab {
+func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn string, ns db.Namespace, s config.Settings, tm timings) *consoleTab {
 	cfg, _ := b.Connection(conn)
+	key, _ := metaKeyFor(b, conn, ns.Database)
 	return &consoleTab{
 		id: id, backend: b, store: st, conn: conn, ns: ns, dialect: sqlx.DialectOf(cfg.Driver),
 		maxRows: s.MaxRows, timings: tm, editorCmd: s.EditorCommand(os.Getenv),
+		catalogs: catalogs, metaKey: key,
 		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth),
 	}
 }
@@ -601,7 +606,18 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 	if m.began && len(recorded) > 0 {
 		recorded = recorded[1:] // the injected BEGIN is not history
 	}
-	return t.record(recorded)
+	return tea.Batch(t.record(recorded), t.staleCatalog(m.results))
+}
+
+// staleCatalog tells the root model that DDL ran, so the catalog changed.
+func (t *consoleTab) staleCatalog(results []runner.Result) tea.Cmd {
+	for _, r := range results {
+		if r.Err == nil && sqlx.Analyze(r.SQL, t.dialect).Kind == sqlx.DDL {
+			conn, database := t.conn, t.ns.Database
+			return func() tea.Msg { return metaStaleMsg{conn: conn, database: database} }
+		}
+	}
+	return nil
 }
 
 func (t *consoleTab) record(results []runner.Result) tea.Cmd {

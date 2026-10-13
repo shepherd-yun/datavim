@@ -15,6 +15,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/export"
 	"github.com/shepherd-yun/sqlvim/internal/history"
+	"github.com/shepherd-yun/sqlvim/internal/meta"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
@@ -53,6 +54,7 @@ type (
 type Model struct {
 	backend  Backend
 	store    Store
+	catalogs *meta.Cache
 	home     string
 	settings config.Settings
 	keys     *keymap.Keymap
@@ -93,6 +95,7 @@ func New(b Backend, st Store, settings config.Settings) *Model {
 	return &Model{
 		backend:       b,
 		store:         st,
+		catalogs:      meta.NewCache(),
 		home:          home,
 		settings:      settings,
 		keys:          keymap.Default(),
@@ -131,6 +134,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case childrenLoadedMsg:
 		return m, m.childrenLoaded(msg)
+	case metaLoadedMsg:
+		return m, m.metaLoaded(msg)
+	case metaStaleMsg:
+		return m, m.metaStale(msg)
 	case overlay.PasswordSubmittedMsg:
 		return m, m.passwordSubmitted(msg)
 	case passphraseMsg:
@@ -314,6 +321,18 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		return m.yank(a)
 	case keymap.NewConnection:
 		m.overlay = overlay.NewConnForm()
+	case keymap.Refresh:
+		var cmd tea.Cmd
+		if conn, ns := m.contextNamespace(); conn != "" {
+			cmd = m.reloadMeta(conn, ns.Database)
+		}
+		if m.focus == focusTree {
+			return tea.Batch(cmd, m.treeAction(a))
+		}
+		if t := m.activeTab(); t != nil {
+			return tea.Batch(cmd, t.Handle(a))
+		}
+		return cmd
 	case keymap.OpenStructure:
 		return m.openStructureFromContext()
 	default:
@@ -414,8 +433,9 @@ func (m *Model) childrenLoaded(msg childrenLoadedMsg) tea.Cmd {
 	m.tree.SetChildren(msg.node, msg.children, msg.err)
 	if msg.err != nil {
 		m.setStatus(msg.err.Error(), true)
+		return nil
 	}
-	return nil
+	return m.ensureMeta(msg.node.Conn, msg.node.NS.Database)
 }
 
 func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
@@ -625,15 +645,15 @@ func (m *Model) openTab(key string, create func(id int) tab) tea.Cmd {
 }
 
 func (m *Model) openData(conn string, ref db.TableRef) tea.Cmd {
-	return m.openTab(dataTabKey(conn, ref), func(id int) tab {
+	return tea.Batch(m.openTab(dataTabKey(conn, ref), func(id int) tab {
 		return newDataTab(id, m.backend, conn, ref, m.settings)
-	})
+	}), m.ensureMeta(conn, ref.Database))
 }
 
 func (m *Model) openStructure(conn string, ref db.TableRef) tea.Cmd {
-	return m.openTab(structureTabKey(conn, ref), func(id int) tab {
+	return tea.Batch(m.openTab(structureTabKey(conn, ref), func(id int) tab {
 		return newStructureTab(id, m.backend, conn, ref)
-	})
+	}), m.ensureMeta(conn, ref.Database))
 }
 
 func (m *Model) openStructureFromContext() tea.Cmd {
@@ -702,9 +722,9 @@ func (m *Model) contextNamespace() (string, db.Namespace) {
 }
 
 func (m *Model) openConsole(conn string, ns db.Namespace) tea.Cmd {
-	return m.openTab(consoleTabKey(conn, ns), func(id int) tab {
-		return newConsoleTab(id, m.backend, m.store, conn, ns, m.settings, m.timings)
-	})
+	return tea.Batch(m.openTab(consoleTabKey(conn, ns), func(id int) tab {
+		return newConsoleTab(id, m.backend, m.store, m.catalogs, conn, ns, m.settings, m.timings)
+	}), m.ensureMeta(conn, ns.Database))
 }
 
 func shutdownCmd(t tab) tea.Cmd {
@@ -855,6 +875,7 @@ func (m *Model) connUpdated(msg connUpdatedMsg) tea.Cmd {
 		return nil
 	}
 	c := msg.conn
+	m.catalogs.Forget(msg.old)
 	cmd := m.closeTabsOf(msg.old)
 	m.tree.ReplaceRoot(msg.old, &tree.Node{Kind: tree.KindConn, Name: c.Name, Conn: c.Name, Prod: c.Env == config.EnvProd})
 	m.setFocus(focusTree)
@@ -871,6 +892,7 @@ func (m *Model) connRemoved(msg connRemovedMsg) tea.Cmd {
 		m.setStatus("cannot delete connection: "+msg.err.Error(), true)
 		return nil
 	}
+	m.catalogs.Forget(msg.name)
 	cmd := m.closeTabsOf(msg.name)
 	m.tree.RemoveRoot(msg.name)
 	m.setFocus(focusTree)

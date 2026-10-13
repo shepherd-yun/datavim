@@ -15,6 +15,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/meta"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
@@ -28,7 +29,7 @@ func newConsole(t *testing.T, b *fakeBackend, conn string) *consoleTab {
 func newConsoleWithStore(t *testing.T, b *fakeBackend, conn string) (*consoleTab, *fakeStore) {
 	t.Helper()
 	st := newFakeStore()
-	c := newConsoleTab(1, b, st, conn, db.Namespace{Database: "app"}, config.Settings{MaxRows: 2, MaxColumnWidth: 40}, timings{})
+	c := newConsoleTab(1, b, st, meta.NewCache(), conn, db.Namespace{Database: "app"}, config.Settings{MaxRows: 2, MaxColumnWidth: 40}, timings{})
 	c.SetSize(80, 24)
 	return c, st
 }
@@ -631,5 +632,19 @@ func TestConsoleEndTxWithoutTransaction(t *testing.T) {
 	}
 	if !strings.Contains(consoleView(c), "no open transaction") {
 		t.Fatalf("view:\n%s", consoleView(c))
+	}
+}
+
+func TestConsoleDDLReportsStaleCatalog(t *testing.T) {
+	b := newFakeBackend()
+	c := newConsole(t, b, "local")
+	c.editor.SetValue("create table t2 (id int)")
+	other := runTab(t, c, c.Handle(keymap.RunStatement))
+	if !slices.Contains(other, tea.Msg(metaStaleMsg{conn: "local", database: "app"})) {
+		t.Fatalf("messages: %#v", other)
+	}
+	c.editor.SetValue("select 1")
+	if other := runTab(t, c, c.Handle(keymap.RunStatement)); slices.ContainsFunc(other, func(m tea.Msg) bool { _, ok := m.(metaStaleMsg); return ok }) {
+		t.Fatal("queries do not change the catalog")
 	}
 }
