@@ -5,6 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -12,6 +15,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/runner"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
@@ -76,13 +80,16 @@ func consoleTabKey(conn string, ns db.Namespace) string {
 }
 
 type consoleTab struct {
-	id      int
-	backend Backend
-	conn    string
-	ns      db.Namespace
-	dialect sqlx.Dialect
-	maxRows int
-	timings timings
+	id        int
+	backend   Backend
+	store     Store
+	editorCmd []string
+	draftGen  int
+	conn      string
+	ns        db.Namespace
+	dialect   sqlx.Dialect
+	maxRows   int
+	timings   timings
 
 	editor       *editor.Model
 	grid         *grid.Model
@@ -104,17 +111,17 @@ type consoleTab struct {
 	width, height, editorH int
 }
 
-func newConsoleTab(id int, b Backend, conn string, ns db.Namespace, s config.Settings, tm timings) *consoleTab {
+func newConsoleTab(id int, b Backend, st Store, conn string, ns db.Namespace, s config.Settings, tm timings) *consoleTab {
 	cfg, _ := b.Connection(conn)
 	return &consoleTab{
-		id: id, backend: b, conn: conn, ns: ns, dialect: sqlx.DialectOf(cfg.Driver),
-		maxRows: s.MaxRows, timings: tm, editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth),
+		id: id, backend: b, store: st, conn: conn, ns: ns, dialect: sqlx.DialectOf(cfg.Driver),
+		maxRows: s.MaxRows, timings: tm, editorCmd: s.EditorCommand(os.Getenv),
+		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth),
 	}
 }
 
-func (t *consoleTab) ID() int       { return t.id }
-func (t *consoleTab) Key() string   { return consoleTabKey(t.conn, t.ns) }
-func (t *consoleTab) Init() tea.Cmd { return nil }
+func (t *consoleTab) ID() int     { return t.id }
+func (t *consoleTab) Key() string { return consoleTabKey(t.conn, t.ns) }
 
 func (t *consoleTab) Title() string {
 	if t.ns.Database != "" {
@@ -180,7 +187,12 @@ func (t *consoleTab) Input(msg tea.Msg) tea.Cmd {
 			return t.cancelRun()
 		}
 	}
-	return t.editor.Update(msg)
+	before := t.editor.Value()
+	cmd := t.editor.Update(msg)
+	if t.editor.Value() != before {
+		return tea.Batch(cmd, t.scheduleDraft())
+	}
+	return cmd
 }
 
 func (t *consoleTab) Handle(a keymap.Action) tea.Cmd {
@@ -212,6 +224,8 @@ func (t *consoleTab) Handle(a keymap.Action) tea.Cmd {
 func (t *consoleTab) editorAction(a keymap.Action) tea.Cmd {
 	e := t.editor
 	switch a {
+	case keymap.ExternalEdit:
+		return t.externalEdit()
 	case keymap.Down:
 		e.Down(1)
 	case keymap.Up:
@@ -349,12 +363,53 @@ func (t *consoleTab) Update(msg tea.Msg) tea.Cmd {
 			return t.execute(stmts, t.maxRows, false)
 		}
 	case runDoneMsg:
-		t.done(m)
+		return t.done(m)
+	case draftLoadedMsg:
+		switch cur := t.editor.Value(); {
+		case m.text == "" || m.text == cur:
+		case cur == "":
+			t.editor.SetValue(m.text)
+		default:
+			t.editor.SetValue(m.text + "\n" + cur)
+		}
+	case draftTickMsg:
+		if m.gen == t.draftGen {
+			save := t.saveDraft()
+			return func() tea.Msg { save(); return nil }
+		}
+	case editFileMsg:
+		if m.err != nil {
+			t.setStatus("cannot create temp file: "+m.err.Error(), true)
+			return nil
+		}
+		argv := append(slices.Clone(t.editorCmd), m.path)
+		id, path := t.id, m.path
+		return tea.ExecProcess(exec.Command(argv[0], argv[1:]...), func(err error) tea.Msg {
+			return editDoneMsg{tabID: id, path: path, err: err}
+		})
+	case editDoneMsg:
+		id, path, editErr := t.id, m.path, m.err
+		return func() tea.Msg {
+			defer func() { _ = os.Remove(path) }()
+			if editErr != nil {
+				return editTextMsg{tabID: id, err: editErr}
+			}
+			data, err := os.ReadFile(path)
+			return editTextMsg{tabID: id, text: string(data), err: err}
+		}
+	case editTextMsg:
+		if m.err != nil {
+			t.setStatus("editor: "+m.err.Error()+" · text unchanged", true)
+			return nil
+		}
+		t.editor.SetValue(strings.TrimRight(m.text, "\n"))
+		t.setStatus("updated from "+t.editorCmd[0], false)
+		return t.scheduleDraft()
 	}
 	return nil
 }
 
-func (t *consoleTab) done(m runDoneMsg) {
+func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 	t.running, t.cancel = false, nil
 	t.session = m.session
 	if m.reconnected {
@@ -368,7 +423,7 @@ func (t *consoleTab) done(m runDoneMsg) {
 		t.log("✗ " + text)
 		t.setStatus(text, true)
 		t.showMessages = true
-		return
+		return nil
 	}
 	var shown *runner.Result
 	for i := range m.results {
@@ -380,7 +435,7 @@ func (t *consoleTab) done(m runDoneMsg) {
 	}
 	if len(m.results) == 0 {
 		t.setStatus("canceled", true)
-		return
+		return nil
 	}
 	last := m.results[len(m.results)-1]
 	if shown != nil {
@@ -400,6 +455,30 @@ func (t *consoleTab) done(m runDoneMsg) {
 		t.showMessages = true
 	default:
 		t.showMessages = false
+	}
+	return t.record(m.results)
+}
+
+func (t *consoleTab) record(results []runner.Result) tea.Cmd {
+	if len(results) == 0 {
+		return nil
+	}
+	st, now := t.store, time.Now()
+	entries := make([]history.Entry, len(results))
+	for i, r := range results {
+		entries[i] = history.Entry{Time: now, Conn: t.conn, Database: t.ns.Database, SQL: r.SQL, Duration: r.Duration}
+		if r.Err != nil {
+			entries[i].Err = errorText(r.Err)
+		}
+	}
+	return func() tea.Msg {
+		for _, e := range entries {
+			if err := st.AddHistory(e); err != nil {
+				slog.Warn("save history", "err", err)
+				break
+			}
+		}
+		return nil
 	}
 }
 
@@ -496,7 +575,7 @@ func scopeSQL(driver string, d db.Dialect, ns db.Namespace) string {
 }
 
 func (t *consoleTab) shutdown() func() {
-	s, cancel := t.session, t.cancel
+	s, cancel, save := t.session, t.cancel, t.saveDraft()
 	t.session = nil
 	return func() {
 		if cancel != nil {
@@ -505,6 +584,86 @@ func (t *consoleTab) shutdown() func() {
 		if s != nil {
 			_ = s.Close()
 		}
+		save()
+	}
+}
+
+type (
+	draftLoadedMsg struct {
+		tabID int
+		text  string
+	}
+	draftTickMsg struct{ tabID, gen int }
+	editFileMsg  struct {
+		tabID int
+		path  string
+		err   error
+	}
+	editDoneMsg struct {
+		tabID int
+		path  string
+		err   error
+	}
+	editTextMsg struct {
+		tabID int
+		text  string
+		err   error
+	}
+)
+
+func (m draftLoadedMsg) TabID() int { return m.tabID }
+func (m draftTickMsg) TabID() int   { return m.tabID }
+func (m editFileMsg) TabID() int    { return m.tabID }
+func (m editDoneMsg) TabID() int    { return m.tabID }
+func (m editTextMsg) TabID() int    { return m.tabID }
+
+func (t *consoleTab) Init() tea.Cmd {
+	id, st, key := t.id, t.store, t.Key()
+	return func() tea.Msg {
+		text, err := st.Draft(key)
+		if err != nil {
+			slog.Warn("load draft", "err", err)
+		}
+		return draftLoadedMsg{tabID: id, text: text}
+	}
+}
+
+func (t *consoleTab) scheduleDraft() tea.Cmd {
+	t.draftGen++
+	id, gen := t.id, t.draftGen
+	return tea.Tick(t.timings.draft, func(time.Time) tea.Msg { return draftTickMsg{tabID: id, gen: gen} })
+}
+
+func (t *consoleTab) saveDraft() func() {
+	st, key, text := t.store, t.Key(), t.editor.Value()
+	return func() {
+		if err := st.SaveDraft(key, text); err != nil {
+			slog.Warn("save draft", "err", err)
+		}
+	}
+}
+
+// insertText appends sql to the editor (or fills an empty editor).
+func (t *consoleTab) insertText(sql string) tea.Cmd {
+	if t.editor.Value() == "" {
+		t.editor.SetValue(sql)
+	} else {
+		t.editor.Bottom()
+		t.editor.InsertString("\n" + sql)
+	}
+	t.onResults = false
+	return t.scheduleDraft()
+}
+
+func (t *consoleTab) externalEdit() tea.Cmd {
+	id, text := t.id, t.editor.Value()
+	return func() tea.Msg {
+		f, err := os.CreateTemp("", "sqlvim-*.sql")
+		if err != nil {
+			return editFileMsg{tabID: id, err: err}
+		}
+		_, err = f.WriteString(text)
+		return editFileMsg{tabID: id, path: f.Name(), err: errors.Join(err, f.Close())}
 	}
 }
 

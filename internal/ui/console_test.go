@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"slices"
 	"strings"
 	"testing"
@@ -20,9 +21,16 @@ import (
 
 func newConsole(t *testing.T, b *fakeBackend, conn string) *consoleTab {
 	t.Helper()
-	c := newConsoleTab(1, b, conn, db.Namespace{Database: "app"}, config.Settings{MaxRows: 2, MaxColumnWidth: 40}, timings{})
-	c.SetSize(80, 24)
+	c, _ := newConsoleWithStore(t, b, conn)
 	return c
+}
+
+func newConsoleWithStore(t *testing.T, b *fakeBackend, conn string) (*consoleTab, *fakeStore) {
+	t.Helper()
+	st := newFakeStore()
+	c := newConsoleTab(1, b, st, conn, db.Namespace{Database: "app"}, config.Settings{MaxRows: 2, MaxColumnWidth: 40}, timings{})
+	c.SetSize(80, 24)
+	return c, st
 }
 
 // runTab runs cmd, feeding messages addressed to tab back into it, and
@@ -291,4 +299,100 @@ func TestDataTabScrollAndFind(t *testing.T) {
 		t.Fatalf("at %q", v.Text)
 	}
 	tab.Handle(keymap.ScrollRight) // must not panic
+}
+
+func TestConsoleRecordsHistory(t *testing.T) {
+	b := newFakeBackend()
+	b.conn.setFail("select bad", errors.New("syntax error"))
+	c, st := newConsoleWithStore(t, b, "local")
+	c.editor.SetValue("select 1; select bad; select 3")
+	runTab(t, c, c.Handle(keymap.RunAll))
+	if len(st.entries) != 2 {
+		t.Fatalf("entries = %+v (stops at the error)", st.entries)
+	}
+	ok, bad := st.entries[0], st.entries[1]
+	if ok.SQL != "select 1" || ok.Conn != "local" || ok.Database != "app" || ok.Err != "" || ok.Time.IsZero() {
+		t.Fatalf("ok entry = %+v", ok)
+	}
+	if bad.SQL != "select bad" || bad.Err != "syntax error" {
+		t.Fatalf("bad entry = %+v", bad)
+	}
+}
+
+func TestConsoleRejectedStatementsAreNotRecorded(t *testing.T) {
+	c, st := newConsoleWithStore(t, newFakeBackend(), "prod")
+	c.editor.SetValue("delete from t where id = 1")
+	runTab(t, c, c.Handle(keymap.RunStatement))
+	if len(st.entries) != 0 {
+		t.Fatalf("entries = %+v", st.entries)
+	}
+}
+
+func TestConsoleDrafts(t *testing.T) {
+	b := newFakeBackend()
+	c, st := newConsoleWithStore(t, b, "local")
+	st.drafts[c.Key()] = "select draft"
+	runTab(t, c, c.Init())
+	if c.editor.Value() != "select draft" {
+		t.Fatalf("draft not restored: %q", c.editor.Value())
+	}
+	c.Handle(keymap.InsertMode)
+	c.editor.Bottom()
+	runTab(t, c, c.Input(uitest.Key("x")))
+	if got := st.draft(c.Key()); got != "select draftx" {
+		t.Fatalf("draft after typing = %q", got)
+	}
+	c.editor.SetValue("select final")
+	c.shutdown()()
+	if got := st.draft(c.Key()); got != "select final" {
+		t.Fatalf("draft on close = %q", got)
+	}
+}
+
+func TestDraftMergesWithTextTypedBeforeItLoaded(t *testing.T) {
+	c, st := newConsoleWithStore(t, newFakeBackend(), "local")
+	st.drafts[c.Key()] = "select old"
+	c.editor.SetValue("select new")
+	runTab(t, c, c.Init())
+	if got := c.editor.Value(); got != "select old\nselect new" {
+		t.Fatalf("value = %q", got)
+	}
+}
+
+func TestExternalEdit(t *testing.T) {
+	c := newConsole(t, newFakeBackend(), "local")
+	c.editor.SetValue("select 1")
+	file, ok := run(c.Handle(keymap.ExternalEdit)).(editFileMsg)
+	if !ok || file.err != nil {
+		t.Fatalf("msg = %#v", file)
+	}
+	if data, _ := os.ReadFile(file.path); string(data) != "select 1" {
+		t.Fatalf("temp file = %q", data)
+	}
+	if !strings.HasSuffix(file.path, ".sql") {
+		t.Fatalf("path = %s", file.path)
+	}
+	if cmd := c.Update(file); cmd == nil {
+		t.Fatal("the editor process is started")
+	}
+	if err := os.WriteFile(file.path, []byte("select 2"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runTab(t, c, c.Update(editDoneMsg{tabID: c.id, path: file.path}))
+	if c.editor.Value() != "select 2" {
+		t.Fatalf("value = %q", c.editor.Value())
+	}
+	if _, err := os.Stat(file.path); !os.IsNotExist(err) {
+		t.Fatal("temp file removed")
+	}
+
+	file2 := run(c.Handle(keymap.ExternalEdit)).(editFileMsg)
+	_ = os.WriteFile(file2.path, []byte("garbage"), 0o600)
+	runTab(t, c, c.Update(editDoneMsg{tabID: c.id, path: file2.path, err: errors.New("exit status 1")}))
+	if c.editor.Value() != "select 2" {
+		t.Fatal("a failed editor keeps the text")
+	}
+	if _, err := os.Stat(file2.path); !os.IsNotExist(err) {
+		t.Fatal("temp file removed after a failed edit too")
+	}
 }

@@ -5,18 +5,20 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
 func newTestModel(t *testing.T) (*Model, *fakeBackend) {
 	t.Helper()
 	b := newFakeBackend()
-	m := New(b, config.Settings{PageSize: 2, MaxColumnWidth: 40, MaxRows: 10})
+	m := New(b, newFakeStore(), config.Settings{PageSize: 2, MaxColumnWidth: 40, MaxRows: 10})
 	m.whichKeyDelay = 0
 	m.timings = timings{}
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -328,7 +330,7 @@ func TestCtrlCCancelsButNeverQuits(t *testing.T) {
 func TestConsoleNeedsAConnection(t *testing.T) {
 	b := newFakeBackend()
 	b.conns = nil
-	m := New(b, config.Settings{PageSize: 2, MaxColumnWidth: 40, MaxRows: 10})
+	m := New(b, newFakeStore(), config.Settings{PageSize: 2, MaxColumnWidth: 40, MaxRows: 10})
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.whichKeyDelay = 0
 	press(t, m, "space", "c")
@@ -410,6 +412,38 @@ func TestStructureFromConsoleNeedsATable(t *testing.T) {
 	m, _ := newTestModel(t)
 	press(t, m, "l", "j", "space", "c", "space", "s")
 	if !strings.Contains(screen(m), "select a table first") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+func TestHistoryPicker(t *testing.T) {
+	m, _ := newTestModel(t)
+	st := m.store.(*fakeStore)
+	st.entries = []history.Entry{{Time: time.Now(), Conn: "local", Database: "app", SQL: "select 7"}}
+	press(t, m, "space", "h")
+	if s := screen(m); !strings.Contains(s, "SQL history") || !strings.Contains(s, "select 7") {
+		t.Fatalf("picker:\n%s", s)
+	}
+	press(t, m, "enter")
+	c, ok := m.activeTab().(*consoleTab)
+	if !ok || c.editor.Value() != "select 7" || c.ns.Database != "app" {
+		t.Fatalf("console = %#v", m.activeTab())
+	}
+	press(t, m, "space", "h", "enter")
+	if c.editor.Value() != "select 7\nselect 7" {
+		t.Fatalf("appended to the open console: %q", c.editor.Value())
+	}
+}
+
+func TestHistoryEmptyAndMissingConnection(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "space", "h")
+	if !strings.Contains(screen(m), "no SQL history yet") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	m.store.(*fakeStore).entries = []history.Entry{{Conn: "gone", SQL: "select 1"}}
+	press(t, m, "space", "h", "enter")
+	if !strings.Contains(screen(m), "connection gone no longer exists") {
 		t.Fatalf("screen:\n%s", screen(m))
 	}
 }
