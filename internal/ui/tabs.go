@@ -52,7 +52,8 @@ func tableKey(conn string, ref db.TableRef) string {
 	return strings.Join([]string{conn, ref.Database, ref.Schema, ref.Name}, "\x00")
 }
 
-func dataTabKey(conn string, ref db.TableRef) string      { return "data\x00" + tableKey(conn, ref) }
+func dataTabKey(conn string, ref db.TableRef) string { return "data\x00" + tableKey(conn, ref) }
+
 func structureTabKey(conn string, ref db.TableRef) string { return "struct\x00" + tableKey(conn, ref) }
 
 // ---- data tab ----
@@ -92,12 +93,12 @@ func newDataTab(id int, b Backend, conn string, ref db.TableRef, s config.Settin
 	}
 }
 
-func (t *dataTab) ID() int                         { return t.id }
-func (t *dataTab) Title() string                   { return t.ref.Name }
-func (t *dataTab) Key() string                     { return dataTabKey(t.conn, t.ref) }
-func (t *dataTab) Context() keymap.Context         { return keymap.Grid }
-func (t *dataTab) Target() (string, db.TableRef)   { return t.conn, t.ref }
-func (t *dataTab) Init() tea.Cmd                   { return t.load(0) }
+func (t *dataTab) ID() int                       { return t.id }
+func (t *dataTab) Title() string                 { return t.ref.Name }
+func (t *dataTab) Key() string                   { return dataTabKey(t.conn, t.ref) }
+func (t *dataTab) Context() keymap.Context       { return keymap.Grid }
+func (t *dataTab) Target() (string, db.TableRef) { return t.conn, t.ref }
+func (t *dataTab) Init() tea.Cmd                 { return t.load(0) }
 
 func (t *dataTab) SetSize(w, h int) {
 	t.height = max(h, 0)

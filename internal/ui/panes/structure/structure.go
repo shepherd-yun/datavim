@@ -40,17 +40,17 @@ type Model struct {
 
 func New() *Model { return &Model{} }
 
-func (m *Model) SetData(d Data)       { m.data, m.offset = d, 0 }
-func (m *Model) SetSize(w, h int)     { m.width, m.height = max(w, 0), max(h, 0) }
-func (m *Model) Section() Section     { return m.section }
-func (m *Model) NextSection()         { m.section, m.offset = (m.section+1)%sectionCount, 0 }
-func (m *Model) PrevSection()         { m.section, m.offset = (m.section+sectionCount-1)%sectionCount, 0 }
-func (m *Model) Top()                 { m.offset = 0 }
-func (m *Model) Bottom()              { m.offset = m.maxOffset() }
-func (m *Model) HalfPage(dir int)     { m.Scroll(dir * max(m.bodyHeight()/2, 1)) }
-func (m *Model) Scroll(delta int)     { m.offset = textutil.Clamp(m.offset+delta, 0, m.maxOffset()) }
-func (m *Model) bodyHeight() int      { return max(m.height-2, 0) }
-func (m *Model) maxOffset() int       { return max(len(m.lines())-m.bodyHeight(), 0) }
+func (m *Model) SetData(d Data)   { m.data, m.offset = d, 0 }
+func (m *Model) SetSize(w, h int) { m.width, m.height = max(w, 0), max(h, 0) }
+func (m *Model) Section() Section { return m.section }
+func (m *Model) NextSection()     { m.section, m.offset = (m.section+1)%sectionCount, 0 }
+func (m *Model) PrevSection()     { m.section, m.offset = (m.section+sectionCount-1)%sectionCount, 0 }
+func (m *Model) Top()             { m.offset = 0 }
+func (m *Model) Bottom()          { m.offset = m.maxOffset() }
+func (m *Model) HalfPage(dir int) { m.Scroll(dir * max(m.bodyHeight()/2, 1)) }
+func (m *Model) Scroll(delta int) { m.offset = textutil.Clamp(m.offset+delta, 0, m.maxOffset()) }
+func (m *Model) bodyHeight() int  { return max(m.height-2, 0) }
+func (m *Model) maxOffset() int   { return max(len(m.lines())-m.bodyHeight(), 0) }
 
 func (m *Model) lines() []string {
 	switch m.section {

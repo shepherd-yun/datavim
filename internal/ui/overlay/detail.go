@@ -24,7 +24,7 @@ func NewDetail(title, text string) *Detail {
 
 func prettyJSON(s string) string {
 	t := strings.TrimSpace(s)
-	if !(strings.HasPrefix(t, "{") || strings.HasPrefix(t, "[")) || !json.Valid([]byte(t)) {
+	if !strings.HasPrefix(t, "{") && !strings.HasPrefix(t, "[") || !json.Valid([]byte(t)) {
 		return s
 	}
 	var b bytes.Buffer

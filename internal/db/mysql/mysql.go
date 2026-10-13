@@ -96,7 +96,7 @@ func (c *conn) Query(ctx context.Context, query string, args ...any) (*db.Result
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	types, err := rows.ColumnTypes()
 	if err != nil {
 		return nil, err

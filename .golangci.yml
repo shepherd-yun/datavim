@@ -10,6 +10,12 @@ linters:
     - revive
     - staticcheck
     - unused
+  exclusions:
+    rules:
+      # Everything lives under internal/ (spec §11); doc comments on every
+      # exported identifier would be noise.
+      - linters: [revive]
+        text: "^exported: "
 formatters:
   enable:
     - gofumpt
