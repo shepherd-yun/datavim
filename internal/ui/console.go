@@ -66,6 +66,8 @@ type runDoneMsg struct {
 	err         error // opening the session failed
 	more        bool  // re-run of the shown statement with a higher limit
 	limit       int
+	readOnly    bool // the connection was read-only when the run started
+	reopened    bool // the session was reopened because readonly changed
 }
 
 type runTickMsg struct{ tabID, gen int }
@@ -99,6 +101,7 @@ type consoleTab struct {
 	messages     []string
 
 	session   db.Session
+	sessionRO bool // the connection was read-only when session was opened
 	running   bool
 	cancel    context.CancelFunc
 	started   time.Time
@@ -300,11 +303,20 @@ func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.C
 	t.gen++
 	t.running, t.cancel, t.started = true, cancel, time.Now()
 	t.setStatus("", false)
-	gen, id, b, conn, ns, d, s := t.gen, t.id, t.backend, t.conn, t.ns, t.dialect, t.session
+	cfg, _ := t.backend.Connection(t.conn)
+	ro := cfg.IsReadOnly()
+	gen, id, b, conn, ns, d, s, sessRO := t.gen, t.id, t.backend, t.conn, t.ns, t.dialect, t.session, t.sessionRO
 	t.session = nil // owned by the command until runDoneMsg hands it back
 	run := func() tea.Msg {
 		defer cancel()
-		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit}
+		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit, readOnly: ro}
+		if s != nil && sessRO != ro {
+			// :set [no]readonly changed the connection: the session's
+			// server-side read-only setting no longer matches.
+			_ = s.Close()
+			s = nil
+			msg.reopened = true
+		}
 		sess, reconnected, err := ensureSession(ctx, b, conn, ns, s)
 		msg.reconnected = reconnected
 		if err != nil {
@@ -412,9 +424,16 @@ func (t *consoleTab) Update(msg tea.Msg) tea.Cmd {
 
 func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 	t.running, t.cancel = false, nil
-	t.session = m.session
+	t.session, t.sessionRO = m.session, m.readOnly
 	if m.reconnected {
 		t.log("reconnected to " + t.conn)
+	}
+	if m.reopened {
+		mode := "read-write"
+		if m.readOnly {
+			mode = "read-only"
+		}
+		t.log("session reopened " + mode + " (session state such as temporary tables was reset)")
 	}
 	if m.err != nil {
 		text := m.err.Error()

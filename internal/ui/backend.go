@@ -19,4 +19,7 @@ type Backend interface {
 	// AddConnection saves a new connection to connections.toml (and its
 	// password to the keychain when save is set).
 	AddConnection(c config.Connection, password string, save bool) error
+	// SetReadOnly switches a connection between read-only and read-write
+	// for this run only.
+	SetReadOnly(name string, ro bool) error
 }
