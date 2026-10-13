@@ -1,0 +1,510 @@
+package ui
+
+import (
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/session"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
+	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+)
+
+const defaultWhichKeyDelay = 300 * time.Millisecond
+
+const welcome = `Select a table in the tree and press l or enter.
+
+<space>s   table structure
+?          help
+:qa        quit`
+
+type focus int
+
+const (
+	focusTree focus = iota
+	focusTabs
+)
+
+type whichKeyMsg struct{ gen int }
+
+// Model is the root Bubble Tea model.
+type Model struct {
+	backend  Backend
+	settings config.Settings
+	keys     *keymap.Keymap
+
+	width, height int
+	focus         focus
+	showTree      bool
+	tree          *tree.Model
+
+	tabs      []tab
+	active    int
+	nextTabID int
+
+	pending       []string
+	pendingGen    int
+	showWhichKey  bool
+	whichKeyDelay time.Duration
+
+	overlay   overlay.Overlay
+	cmdline   *overlay.CmdLine
+	retryNode *tree.Node
+
+	status    string
+	statusErr bool
+}
+
+// New builds the root model with one tree root per configured connection.
+func New(b Backend, settings config.Settings) *Model {
+	conns := b.Connections()
+	roots := make([]*tree.Node, len(conns))
+	for i, c := range conns {
+		roots[i] = &tree.Node{Kind: tree.KindConn, Name: c.Name, Conn: c.Name, Prod: c.Env == config.EnvProd}
+	}
+	return &Model{
+		backend:       b,
+		settings:      settings,
+		keys:          keymap.Default(),
+		showTree:      true,
+		tree:          tree.New(roots),
+		whichKeyDelay: defaultWhichKeyDelay,
+	}
+}
+
+func (m *Model) Init() tea.Cmd { return nil }
+
+func (m *Model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	return v
+}
+
+func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		m.width, m.height = msg.Width, msg.Height
+		m.layout()
+	case tea.KeyPressMsg:
+		return m, m.handleKey(msg)
+	case whichKeyMsg:
+		if msg.gen == m.pendingGen && len(m.pending) > 0 {
+			m.showWhichKey = true
+		}
+	case childrenLoadedMsg:
+		return m, m.childrenLoaded(msg)
+	case overlay.PasswordSubmittedMsg:
+		return m, m.passwordSubmitted(msg)
+	case overlay.CommandMsg:
+		return m, m.runCommand(msg.Text)
+	case openOverlayMsg:
+		m.overlay = msg.overlay
+	case tabMsg:
+		if t := m.tabByID(msg.TabID()); t != nil {
+			return m, t.Update(msg)
+		}
+	}
+	return m, nil
+}
+
+// ---- keys ----
+
+func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
+	m.status, m.statusErr = "", false
+	if m.cmdline != nil {
+		next, cmd := m.cmdline.HandleKey(msg)
+		if next == nil {
+			m.cmdline = nil
+		}
+		return cmd
+	}
+	if m.overlay != nil {
+		next, cmd := m.overlay.HandleKey(msg)
+		m.overlay = next
+		return cmd
+	}
+	key := msg.String()
+	if key == "esc" && len(m.pending) > 0 {
+		m.clearPending()
+		return nil
+	}
+	m.pending = append(m.pending, key)
+	action, res := m.keys.Resolve(m.context(), m.pending)
+	switch res {
+	case keymap.Pending:
+		m.pendingGen++
+		gen := m.pendingGen
+		return tea.Tick(m.whichKeyDelay, func(time.Time) tea.Msg { return whichKeyMsg{gen: gen} })
+	case keymap.Matched:
+		m.clearPending()
+		return m.dispatch(action)
+	default:
+		m.clearPending()
+		return nil
+	}
+}
+
+func (m *Model) clearPending() {
+	m.pending = nil
+	m.showWhichKey = false
+}
+
+func (m *Model) context() keymap.Context {
+	if m.focus == focusTabs {
+		if t := m.activeTab(); t != nil {
+			return t.Context()
+		}
+	}
+	return keymap.Tree
+}
+
+func (m *Model) dispatch(a keymap.Action) tea.Cmd {
+	if n, ok := keymap.TabNumber(a); ok {
+		m.gotoTab(n - 1)
+		return nil
+	}
+	switch a {
+	case keymap.Quit:
+		return tea.Quit
+	case keymap.CommandLine:
+		m.cmdline = overlay.NewCmdLine()
+	case keymap.Help:
+		m.overlay = overlay.NewHelp(m.keys.Help(m.context()))
+	case keymap.FocusNext, keymap.FocusPrev:
+		if m.focus == focusTree {
+			m.setFocus(focusTabs)
+		} else {
+			m.setFocus(focusTree)
+		}
+	case keymap.FocusLeft:
+		m.setFocus(focusTree)
+	case keymap.FocusRight:
+		m.setFocus(focusTabs)
+	case keymap.ToggleTree:
+		m.toggleTree()
+	case keymap.OpenStructure:
+		return m.openStructureFromContext()
+	default:
+		if m.focus == focusTree {
+			return m.treeAction(a)
+		}
+		if t := m.activeTab(); t != nil {
+			return t.Handle(a)
+		}
+	}
+	return nil
+}
+
+func (m *Model) treeAction(a keymap.Action) tea.Cmd {
+	t := m.tree
+	switch a {
+	case keymap.Down:
+		t.Move(1)
+	case keymap.Up:
+		t.Move(-1)
+	case keymap.Top:
+		t.Top()
+	case keymap.Bottom:
+		t.Bottom()
+	case keymap.HalfPageDown:
+		t.HalfPage(1)
+	case keymap.HalfPageUp:
+		t.HalfPage(-1)
+	case keymap.Collapse:
+		t.Collapse()
+	case keymap.Expand:
+		n := t.Selected()
+		if n == nil {
+			return nil
+		}
+		if n.IsTable() {
+			return m.openData(n.Conn, n.TableRef())
+		}
+		if t.Expand() {
+			return loadChildren(m.backend, n)
+		}
+	case keymap.Refresh:
+		if n := t.Selected(); n != nil && n.Expandable() && !n.Loading {
+			t.StartLoad(n)
+			return loadChildren(m.backend, n)
+		}
+	case keymap.Password:
+		if n := t.Selected(); n != nil {
+			m.retryNode = nil
+			m.overlay = overlay.NewPassword(n.Conn)
+		}
+	}
+	return nil
+}
+
+func (m *Model) childrenLoaded(msg childrenLoadedMsg) tea.Cmd {
+	if errors.Is(msg.err, session.ErrPasswordRequired) {
+		m.tree.CancelLoad(msg.node)
+		m.retryNode = msg.node
+		m.overlay = overlay.NewPassword(msg.node.Conn)
+		return nil
+	}
+	m.tree.SetChildren(msg.node, msg.children, msg.err)
+	if msg.err != nil {
+		m.setStatus(msg.err.Error(), true)
+	}
+	return nil
+}
+
+func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
+	if err := m.backend.SetPassword(msg.Conn, msg.Password, msg.Save); err != nil {
+		m.setStatus("password kept for this session only: "+err.Error(), true)
+	}
+	node := m.retryNode
+	m.retryNode = nil
+	if node == nil || node.Conn != msg.Conn {
+		m.tree.ResetConn(msg.Conn)
+		return nil
+	}
+	m.tree.StartLoad(node)
+	return loadChildren(m.backend, node)
+}
+
+func (m *Model) runCommand(text string) tea.Cmd {
+	switch cmd := strings.TrimSpace(text); cmd {
+	case "":
+	case "q", "q!", "close":
+		if len(m.tabs) == 0 {
+			return tea.Quit
+		}
+		m.closeTab(m.active)
+	case "qa", "qa!", "quit":
+		return tea.Quit
+	default:
+		m.setStatus("unknown command: "+cmd, true)
+	}
+	return nil
+}
+
+func (m *Model) setStatus(s string, isErr bool) { m.status, m.statusErr = s, isErr }
+
+// ---- focus and tabs ----
+
+func (m *Model) setFocus(f focus) {
+	switch f {
+	case focusTree:
+		if !m.showTree {
+			m.showTree = true
+			m.layout()
+		}
+		m.focus = focusTree
+	case focusTabs:
+		if len(m.tabs) > 0 {
+			m.focus = focusTabs
+		}
+	}
+}
+
+func (m *Model) toggleTree() {
+	if !m.showTree {
+		m.showTree = true
+	} else if len(m.tabs) > 0 {
+		m.showTree = false
+		m.focus = focusTabs
+	}
+	m.layout()
+}
+
+func (m *Model) activeTab() tab {
+	if m.active < 0 || m.active >= len(m.tabs) {
+		return nil
+	}
+	return m.tabs[m.active]
+}
+
+func (m *Model) tabByID(id int) tab {
+	for _, t := range m.tabs {
+		if t.ID() == id {
+			return t
+		}
+	}
+	return nil
+}
+
+func (m *Model) gotoTab(i int) {
+	if i >= 0 && i < len(m.tabs) {
+		m.active = i
+		m.focus = focusTabs
+	}
+}
+
+func (m *Model) closeTab(i int) {
+	m.tabs = append(m.tabs[:i], m.tabs[i+1:]...)
+	m.active = textutil.Clamp(m.active, 0, len(m.tabs)-1)
+	if len(m.tabs) == 0 {
+		m.showTree = true
+		m.focus = focusTree
+	}
+	m.layout()
+}
+
+func (m *Model) openTab(key string, create func(id int) tab) tea.Cmd {
+	for i, t := range m.tabs {
+		if t.Key() == key {
+			m.gotoTab(i)
+			return nil
+		}
+	}
+	m.nextTabID++
+	t := create(m.nextTabID)
+	m.tabs = append(m.tabs, t)
+	m.active = len(m.tabs) - 1
+	m.focus = focusTabs
+	m.layout()
+	return t.Init()
+}
+
+func (m *Model) openData(conn string, ref db.TableRef) tea.Cmd {
+	return m.openTab(dataTabKey(conn, ref), func(id int) tab {
+		return newDataTab(id, m.backend, conn, ref, m.settings)
+	})
+}
+
+func (m *Model) openStructure(conn string, ref db.TableRef) tea.Cmd {
+	return m.openTab(structureTabKey(conn, ref), func(id int) tab {
+		return newStructureTab(id, m.backend, conn, ref)
+	})
+}
+
+func (m *Model) openStructureFromContext() tea.Cmd {
+	if m.focus == focusTree {
+		if n := m.tree.Selected(); n != nil && n.IsTable() {
+			return m.openStructure(n.Conn, n.TableRef())
+		}
+	} else if t := m.activeTab(); t != nil {
+		conn, ref := t.Target()
+		return m.openStructure(conn, ref)
+	}
+	m.setStatus("select a table first", true)
+	return nil
+}
+
+// ---- layout and rendering ----
+
+func (m *Model) treeWidth() int {
+	if !m.showTree {
+		return 0
+	}
+	return min(textutil.Clamp(m.width/4, 24, 40), m.width)
+}
+
+func (m *Model) bodyHeight() int { return max(m.height-1, 0) }
+
+func (m *Model) layout() {
+	inner := max(m.bodyHeight()-2, 0)
+	m.tree.SetHeight(inner)
+	tabsWidth := max(m.width-m.treeWidth()-2, 0)
+	for _, t := range m.tabs {
+		t.SetSize(tabsWidth, inner)
+	}
+}
+
+func (m *Model) render() string {
+	if m.width <= 0 || m.height <= 0 {
+		return ""
+	}
+	bodyH := m.bodyHeight()
+	treeW := m.treeWidth()
+	var panes []string
+	if treeW > 0 {
+		focused := m.focus == focusTree
+		panes = append(panes, theme.Box("Connections", m.tree.View(max(treeW-2, 0), focused), treeW, bodyH, focused))
+	}
+	if w := m.width - treeW; w > 0 {
+		panes = append(panes, m.renderTabs(w, bodyH))
+	}
+	screen := lipgloss.JoinHorizontal(lipgloss.Top, panes...) + "\n" + m.renderStatus()
+	if m.overlay != nil {
+		screen = overlay.Center(screen, m.overlay.View(m.width, m.height), m.width, m.height)
+	}
+	if m.showWhichKey {
+		box := overlay.WhichKey(m.keys.Continuations(m.context(), m.pending))
+		x := max(m.width-lipgloss.Width(box), 0)
+		y := max(m.height-1-lipgloss.Height(box), 0)
+		screen = overlay.PlaceAt(screen, box, x, y)
+	}
+	return screen
+}
+
+func (m *Model) renderTabs(width, height int) string {
+	t := m.activeTab()
+	if t == nil {
+		return theme.Box("sqlvim", welcome, width, height, false)
+	}
+	focused := m.focus == focusTabs
+	return theme.Box(m.tabBar(), t.View(focused), width, height, focused)
+}
+
+func (m *Model) tabBar() string {
+	labels := make([]string, len(m.tabs))
+	for i, t := range m.tabs {
+		label := fmt.Sprintf("[%d]%s", i+1, textutil.Sanitize(t.Title()))
+		if i == m.active {
+			labels[i] = theme.ActiveTab.Render(label)
+		} else {
+			labels[i] = theme.Muted.Render(label)
+		}
+	}
+	return strings.Join(labels, " ")
+}
+
+func (m *Model) renderStatus() string {
+	if m.cmdline != nil {
+		return textutil.Fit(m.cmdline.View(m.width, 1), m.width)
+	}
+	parts := []string{theme.Mode.Render(" NORMAL ")}
+	if len(m.pending) > 0 {
+		parts = append(parts, m.keys.Display(m.pending))
+	}
+	if loc := m.location(); loc != "" {
+		parts = append(parts, loc)
+	}
+	if m.status != "" {
+		style := theme.Muted
+		if m.statusErr {
+			style = theme.Error
+		}
+		parts = append(parts, style.Render(textutil.Sanitize(m.status)))
+	}
+	left := strings.Join(parts, "  ")
+	right := theme.Muted.Render("<space> leader · ? help · : command")
+	gap := m.width - ansi.StringWidth(left) - ansi.StringWidth(right)
+	if gap < 1 {
+		return textutil.Fit(left, m.width)
+	}
+	return left + strings.Repeat(" ", gap) + right
+}
+
+func (m *Model) location() string {
+	var conn string
+	var ns db.Namespace
+	if t := m.activeTab(); m.focus == focusTabs && t != nil {
+		var ref db.TableRef
+		conn, ref = t.Target()
+		ns = ref.Namespace
+	} else if n := m.tree.Selected(); n != nil {
+		conn, ns = n.Conn, n.NS
+	}
+	var parts []string
+	for _, p := range []string{conn, ns.Database, ns.Schema} {
+		if p != "" {
+			parts = append(parts, p)
+		}
+	}
+	return strings.Join(parts, "/")
+}
