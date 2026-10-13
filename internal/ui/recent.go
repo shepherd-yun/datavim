@@ -90,3 +90,24 @@ func (m *Model) openRecent(r history.Recent) tea.Cmd {
 	}
 	return nil
 }
+
+// touchActive records the active tab as just used.
+func (m *Model) touchActive() tea.Cmd {
+	t := m.activeTab()
+	if t == nil {
+		return nil
+	}
+	conn, ref := t.Target()
+	r := history.Recent{Conn: conn, Database: ref.Database, Schema: ref.Schema, Name: ref.Name}
+	switch t.(type) {
+	case *dataTab:
+		r.Kind = history.RecentData
+	case *structureTab:
+		r.Kind = history.RecentStructure
+	case *consoleTab:
+		r.Kind, r.Name = history.RecentConsole, ""
+	default:
+		return nil
+	}
+	return recordRecent(m.store, r)
+}

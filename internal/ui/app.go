@@ -285,8 +285,11 @@ func (m *Model) context() keymap.Context {
 
 func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	if n, ok := keymap.TabNumber(a); ok {
+		if n-1 >= len(m.tabs) {
+			return nil
+		}
 		m.gotoTab(n - 1)
-		return nil
+		return m.touchActive()
 	}
 	if f, ok := keymap.CopyFormat(a); ok {
 		return m.copyAs(export.Format(f))

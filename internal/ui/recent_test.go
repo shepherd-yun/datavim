@@ -71,3 +71,14 @@ func TestRecentAsksForThePassword(t *testing.T) {
 		t.Fatal("the tab loads once the password is entered")
 	}
 }
+
+func TestSwitchingTabsUpdatesRecent(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	press(t, m, "space", "s") // the structure tab is now the newest
+	press(t, m, "1")          // back to the data tab
+	got, _ := m.store.Recent(1)
+	if len(got) != 1 || got[0].Kind != history.RecentData {
+		t.Fatalf("newest = %+v", got)
+	}
+}
