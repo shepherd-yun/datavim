@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/pelletier/go-toml/v2"
 )
@@ -45,13 +46,41 @@ func (c Connection) IsReadOnly() bool {
 
 // Settings is config.toml.
 type Settings struct {
-	PageSize       int `toml:"page_size"`
-	MaxColumnWidth int `toml:"max_column_width"`
+	PageSize       int    `toml:"page_size"`
+	MaxColumnWidth int    `toml:"max_column_width"`
+	MaxRows        int    `toml:"max_rows"`
+	Editor         string `toml:"editor"`
+	ExportDir      string `toml:"export_dir"`
 }
 
 // DefaultSettings returns the settings used when config.toml omits a key.
 func DefaultSettings() Settings {
-	return Settings{PageSize: 200, MaxColumnWidth: 40}
+	return Settings{PageSize: 200, MaxColumnWidth: 40, MaxRows: 1000}
+}
+
+// EditorCommand is the command line <space>v runs: the editor setting, then
+// $VISUAL, then $EDITOR, then nvim.
+func (s Settings) EditorCommand(getenv func(string) string) []string {
+	for _, v := range []string{s.Editor, getenv("VISUAL"), getenv("EDITOR")} {
+		if f := strings.Fields(v); len(f) > 0 {
+			return f
+		}
+	}
+	return []string{"nvim"}
+}
+
+// ExportDirectory returns export_dir with a leading ~ expanded, defaulting to ~/Downloads.
+func (s Settings) ExportDirectory(home string) string {
+	switch d := s.ExportDir; {
+	case d == "":
+		return filepath.Join(home, "Downloads")
+	case d == "~":
+		return home
+	case strings.HasPrefix(d, "~/"):
+		return filepath.Join(home, d[2:])
+	default:
+		return d
+	}
 }
 
 // Config is everything loaded from the config directory.
@@ -91,6 +120,9 @@ func Load(dir string) (*Config, error) {
 	if cfg.Settings.MaxColumnWidth <= 0 {
 		return nil, fmt.Errorf("%s: max_column_width must be positive", settingsPath)
 	}
+	if cfg.Settings.MaxRows <= 0 {
+		return nil, fmt.Errorf("%s: max_rows must be positive", settingsPath)
+	}
 	return cfg, nil
 }
 
@@ -119,6 +151,31 @@ func decodeFile(path string, v any) error {
 	return nil
 }
 
+// Normalize validates one connection and fills in defaults (host, port, env).
+func Normalize(c Connection) (Connection, error) {
+	if c.Name == "" {
+		return c, errors.New("connection: name is required")
+	}
+	port, ok := defaultPorts[c.Driver]
+	if !ok {
+		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql or postgres)", c.Name, c.Driver)
+	}
+	if c.Port == 0 {
+		c.Port = port
+	}
+	if c.Host == "" {
+		c.Host = "localhost"
+	}
+	switch c.Env {
+	case "":
+		c.Env = EnvDev
+	case EnvDev, EnvStaging, EnvProd:
+	default:
+		return c, fmt.Errorf("connection %q: unknown env %q (want dev, staging or prod)", c.Name, c.Env)
+	}
+	return c, nil
+}
+
 func normalize(in []Connection) ([]Connection, error) {
 	seen := make(map[string]bool, len(in))
 	out := make([]Connection, 0, len(in))
@@ -130,26 +187,67 @@ func normalize(in []Connection) ([]Connection, error) {
 			return nil, fmt.Errorf("connection %q: duplicate name", c.Name)
 		}
 		seen[c.Name] = true
-		port, ok := defaultPorts[c.Driver]
-		if !ok {
-			return nil, fmt.Errorf("connection %q: unknown driver %q (want mysql or postgres)", c.Name, c.Driver)
-		}
-		if c.Port == 0 {
-			c.Port = port
-		}
-		if c.Host == "" {
-			c.Host = "localhost"
-		}
-		switch c.Env {
-		case "":
-			c.Env = EnvDev
-		case EnvDev, EnvStaging, EnvProd:
-		default:
-			return nil, fmt.Errorf("connection %q: unknown env %q (want dev, staging or prod)", c.Name, c.Env)
+		c, err := Normalize(c)
+		if err != nil {
+			return nil, err
 		}
 		out = append(out, c)
 	}
 	return out, nil
+}
+
+// connBlock is what <space>n writes; empty optional keys are left out.
+type connBlock struct {
+	Name     string `toml:"name"`
+	Driver   string `toml:"driver"`
+	Host     string `toml:"host"`
+	Port     int    `toml:"port"`
+	User     string `toml:"user,omitempty"`
+	Database string `toml:"database,omitempty"`
+	Env      Env    `toml:"env"`
+}
+
+// AppendConnection validates c and appends it to dir/connections.toml as a new
+// [[connection]] block, leaving existing content (and comments) untouched.
+func AppendConnection(dir string, c Connection) (Connection, error) {
+	c, err := Normalize(c)
+	if err != nil {
+		return c, err
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		return c, err
+	}
+	for _, e := range cfg.Connections {
+		if e.Name == c.Name {
+			return c, fmt.Errorf("connection %q already exists", c.Name)
+		}
+	}
+	block, err := toml.Marshal(struct {
+		Connection []connBlock `toml:"connection"`
+	}{[]connBlock{{
+		Name: c.Name, Driver: c.Driver, Host: c.Host, Port: c.Port,
+		User: c.User, Database: c.Database, Env: c.Env,
+	}}})
+	if err != nil {
+		return c, err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return c, err
+	}
+	path := filepath.Join(dir, "connections.toml")
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	if err != nil {
+		return c, err
+	}
+	defer func() { _ = f.Close() }()
+	if info, err := f.Stat(); err == nil && info.Size() > 0 {
+		block = append([]byte("\n"), block...)
+	}
+	if _, err := f.Write(block); err != nil {
+		return c, err
+	}
+	return c, f.Close()
 }
 
 // Dir returns $XDG_CONFIG_HOME/sqlvim or ~/.config/sqlvim.

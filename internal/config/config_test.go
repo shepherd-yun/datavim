@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -141,5 +142,121 @@ func TestDirsDefaultToDotConfig(t *testing.T) {
 	t.Setenv("HOME", "/home/u")
 	if d, _ := Dir(); d != "/home/u/.config/sqlvim" {
 		t.Errorf("Dir = %q", d)
+	}
+}
+
+func TestNewSettingsDefaultsAndValidation(t *testing.T) {
+	if got := DefaultSettings().MaxRows; got != 1000 {
+		t.Fatalf("MaxRows default = %d", got)
+	}
+	dir := t.TempDir()
+	writeFile(t, dir, "config.toml", "max_rows = 50\neditor = \"code -w\"\nexport_dir = \"~/out\"\n")
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := cfg.Settings
+	if s.MaxRows != 50 || s.Editor != "code -w" || s.ExportDir != "~/out" {
+		t.Fatalf("settings = %+v", s)
+	}
+	writeFile(t, dir, "config.toml", "max_rows = 0\n")
+	if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), "max_rows") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestEditorCommand(t *testing.T) {
+	env := map[string]string{}
+	getenv := func(k string) string { return env[k] }
+	if got := (Settings{}).EditorCommand(getenv); !slices.Equal(got, []string{"nvim"}) {
+		t.Fatalf("fallback = %v", got)
+	}
+	env["EDITOR"] = "vim"
+	if got := (Settings{}).EditorCommand(getenv); !slices.Equal(got, []string{"vim"}) {
+		t.Fatalf("EDITOR = %v", got)
+	}
+	env["VISUAL"] = "hx"
+	if got := (Settings{}).EditorCommand(getenv); !slices.Equal(got, []string{"hx"}) {
+		t.Fatalf("VISUAL wins over EDITOR: %v", got)
+	}
+	if got := (Settings{Editor: "code -w"}).EditorCommand(getenv); !slices.Equal(got, []string{"code", "-w"}) {
+		t.Fatalf("setting wins: %v", got)
+	}
+}
+
+func TestExportDirectory(t *testing.T) {
+	cases := map[string]string{
+		"":         "/home/u/Downloads",
+		"~":        "/home/u",
+		"~/out":    "/home/u/out",
+		"/tmp/x":   "/tmp/x",
+		"relative": "relative",
+	}
+	for in, want := range cases {
+		if got := (Settings{ExportDir: in}).ExportDirectory("/home/u"); got != want {
+			t.Errorf("ExportDirectory(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestNormalize(t *testing.T) {
+	c, err := Normalize(Connection{Name: "x", Driver: "postgres"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Port != 5432 || c.Host != "localhost" || c.Env != EnvDev {
+		t.Fatalf("defaults not applied: %+v", c)
+	}
+	for _, bad := range []Connection{
+		{Driver: "mysql"},
+		{Name: "x", Driver: "sqlite"},
+		{Name: "x", Driver: "mysql", Env: "qa"},
+	} {
+		if _, err := Normalize(bad); err == nil {
+			t.Errorf("Normalize(%+v) succeeded", bad)
+		}
+	}
+}
+
+func TestAppendConnectionKeepsExistingContent(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "connections.toml", "# my servers\n[[connection]]\nname = \"a\"\ndriver = \"mysql\"\n")
+	got, err := AppendConnection(dir, Connection{Name: "b \"quoted\"", Driver: "postgres", User: "app", Database: "shop", Env: EnvProd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Port != 5432 {
+		t.Fatalf("returned connection is normalized: %+v", got)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, "connections.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(string(data), "# my servers\n") {
+		t.Fatalf("existing content rewritten:\n%s", data)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("file no longer loads: %v\n%s", err, data)
+	}
+	if len(cfg.Connections) != 2 || cfg.Connections[1].Name != `b "quoted"` || cfg.Connections[1].Env != EnvProd {
+		t.Fatalf("connections = %+v", cfg.Connections)
+	}
+	if _, err := AppendConnection(dir, Connection{Name: "a", Driver: "mysql"}); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("duplicate err = %v", err)
+	}
+}
+
+func TestAppendConnectionCreatesPrivateFile(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "new", "sqlvim")
+	if _, err := AppendConnection(dir, Connection{Name: "a", Driver: "mysql"}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(filepath.Join(dir, "connections.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Fatalf("perm = %o", perm)
 	}
 }
