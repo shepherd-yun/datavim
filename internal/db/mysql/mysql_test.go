@@ -43,3 +43,22 @@ func TestQualifiedName(t *testing.T) {
 		t.Fatalf("got %s", got)
 	}
 }
+
+func TestDSNConfigReadOnly(t *testing.T) {
+	for _, params := range []map[string]string{nil, {"charset": "utf8mb4"}} {
+		mc, err := dsnConfig(db.ConnConfig{Host: "h", Port: 3306, User: "u", ReadOnly: true, Params: params})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mc.Params["transaction_read_only"] != "1" {
+			t.Errorf("params=%v: got %v", params, mc.Params)
+		}
+	}
+	mc, err := dsnConfig(db.ConnConfig{Host: "h", Port: 3306, User: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := mc.Params["transaction_read_only"]; ok {
+		t.Error("read-write connections must not set transaction_read_only")
+	}
+}

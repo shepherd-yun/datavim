@@ -68,3 +68,23 @@ CREATE UNIQUE INDEX users_email_key ON app.users USING btree (email);
 		t.Fatal("must start with CREATE TABLE")
 	}
 }
+
+func TestPoolConfig(t *testing.T) {
+	pc, err := poolConfig(db.ConnConfig{Host: "h", Port: 5432, User: "u", Database: "app"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if pc.ConnConfig.BuildContextWatcherHandler == nil {
+		t.Fatal("cancelling a context must send a cancel request")
+	}
+	if _, ok := pc.ConnConfig.RuntimeParams["default_transaction_read_only"]; ok {
+		t.Fatal("read-write connections must not set default_transaction_read_only")
+	}
+	ro, err := poolConfig(db.ConnConfig{Host: "h", Port: 5432, User: "u", Database: "app", ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := ro.ConnConfig.RuntimeParams["default_transaction_read_only"]; got != "on" {
+		t.Fatalf("default_transaction_read_only = %q", got)
+	}
+}

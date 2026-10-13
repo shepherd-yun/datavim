@@ -154,3 +154,25 @@ func run(cmd tea.Cmd) tea.Msg {
 	}
 	return cmd()
 }
+
+type fakeSession struct {
+	conn   *fakeConn
+	closed bool
+}
+
+func (c *fakeConn) Session(context.Context) (db.Session, error) { return &fakeSession{conn: c}, nil }
+
+func (s *fakeSession) Query(ctx context.Context, q string, args ...any) (*db.ResultSet, error) {
+	return s.conn.Query(ctx, q, args...)
+}
+
+func (s *fakeSession) Exec(ctx context.Context, q string, args ...any) (db.ExecResult, error) {
+	return s.conn.Exec(ctx, q, args...)
+}
+
+func (s *fakeSession) Stream(ctx context.Context, q string, onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
+	return s.conn.Stream(ctx, q, onColumns, onRow)
+}
+
+func (s *fakeSession) Ping(context.Context) error { return nil }
+func (s *fakeSession) Close() error               { s.closed = true; return nil }
