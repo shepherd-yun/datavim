@@ -294,6 +294,41 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 	})
 
+	t.Run("Session keeps a transaction open across calls", func(t *testing.T) {
+		s, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = s.Close() }()
+		users := d.QualifiedName(ref("users"))
+		note := func(q db.Querier) string {
+			t.Helper()
+			rs, err := q.Query(ctx, "SELECT note FROM "+users+" WHERE id = 1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			return rs.Rows[0][0].Text
+		}
+		if _, err := s.Exec(ctx, "BEGIN"); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := s.Exec(ctx, "UPDATE "+users+" SET note = 'in tx' WHERE id = 1"); err != nil {
+			t.Fatal(err)
+		}
+		if got := note(s); got != "in tx" {
+			t.Fatalf("the session sees its own change: %q", got)
+		}
+		if got := note(conn); got != "hi" {
+			t.Fatalf("other connections do not see uncommitted changes: %q", got)
+		}
+		if _, err := s.Exec(ctx, "ROLLBACK"); err != nil {
+			t.Fatal(err)
+		}
+		if got := note(s); got != "hi" {
+			t.Fatalf("rolled back: %q", got)
+		}
+	})
+
 	t.Run("pooled queries do not see session state", func(t *testing.T) {
 		s, err := conn.Session(ctx)
 		if err != nil {
