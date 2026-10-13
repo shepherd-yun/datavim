@@ -3,10 +3,11 @@
 A terminal SQL client for MySQL and PostgreSQL with vim keys and DataGrip-style workflows.
 一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL 和 PostgreSQL。
 
-> Status: v0.5 — browse databases and tables, write and run SQL in a highlighted console
-> with a built-in vim editor and completion, search everything with `<Space><Space>`,
-> reopen recent tabs, copy and export results, SQL history, SSH tunnels (agent, keys,
-> ProxyJump), production safeguards and manual transactions. Editing table data arrives in v0.6.
+> Status: v0.6 — browse databases and tables, filter and sort table data, edit it in place
+> (changes are staged, previewed as SQL and submitted in one transaction), write and run SQL
+> in a highlighted console with a built-in vim editor and completion, search everything with
+> `<Space><Space>`, reopen recent tabs, copy and export results, SQL history, SSH tunnels
+> (agent, keys, ProxyJump), production safeguards and manual transactions.
 
 ## Install
 
@@ -30,6 +31,17 @@ export_dir       = "~/Downloads"
 ```
 
 No config yet? Start sqlvim and press `<space>n` to add a connection.
+
+## Editing table data
+
+Changes are staged: edited cells turn yellow, new rows green and rows marked for deletion red.
+`<Space>w` (or `:w`) shows the statements; `y` runs them in one transaction, which is rolled
+back if any statement fails or does not change exactly one row. Rows are located by their
+primary key, else a unique index over NOT NULL columns; tables without one are matched by all
+their values with `LIMIT 1` (MySQL) or by `ctid` (PostgreSQL), and the preview says so.
+Read-only connections refuse changes, PROD connections show `PROD ·` in the preview, and
+paging, refreshing, filtering, sorting, closing the tab or quitting ask or refuse while
+changes are staged. Console results stay read-only.
 
 ## SSH tunnels
 
@@ -66,6 +78,12 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `0` / `$` | Grid: first / last column |
 | `zh` `zl` / `zH` `zL` | Scroll a grid sideways by half a screen / one column |
 | `K` | Show full cell value |
+| `f` / `F` | Table data: filter by the cell's value / edit the filter (`WHERE …`) |
+| `s` | Table data: sort by the column — ascending, descending, off |
+| `i` / `Enter` | Table data: edit the cell in a vim editor (`Enter` saves, `Ctrl-n` NULL, `Esc` NORMAL / cancel) |
+| `o` / `dd` | Table data: add a row below / mark the row for deletion |
+| `u` / `U` | Table data: undo the last change / discard every change |
+| `<Space>w`, `:w` | Table data: preview the changes as SQL, `y` submits them in one transaction |
 | `yl` / `yy` | Copy cell / row |
 | `p` | Re-enter connection password (tree) |
 | `<Space>c` | SQL console for the selected connection / database |

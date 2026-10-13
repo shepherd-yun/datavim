@@ -6,11 +6,23 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-14
+
 ### Added
+- Edit table data in place: `i` / `Enter` edit a cell in the vim editor (`Ctrl-n` sets NULL),
+  `o` adds a row, `dd` marks a row for deletion, `u` / `U` undo one / every change.
+- Staged changes are colored and submitted with `<Space>w` or `:w` after a SQL preview, in one
+  transaction that rolls back unless every statement changes exactly one row.
+- Rows without a primary key or unique NOT NULL index are located by all their values
+  (MySQL, `LIMIT 1`) or by `ctid` (PostgreSQL).
+- `f` filters table data by the cell's value, `F` edits the `WHERE` condition, `s` sorts by the
+  column; whole-table exports keep the filter and order.
+- `:q`, `:qa` and editing or deleting a connection ask or refuse while table changes are unsaved.
 - `zH` / `zL` scroll a grid one column sideways.
 
 ### Changed
 - `zh` / `zl` scroll a grid half a screen sideways instead of one column.
+- MySQL reports the rows an `UPDATE` matched rather than the rows it changed, like PostgreSQL.
 
 ## [0.5.0] - 2026-10-14
 
