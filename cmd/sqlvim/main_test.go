@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
 )
 
 func TestRunPrintsVersion(t *testing.T) {
@@ -34,7 +35,7 @@ func TestRunReportsConfigErrors(t *testing.T) {
 
 func TestNewManagerPersistsAddedConnections(t *testing.T) {
 	dir := t.TempDir()
-	mgr := newManager(&config.Config{}, dir)
+	mgr := newManager(&config.Config{}, dir, nil)
 	if err := mgr.AddConnection(config.Connection{Name: "local", Driver: "mysql"}, "", false); err != nil {
 		t.Fatal(err)
 	}
@@ -44,5 +45,23 @@ func TestNewManagerPersistsAddedConnections(t *testing.T) {
 	}
 	if len(cfg.Connections) != 1 || cfg.Connections[0].Name != "local" {
 		t.Fatalf("connections = %+v", cfg.Connections)
+	}
+}
+
+func TestNewManagerUsesTunnels(t *testing.T) {
+	p := tunnel.NewPool(tunnel.Options{})
+	defer p.Close()
+	mgr := newManager(&config.Config{}, t.TempDir(), p)
+	if mgr.Tunnels != p {
+		t.Fatal("the manager opens ssh connections through the pool")
+	}
+	if mgr := newManager(&config.Config{}, t.TempDir(), nil); mgr.Tunnels != nil {
+		t.Fatal("nil stays nil")
+	}
+}
+
+func TestLocalUser(t *testing.T) {
+	if localUser() == "" {
+		t.Fatal("the default ssh user is the local user")
 	}
 }

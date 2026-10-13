@@ -27,3 +27,12 @@ host     = "10.0.1.5"
 user     = "readonly"
 database = "app"
 env      = "prod"          # marked [PROD]; read-only by default
+
+[[connection]]
+name     = "staging-mysql"
+driver   = "mysql"
+host     = "10.0.2.7"      # resolved by the SSH server
+user     = "app"
+database = "app"
+env      = "staging"
+ssh      = "bastion"       # a Host alias from ~/.ssh/config (ProxyJump works too)
