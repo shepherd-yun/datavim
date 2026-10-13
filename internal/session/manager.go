@@ -17,6 +17,10 @@ import (
 // ErrPasswordRequired means no password is known; ask the user.
 var ErrPasswordRequired = errors.New("password required")
 
+// ErrKeychain marks an UpdateConnection or RemoveConnection that changed
+// connections.toml but could not update the saved password.
+var ErrKeychain = errors.New("keychain not updated")
+
 // Tunneler opens SSH tunnels; *tunnel.Pool implements it.
 type Tunneler interface {
 	Connect(ctx context.Context, alias string) (db.DialFunc, error)
@@ -158,7 +162,7 @@ func (m *Manager) UpdateConnection(old string, c config.Connection, password str
 		errs = append(errs, m.SetPassword(c.Name, password, save))
 	}
 	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("connection saved, but the keychain was not updated: %w", err)
+		return fmt.Errorf("connection saved, but the keychain was not updated: %w", errors.Join(ErrKeychain, err))
 	}
 	return nil
 }
@@ -180,7 +184,7 @@ func (m *Manager) RemoveConnection(name string) error {
 	delete(m.passwords, name)
 	m.mu.Unlock()
 	if err := m.secrets.Delete(name); err != nil {
-		return fmt.Errorf("connection removed, but its keychain password was not: %w", err)
+		return fmt.Errorf("connection removed, but its keychain password was not: %w", errors.Join(ErrKeychain, err))
 	}
 	return nil
 }

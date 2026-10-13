@@ -12,11 +12,12 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
 
-// ConnFormMsg carries a new connection from the form.
+// ConnFormMsg carries a connection from the form.
 type ConnFormMsg struct {
 	Conn     config.Connection
-	Password string
+	Password string // empty when editing means: keep the current password
 	Save     bool
+	Original string // the edited connection's name; empty for a new one
 }
 
 type formField struct {
@@ -42,9 +43,10 @@ const (
 
 // ConnForm is the <space>n new-connection form.
 type ConnForm struct {
-	fields []formField
-	cur    int
-	err    string
+	fields   []formField
+	cur      int
+	err      string
+	original string // editing this connection; empty for a new one
 }
 
 // NewConnForm builds an empty form.
@@ -61,6 +63,31 @@ func NewConnForm() *ConnForm {
 		ffEnv:      {label: "Env", choices: []string{"dev", "staging", "prod"}},
 		ffSave:     {label: "Save password", choices: []string{"yes", "no"}},
 	}}
+}
+
+// NewEditConnForm builds the form filled in with c, for <e> in the tree.
+func NewEditConnForm(c config.Connection) *ConnForm {
+	f := NewConnForm()
+	f.original = c.Name
+	set := func(i int, v string) { f.fields[i].input = newField(v) }
+	set(ffName, c.Name)
+	set(ffHost, c.Host)
+	if c.Port != 0 {
+		set(ffPort, strconv.Itoa(c.Port))
+	}
+	set(ffUser, c.User)
+	set(ffDatabase, c.Database)
+	set(ffSSH, c.SSH)
+	choose := func(i int, v string) {
+		for j, ch := range f.fields[i].choices {
+			if ch == v {
+				f.fields[i].choice = j
+			}
+		}
+	}
+	choose(ffDriver, c.Driver)
+	choose(ffEnv, string(c.Env))
+	return f
 }
 
 func (f *ConnForm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
@@ -123,7 +150,9 @@ func (f *ConnForm) submit() (Overlay, tea.Cmd) {
 		f.err = err.Error()
 		return f, nil
 	}
-	return nil, emit(ConnFormMsg{Conn: c, Password: f.fields[ffPassword].input.String(), Save: f.value(ffSave) == "yes"})
+	return nil, emit(ConnFormMsg{
+		Conn: c, Password: f.fields[ffPassword].input.String(), Save: f.value(ffSave) == "yes", Original: f.original,
+	})
 }
 
 func (f *ConnForm) View(width, _ int) string {
@@ -152,7 +181,12 @@ func (f *ConnForm) View(width, _ int) string {
 	if f.err != "" {
 		lines = append(lines, theme.Error.Render(textutil.Sanitize(f.err)))
 	}
+	title := "New connection"
+	if f.original != "" {
+		title = "Edit connection"
+		lines = append(lines, theme.Muted.Render("Password: empty keeps the current one"))
+	}
 	lines = append(lines, theme.Muted.Render("SSH host: a Host alias from ~/.ssh/config (optional)"))
 	lines = append(lines, theme.Muted.Render("tab next · enter next/save · ctrl+s save · esc cancel"))
-	return theme.Box("New connection", strings.Join(lines, "\n"), w, len(lines)+2, true)
+	return theme.Box(title, strings.Join(lines, "\n"), w, len(lines)+2, true)
 }

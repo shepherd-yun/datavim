@@ -188,3 +188,25 @@ func TestAddRootAndEmpty(t *testing.T) {
 		t.Fatal("AddRoot selects the new connection")
 	}
 }
+
+func TestReplaceAndRemoveRoot(t *testing.T) {
+	m := fixture()
+	m.Expand()
+	m.SetChildren(m.Selected(), []*Node{{Kind: KindDatabase, Name: "app", Conn: "local"}}, nil)
+	m.Move(1) // app, under local
+	m.ReplaceRoot("local", &Node{Kind: KindConn, Name: "laptop", Conn: "laptop"})
+	if got := strings.Join(names(m), ","); got != "laptop,prod" {
+		t.Fatalf("visible = %s", got)
+	}
+	if m.Selected().Name != "laptop" {
+		t.Fatalf("selected = %s: the replacement keeps the cursor on that connection", m.Selected().Name)
+	}
+	m.RemoveRoot("laptop")
+	if got := strings.Join(names(m), ","); got != "prod" || m.Selected().Name != "prod" {
+		t.Fatalf("visible = %s selected = %v", got, m.Selected())
+	}
+	m.RemoveRoot("prod")
+	if !m.Empty() || m.Selected() != nil {
+		t.Fatal("empty tree")
+	}
+}

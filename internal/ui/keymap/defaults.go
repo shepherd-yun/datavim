@@ -52,6 +52,8 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("h"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("left"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("p"), Password, "Enter password"},
+		Binding{Tree, keys("e"), EditConnection, "Edit connection"},
+		Binding{Tree, keys("d", "d"), DeleteConnection, "Delete connection"},
 	)
 
 	b = append(b, gridBindings(Grid)...)

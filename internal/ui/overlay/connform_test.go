@@ -66,3 +66,30 @@ func TestConnFormMasksPassword(t *testing.T) {
 		t.Fatal("password must be masked")
 	}
 }
+
+func TestEditConnForm(t *testing.T) {
+	orig := config.Connection{
+		Name: "pg", Driver: "postgres", Host: "db", Port: 6543, User: "app",
+		Database: "shop", SSH: "bastion", Env: config.EnvProd,
+	}
+	f := NewEditConnForm(orig)
+	v := ansi.Strip(f.View(80, 30))
+	for _, want := range []string{"Edit connection", "pg", "postgres", "db", "6543", "app", "shop", "bastion", "prod", "empty keeps"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("missing %q:\n%s", want, v)
+		}
+	}
+	// name: append "2"; leave the rest; save
+	_, msg := send(t, f, "2", "ctrl+s")
+	got, ok := msg.(ConnFormMsg)
+	if !ok {
+		t.Fatalf("msg = %#v", msg)
+	}
+	if got.Original != "pg" || got.Conn.Name != "pg2" || got.Conn.Driver != "postgres" || got.Conn.Port != 6543 ||
+		got.Conn.SSH != "bastion" || got.Conn.Env != config.EnvProd || got.Password != "" {
+		t.Fatalf("got = %+v", got)
+	}
+	if _, msg := send(t, NewConnForm(), "x", "ctrl+s"); msg.(ConnFormMsg).Original != "" {
+		t.Fatal("a new connection has no original name")
+	}
+}

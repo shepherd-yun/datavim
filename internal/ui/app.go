@@ -174,9 +174,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case exportDoneMsg:
 		m.exportDone(msg)
 	case overlay.ConnFormMsg:
+		if msg.Original != "" {
+			return m, updateConnection(m.backend, msg)
+		}
 		return m, addConnection(m.backend, msg)
 	case connAddedMsg:
 		m.connAdded(msg)
+	case connUpdatedMsg:
+		return m, m.connUpdated(msg)
+	case deleteConnMsg:
+		return m, removeConnection(m.backend, msg.name)
+	case connRemovedMsg:
+		return m, m.connRemoved(msg)
 	case overlay.SearchMsg:
 		m.lastSearch = msg.Text
 		m.find(true)
@@ -360,8 +369,33 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 			m.retryNode = nil
 			m.overlay = overlay.NewPassword(n.Conn)
 		}
+	case keymap.EditConnection:
+		if n := t.Selected(); n != nil && m.canChange(n.Conn) {
+			if cfg, ok := m.backend.Connection(n.Conn); ok {
+				m.overlay = overlay.NewEditConnForm(cfg)
+			}
+		}
+	case keymap.DeleteConnection:
+		if n := t.Selected(); n != nil && m.canChange(n.Conn) {
+			m.overlay = overlay.NewConfirm("Delete connection", []string{
+				"Delete " + n.Conn + " from connections.toml and its saved password?",
+				"Its open tabs are closed. Type the connection name to confirm.",
+			}, n.Conn, deleteConnMsg{name: n.Conn})
+		}
 	}
 	return nil
+}
+
+// canChange reports whether conn may be edited or deleted: not while a
+// console on it holds an open transaction.
+func (m *Model) canChange(conn string) bool {
+	for _, t := range m.tabs {
+		if c, ok := t.(*consoleTab); ok && c.conn == conn && c.openTx() {
+			m.setStatus("a console on "+conn+" has an open transaction · :commit or :rollback first", true)
+			return false
+		}
+	}
+	return true
 }
 
 func (m *Model) childrenLoaded(msg childrenLoadedMsg) tea.Cmd {
@@ -787,6 +821,76 @@ func (m *Model) connAdded(msg connAddedMsg) {
 	m.tree.AddRoot(&tree.Node{Kind: tree.KindConn, Name: c.Name, Conn: c.Name, Prod: c.Env == config.EnvProd})
 	m.setFocus(focusTree)
 	m.setStatus("added connection "+c.Name+" to connections.toml", false)
+}
+
+type (
+	connUpdatedMsg struct {
+		old  string
+		conn config.Connection
+		err  error
+	}
+	deleteConnMsg  struct{ name string }
+	connRemovedMsg struct {
+		name string
+		err  error
+	}
+)
+
+func updateConnection(b Backend, msg overlay.ConnFormMsg) tea.Cmd {
+	return func() tea.Msg {
+		err := b.UpdateConnection(msg.Original, msg.Conn, msg.Password, msg.Save)
+		return connUpdatedMsg{old: msg.Original, conn: msg.Conn, err: err}
+	}
+}
+
+func removeConnection(b Backend, name string) tea.Cmd {
+	return func() tea.Msg { return connRemovedMsg{name: name, err: b.RemoveConnection(name)} }
+}
+
+// connUpdated swaps the edited connection into the tree and closes the tabs
+// that were opened with its old settings.
+func (m *Model) connUpdated(msg connUpdatedMsg) tea.Cmd {
+	if msg.err != nil && !errors.Is(msg.err, session.ErrKeychain) {
+		m.setStatus("cannot save connection: "+msg.err.Error(), true)
+		return nil
+	}
+	c := msg.conn
+	cmd := m.closeTabsOf(msg.old)
+	m.tree.ReplaceRoot(msg.old, &tree.Node{Kind: tree.KindConn, Name: c.Name, Conn: c.Name, Prod: c.Env == config.EnvProd})
+	m.setFocus(focusTree)
+	if msg.err != nil { // saved, but the keychain could not follow
+		m.setStatus(msg.err.Error(), true)
+	} else {
+		m.setStatus("saved connection "+c.Name+" to connections.toml", false)
+	}
+	return cmd
+}
+
+func (m *Model) connRemoved(msg connRemovedMsg) tea.Cmd {
+	if msg.err != nil && !errors.Is(msg.err, session.ErrKeychain) {
+		m.setStatus("cannot delete connection: "+msg.err.Error(), true)
+		return nil
+	}
+	cmd := m.closeTabsOf(msg.name)
+	m.tree.RemoveRoot(msg.name)
+	m.setFocus(focusTree)
+	if msg.err != nil {
+		m.setStatus(msg.err.Error(), true)
+	} else {
+		m.setStatus("deleted connection "+msg.name, false)
+	}
+	return cmd
+}
+
+// closeTabsOf closes every tab on conn.
+func (m *Model) closeTabsOf(conn string) tea.Cmd {
+	var cmds []tea.Cmd
+	for i := len(m.tabs) - 1; i >= 0; i-- {
+		if c, _ := m.tabs[i].Target(); c == conn {
+			cmds = append(cmds, m.closeTab(i))
+		}
+	}
+	return tea.Batch(cmds...)
 }
 
 // ---- layout and rendering ----

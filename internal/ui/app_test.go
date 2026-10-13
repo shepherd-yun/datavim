@@ -709,3 +709,77 @@ func TestPasteGoesToTheOpenPopup(t *testing.T) {
 		t.Fatal("the command line takes pasted text")
 	}
 }
+
+func TestEditConnection(t *testing.T) {
+	m, b := newTestModel(t)
+	openUsers(t, m) // a tab on local
+	press(t, m, "ctrl+h", "g", "g", "e")
+	if !strings.Contains(screen(m), "Edit connection") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	press(t, m, "2", "ctrl+s") // rename local -> local2
+	if _, ok := b.Connection("local2"); !ok {
+		t.Fatalf("connections = %+v", b.Connections())
+	}
+	if len(m.tabs) != 0 {
+		t.Fatal("tabs on the edited connection are closed")
+	}
+	if n := m.tree.Selected(); n == nil || n.Name != "local2" {
+		t.Fatalf("selected = %+v", n)
+	}
+	if s := statusLine(m); !strings.Contains(s, "local2") {
+		t.Fatalf("status: %s", s)
+	}
+	press(t, m, "l") // the renamed connection loads
+	if !strings.Contains(screen(m), "app") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+func TestDeleteConnectionNeedsItsName(t *testing.T) {
+	m, b := newTestModel(t)
+	press(t, m, "d", "d")
+	if !strings.Contains(screen(m), "Delete connection") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	press(t, m, "y", "enter")
+	if len(b.Connections()) != 2 {
+		t.Fatal("y alone does not delete")
+	}
+	press(t, m, "ctrl+u", "l", "o", "c", "a", "l", "enter")
+	if len(b.Connections()) != 1 {
+		t.Fatalf("connections = %+v", b.Connections())
+	}
+	if n := m.tree.Selected(); n == nil || n.Name != "prod" {
+		t.Fatalf("selected = %+v", n)
+	}
+	if strings.Contains(screen(m), "local") && !strings.Contains(statusLine(m), "deleted") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+func TestEditAndDeleteBlockedByOpenTransaction(t *testing.T) {
+	m, b := newTestModel(t)
+	openTxConsole(t, m)
+	press(t, m, "ctrl+h", "g", "g", "e")
+	if strings.Contains(screen(m), "Edit connection") || !strings.Contains(statusLine(m), "open transaction") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	press(t, m, "d", "d")
+	if strings.Contains(screen(m), "Delete connection") || len(b.Connections()) != 2 {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+func TestEditConnectionSaveFailureKeepsEverything(t *testing.T) {
+	m, b := newTestModel(t)
+	openUsers(t, m)
+	b.addErr = errors.New("connections.toml: permission denied")
+	press(t, m, "ctrl+h", "g", "g", "e", "ctrl+s") // same name, nothing renamed
+	if s := statusLine(m); !strings.Contains(s, "cannot save connection") {
+		t.Fatalf("status: %s", s)
+	}
+	if len(m.tabs) != 1 {
+		t.Fatal("tabs stay open when nothing was saved")
+	}
+}

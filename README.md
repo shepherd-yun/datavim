@@ -77,6 +77,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `<Space>y t/c/j/m/i` | Copy result as TSV / CSV / JSON / Markdown / INSERT |
 | `<Space>x c/j/s/x` | Export result as CSV / JSON / SQL / xlsx |
 | `<Space>n` | New connection |
+| `e` / `dd` | Tree: edit / delete the selected connection (saved to `connections.toml`) |
 | `<Space>s` | Table structure |
 | `<Space>b` | Toggle tree |
 | `<Space>r` | Refresh |

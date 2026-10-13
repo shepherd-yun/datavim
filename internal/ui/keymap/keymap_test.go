@@ -177,3 +177,13 @@ func TestToggleTxBinding(t *testing.T) {
 		}
 	}
 }
+
+func TestConnectionEditBindings(t *testing.T) {
+	k := Default()
+	if a, res := k.Resolve(Tree, []string{"e"}); a != EditConnection || res != Matched {
+		t.Errorf("e: %q %v", a, res)
+	}
+	if a, res := k.Resolve(Tree, []string{"d", "d"}); a != DeleteConnection || res != Matched {
+		t.Errorf("dd: %q %v", a, res)
+	}
+}

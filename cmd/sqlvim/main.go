@@ -124,14 +124,20 @@ func openStore(stateDir string) (*history.Store, error) {
 	return history.Open(":memory:")
 }
 
-// newManager builds the session manager; connections added in the UI are
-// appended to dir/connections.toml, and ssh connections use tunnels.
+// newManager builds the session manager; connections added, edited or
+// deleted in the UI are saved to dir/connections.toml, and ssh connections
+// use tunnels.
 func newManager(cfg *config.Config, dir string, tunnels session.Tunneler) *session.Manager {
 	mgr := session.NewManager(cfg.Connections, secret.Keyring{}, mysql.Driver{}, postgres.Driver{})
 	mgr.Persist = func(c config.Connection) error {
 		_, err := config.AppendConnection(dir, c)
 		return err
 	}
+	mgr.PersistUpdate = func(name string, c config.Connection) error {
+		_, err := config.UpdateConnection(dir, name, c)
+		return err
+	}
+	mgr.PersistRemove = func(name string) error { return config.RemoveConnection(dir, name) }
 	mgr.Tunnels = tunnels
 	return mgr
 }

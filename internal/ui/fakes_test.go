@@ -366,3 +366,39 @@ func (f *fakeBackend) TrustHost(e *tunnel.UnknownHostError) error {
 	f.connErr = nil
 	return nil
 }
+
+func (f *fakeBackend) UpdateConnection(old string, c config.Connection, password string, _ bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.addErr != nil {
+		return f.addErr
+	}
+	c, err := config.Normalize(c)
+	if err != nil {
+		return err
+	}
+	for i := range f.conns {
+		if f.conns[i].Name == old {
+			f.conns[i] = c
+			if password != "" {
+				f.passwords = append(f.passwords, c.Name+":"+password)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown connection %q", old)
+}
+
+func (f *fakeBackend) RemoveConnection(name string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.addErr != nil {
+		return f.addErr
+	}
+	n := len(f.conns)
+	f.conns = slices.DeleteFunc(f.conns, func(c config.Connection) bool { return c.Name == name })
+	if len(f.conns) == n {
+		return fmt.Errorf("unknown connection %q", name)
+	}
+	return nil
+}
