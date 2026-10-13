@@ -113,3 +113,13 @@ func TestEditedOrRemovedConnectionForgetsItsCatalog(t *testing.T) {
 		t.Fatalf("removed: %v", st)
 	}
 }
+
+func TestCatalogLoadsAfterThePasswordIsEntered(t *testing.T) {
+	m, b := newTestModel(t)
+	b.needPassword = true
+	press(t, m, "space", "space", "esc") // the catalog load fails: no password yet
+	press(t, m, "l", "s", "e", "c", "enter")
+	if _, st := m.catalogs.Get(localKey); st != meta.Ready {
+		t.Fatalf("state after the password = %v", st)
+	}
+}

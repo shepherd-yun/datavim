@@ -138,3 +138,16 @@ func Load(ctx context.Context, mr db.MetaReader, k Key) (*Snapshot, error) {
 	}
 	return NewSnapshot(k, c, time.Now()), nil
 }
+
+// Failed lists the keys of conn whose last load failed and that are not
+// loading again, sorted.
+func (c *Cache) Failed(conn string) []Key {
+	var out []Key
+	for k, e := range c.entries {
+		if k.Conn == conn && e.err != nil && e.loading == 0 {
+			out = append(out, k)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Database < out[j].Database })
+	return out
+}

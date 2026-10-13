@@ -3,6 +3,9 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/shepherd-yun/sqlvim/internal/history"
 )
 
 func TestRecentListsWhatWasOpened(t *testing.T) {
@@ -46,5 +49,25 @@ func TestRecentEmpty(t *testing.T) {
 	press(t, m, "space", "e")
 	if m.overlay != nil || !strings.Contains(m.status, "nothing opened yet") {
 		t.Fatalf("overlay %T, status %q", m.overlay, m.status)
+	}
+}
+
+func TestRecentAsksForThePassword(t *testing.T) {
+	m, b := newTestModel(t)
+	if err := m.store.AddRecent(history.Recent{Kind: history.RecentData, Conn: "local", Database: "app", Name: "users", Time: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+	b.needPassword = true
+	press(t, m, "space", "e", "enter")
+	if !strings.Contains(screen(m), "Password for local") {
+		t.Fatalf("prompt not shown:\n%s", screen(m))
+	}
+	press(t, m, "s", "e", "c", "enter")
+	tab, ok := m.activeTab().(*dataTab)
+	if !ok || tab.err != "" {
+		t.Fatalf("tab = %#v", m.activeTab())
+	}
+	if _, _, ok := tab.grid.Cell(); !ok {
+		t.Fatal("the tab loads once the password is entered")
 	}
 }

@@ -159,3 +159,23 @@ func TestLoad(t *testing.T) {
 		t.Fatal("errors are returned")
 	}
 }
+
+func TestCacheFailed(t *testing.T) {
+	c := NewCache()
+	bad, good, other := Key{Conn: "pg", Database: "a"}, Key{Conn: "pg", Database: "b"}, Key{Conn: "my"}
+	for _, k := range []Key{bad, good, other} {
+		gen, _ := c.Start(k)
+		var err error
+		if k != good {
+			err = errors.New("password required")
+		}
+		c.Finish(k, gen, nil, err)
+	}
+	if diff := cmp.Diff([]Key{bad}, c.Failed("pg")); diff != "" {
+		t.Fatalf("failed keys (-want +got):\n%s", diff)
+	}
+	c.Start(bad)
+	if got := c.Failed("pg"); len(got) != 0 {
+		t.Fatalf("a key being reloaded is not failed: %v", got)
+	}
+}
