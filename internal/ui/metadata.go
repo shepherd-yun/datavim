@@ -110,3 +110,13 @@ func (m *Model) metaStale(msg metaStaleMsg) tea.Cmd {
 	}
 	return m.reloadMeta(msg.conn, msg.database)
 }
+
+// retryFailedMeta reloads the catalogs of conn whose last load failed, such
+// as loads that ran before its password was entered.
+func (m *Model) retryFailedMeta(conn string) tea.Cmd {
+	var cmds []tea.Cmd
+	for _, k := range m.catalogs.Failed(conn) {
+		cmds = append(cmds, loadMeta(m.backend, k, m.catalogs.Restart(k)))
+	}
+	return tea.Batch(cmds...)
+}

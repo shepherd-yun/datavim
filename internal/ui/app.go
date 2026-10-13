@@ -76,6 +76,7 @@ type Model struct {
 	overlay   overlay.Overlay
 	cmdline   *overlay.CmdLine
 	retryNode *tree.Node
+	retryTab  int // data or structure tab to reload once a password is entered
 
 	status    string
 	statusErr bool
@@ -125,6 +126,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if o := sshPrompt(err); o != nil && m.overlay == nil {
 			m.overlay = o
 		}
+		m.askPassword(msg, conn, err)
 	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
@@ -465,14 +467,38 @@ func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
 	if err := m.backend.SetPassword(msg.Conn, msg.Password, msg.Save); err != nil {
 		m.setStatus("password kept for this session only: "+err.Error(), true)
 	}
-	node := m.retryNode
-	m.retryNode = nil
+	node, tabID := m.retryNode, m.retryTab
+	m.retryNode, m.retryTab = nil, 0
+	retry := m.retryFailedMeta(msg.Conn)
+	if t := m.tabByID(tabID); t != nil {
+		if conn, _ := t.Target(); conn == msg.Conn {
+			return tea.Batch(retry, t.Handle(keymap.Refresh))
+		}
+	}
 	if node == nil || node.Conn != msg.Conn {
 		m.tree.ResetConn(msg.Conn)
-		return nil
+		return retry
 	}
 	m.tree.StartLoad(node)
-	return loadChildren(m.backend, node)
+	return tea.Batch(retry, loadChildren(m.backend, node))
+}
+
+// askPassword opens the password prompt when a data or structure tab could
+// not load for want of one; the tab reloads once it is entered. (The tree
+// asks in childrenLoaded; consoles say how to enter one.)
+func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
+	if !errors.Is(err, session.ErrPasswordRequired) || m.overlay != nil {
+		return
+	}
+	switch msg := msg.(type) {
+	case pageLoadedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
+	case structureLoadedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
+	default:
+		return
+	}
+	m.overlay = overlay.NewPassword(conn)
 }
 
 func (m *Model) runCommand(text string) tea.Cmd {
