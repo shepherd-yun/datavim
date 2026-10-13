@@ -62,6 +62,9 @@ func DefaultBindings() []Binding {
 	b = append(b,
 		Binding{Grid, keys("["), PrevPage, "Previous page"},
 		Binding{Grid, keys("]"), NextPage, "Next page"},
+		Binding{Grid, keys("f"), FilterValue, "Filter by this value"},
+		Binding{Grid, keys("F"), FilterPrompt, "Edit the filter (WHERE)"},
+		Binding{Grid, keys("s"), SortColumn, "Sort by column: asc, desc, off"},
 	)
 
 	b = append(b, gridBindings(Results)...)

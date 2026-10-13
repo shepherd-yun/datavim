@@ -63,19 +63,28 @@ type pageLoadedMsg struct {
 	tabID   int
 	conn    string
 	page    int
+	query   tableQuery
 	rs      *db.ResultSet
 	hasMore bool
-	orderBy []string
 	err     error
 }
 
 func (m pageLoadedMsg) TabID() int { return m.tabID }
+
+// filterMsg is a filter typed at the F prompt.
+type filterMsg struct {
+	tabID int
+	text  string
+}
+
+func (m filterMsg) TabID() int { return m.tabID }
 
 type dataTab struct {
 	id       int
 	backend  Backend
 	conn     string
 	ref      db.TableRef
+	dialect  sqlx.Dialect
 	pageSize int
 	grid     *grid.Model
 
@@ -83,15 +92,18 @@ type dataTab struct {
 	hasMore    bool
 	loading    bool
 	err        string
-	orderBy    []string
-	orderKnown bool
+	status     string // what the last key did; cleared by the next one
+	statusErr  bool
+	query      tableQuery
+	known      bool // query.key has been read from the catalog
 	height     int
 	wantColumn string // column to put the cursor on once data is shown
 }
 
 func newDataTab(id int, b Backend, conn string, ref db.TableRef, s config.Settings) *dataTab {
+	cfg, _ := b.Connection(conn)
 	return &dataTab{
-		id: id, backend: b, conn: conn, ref: ref, pageSize: s.PageSize,
+		id: id, backend: b, conn: conn, ref: ref, dialect: sqlx.DialectOf(cfg.Driver), pageSize: s.PageSize,
 		grid: grid.New(nil, s.MaxColumnWidth),
 	}
 }
@@ -101,31 +113,34 @@ func (t *dataTab) Title() string                 { return t.ref.Name }
 func (t *dataTab) Key() string                   { return dataTabKey(t.conn, t.ref) }
 func (t *dataTab) Context() keymap.Context       { return keymap.Grid }
 func (t *dataTab) Target() (string, db.TableRef) { return t.conn, t.ref }
-func (t *dataTab) Init() tea.Cmd                 { return t.load(0) }
+func (t *dataTab) Init() tea.Cmd                 { return t.load(0, t.query) }
 
 func (t *dataTab) SetSize(w, h int) {
 	t.height = max(h, 0)
 	t.grid.SetSize(w, max(h-1, 0))
 }
 
-func (t *dataTab) load(page int) tea.Cmd {
+func (t *dataTab) setStatus(s string, isErr bool) { t.status, t.statusErr = s, isErr }
+
+// load reads page of q. q becomes the tab's query only once it loaded, so
+// a failing filter leaves the rows on screen.
+func (t *dataTab) load(page int, q tableQuery) tea.Cmd {
 	t.loading = true
-	id, b, conn, ref, size := t.id, t.backend, t.conn, t.ref, t.pageSize
-	orderBy, known := t.orderBy, t.orderKnown
+	id, b, conn, ref, size, d, known := t.id, t.backend, t.conn, t.ref, t.pageSize, t.dialect, t.known
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 		defer cancel()
-		msg := pageLoadedMsg{tabID: id, conn: conn, page: page, orderBy: orderBy}
+		msg := pageLoadedMsg{tabID: id, conn: conn, page: page, query: q}
 		msg.err = withConn(ctx, b, conn, ref.Database, func(c db.Conn) error {
 			if !known {
 				cols, err := c.Meta().Columns(ctx, ref)
 				if err != nil {
 					return err
 				}
-				msg.orderBy = primaryKey(cols)
+				msg.query.key = primaryKey(cols)
 			}
 			var err error
-			msg.rs, msg.hasMore, err = fetchPage(ctx, c, ref, msg.orderBy, page, size)
+			msg.rs, msg.hasMore, err = fetchPage(ctx, c, d, ref, msg.query, page, size)
 			return err
 		})
 		return msg
@@ -142,22 +157,8 @@ func primaryKey(cols []db.Column) []string {
 	return out
 }
 
-// selectAll is the table-data query in primary-key order.
-func selectAll(d db.Dialect, ref db.TableRef, orderBy []string) string {
-	q := "SELECT * FROM " + d.QualifiedName(ref)
-	if len(orderBy) > 0 {
-		quoted := make([]string, len(orderBy))
-		for i, col := range orderBy {
-			quoted[i] = d.QuoteIdent(col)
-		}
-		q += " ORDER BY " + strings.Join(quoted, ", ")
-	}
-	return q
-}
-
-func fetchPage(ctx context.Context, c db.Conn, ref db.TableRef, orderBy []string, page, size int) (*db.ResultSet, bool, error) {
-	d := c.Dialect()
-	rs, err := c.Query(ctx, d.Paginate(selectAll(d, ref, orderBy), size+1, page*size))
+func fetchPage(ctx context.Context, c db.Conn, d sqlx.Dialect, ref db.TableRef, q tableQuery, page, size int) (*db.ResultSet, bool, error) {
+	rs, err := c.Query(ctx, c.Dialect().Paginate(q.sql(d, ref), size+1, page*size))
 	if err != nil {
 		return nil, false, err
 	}
@@ -169,23 +170,30 @@ func fetchPage(ctx context.Context, c db.Conn, ref db.TableRef, orderBy []string
 }
 
 func (t *dataTab) Update(msg tea.Msg) tea.Cmd {
-	m, ok := msg.(pageLoadedMsg)
-	if !ok {
-		return nil
+	switch m := msg.(type) {
+	case pageLoadedMsg:
+		t.pageLoaded(m)
+	case filterMsg:
+		where := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(m.text), ";"))
+		return t.applyQuery(func(q *tableQuery) { q.where = where })
 	}
+	return nil
+}
+
+func (t *dataTab) pageLoaded(m pageLoadedMsg) {
 	t.loading = false
 	if m.err != nil {
 		t.err = m.err.Error()
-		return nil
+		return
 	}
 	t.err, t.page, t.hasMore = "", m.page, m.hasMore
-	t.orderBy, t.orderKnown = m.orderBy, true
+	t.query, t.known = m.query, true
+	t.grid.SetSort(t.query.sort, t.query.desc)
 	t.grid.SetResult(m.rs)
 	if t.wantColumn != "" {
 		t.grid.SelectColumn(t.wantColumn)
 		t.wantColumn = ""
 	}
-	return nil
 }
 
 // focusColumn puts the cursor on the column called name, now or once the
@@ -244,25 +252,71 @@ func gridAction(g *grid.Model, a keymap.Action) (tea.Cmd, bool) {
 func (t *dataTab) Find(q string, forward bool) bool { return t.grid.Find(q, forward) }
 
 func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
+	t.status = ""
 	if cmd, ok := gridAction(t.grid, a); ok {
 		return cmd
 	}
 	switch a {
 	case keymap.NextPage:
 		if t.hasMore && !t.loading {
-			return t.load(t.page + 1)
+			return t.load(t.page+1, t.query)
 		}
 	case keymap.PrevPage:
 		if t.page > 0 && !t.loading {
-			return t.load(t.page - 1)
+			return t.load(t.page-1, t.query)
 		}
 	case keymap.Refresh:
 		if !t.loading {
-			t.orderKnown = false
-			return t.load(t.page)
+			t.known = false
+			return t.load(t.page, t.query)
 		}
+	case keymap.FilterValue:
+		col, v, ok := t.grid.Cell()
+		if !ok {
+			t.setStatus("no cell to filter by", true)
+			return nil
+		}
+		cond := valueFilter(t.dialect, col, v)
+		return t.applyQuery(func(q *tableQuery) { q.where = andFilter(q.where, cond) })
+	case keymap.FilterPrompt:
+		id := t.id
+		return openOverlay(overlay.NewPrompt("Filter "+t.ref.Name, "WHERE … (empty shows every row)", t.query.where,
+			func(s string) tea.Msg { return filterMsg{tabID: id, text: s} }))
+	case keymap.SortColumn:
+		col, ok := t.grid.Column()
+		if !ok {
+			return nil
+		}
+		return t.applyQuery(func(q *tableQuery) {
+			switch {
+			case q.sort != col.Name:
+				q.sort, q.desc = col.Name, false
+			case !q.desc:
+				q.desc = true
+			default:
+				q.sort, q.desc = "", false
+			}
+		})
 	}
 	return nil
+}
+
+// applyQuery reloads the first page with a changed filter or sort, keeping
+// the cursor's column.
+func (t *dataTab) applyQuery(change func(*tableQuery)) tea.Cmd {
+	if t.loading {
+		return nil
+	}
+	q := t.query
+	change(&q)
+	if err := q.check(t.dialect, t.ref); err != nil {
+		t.setStatus(err.Error(), true)
+		return nil
+	}
+	if col, ok := t.grid.Column(); ok {
+		t.wantColumn = col.Name
+	}
+	return t.load(0, q)
 }
 
 func (t *dataTab) View(focused bool) string {
@@ -275,20 +329,43 @@ func (t *dataTab) statusLine() string {
 		return theme.Muted.Render("loading…")
 	case t.err != "":
 		return theme.Error.Render("✗ " + textutil.Sanitize(t.err))
+	case t.status != "":
+		style := theme.Muted
+		if t.statusErr {
+			style = theme.Error
+		}
+		return style.Render(textutil.Sanitize(t.status))
 	}
-	n := t.grid.RowCount()
-	if n == 0 {
-		return theme.Muted.Render(fmt.Sprintf("no rows · page %d", t.page+1))
+	return theme.Muted.Render(textutil.Sanitize(t.pageInfo()))
+}
+
+// pageInfo describes the rows shown: their numbers, filter, sort and paging.
+func (t *dataTab) pageInfo() string {
+	var parts []string
+	if n := t.grid.RowCount(); n == 0 {
+		parts = append(parts, "no rows")
+	} else {
+		first := t.page*t.pageSize + 1
+		parts = append(parts, fmt.Sprintf("rows %d–%d", first, first+n-1))
 	}
-	first := t.page*t.pageSize + 1
-	s := fmt.Sprintf("rows %d–%d · page %d", first, first+n-1, t.page+1)
+	parts = append(parts, fmt.Sprintf("page %d", t.page+1))
+	if t.query.where != "" {
+		parts = append(parts, "where "+oneLine(t.query.where))
+	}
+	if t.query.sort != "" {
+		dir := "asc"
+		if t.query.desc {
+			dir = "desc"
+		}
+		parts = append(parts, "sorted by "+t.query.sort+" "+dir)
+	}
 	if t.hasMore {
-		s += " · ] next"
+		parts = append(parts, "] next")
 	}
 	if t.page > 0 {
-		s += " · [ prev"
+		parts = append(parts, "[ prev")
 	}
-	return theme.Muted.Render(s)
+	return strings.Join(parts, " · ")
 }
 
 // ---- structure tab ----

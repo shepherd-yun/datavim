@@ -78,6 +78,9 @@ const (
 	ToggleTx         Action = "tx.toggle"
 	GlobalSearch     Action = "search.global"
 	Recent           Action = "recent.open"
+	FilterValue      Action = "filter.value"
+	FilterPrompt     Action = "filter.prompt"
+	SortColumn       Action = "sort.column"
 )
 
 const (
