@@ -21,10 +21,21 @@ type Model struct {
 	hlClasses []highlight.Class
 	curX      int // where View drew the cursor
 	curY      int
+
+	placeholder string
 }
 
 // New returns an empty editor in NORMAL mode.
-func New() *Model { return &Model{vim: vimedit.New()} }
+func New() *Model { return &Model{vim: vimedit.New(), placeholder: defaultPlaceholder} }
+
+// SetPlaceholder sets the hint shown in an empty editor ("" for none).
+func (m *Model) SetPlaceholder(s string) { m.placeholder = s }
+
+// AppendAtEnd starts INSERT mode after the last character (vim's GA).
+func (m *Model) AppendAtEnd() {
+	m.Bottom()
+	m.vim.Feed(vimedit.Key{Name: "A", Text: "A"})
+}
 
 // SetSize sets the drawing area.
 func (m *Model) SetSize(w, h int) {

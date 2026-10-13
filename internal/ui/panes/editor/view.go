@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	tabWidth    = 4
-	placeholder = "i to write SQL · enter runs the statement under the cursor"
+	tabWidth           = 4
+	defaultPlaceholder = "i to write SQL · enter runs the statement under the cursor"
 )
 
 // cell is one rune as drawn.
@@ -138,9 +138,13 @@ func (m *Model) View() string {
 	m.top = textutil.Clamp(m.top, 0, max(len(rows)-1, 0))
 	m.curX, m.curY = gutter+curX, curRow-m.top
 
+	ph := ""
+	if text == "" {
+		ph = m.placeholder
+	}
 	out := make([]string, 0, m.height)
 	for r := m.top; r < len(rows) && len(out) < m.height; r++ {
-		out = append(out, drawRow(rows[r], digits, textW, curLine, text == ""))
+		out = append(out, drawRow(rows[r], digits, textW, curLine, ph))
 	}
 	for len(out) < m.height {
 		out = append(out, strings.Repeat(" ", m.width))
@@ -148,7 +152,7 @@ func (m *Model) View() string {
 	return strings.Join(out, "\n")
 }
 
-func drawRow(r row, digits, textW, curLine int, empty bool) string {
+func drawRow(r row, digits, textW, curLine int, placeholder string) string {
 	gutter := strings.Repeat(" ", digits+1)
 	if r.first {
 		num := fmt.Sprintf("%*d ", digits, r.line+1)
@@ -192,7 +196,7 @@ func drawRow(r row, digits, textW, curLine int, empty bool) string {
 	flush()
 	if r.cursor == r.to {
 		b.WriteString(theme.Selected.Render(" "))
-		if empty {
+		if placeholder != "" {
 			b.WriteString(theme.Muted.Render(placeholder))
 		}
 	}
