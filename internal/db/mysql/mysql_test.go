@@ -1,6 +1,9 @@
 package mysql
 
 import (
+	"context"
+	"errors"
+	"net"
 	"testing"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
@@ -60,5 +63,33 @@ func TestDSNConfigReadOnly(t *testing.T) {
 	}
 	if _, ok := mc.Params["transaction_read_only"]; ok {
 		t.Error("read-write connections must not set transaction_read_only")
+	}
+}
+
+func TestDSNConfigDialsThroughTunnel(t *testing.T) {
+	var dialed []string
+	dial := func(_ context.Context, network, addr string) (net.Conn, error) {
+		dialed = append(dialed, network+" "+addr)
+		return nil, errors.New("no network in unit tests")
+	}
+	for _, params := range []map[string]string{nil, {"charset": "utf8mb4"}} {
+		mc, err := dsnConfig(db.ConnConfig{Host: "db.internal", Port: 3306, User: "u", Params: params, Dial: dial})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if mc.DialFunc == nil {
+			t.Fatalf("params=%v: DialFunc not set", params)
+		}
+		_, _ = mc.DialFunc(context.Background(), mc.Net, mc.Addr)
+	}
+	if len(dialed) != 2 || dialed[0] != "tcp db.internal:3306" {
+		t.Fatalf("dialed = %v", dialed)
+	}
+	mc, err := dsnConfig(db.ConnConfig{Host: "h", Port: 3306, User: "u"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mc.DialFunc != nil {
+		t.Error("direct connections keep the driver's dialer")
 	}
 }
