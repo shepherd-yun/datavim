@@ -127,8 +127,6 @@ func TestV02Bindings(t *testing.T) {
 		{Tree, []string{"ctrl+c"}, Cancel},
 		{Console, []string{"enter"}, RunStatement},
 		{Console, []string{"R"}, RunAll},
-		{Console, []string{"i"}, InsertMode},
-		{Console, []string{"j"}, Down},
 		{Console, []string{"ctrl+j"}, FocusResults},
 		{Console, []string{"space", "v"}, ExternalEdit},
 		{Results, []string{"ctrl+k"}, FocusEditor},
@@ -147,6 +145,11 @@ func TestV02Bindings(t *testing.T) {
 	for _, tt := range tests {
 		if a, r := k.Resolve(tt.ctx, tt.seq); a != tt.action || r != Matched {
 			t.Errorf("Resolve(%s, %v) = %q, %v; want %q", tt.ctx, tt.seq, a, r, tt.action)
+		}
+	}
+	for _, key := range []string{"i", "j", "h", "0", "$"} {
+		if _, r := k.Resolve(Console, []string{key}); r != NoMatch {
+			t.Errorf("console %s belongs to the vim editor, keymap gives %v", key, r)
 		}
 	}
 	if _, r := k.Resolve(Console, []string{"space", "y"}); r != Pending {

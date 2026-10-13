@@ -71,17 +71,10 @@ func DefaultBindings() []Binding {
 		Binding{Results, keys("ctrl+k"), FocusEditor, "Focus editor"},
 	)
 
-	b = append(b, vertical(Console)...)
+	// The console's editing keys belong to its vim editor (vimedit), which
+	// sees keys before the keymap; these are what it leaves alone.
 	b = append(b,
-		Binding{Console, keys("h"), Left, "Move left"},
-		Binding{Console, keys("left"), Left, "Move left"},
-		Binding{Console, keys("l"), Right, "Move right"},
-		Binding{Console, keys("right"), Right, "Move right"},
-		Binding{Console, keys("0"), LineStart, "Line start"},
-		Binding{Console, keys("$"), LineEnd, "Line end"},
-		Binding{Console, keys("i"), InsertMode, "Insert"},
-		Binding{Console, keys("a"), Append, "Append"},
-		Binding{Console, keys("enter"), RunStatement, "Run statement under cursor"},
+		Binding{Console, keys("enter"), RunStatement, "Run statement under cursor / selection"},
 		Binding{Console, keys("R"), RunAll, "Run all statements"},
 		Binding{Console, keys("ctrl+j"), FocusResults, "Focus results"},
 		Binding{Console, keys("M"), ToggleMessages, "Toggle messages"},

@@ -12,6 +12,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
+	"github.com/shepherd-yun/sqlvim/internal/ui/vimedit"
 )
 
 func typeText(m *Model, s string) {
@@ -41,7 +42,7 @@ func TestInsertModeEditsAndNormalModeDoesNot(t *testing.T) {
 	if !strings.HasSuffix(m.Value(), "select 2; -- x") {
 		t.Fatalf("paste: %q", m.Value())
 	}
-	m.ExitInsert()
+	m.Escape()
 	if m.Insert() {
 		t.Fatal("ExitInsert")
 	}
@@ -51,36 +52,71 @@ func TestInsertModeEditsAndNormalModeDoesNot(t *testing.T) {
 	}
 }
 
-func TestMovesAndOffset(t *testing.T) {
+func TestVimKeysMoveAndOffset(t *testing.T) {
 	m := New()
 	m.SetSize(40, 6)
 	m.SetValue("select 1;\nselect 2;")
-	m.Up(1)
-	m.LineStart()
+	for _, k := range []string{"k", "0"} {
+		m.Update(uitest.Key(k))
+	}
 	if m.Offset() != 0 {
 		t.Fatalf("start offset = %d", m.Offset())
 	}
-	m.Right()
-	m.Right()
-	if m.Offset() != 2 {
-		t.Fatalf("right offset = %d", m.Offset())
+	if r := m.Update(uitest.Key("w")); !r.Handled || m.Offset() != len("select ") {
+		t.Fatalf("w: offset %d", m.Offset())
 	}
-	m.Left()
-	if m.Offset() != 1 {
-		t.Fatalf("left offset = %d", m.Offset())
+	m.Update(uitest.Key("G"))
+	m.Update(uitest.Key("$"))
+	if m.Offset() != len(m.Value())-1 {
+		t.Fatalf("G$ offset = %d", m.Offset())
 	}
-	m.Down(1)
-	m.LineEnd()
-	if m.Offset() != len(m.Value()) {
-		t.Fatalf("end offset = %d", m.Offset())
+	if r := m.Update(uitest.Key("enter")); r.Handled {
+		t.Fatal("enter is the console's (run)")
 	}
 	m.Top()
 	if m.Offset() != 0 {
 		t.Fatal("Top")
 	}
 	m.Bottom()
-	if m.Offset() != len(m.Value()) {
-		t.Fatal("Bottom")
+	if m.Offset() != len(m.Value())-1 {
+		t.Fatal("Bottom stays on the last rune in NORMAL mode")
+	}
+}
+
+func TestKeyOf(t *testing.T) {
+	for _, c := range []struct {
+		key  tea.KeyPressMsg
+		want vimedit.Key
+	}{
+		{uitest.Key("G"), vimedit.Key{Name: "G", Text: "G"}},
+		{uitest.Key("space"), vimedit.Key{Name: "space", Text: " "}},
+		{uitest.Key("ctrl+r"), vimedit.Key{Name: "ctrl+r"}},
+		{uitest.Key("esc"), vimedit.Key{Name: "esc"}},
+	} {
+		if got := KeyOf(c.key); got != c.want {
+			t.Errorf("KeyOf(%s) = %+v, want %+v", c.key, got, c.want)
+		}
+	}
+}
+
+func TestViewShowsTheSelection(t *testing.T) {
+	m := New()
+	m.SetSize(30, 2)
+	m.SetValue("select id")
+	m.Top()
+	for _, k := range []string{"v", "e"} {
+		m.Update(uitest.Key(k))
+	}
+	v := m.View()
+	if !strings.Contains(v, theme.Visual.Render("s")) || !strings.Contains(v, theme.Visual.Render("l")) {
+		t.Fatalf("selected runes are drawn as selected: %q", v)
+	}
+	if strings.Contains(v, theme.Visual.Render("i")) {
+		t.Fatalf("only the selection: %q", v)
+	}
+	m.Escape()
+	if strings.Contains(m.View(), theme.Visual.Render("s")) {
+		t.Fatal("esc clears the selection")
 	}
 }
 
@@ -89,9 +125,8 @@ func TestOffsetCountsBytes(t *testing.T) {
 	m.SetSize(40, 6)
 	m.SetValue("select '李雷';")
 	m.Top()
-	for range 9 { // past "select '李"
-		m.Right()
-	}
+	m.Update(uitest.Key("9"))
+	m.Update(uitest.Key("l")) // past "select '李"
 	if got, want := m.Offset(), len("select '李"); got != want {
 		t.Fatalf("offset = %d, want %d", got, want)
 	}
@@ -125,10 +160,12 @@ func TestViewWrapsAndTracksCursor(t *testing.T) {
 	if diff := cmp.Diff(want, got); diff != "" {
 		t.Fatalf("view (-want +got):\n%s", diff)
 	}
-	if x, y := m.CursorPos(); x != 10 || y != 1 {
-		t.Fatalf("cursor at %d,%d; want 10,1", x, y)
+	if x, y := m.CursorPos(); x != 9 || y != 1 {
+		t.Fatalf("cursor on the last rune at %d,%d; want 9,1", x, y)
 	}
-	m.SetValue("abcdefghi") // the cursor sits after a full row: it goes to the next one
+	m.SetValue("abcdefghi") // in INSERT mode the cursor can sit after a full row: it goes to the next one
+	m.EnterInsert()
+	m.Bottom()
 	_ = m.View()
 	if x, y := m.CursorPos(); x != 3 || y != 1 {
 		t.Fatalf("cursor after full row at %d,%d; want 3,1", x, y)
@@ -145,7 +182,7 @@ func TestViewWrapsWideRunesAndTracksCursor(t *testing.T) {
 	}
 	m.SetValue("李雷abc")
 	m.Top()
-	m.Right()
+	m.Update(uitest.Key("l"))
 	_ = m.View()
 	if x, y := m.CursorPos(); x != 5 || y != 0 {
 		t.Fatalf("cursor after one wide rune at %d,%d; want 5,0", x, y)
@@ -224,8 +261,8 @@ func TestCursorAPI(t *testing.T) {
 		t.Fatalf("cursor = %d,%d offset %d", line, col, m.Offset())
 	}
 	m.SetCursor(9, 9)
-	if line, col := m.Cursor(); line != 2 || col != 1 {
-		t.Fatalf("clamped cursor = %d,%d", line, col)
+	if line, col := m.Cursor(); line != 2 || col != 0 {
+		t.Fatalf("clamped to the last rune in NORMAL mode = %d,%d", line, col)
 	}
 	m.SetValue("select us from t")
 	m.SetCursorOffset(len("select us"))
