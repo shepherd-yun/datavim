@@ -301,3 +301,16 @@ func TestTypingEditsKeepTheCursor(t *testing.T) {
 		t.Fatalf("paste: %q at %d", m.Value(), m.Offset())
 	}
 }
+func TestPlaceholderAndAppendAtEnd(t *testing.T) {
+	m := New()
+	m.SetSize(40, 3)
+	m.SetPlaceholder("")
+	if v := ansi.Strip(m.View()); strings.Contains(v, "i to write SQL") {
+		t.Fatalf("placeholder still shown:\n%s", v)
+	}
+	m.SetValue("ab\ncd")
+	m.AppendAtEnd()
+	if !m.Insert() || m.Offset() != len("ab\ncd") {
+		t.Fatalf("mode %v offset %d", m.Mode(), m.Offset())
+	}
+}
