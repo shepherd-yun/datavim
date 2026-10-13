@@ -36,6 +36,10 @@ type Manager struct {
 
 	// Persist, if set, saves connections added with AddConnection.
 	Persist func(config.Connection) error
+	// PersistUpdate and PersistRemove, if set, save UpdateConnection and
+	// RemoveConnection.
+	PersistUpdate func(old string, c config.Connection) error
+	PersistRemove func(name string) error
 	// Tunnels, if set, opens the SSH tunnels of connections with ssh set.
 	Tunnels Tunneler
 
@@ -104,6 +108,81 @@ func (m *Manager) AddConnection(c config.Connection, password string, save bool)
 		return nil
 	}
 	return m.SetPassword(c.Name, password, save)
+}
+
+// UpdateConnection replaces the connection called old with c (which may be
+// renamed). Keys the form does not edit (readonly, params) are kept. Open
+// connections are closed, and a saved password follows a rename. A non-empty
+// password replaces the known one.
+func (m *Manager) UpdateConnection(old string, c config.Connection, password string, save bool) error {
+	c, err := config.Normalize(c)
+	if err != nil {
+		return err
+	}
+	if _, ok := m.drivers[c.Driver]; !ok {
+		return fmt.Errorf("connection %q: driver %q not available", c.Name, c.Driver)
+	}
+	cur, ok := m.Connection(old)
+	if !ok {
+		return fmt.Errorf("unknown connection %q", old)
+	}
+	if _, taken := m.Connection(c.Name); taken && c.Name != old {
+		return fmt.Errorf("connection %q already exists", c.Name)
+	}
+	c.ReadOnly, c.Params = cur.ReadOnly, cur.Params
+	if m.PersistUpdate != nil {
+		if err := m.PersistUpdate(old, c); err != nil {
+			return err
+		}
+	}
+	m.mu.Lock()
+	for i := range m.conns {
+		if m.conns[i].Name == old {
+			m.conns[i] = c
+		}
+	}
+	m.resetLocked(old)
+	pw, known := m.passwords[old]
+	delete(m.passwords, old)
+	if known {
+		m.passwords[c.Name] = pw
+	}
+	m.mu.Unlock()
+	var errs []error
+	if c.Name != old {
+		if saved, err := m.secrets.Get(old); err == nil {
+			errs = append(errs, m.secrets.Set(c.Name, saved), m.secrets.Delete(old))
+		}
+	}
+	if password != "" {
+		errs = append(errs, m.SetPassword(c.Name, password, save))
+	}
+	if err := errors.Join(errs...); err != nil {
+		return fmt.Errorf("connection saved, but the keychain was not updated: %w", err)
+	}
+	return nil
+}
+
+// RemoveConnection forgets the connection, closes it and deletes its saved
+// password.
+func (m *Manager) RemoveConnection(name string) error {
+	if _, ok := m.Connection(name); !ok {
+		return fmt.Errorf("unknown connection %q", name)
+	}
+	if m.PersistRemove != nil {
+		if err := m.PersistRemove(name); err != nil {
+			return err
+		}
+	}
+	m.mu.Lock()
+	m.conns = slices.DeleteFunc(m.conns, func(c config.Connection) bool { return c.Name == name })
+	m.resetLocked(name)
+	delete(m.passwords, name)
+	m.mu.Unlock()
+	if err := m.secrets.Delete(name); err != nil {
+		return fmt.Errorf("connection removed, but its keychain password was not: %w", err)
+	}
+	return nil
 }
 
 // SetReadOnly switches name between read-only and read-write for this run

@@ -42,3 +42,20 @@ func TestEnvOverridesKeyring(t *testing.T) {
 		t.Fatalf("Get = %q, want from-env", got)
 	}
 }
+
+func TestKeyringDelete(t *testing.T) {
+	keyring.MockInit()
+	k := Keyring{Getenv: func(string) string { return "" }}
+	if err := k.Delete("local"); err != nil {
+		t.Fatalf("deleting a missing password is not an error: %v", err)
+	}
+	if err := k.Set("local", "pw"); err != nil {
+		t.Fatal(err)
+	}
+	if err := k.Delete("local"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := k.Get("local"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("Get after Delete: %v", err)
+	}
+}

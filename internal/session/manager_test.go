@@ -27,6 +27,8 @@ func (f *fakeSecrets) Get(name string) (string, error) {
 
 func (f *fakeSecrets) Set(name, pw string) error { f.m[name] = pw; return nil }
 
+func (f *fakeSecrets) Delete(name string) error { delete(f.m, name); return nil }
+
 // fakeConn closes like a pgx pool: Close returns only once release (if
 // set) is closed, standing in for sessions still borrowed from the pool.
 type fakeConn struct {
@@ -406,5 +408,106 @@ func TestSetReadOnlyDoesNotWaitForBorrowedSessions(t *testing.T) {
 	close(drv.release) // the console returns its session
 	if !c.(*fakeConn).waitClosed() {
 		t.Fatal("the retired pool closes once its sessions are back")
+	}
+}
+
+func TestUpdateConnection(t *testing.T) {
+	m, drv, sec := setup(true)
+	sec.m["local"] = "pw"
+	ro := true
+	m.conns[0].ReadOnly = &ro
+	m.conns[0].Params = map[string]string{"sslmode": "disable"}
+	type update struct {
+		old string
+		c   config.Connection
+	}
+	var persisted []update
+	m.PersistUpdate = func(old string, c config.Connection) error {
+		persisted = append(persisted, update{old, c})
+		return nil
+	}
+	ctx := context.Background()
+	c1, err := m.Conn(ctx, "local", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	edited := config.Connection{Name: "laptop", Driver: "postgres", Host: "h2", User: "u"}
+	if err := m.UpdateConnection("local", edited, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if len(persisted) != 1 || persisted[0].old != "local" || persisted[0].c.Name != "laptop" || persisted[0].c.Port != 5432 {
+		t.Fatalf("persisted = %+v", persisted)
+	}
+	if _, ok := m.Connection("local"); ok {
+		t.Fatal("the old name is gone")
+	}
+	c, ok := m.Connection("laptop")
+	if !ok || c.Host != "h2" || !c.IsReadOnly() || c.Params["sslmode"] != "disable" {
+		t.Fatalf("laptop = %+v; readonly and params are kept", c)
+	}
+	if !c1.(*fakeConn).waitClosed() {
+		t.Fatal("connections to the old settings are closed")
+	}
+	if sec.m["laptop"] != "pw" || sec.m["local"] != "" {
+		t.Fatalf("the saved password moves with the name: %v", sec.m)
+	}
+	if _, err := m.Conn(ctx, "laptop", ""); err != nil || drv.opens[1].Host != "h2" || drv.opens[1].Password != "pw" {
+		t.Fatalf("reconnect: %v %+v", err, drv.opens)
+	}
+
+	if err := m.UpdateConnection("laptop", config.Connection{Name: "laptop", Driver: "postgres"}, "new", true); err != nil {
+		t.Fatal(err)
+	}
+	if sec.m["laptop"] != "new" {
+		t.Fatal("a new password replaces the old one")
+	}
+	if err := m.UpdateConnection("nope", edited, "", false); err == nil {
+		t.Fatal("unknown connection")
+	}
+	m.conns = append(m.conns, config.Connection{Name: "other", Driver: "postgres"})
+	if err := m.UpdateConnection("laptop", config.Connection{Name: "other", Driver: "postgres"}, "", false); err == nil {
+		t.Fatal("renaming onto another connection fails")
+	}
+}
+
+func TestRemoveConnection(t *testing.T) {
+	m, _, sec := setup(true)
+	sec.m["local"] = "pw"
+	var removed []string
+	m.PersistRemove = func(name string) error { removed = append(removed, name); return nil }
+	c1, err := m.Conn(context.Background(), "local", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.RemoveConnection("local"); err != nil {
+		t.Fatal(err)
+	}
+	if len(m.Connections()) != 0 || !slices.Equal(removed, []string{"local"}) {
+		t.Fatalf("connections = %v, removed = %v", m.Connections(), removed)
+	}
+	if _, ok := sec.m["local"]; ok {
+		t.Fatal("the saved password is deleted")
+	}
+	if !c1.(*fakeConn).waitClosed() {
+		t.Fatal("open connections are closed")
+	}
+	if err := m.RemoveConnection("local"); err == nil {
+		t.Fatal("removing twice fails")
+	}
+}
+
+func TestPersistFailureChangesNothing(t *testing.T) {
+	m, _, sec := setup(true)
+	sec.m["local"] = "pw"
+	m.PersistUpdate = func(string, config.Connection) error { return errors.New("disk full") }
+	m.PersistRemove = func(string) error { return errors.New("disk full") }
+	if err := m.UpdateConnection("local", config.Connection{Name: "x", Driver: "postgres"}, "", false); err == nil {
+		t.Fatal("update error")
+	}
+	if err := m.RemoveConnection("local"); err == nil {
+		t.Fatal("remove error")
+	}
+	if _, ok := m.Connection("local"); !ok || sec.m["local"] != "pw" {
+		t.Fatal("nothing changed")
 	}
 }
