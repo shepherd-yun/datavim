@@ -4,8 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
+	"unicode"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -15,6 +17,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/structure"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
@@ -82,6 +85,11 @@ type filterMsg struct {
 
 func (m filterMsg) TabID() int { return m.tabID }
 
+// normFilter trims a typed filter and its trailing semicolons.
+func normFilter(s string) string {
+	return strings.TrimSpace(strings.TrimRight(strings.TrimSpace(s), ";"))
+}
+
 // filterValueMsg is a value typed for fs, f> or f<.
 type filterValueMsg struct {
 	tabID  int
@@ -119,6 +127,7 @@ type dataTab struct {
 	retrySubmit bool     // the last submit wanted a password
 	height      int
 	wantColumn  string // column to put the cursor on once data is shown
+	failedWhere string // a filter the server rejected, offered again by F
 }
 
 func newDataTab(id int, b Backend, st Store, conn string, ref db.TableRef, s config.Settings) *dataTab {
@@ -258,7 +267,7 @@ func (t *dataTab) Update(msg tea.Msg) tea.Cmd {
 	case editsAppliedMsg:
 		return t.applied(m)
 	case filterMsg:
-		where := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(m.text), ";"))
+		where := normFilter(m.text)
 		return t.applyQuery(func(q *tableQuery) { q.where = where })
 	case filterValueMsg:
 		if m.text == "" {
@@ -280,8 +289,12 @@ func (t *dataTab) pageLoaded(m pageLoadedMsg) {
 	t.loading = false
 	if m.err != nil {
 		t.err = m.err.Error()
+		if m.query.where != t.query.where {
+			t.failedWhere = m.query.where
+		}
 		return
 	}
+	t.failedWhere = ""
 	t.err, t.page, t.hasMore = "", m.page, m.hasMore
 	t.query, t.known = m.query, true
 	if m.meta != nil {
@@ -407,9 +420,7 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 		}
 		return t.applyQuery(func(q *tableQuery) { q.where = "" })
 	case keymap.FilterPrompt:
-		id := t.id
-		return openOverlay(overlay.NewPrompt("Filter "+t.ref.Name, "WHERE … (empty shows every row)", t.query.where,
-			func(s string) tea.Msg { return filterMsg{tabID: id, text: s} }))
+		return t.filterPrompt()
 	case keymap.SortColumn:
 		col, ok := t.grid.Column()
 		if !ok {
@@ -486,6 +497,69 @@ func (t *dataTab) filterValuePrompt(a keymap.Action) tea.Cmd {
 	id := t.id
 	return openOverlay(overlay.NewPrompt("Filter "+t.ref.Name, col.Name+" "+filterVerbs[a]+" …", initial,
 		func(s string) tea.Msg { return filterValueMsg{tabID: id, action: a, col: col, text: s} }))
+}
+
+// filterPrompt edits the WHERE condition, starting from a filter the
+// server just rejected, else the current one, else the cursor's column.
+func (t *dataTab) filterPrompt() tea.Cmd {
+	initial := t.query.where
+	switch {
+	case t.failedWhere != "":
+		initial = t.failedWhere
+	case initial == "":
+		if col, ok := t.grid.Column(); ok {
+			initial = sqlx.QuoteIfNeeded(col.Name, t.dialect) + " "
+		}
+	}
+	id := t.id
+	return openOverlay(overlay.NewPrompt("Filter "+t.ref.Name,
+		"WHERE …  e.g. name LIKE '%abc%' AND age > 18 · empty shows every row", initial,
+		func(s string) tea.Msg { return filterMsg{tabID: id, text: s} },
+		overlay.WithCompleter(t.completeFilter),
+		overlay.WithValidate(t.checkFilter)))
+}
+
+// checkFilter rejects a typed filter that is not a single condition.
+func (t *dataTab) checkFilter(s string) error {
+	q := t.query
+	q.where = normFilter(s)
+	return q.check(t.dialect, t.ref)
+}
+
+var filterKeywords = []string{"AND", "OR", "NOT", "LIKE", "IN", "IS", "NULL", "BETWEEN", "TRUE", "FALSE"}
+
+func isFilterWordRune(r rune) bool {
+	return r == '_' || r == '"' || r == '`' || unicode.IsLetter(r) || unicode.IsDigit(r)
+}
+
+// completeFilter offers the table's columns and condition keywords for the
+// word before the cursor in the F prompt.
+func (t *dataTab) completeFilter(text string, cursor int) (int, []complete.Candidate) {
+	rs := []rune(text)
+	cursor = min(max(cursor, 0), len(rs))
+	start := cursor
+	for start > 0 && isFilterWordRune(rs[start-1]) {
+		start--
+	}
+	prefix := strings.Trim(string(rs[start:cursor]), "\"`")
+	var cands []complete.Candidate
+	for _, c := range t.cols {
+		cands = append(cands, complete.Candidate{
+			Text: sqlx.QuoteIfNeeded(c.Name, t.dialect), Label: c.Name, Kind: complete.Column, Detail: c.Type,
+		})
+	}
+	kws := filterKeywords
+	if t.dialect == sqlx.Postgres {
+		kws = append(slices.Clone(kws), "ILIKE")
+	}
+	lower := strings.ToUpper(prefix) != prefix
+	for _, kw := range kws {
+		if lower {
+			kw = strings.ToLower(kw)
+		}
+		cands = append(cands, complete.Candidate{Text: kw, Label: kw, Kind: complete.Keyword})
+	}
+	return start, complete.Rank(prefix, cands, maxCandidates)
 }
 
 func (t *dataTab) View(focused bool) string {

@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -10,6 +11,8 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
+	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
 const usersPage = " ORDER BY `id` LIMIT 3 OFFSET 0"
@@ -119,5 +122,94 @@ func TestBadFilterValueKeepsThePage(t *testing.T) {
 	tab.Update(run(tab.Update(filterValueMsg{tabID: 1, action: keymap.FilterGreater, col: colNamed("id"), text: "x"})))
 	if v := ansi.Strip(tab.View(true)); !strings.Contains(v, "bad value") || !strings.Contains(v, "user1") {
 		t.Fatalf("view:\n%s", v)
+	}
+}
+
+// filterPrompt presses F and returns the prompt.
+func filterPrompt(t *testing.T, tab *dataTab) *overlay.Prompt {
+	t.Helper()
+	return promptFor(t, tab, keymap.FilterPrompt)
+}
+
+func promptText(t *testing.T, p *overlay.Prompt) string {
+	t.Helper()
+	_, cmd := p.HandleKey(uitest.Key("enter"))
+	if cmd == nil {
+		t.Fatal("enter did not submit")
+	}
+	m, ok := cmd().(filterMsg)
+	if !ok {
+		t.Fatalf("submit: %#v", cmd())
+	}
+	return m.text
+}
+
+func candTexts(cands []complete.Candidate) []string {
+	out := make([]string, len(cands))
+	for i, c := range cands {
+		out[i] = c.Text
+	}
+	return out
+}
+
+func TestFilterPromptStartsFromTheColumn(t *testing.T) {
+	b := newFakeBackend()
+	tab := loadedDataTab(t, b)
+	tab.Handle(keymap.Right)
+	if got := promptText(t, filterPrompt(t, tab)); got != "name " {
+		t.Fatalf("an empty filter starts with the column: %q", got)
+	}
+	tab.Update(run(tab.Update(filterMsg{tabID: 1, text: "id > 1"})))
+	if got := promptText(t, filterPrompt(t, tab)); got != "id > 1" {
+		t.Fatalf("an existing filter is kept: %q", got)
+	}
+}
+
+func TestFilterPromptCompletes(t *testing.T) {
+	b := newFakeBackend()
+	tab := loadedDataTab(t, b)
+	start, cands := tab.completeFilter("id > 1 and na", 13)
+	if start != 11 || len(cands) == 0 || cands[0].Text != "name" || cands[0].Detail != "text" {
+		t.Fatalf("start=%d cands=%+v", start, cands)
+	}
+	_, cands = tab.completeFilter("name li", 7)
+	if len(cands) == 0 || cands[0].Text != "like" {
+		t.Fatalf("keywords follow the typed case: %+v", cands)
+	}
+	_, cands = tab.completeFilter("name IS N", 9)
+	if texts := candTexts(cands); !slices.Contains(texts, "NULL") || !slices.Contains(texts, "NOT") {
+		t.Fatalf("upper case: %v", texts)
+	}
+	if _, cands = tab.completeFilter("", 0); len(cands) < 2 {
+		t.Fatalf("tab on nothing offers everything: %+v", cands)
+	}
+}
+
+func TestFilterPromptChecksLocally(t *testing.T) {
+	b := newFakeBackend()
+	tab := loadedDataTab(t, b)
+	p := filterPrompt(t, tab)
+	p.HandleKey(uitest.Key("ctrl+u"))
+	for _, k := range uitest.Type("1=1; DELETE FROM users") {
+		p.HandleKey(k)
+	}
+	o, cmd := p.HandleKey(uitest.Key("enter"))
+	if o == nil || cmd != nil || !strings.Contains(ansi.Strip(p.View(80, 24)), "the filter must be a condition") {
+		t.Fatalf("a bad filter keeps the prompt open:\n%s", ansi.Strip(p.View(80, 24)))
+	}
+}
+
+func TestFilterPromptBringsBackAFailedFilter(t *testing.T) {
+	b := newFakeBackend()
+	tab := loadedDataTab(t, b)
+	b.conn.setFail("SELECT * FROM `app`.`users` WHERE (nmae = 'x'\n)"+usersPage, errors.New("unknown column nmae"))
+	tab.Update(run(tab.Update(filterMsg{tabID: 1, text: "nmae = 'x'"})))
+	if got := promptText(t, filterPrompt(t, tab)); got != "nmae = 'x'" {
+		t.Fatalf("F brings back the failed filter: %q", got)
+	}
+	tab.Update(run(tab.Update(filterMsg{tabID: 1, text: "name = 'x'"})))
+	tab.Update(run(tab.Update(filterMsg{tabID: 1, text: ""})))
+	if got := promptText(t, filterPrompt(t, tab)); got != "id " {
+		t.Fatalf("a later success forgets it: %q", got)
 	}
 }
