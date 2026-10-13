@@ -7,6 +7,7 @@ import (
 	"slices"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
@@ -26,12 +27,31 @@ func (f *fakeSecrets) Get(name string) (string, error) {
 
 func (f *fakeSecrets) Set(name, pw string) error { f.m[name] = pw; return nil }
 
+// fakeConn closes like a pgx pool: Close returns only once release (if
+// set) is closed, standing in for sessions still borrowed from the pool.
 type fakeConn struct {
 	db.Conn
-	closed bool
+	release chan struct{}
+	done    chan struct{}
 }
 
-func (c *fakeConn) Close() error { c.closed = true; return nil }
+func (c *fakeConn) Close() error {
+	if c.release != nil {
+		<-c.release
+	}
+	close(c.done)
+	return nil
+}
+
+// waitClosed reports whether c was closed within a second.
+func (c *fakeConn) waitClosed() bool {
+	select {
+	case <-c.done:
+		return true
+	case <-time.After(time.Second):
+		return false
+	}
+}
 
 type fakeDriver struct {
 	name   string
@@ -39,6 +59,8 @@ type fakeDriver struct {
 	mu     sync.Mutex
 	opens  []db.ConnConfig
 	err    error
+	// release, if set, makes Close wait until it is closed.
+	release chan struct{}
 }
 
 func (d *fakeDriver) Name() string         { return d.name }
@@ -50,7 +72,7 @@ func (d *fakeDriver) Open(_ context.Context, cfg db.ConnConfig) (db.Conn, error)
 	if d.err != nil {
 		return nil, d.err
 	}
-	return &fakeConn{}, nil
+	return &fakeConn{release: d.release, done: make(chan struct{})}, nil
 }
 
 func setup(scoped bool) (*Manager, *fakeDriver, *fakeSecrets) {
@@ -106,7 +128,7 @@ func TestSetPasswordClosesOpenConns(t *testing.T) {
 	sec.m["local"] = "old"
 	c, _ := m.Conn(context.Background(), "local", "")
 	_ = m.SetPassword("local", "new", false)
-	if !c.(*fakeConn).closed {
+	if !c.(*fakeConn).waitClosed() {
 		t.Error("existing conns must be closed so the new password is used")
 	}
 }
@@ -218,7 +240,7 @@ func TestResetClosesOnlyThatConnection(t *testing.T) {
 	a, _ := m.Conn(ctx, "local", "app")
 	b, _ := m.Conn(ctx, "local", "other")
 	m.Reset("local")
-	if !a.(*fakeConn).closed || !b.(*fakeConn).closed {
+	if !a.(*fakeConn).waitClosed() || !b.(*fakeConn).waitClosed() {
 		t.Fatal("all databases of the connection are closed")
 	}
 	c, _ := m.Conn(ctx, "local", "app")
@@ -314,7 +336,7 @@ func TestSetReadOnly(t *testing.T) {
 	if cfg, _ := m.Connection("local"); !cfg.IsReadOnly() {
 		t.Fatal("Connection reflects the override")
 	}
-	if !c1.(*fakeConn).closed {
+	if !c1.(*fakeConn).waitClosed() {
 		t.Fatal("open connections are closed so the server-side guard follows")
 	}
 	if _, err := m.Conn(ctx, "local", ""); err != nil {
@@ -351,5 +373,38 @@ func TestSetPassphraseAndTrustHostGoToTunnels(t *testing.T) {
 	}
 	if tun.pass["/k"] != "s3" || !slices.Equal(tun.trusted, []string{"[h]:2222"}) {
 		t.Fatalf("tunnels = %+v", tun)
+	}
+}
+
+// A pgx pool's Close waits for sessions borrowed from it, and an idle console
+// keeps one. Switching read-only from the UI must not wait for that session.
+func TestSetReadOnlyDoesNotWaitForBorrowedSessions(t *testing.T) {
+	m, drv, sec := setup(true)
+	sec.m["local"] = "pw"
+	drv.release = make(chan struct{})
+	c, err := m.Conn(context.Background(), "local", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	returned := make(chan error, 1)
+	go func() { returned <- m.SetReadOnly("local", true) }()
+	select {
+	case err := <-returned:
+		if err != nil {
+			t.Fatal(err)
+		}
+	case <-time.After(time.Second):
+		close(drv.release)
+		t.Fatal("SetReadOnly blocked until the borrowed session was returned")
+	}
+	if _, err := m.Conn(context.Background(), "local", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(drv.opens) != 2 || !drv.opens[1].ReadOnly {
+		t.Fatalf("a new read-only pool is opened: %+v", drv.opens)
+	}
+	close(drv.release) // the console returns its session
+	if !c.(*fakeConn).waitClosed() {
+		t.Fatal("the retired pool closes once its sessions are back")
 	}
 }
