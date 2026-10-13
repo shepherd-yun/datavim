@@ -1,43 +1,62 @@
-// Package editor is the console's SQL editor: a Bubbles textarea with a
-// NORMAL mode (cursor moves only) and an INSERT mode (textarea gets keys).
+// Package editor is the console's SQL editor. A Bubbles textarea edits the
+// text (NORMAL mode only moves the cursor, INSERT mode gets keys); View
+// draws it with syntax colors, soft wrapping and a block cursor.
 package editor
 
 import (
 	"strings"
+	"unicode/utf8"
 
 	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 )
 
+// taWidth is the textarea's own width. View does its own wrapping; this
+// only keeps the textarea from wrapping lines internally, so j and k move
+// by whole lines (lines longer than this still wrap inside the textarea).
+const taWidth = 1024
+
 // Model wraps a textarea.
 type Model struct {
-	ta     textarea.Model
-	insert bool
-	height int
+	ta            textarea.Model
+	insert        bool
+	width, height int
+	top           int // first visible screen row
+
+	highlight func(string) []highlight.Span
+	hlText    string
+	hlClasses []highlight.Class
+	curX      int // where View drew the cursor
+	curY      int
 }
 
 // New returns an empty editor in NORMAL mode.
 func New() *Model {
 	ta := textarea.New()
-	ta.ShowLineNumbers = true
+	ta.ShowLineNumbers = false
 	ta.Prompt = ""
 	ta.CharLimit = 0
 	ta.MaxHeight = 9999
-	ta.Placeholder = "i to write SQL · enter runs the statement under the cursor"
+	ta.SetWidth(taWidth)
 	st := ta.Styles()
-	st.Cursor.Blink = false
+	st.Cursor.Blink = false // View draws its own cursor; no blink ticks
 	ta.SetStyles(st)
-	_ = ta.Focus() // always focused so the cursor is drawn; insert decides who gets keys
+	_ = ta.Focus() // always focused; insert decides who gets keys
 	return &Model{ta: ta}
 }
 
 // SetSize sets the drawing area.
 func (m *Model) SetSize(w, h int) {
-	m.height = max(h, 0)
-	m.ta.SetWidth(max(w, 1))
+	m.width, m.height = max(w, 0), max(h, 0)
 	m.ta.SetHeight(max(h, 1))
+}
+
+// SetHighlighter sets how View colors the text (nil: no colors).
+func (m *Model) SetHighlighter(f func(string) []highlight.Span) {
+	m.highlight, m.hlClasses = f, nil
 }
 
 func (m *Model) Value() string { return m.ta.Value() }
@@ -103,9 +122,39 @@ func (m *Model) Offset() int {
 	return off + len(string(r[:textutil.Clamp(m.ta.Column(), 0, len(r))]))
 }
 
-func (m *Model) View() string {
-	if m.height == 0 {
-		return ""
+// Cursor returns the cursor line and column (in runes), both 0-based.
+func (m *Model) Cursor() (line, col int) { return m.ta.Line(), m.ta.Column() }
+
+// SetCursor moves the cursor to line and column (in runes), clamped.
+func (m *Model) SetCursor(line, col int) {
+	line = textutil.Clamp(line, 0, m.ta.LineCount()-1)
+	m.ta.MoveToBegin()
+	// CursorDown moves by screen row, so a line the textarea wraps takes
+	// several steps.
+	for i := 0; m.ta.Line() < line && i < 1<<20; i++ {
+		m.ta.CursorDown()
 	}
-	return m.ta.View()
+	m.ta.SetCursorColumn(col)
 }
+
+// SetCursorOffset moves the cursor to a byte offset into Value().
+func (m *Model) SetCursorOffset(off int) {
+	v := m.ta.Value()
+	before := v[:textutil.Clamp(off, 0, len(v))]
+	line := strings.Count(before, "\n")
+	col := utf8.RuneCountInString(before[strings.LastIndexByte(before, '\n')+1:])
+	m.SetCursor(line, col)
+}
+
+// ReplaceBeforeCursor replaces the text from byte offset start to the
+// cursor with s and leaves the cursor after s.
+func (m *Model) ReplaceBeforeCursor(start int, s string) {
+	v, cur := m.ta.Value(), m.Offset()
+	start = textutil.Clamp(start, 0, cur)
+	m.ta.SetValue(v[:start] + s + v[cur:])
+	m.SetCursorOffset(start + len(s))
+}
+
+// CursorPos is where the last View drew the cursor, relative to the
+// editor's top-left corner (line numbers included).
+func (m *Model) CursorPos() (x, y int) { return m.curX, m.curY }
