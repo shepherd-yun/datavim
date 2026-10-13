@@ -257,3 +257,21 @@ func indexIn(toks []token, from int, set map[string]bool) int {
 func upper(t token) string           { return strings.ToUpper(t.text) }
 func isWord(t token, w string) bool  { return t.kind == tokWord && strings.EqualFold(t.text, w) }
 func isPunct(t token, p string) bool { return t.kind == tokPunct && t.text == p }
+
+// UnlocksReadOnly reports whether stmt may switch the session back to
+// read-write (SET … read_only, TRANSACTION READ WRITE, set_config(…)), which
+// would switch off the server-side guard of a read-only connection. The
+// read_only check looks at the raw text so names inside strings count too.
+func UnlocksReadOnly(stmt string, d Dialect) bool {
+	if strings.Contains(strings.ToLower(stmt), "read_only") {
+		return true
+	}
+	toks := codeTokens(stmt, d)
+	for i := 1; i < len(toks); i++ {
+		if toks[i-1].kind == tokWord && toks[i].kind == tokWord &&
+			strings.EqualFold(toks[i-1].text, "read") && strings.EqualFold(toks[i].text, "write") {
+			return true
+		}
+	}
+	return false
+}
