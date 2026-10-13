@@ -6,6 +6,9 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `zH` / `zL` scroll a grid half a screen sideways.
+
 ## [0.5.0] - 2026-10-14
 
 ### Added

@@ -63,7 +63,8 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `1`–`9` | Go to tab (in the console editor digits are counts: use `gt` / `gT` / `{n}gt`) |
 | `/` `n` `N` | Search in the tree or a result grid |
 | `[` `]` | Previous / next page (data), section (structure); `]` loads more console rows |
-| `zh` `zl` | Scroll a grid sideways |
+| `0` / `$` | Grid: first / last column |
+| `zh` `zl` / `zH` `zL` | Scroll a grid sideways by one column / half a screen |
 | `K` | Show full cell value |
 | `yl` / `yy` | Copy cell / row |
 | `p` | Re-enter connection password (tree) |

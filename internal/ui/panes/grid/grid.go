@@ -241,6 +241,27 @@ func (m *Model) ScrollColumns(n int) {
 	}
 }
 
+// ScrollHalf scrolls the view about half its width right (dir > 0) or left,
+// at least one column.
+func (m *Model) ScrollHalf(dir int) {
+	if m.colCount() == 0 {
+		return
+	}
+	start := m.colOff
+	if dir < 0 {
+		start--
+	}
+	n, used := 0, 0
+	for c := start; c >= 0 && c < m.colCount(); c += dir {
+		used += m.widths[c] + sepWidth
+		if n > 0 && used > m.width/2 {
+			break
+		}
+		n++
+	}
+	m.ScrollColumns(dir * max(n, 1))
+}
+
 // SelectColumn moves the cursor to the column called name (exactly, else
 // ignoring case) and reports whether there is one.
 func (m *Model) SelectColumn(name string) bool {

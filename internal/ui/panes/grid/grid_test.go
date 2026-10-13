@@ -147,6 +147,49 @@ func TestScrollColumns(t *testing.T) {
 	New(nil, 40).ScrollColumns(1) // must not panic
 }
 
+func TestScrollHalf(t *testing.T) {
+	r := &db.ResultSet{}
+	row := []db.Value{}
+	for _, name := range []string{"c0", "c1", "c2", "c3", "c4", "c5", "c6", "c7", "c8", "c9"} {
+		r.Columns = append(r.Columns, db.ColumnInfo{Name: name})
+		row = append(row, db.Value{Text: "aaaa"})
+	}
+	r.Rows = [][]db.Value{row}
+	m := New(r, 40)
+	m.SetSize(30, 10) // each column is 4 wide plus a 3-wide separator: half a view is two columns
+	m.ScrollHalf(1)
+	if !strings.HasPrefix(view(m, true)[0], "c2") {
+		t.Fatalf("zL scrolls half a view: %q", view(m, true)[0])
+	}
+	if col, _, _ := m.Cell(); col.Name != "c2" {
+		t.Fatalf("cursor pulled into view, got %s", col.Name)
+	}
+	m.ScrollHalf(1)
+	m.ScrollHalf(-1)
+	if !strings.HasPrefix(view(m, true)[0], "c2") {
+		t.Fatalf("zH scrolls back half a view: %q", view(m, true)[0])
+	}
+	m.ScrollHalf(-1)
+	m.ScrollHalf(-1)
+	if !strings.HasPrefix(view(m, true)[0], "c0") {
+		t.Fatalf("clamped at the first column: %q", view(m, true)[0])
+	}
+	for range 10 {
+		m.ScrollHalf(1)
+	}
+	if col, _, _ := m.Cell(); col.Name != "c9" {
+		t.Fatalf("clamped at the last column, got %s", col.Name)
+	}
+
+	wide := New(rs(), 40)
+	wide.SetSize(3, 10) // narrower than any column: still moves one column
+	wide.ScrollHalf(1)
+	if col, _, _ := wide.Cell(); col.Name != "name" {
+		t.Fatalf("at least one column, got %s", col.Name)
+	}
+	New(nil, 40).ScrollHalf(1) // must not panic
+}
+
 func TestFind(t *testing.T) {
 	m := New(rs(), 40)
 	m.SetSize(80, 10)

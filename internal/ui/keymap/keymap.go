@@ -71,6 +71,8 @@ const (
 	SearchPrev       Action = "search.prev"
 	ScrollLeft       Action = "scroll.left"
 	ScrollRight      Action = "scroll.right"
+	ScrollHalfLeft   Action = "scroll.halfleft"
+	ScrollHalfRight  Action = "scroll.halfright"
 	YankCell         Action = "yank.cell"
 	YankRow          Action = "yank.row"
 	ToggleTx         Action = "tx.toggle"
