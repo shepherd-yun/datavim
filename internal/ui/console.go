@@ -56,7 +56,10 @@ type (
 	finder interface {
 		Find(q string, forward bool) bool
 	}
-	canceler   interface{ cancelRun() tea.Cmd }
+	canceler interface{ cancelRun() tea.Cmd }
+	keyTaker interface {
+		TakeKey(msg tea.KeyPressMsg) (tea.Cmd, bool)
+	}
 	shutdowner interface{ shutdown() func() }
 )
 
@@ -168,10 +171,10 @@ func (t *consoleTab) Target() (string, db.TableRef) { return t.conn, db.TableRef
 func (t *consoleTab) CapturesInput() bool { return !t.onResults && t.editor.Insert() }
 
 func (t *consoleTab) Mode() string {
-	if t.CapturesInput() {
-		return "INSERT"
+	if t.onResults {
+		return "NORMAL"
 	}
-	return "NORMAL"
+	return t.editor.Mode().String()
 }
 
 func (t *consoleTab) Find(q string, forward bool) bool {
@@ -207,9 +210,6 @@ func (t *consoleTab) Input(msg tea.Msg) tea.Cmd {
 			return cmd
 		}
 		switch k.String() {
-		case "esc":
-			t.editor.ExitInsert()
-			return nil
 		case "ctrl+enter", "ctrl+j":
 			t.popup = nil
 			return t.runAtCursor()
@@ -217,14 +217,33 @@ func (t *consoleTab) Input(msg tea.Msg) tea.Cmd {
 			return t.cancelRun()
 		}
 	}
-	before := t.editor.Value()
-	cmd := t.editor.Update(msg)
-	if t.editor.Value() == before {
-		t.popup = nil // the cursor moved
-		return cmd
+	before := t.editor.Version()
+	t.editor.Update(msg)
+	if t.editor.Version() == before || !t.editor.Insert() {
+		t.popup = nil // the cursor moved, or esc left INSERT mode
+		return nil
 	}
 	t.suggest(false)
-	return tea.Batch(cmd, t.scheduleDraft())
+	return t.scheduleDraft()
+}
+
+// TakeKey gives a key pressed in NORMAL or VISUAL mode to the editor
+// before the keymap sees it; used is false when the editor leaves the key
+// to the keymap (space, :, enter, ctrl+j …).
+func (t *consoleTab) TakeKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
+	if t.onResults {
+		return nil, false
+	}
+	before := t.editor.Version()
+	res := t.editor.Update(msg)
+	if !res.Handled {
+		return nil, false
+	}
+	t.popup = nil
+	if t.editor.Version() != before {
+		return t.scheduleDraft(), true
+	}
+	return nil, true
 }
 
 func (t *consoleTab) Handle(a keymap.Action) tea.Cmd {
@@ -253,40 +272,16 @@ func (t *consoleTab) Handle(a keymap.Action) tea.Cmd {
 	return t.editorAction(a)
 }
 
+// editorAction runs the keymap's console actions; vimedit handles the
+// editing keys before the keymap sees them (TakeKey).
 func (t *consoleTab) editorAction(a keymap.Action) tea.Cmd {
-	e := t.editor
 	switch a {
 	case keymap.ExternalEdit:
 		return t.externalEdit()
-	case keymap.Down:
-		e.Down(1)
-	case keymap.Up:
-		e.Up(1)
-	case keymap.Left:
-		e.Left()
-	case keymap.Right:
-		e.Right()
-	case keymap.Top:
-		e.Top()
-	case keymap.Bottom:
-		e.Bottom()
-	case keymap.HalfPageDown:
-		e.HalfPage(1)
-	case keymap.HalfPageUp:
-		e.HalfPage(-1)
-	case keymap.LineStart:
-		e.LineStart()
-	case keymap.LineEnd:
-		e.LineEnd()
-	case keymap.InsertMode:
-		e.EnterInsert()
-	case keymap.Append:
-		e.Right()
-		e.EnterInsert()
 	case keymap.RunStatement:
 		return t.runAtCursor()
 	case keymap.RunAll:
-		return t.run(sqlx.Split(e.Value(), t.dialect))
+		return t.run(sqlx.Split(t.editor.Value(), t.dialect))
 	}
 	return nil
 }
@@ -560,7 +555,7 @@ func (t *consoleTab) Update(msg tea.Msg) tea.Cmd {
 			t.setStatus("editor: "+m.err.Error()+" · text unchanged", true)
 			return nil
 		}
-		t.editor.SetValue(strings.TrimRight(m.text, "\n"))
+		t.editor.ReplaceAll(strings.TrimRight(m.text, "\n"))
 		t.setStatus("updated from "+t.editorCmd[0], false)
 		return t.scheduleDraft()
 	}
@@ -833,11 +828,10 @@ func (t *consoleTab) saveDraft() func() {
 
 // insertText appends sql to the editor (or fills an empty editor).
 func (t *consoleTab) insertText(sql string) tea.Cmd {
-	if t.editor.Value() == "" {
-		t.editor.SetValue(sql)
+	if cur := t.editor.Value(); cur == "" {
+		t.editor.ReplaceAll(sql)
 	} else {
-		t.editor.Bottom()
-		t.editor.InsertString("\n" + sql)
+		t.editor.ReplaceAll(cur + "\n" + sql)
 	}
 	t.onResults = false
 	return t.scheduleDraft()
@@ -902,12 +896,14 @@ func (t *consoleTab) statusLine() string {
 		el := time.Since(t.started)
 		frame := spinner[int(el/(100*time.Millisecond))%len(spinner)]
 		return theme.Muted.Render(textutil.Fit(fmt.Sprintf("%s running %.1fs · ctrl+c cancel", frame, el.Seconds()), t.width))
+	case t.editor.Pending() != "" && !t.onResults:
+		return theme.Muted.Render(textutil.Fit(textutil.Sanitize(t.editor.Pending()), t.width))
 	case t.status != "" && t.statusErr:
 		return theme.Error.Render(textutil.Fit("✗ "+textutil.Sanitize(t.status), t.width))
 	case t.status != "":
 		return theme.Muted.Render(textutil.Fit(textutil.Sanitize(t.status), t.width))
 	}
-	hint := "enter run · R run all · i insert · ctrl+j results · <space>v $EDITOR"
+	hint := "enter run · R run all · i insert · v select · u undo · ctrl+j results · <space>v $EDITOR"
 	if t.manualTx {
 		hint = "manual commit · :commit / :rollback · " + hint
 	}

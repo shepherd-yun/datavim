@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/sqlvim/internal/ui/vimedit"
 )
 
 const defaultWhichKeyDelay = 300 * time.Millisecond
@@ -248,6 +250,11 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 	if c := m.capturingTab(); c != nil {
 		return c.Input(msg)
 	}
+	if t := m.keyTakingTab(); t != nil && len(m.pending) == 0 {
+		if cmd, used := t.TakeKey(msg); used {
+			return cmd
+		}
+	}
 	key := msg.String()
 	if key == "esc" && len(m.pending) > 0 {
 		m.clearPending()
@@ -328,7 +335,11 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	case keymap.CommandLine:
 		m.cmdline = overlay.NewCmdLine()
 	case keymap.Help:
-		m.overlay = overlay.NewHelp(m.keys.Help(m.context()))
+		entries := m.keys.Help(m.context())
+		if m.context() == keymap.Console {
+			entries = withEditorHelp(entries)
+		}
+		m.overlay = overlay.NewHelp(entries)
 	case keymap.FocusNext, keymap.FocusPrev:
 		if m.focus == focusTree {
 			m.setFocus(focusTabs)
@@ -723,6 +734,31 @@ func (m *Model) openStructureFromContext() tea.Cmd {
 	}
 	m.setStatus("select a table first", true)
 	return nil
+}
+
+// keyTakingTab returns the focused tab when it reads keys before the
+// keymap (a console's vim editor in NORMAL and VISUAL mode).
+func (m *Model) keyTakingTab() keyTaker {
+	if m.focus != focusTabs {
+		return nil
+	}
+	if t, ok := m.activeTab().(keyTaker); ok {
+		return t
+	}
+	return nil
+}
+
+// withEditorHelp adds the vim editor's keys after the console's bindings.
+func withEditorHelp(entries []keymap.HelpEntry) []keymap.HelpEntry {
+	i := 0
+	for i < len(entries) && entries[i].Context == keymap.Console {
+		i++
+	}
+	var vim []keymap.HelpEntry
+	for _, h := range vimedit.Help() {
+		vim = append(vim, keymap.HelpEntry{Context: keymap.Console, Keys: h.Keys, Desc: h.Desc})
+	}
+	return slices.Concat(entries[:i], vim, entries[i:])
 }
 
 // capturingTab returns the focused tab when it wants raw input (INSERT mode).

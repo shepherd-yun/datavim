@@ -9,7 +9,6 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/meta"
 	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
@@ -29,7 +28,7 @@ func insertConsole(t *testing.T) *consoleTab {
 	c := newConsoleTab(1, newFakeBackend(), newFakeStore(), readyCatalogs(), "local",
 		db.Namespace{Database: "app"}, config.Settings{MaxRows: 2, MaxColumnWidth: 40}, timings{})
 	c.SetSize(80, 24)
-	c.Handle(keymap.InsertMode)
+	c.editor.EnterInsert()
 	return c
 }
 
@@ -151,7 +150,7 @@ func TestConsoleWithoutCatalogOffersKeywords(t *testing.T) {
 	c := newConsoleTab(1, newFakeBackend(), newFakeStore(), meta.NewCache(), "local",
 		db.Namespace{Database: "app"}, config.Settings{MaxRows: 2, MaxColumnWidth: 40}, timings{})
 	c.SetSize(80, 24)
-	c.Handle(keymap.InsertMode)
+	c.editor.EnterInsert()
 	typeIn(t, c, "select * from us")
 	if c.popup != nil {
 		t.Fatalf("no tables known yet: %+v", c.popup)

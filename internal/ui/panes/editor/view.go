@@ -20,9 +20,10 @@ const (
 
 // cell is one rune as drawn.
 type cell struct {
-	text  string
-	width int
-	class highlight.Class
+	text     string
+	width    int
+	class    highlight.Class
+	selected bool // inside the visual selection
 }
 
 func cellOf(r rune, class highlight.Class) cell {
@@ -91,13 +92,14 @@ func (m *Model) View() string {
 	if m.height <= 0 || m.width <= 0 {
 		return ""
 	}
-	text := m.ta.Value()
+	text := m.vim.Text()
 	lines := strings.Split(text, "\n")
+	selFrom, selTo, _ := m.vim.Selection()
 	digits := max(len(strconv.Itoa(len(lines))), 2)
 	gutter := digits + 1
 	textW := max(m.width-gutter, 1)
 	cls := m.classes(text)
-	curLine, curCol := m.ta.Line(), m.ta.Column()
+	curLine, curCol := m.Cursor()
 
 	var rows []row
 	curRow, curX := 0, 0
@@ -105,7 +107,9 @@ func (m *Model) View() string {
 	for i, l := range lines {
 		cells := make([]cell, 0, len(l))
 		for j, r := range l {
-			cells = append(cells, cellOf(r, cls[off+j]))
+			c := cellOf(r, cls[off+j])
+			c.selected = off+j >= selFrom && off+j < selTo
+			cells = append(cells, c)
 		}
 		off += len(l) + 1
 		runs := wrap(cells, textW)
@@ -172,6 +176,11 @@ func drawRow(r row, digits, textW, curLine int, empty bool) string {
 		if i == r.cursor {
 			flush()
 			b.WriteString(theme.Selected.Render(c.text))
+			continue
+		}
+		if c.selected {
+			flush()
+			b.WriteString(theme.Visual.Render(c.text))
 			continue
 		}
 		if c.class != class {

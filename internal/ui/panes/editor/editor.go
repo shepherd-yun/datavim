@@ -1,28 +1,18 @@
-// Package editor is the console's SQL editor. A Bubbles textarea edits the
-// text (NORMAL mode only moves the cursor, INSERT mode gets keys); View
-// draws it with syntax colors, soft wrapping and a block cursor.
+// Package editor is the console's SQL editor: vimedit edits the text and
+// View draws it with syntax colors, the visual selection, soft wrapping
+// and a block cursor.
 package editor
 
 import (
-	"strings"
-	"unicode/utf8"
-
-	"charm.land/bubbles/v2/textarea"
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
+	"github.com/shepherd-yun/sqlvim/internal/ui/vimedit"
 )
 
-// taWidth is the textarea's own width. View does its own wrapping; this
-// only keeps the textarea from wrapping lines internally, so j and k move
-// by whole lines (lines longer than this still wrap inside the textarea).
-const taWidth = 1024
-
-// Model wraps a textarea.
+// Model is the editor pane.
 type Model struct {
-	ta            textarea.Model
-	insert        bool
+	vim           *vimedit.Editor
 	width, height int
 	top           int // first visible screen row
 
@@ -34,24 +24,12 @@ type Model struct {
 }
 
 // New returns an empty editor in NORMAL mode.
-func New() *Model {
-	ta := textarea.New()
-	ta.ShowLineNumbers = false
-	ta.Prompt = ""
-	ta.CharLimit = 0
-	ta.MaxHeight = 9999
-	ta.SetWidth(taWidth)
-	st := ta.Styles()
-	st.Cursor.Blink = false // View draws its own cursor; no blink ticks
-	ta.SetStyles(st)
-	_ = ta.Focus() // always focused; insert decides who gets keys
-	return &Model{ta: ta}
-}
+func New() *Model { return &Model{vim: vimedit.New()} }
 
 // SetSize sets the drawing area.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = max(w, 0), max(h, 0)
-	m.ta.SetHeight(max(h, 1))
+	m.vim.SetHeight(h)
 }
 
 // SetHighlighter sets how View colors the text (nil: no colors).
@@ -59,145 +37,88 @@ func (m *Model) SetHighlighter(f func(string) []highlight.Span) {
 	m.highlight, m.hlClasses = f, nil
 }
 
-func (m *Model) Value() string { return m.ta.Value() }
-
-// SetValue replaces the text and puts the cursor at the end.
-func (m *Model) SetValue(s string) { m.ta.SetValue(s) }
-
-// InsertString inserts s at the cursor.
-func (m *Model) InsertString(s string) { m.ta.InsertString(s) }
-
-func (m *Model) Insert() bool { return m.insert }
-func (m *Model) EnterInsert() { m.insert = true }
-func (m *Model) ExitInsert()  { m.insert = false }
-
-// Update forwards key presses and pastes to the textarea in INSERT mode.
-func (m *Model) Update(msg tea.Msg) tea.Cmd {
-	if !m.insert {
-		return nil
+// KeyOf turns a Bubble Tea key press into a vimedit key.
+func KeyOf(msg tea.KeyPressMsg) vimedit.Key {
+	k := vimedit.Key{Name: msg.String()}
+	if key := msg.Key(); key.Text != "" && key.Mod&^tea.ModShift == 0 {
+		k.Text = key.Text
 	}
-	if m.fastEdit(msg) {
-		return nil
-	}
-	var cmd tea.Cmd
-	m.ta, cmd = m.ta.Update(msg)
-	return cmd
+	return k
 }
 
-func (m *Model) Up(n int) {
-	for range n {
-		m.ta.CursorUp()
+// Update feeds a key press to the editor, or types a paste in INSERT
+// mode. Handled is false for keys the editor leaves to the console.
+func (m *Model) Update(msg tea.Msg) vimedit.Result {
+	switch msg := msg.(type) {
+	case tea.KeyPressMsg:
+		return m.vim.Feed(KeyOf(msg))
+	case tea.PasteMsg:
+		if m.Insert() {
+			m.vim.InsertText(msg.Content)
+			return vimedit.Result{Handled: true}
+		}
 	}
+	return vimedit.Result{}
 }
 
-func (m *Model) Down(n int) {
-	for range n {
-		m.ta.CursorDown()
-	}
+func (m *Model) Value() string { return m.vim.Text() }
+
+// SetValue replaces the text as newly loaded (u does not undo it); the
+// cursor goes to the end.
+func (m *Model) SetValue(s string) { m.vim.SetText(s) }
+
+// ReplaceAll replaces the text as one change that u undoes.
+func (m *Model) ReplaceAll(s string) { m.vim.ReplaceAll(s) }
+
+// Version changes whenever the text does.
+func (m *Model) Version() int { return m.vim.Version() }
+
+func (m *Model) Mode() vimedit.Mode { return m.vim.Mode() }
+func (m *Model) Insert() bool       { return m.vim.Mode() == vimedit.Insert }
+
+// Visual reports VISUAL and V-LINE mode.
+func (m *Model) Visual() bool {
+	md := m.vim.Mode()
+	return md == vimedit.Visual || md == vimedit.VisualLine
 }
 
-func (m *Model) Left()      { m.ta.SetCursorColumn(m.ta.Column() - 1) }
-func (m *Model) Right()     { m.ta.SetCursorColumn(m.ta.Column() + 1) }
-func (m *Model) LineStart() { m.ta.CursorStart() }
-func (m *Model) LineEnd()   { m.ta.CursorEnd() }
-func (m *Model) Top()       { m.ta.MoveToBegin() }
-func (m *Model) Bottom()    { m.ta.MoveToEnd() }
+// EnterInsert is i; Escape is esc (it leaves INSERT or VISUAL mode).
+func (m *Model) EnterInsert() { m.vim.Feed(vimedit.Key{Name: "i", Text: "i"}) }
+func (m *Model) Escape()      { m.vim.Feed(vimedit.Key{Name: "esc"}) }
 
-// HalfPage moves half the visible height in direction dir (+1 / -1).
-func (m *Model) HalfPage(dir int) {
-	n := max(m.height/2, 1)
-	if dir > 0 {
-		m.Down(n)
-	} else {
-		m.Up(n)
-	}
+// Pending is the command typed so far (vim's showcmd).
+func (m *Model) Pending() string { return m.vim.Pending() }
+
+// Selection is the visual selection as byte offsets into Value().
+func (m *Model) Selection() (from, to int, ok bool) { return m.vim.Selection() }
+
+// PasteClipboard finishes a "+p with the clipboard's text.
+func (m *Model) PasteClipboard(p vimedit.ClipboardPaste, text string) bool {
+	return m.vim.PasteClipboard(p, text)
 }
 
 // Offset is the cursor position as a byte offset into Value().
-func (m *Model) Offset() int {
-	lines := strings.Split(m.ta.Value(), "\n")
-	row := textutil.Clamp(m.ta.Line(), 0, len(lines)-1)
-	off := 0
-	for _, l := range lines[:row] {
-		off += len(l) + 1
-	}
-	r := []rune(lines[row])
-	return off + len(string(r[:textutil.Clamp(m.ta.Column(), 0, len(r))]))
-}
+func (m *Model) Offset() int { return m.vim.Offset() }
 
 // Cursor returns the cursor line and column (in runes), both 0-based.
-func (m *Model) Cursor() (line, col int) { return m.ta.Line(), m.ta.Column() }
+func (m *Model) Cursor() (line, col int) {
+	p := m.vim.Cursor()
+	return p.Line, p.Col
+}
 
 // SetCursor moves the cursor to line and column (in runes), clamped.
-func (m *Model) SetCursor(line, col int) {
-	lines := strings.Split(m.ta.Value(), "\n")
-	line = textutil.Clamp(line, 0, len(lines)-1)
-	off := 0
-	for _, l := range lines[:line] {
-		off += len(l) + 1
-	}
-	r := []rune(lines[line])
-	m.SetCursorOffset(off + len(string(r[:textutil.Clamp(col, 0, len(r))])))
-}
+func (m *Model) SetCursor(line, col int) { m.vim.SetCursor(vimedit.Pos{Line: line, Col: col}) }
 
 // SetCursorOffset moves the cursor to a byte offset into Value().
-func (m *Model) SetCursorOffset(off int) {
-	v := m.ta.Value()
-	m.setValueAt(v, textutil.Clamp(off, 0, len(v)))
-}
+func (m *Model) SetCursorOffset(off int) { m.vim.SetOffset(off) }
 
 // ReplaceBeforeCursor replaces the text from byte offset start to the
 // cursor with s and leaves the cursor after s.
-func (m *Model) ReplaceBeforeCursor(start int, s string) {
-	v, cur := m.ta.Value(), m.Offset()
-	start = textutil.Clamp(start, 0, cur)
-	m.setValueAt(v[:start]+s+v[cur:], start+len(s))
-}
+func (m *Model) ReplaceBeforeCursor(start int, s string) { m.vim.ReplaceBeforeCursor(start, s) }
 
-// setValueAt replaces the text with v and puts the cursor at byte offset
-// off (on a rune boundary). The textarea moves the cursor by one screen row
-// at a time, each step costing time linear in the text; setting the text
-// after the cursor and then inserting the text before it at the start
-// leaves the cursor in place in linear time.
-func (m *Model) setValueAt(v string, off int) {
-	for off > 0 && off < len(v) && !utf8.RuneStart(v[off]) {
-		off--
-	}
-	m.ta.SetValue(v[off:])
-	m.ta.MoveToBegin()
-	m.ta.InsertString(v[:off])
-}
+func (m *Model) Top()    { m.SetCursor(0, 0) }
+func (m *Model) Bottom() { m.SetCursor(1<<30, 1<<30) }
 
 // CursorPos is where the last View drew the cursor, relative to the
 // editor's top-left corner (line numbers included).
 func (m *Model) CursorPos() (x, y int) { return m.curX, m.curY }
-
-// fastEdit applies typing, enter, backspace and pastes directly. The
-// textarea's own Update renders the whole text on every call, which is
-// slow for long consoles and unused here (View draws the editor).
-func (m *Model) fastEdit(msg tea.Msg) bool {
-	if m.ta.HasSelection() {
-		return false
-	}
-	switch msg := msg.(type) {
-	case tea.PasteMsg:
-		m.ta.InsertString(msg.Content)
-		return true
-	case tea.KeyPressMsg:
-		switch k := msg.Key(); {
-		case msg.String() == "enter":
-			m.ta.InsertString("\n")
-		case msg.String() == "backspace":
-			if off := m.Offset(); off > 0 {
-				_, size := utf8.DecodeLastRuneInString(m.ta.Value()[:off])
-				m.ReplaceBeforeCursor(off-size, "")
-			}
-		case k.Text != "" && k.Mod&^tea.ModShift == 0:
-			m.ta.InsertString(k.Text)
-		default:
-			return false
-		}
-		return true
-	}
-	return false
-}

@@ -24,6 +24,7 @@ var (
 	Accent      = lipgloss.NewStyle().Bold(true).Foreground(ColorAccent)
 	Title       = lipgloss.NewStyle().Bold(true)
 	Selected    = lipgloss.NewStyle().Reverse(true)
+	Visual      = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
 	SelectedDim = lipgloss.NewStyle().Underline(true)
 	Mode        = lipgloss.NewStyle().Bold(true).Reverse(true)
 	Null        = lipgloss.NewStyle().Foreground(ColorBorder).Italic(true)

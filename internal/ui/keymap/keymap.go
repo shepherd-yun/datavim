@@ -60,8 +60,6 @@ const (
 	DeleteConnection Action = "conn.delete"
 	History          Action = "history.open"
 	ExternalEdit     Action = "editor.external"
-	InsertMode       Action = "editor.insert"
-	Append           Action = "editor.append"
 	RunStatement     Action = "sql.run"
 	RunAll           Action = "sql.runall"
 	FocusResults     Action = "console.results"

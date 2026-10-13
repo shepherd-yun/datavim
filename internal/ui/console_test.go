@@ -263,7 +263,7 @@ func TestConsoleInsertMode(t *testing.T) {
 	if c.CapturesInput() || c.Mode() != "NORMAL" {
 		t.Fatal("starts in NORMAL")
 	}
-	c.Handle(keymap.InsertMode)
+	c.editor.EnterInsert()
 	if !c.CapturesInput() || c.Mode() != "INSERT" {
 		t.Fatal("i enters INSERT")
 	}
@@ -337,7 +337,7 @@ func TestConsoleDrafts(t *testing.T) {
 	if c.editor.Value() != "select draft" {
 		t.Fatalf("draft not restored: %q", c.editor.Value())
 	}
-	c.Handle(keymap.InsertMode)
+	c.editor.EnterInsert()
 	c.editor.Bottom()
 	runTab(t, c, c.Input(uitest.Key("x")))
 	if got := st.draft(c.Key()); got != "select draftx" {
@@ -679,7 +679,7 @@ func TestConsoleDoesNotJumpWhenTextChanged(t *testing.T) {
 	cmd := c.Handle(keymap.RunStatement)
 	c.editor.SetValue("something else")
 	runTab(t, c, cmd)
-	if strings.Contains(c.status, "line ") || c.editor.Offset() != len("something else") {
+	if strings.Contains(c.status, "line ") || c.editor.Offset() != len("something else")-1 {
 		t.Fatalf("status %q, cursor %d", c.status, c.editor.Offset())
 	}
 }
