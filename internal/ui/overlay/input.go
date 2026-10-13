@@ -22,3 +22,5 @@ func (f *field) handle(msg tea.KeyPressMsg) {
 
 func (f *field) String() string { return string(f.r) }
 func (f *field) Len() int       { return len(f.r) }
+
+func newField(s string) field { return field{r: []rune(s)} }
