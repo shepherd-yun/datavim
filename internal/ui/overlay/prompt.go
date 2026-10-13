@@ -47,3 +47,6 @@ func (p *Prompt) View(width, _ int) string {
 	}, "\n")
 	return theme.Box(p.title, body, w, 6, true)
 }
+
+// Paste appends text to the input.
+func (p *Prompt) Paste(text string) { p.input.paste(text) }

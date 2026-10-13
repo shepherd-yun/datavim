@@ -53,3 +53,6 @@ func (p *Password) View(width, _ int) string {
 	}, "\n")
 	return theme.Box("Connect", body, max(min(width-4, 50), 10), 7, true)
 }
+
+// Paste appends text to the input.
+func (p *Password) Paste(text string) { p.input.paste(text) }

@@ -695,3 +695,17 @@ func TestSetReadOnlyBlockedByOpenTransaction(t *testing.T) {
 		t.Fatalf("status: %s", s)
 	}
 }
+
+func TestPasteGoesToTheOpenPopup(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "space", "n")
+	m.Update(tea.PasteMsg{Content: "pasted-name"})
+	if !strings.Contains(screen(m), "pasted-name") {
+		t.Fatalf("the new connection form takes pasted text:\n%s", screen(m))
+	}
+	press(t, m, "esc", ":")
+	m.Update(tea.PasteMsg{Content: "qa"})
+	if !press(t, m, "enter") {
+		t.Fatal("the command line takes pasted text")
+	}
+}

@@ -73,3 +73,9 @@ func (c *Confirm) View(width, height int) string {
 	h := min(len(body)+2, max(height-2, 3))
 	return theme.Box(c.title, strings.Join(body, "\n"), w, h, true)
 }
+
+// Paste appends text to the input.
+func (c *Confirm) Paste(text string) {
+	c.wrong = false
+	c.input.paste(text)
+}

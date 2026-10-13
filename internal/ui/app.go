@@ -150,8 +150,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case openOverlayMsg:
 		m.overlay = msg.overlay
 	case tea.PasteMsg:
-		if c := m.capturingTab(); c != nil {
-			return m, c.Input(msg)
+		// Like keys, a paste goes to the command line, then a popup, then
+		// a console in insert mode.
+		switch p, ok := m.overlay.(overlay.Paster); {
+		case m.cmdline != nil:
+			m.cmdline.Paste(msg.Content)
+		case ok:
+			p.Paste(msg.Content)
+		case m.overlay != nil:
+		default:
+			if c := m.capturingTab(); c != nil {
+				return m, c.Input(msg)
+			}
 		}
 	case historyLoadedMsg:
 		m.historyLoaded(msg)

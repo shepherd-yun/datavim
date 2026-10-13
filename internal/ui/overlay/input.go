@@ -1,6 +1,10 @@
 package overlay
 
-import tea "charm.land/bubbletea/v2"
+import (
+	"unicode"
+
+	tea "charm.land/bubbletea/v2"
+)
 
 // field is a minimal single-line text input (append-only cursor).
 type field struct{ r []rune }
@@ -16,6 +20,17 @@ func (f *field) handle(msg tea.KeyPressMsg) {
 	default:
 		if msg.Text != "" && !msg.Mod.Contains(tea.ModCtrl) {
 			f.r = append(f.r, []rune(msg.Text)...)
+		}
+	}
+}
+
+// paste appends a terminal paste. The field is single-line, so newlines and
+// other control characters are dropped (password managers often copy a
+// trailing newline).
+func (f *field) paste(s string) {
+	for _, r := range s {
+		if !unicode.IsControl(r) {
+			f.r = append(f.r, r)
 		}
 	}
 }
