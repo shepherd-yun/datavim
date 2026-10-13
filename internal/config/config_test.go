@@ -292,3 +292,100 @@ func TestAppendConnectionWritesSSH(t *testing.T) {
 		t.Fatalf("an empty ssh key is left out; file:\n%s", data)
 	}
 }
+
+const editableConns = `# my connections
+[[connection]]
+name = "local"   # the laptop
+driver = "mysql"
+user = "root"
+
+# production, careful
+[[connection]]
+name     = 'prod-pg'
+driver   = 'postgres'
+host     = '10.0.1.5'
+user     = 'app'
+database = 'app'
+env      = 'prod'
+readonly = true
+params   = { sslmode = "require" }
+
+[[connection]]
+name = "last"
+driver = "postgres"
+`
+
+func TestUpdateConnectionTouchesOnlyItsBlock(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "connections.toml", editableConns)
+	c := Connection{Name: "prod", Driver: "postgres", Host: "10.0.1.6", Port: 5432, User: "app", SSH: "bastion", Env: EnvProd}
+	if _, err := UpdateConnection(dir, "prod-pg", c); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "connections.toml"))
+	got := string(data)
+	for _, keep := range []string{"# my connections", `name = "local"   # the laptop`, "# production, careful",
+		"readonly = true", `params   = { sslmode = "require" }`, "user     = 'app'", `name = "last"`} {
+		if !strings.Contains(got, keep) {
+			t.Errorf("lost %q:\n%s", keep, got)
+		}
+	}
+	if strings.Contains(got, "database") {
+		t.Errorf("an emptied optional key is removed:\n%s", got)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := cfg.Connections[1]
+	if p.Name != "prod" || p.Host != "10.0.1.6" || p.SSH != "bastion" || !p.IsReadOnly() || p.Params["sslmode"] != "require" {
+		t.Fatalf("prod = %+v", p)
+	}
+	if cfg.Connections[0].Name != "local" || cfg.Connections[2].Name != "last" {
+		t.Fatalf("other connections changed: %+v", cfg.Connections)
+	}
+}
+
+func TestUpdateConnectionErrors(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "connections.toml", editableConns)
+	if _, err := UpdateConnection(dir, "nope", Connection{Name: "nope", Driver: "mysql"}); err == nil {
+		t.Error("unknown connection")
+	}
+	if _, err := UpdateConnection(dir, "local", Connection{Name: "last", Driver: "mysql"}); err == nil || !strings.Contains(err.Error(), "already exists") {
+		t.Errorf("rename onto another connection: %v", err)
+	}
+	if _, err := UpdateConnection(dir, "local", Connection{Name: "local", Driver: "oracle"}); err == nil {
+		t.Error("invalid connection")
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "connections.toml"))
+	if string(data) != editableConns {
+		t.Fatalf("failed updates leave the file alone:\n%s", data)
+	}
+}
+
+func TestRemoveConnection(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "connections.toml", editableConns)
+	if err := RemoveConnection(dir, "local"); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "connections.toml"))
+	got := string(data)
+	if strings.Contains(got, "laptop") || !strings.Contains(got, "# my connections") || !strings.Contains(got, "# production, careful") {
+		t.Fatalf("only the block goes; comments above other blocks stay:\n%s", got)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Connections) != 2 || cfg.Connections[0].Name != "prod-pg" {
+		t.Fatalf("connections = %+v", cfg.Connections)
+	}
+	if err := RemoveConnection(dir, "local"); err == nil {
+		t.Fatal("removing it twice fails")
+	}
+	if info, _ := os.Stat(filepath.Join(dir, "connections.toml")); info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %v", info.Mode().Perm())
+	}
+}
