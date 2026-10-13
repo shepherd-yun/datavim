@@ -366,6 +366,10 @@ func (e *Editor) run(c cmd) {
 		}
 	case ".":
 		e.repeat(c)
+	case "v":
+		e.mode, e.anchor = Visual, e.cur
+	case "V":
+		e.mode, e.anchor = VisualLine, e.cur
 	case "ctrl+d", "ctrl+u":
 		dir := "j"
 		if c.op == "ctrl+u" {

@@ -37,7 +37,11 @@ func (e *Editor) normalKey(k Key) {
 	p := &e.pend
 	name := k.Name
 	idle := len(p.keys) == 0
+	visual := e.mode == Visual || e.mode == VisualLine
 	if name == "esc" {
+		if idle && visual {
+			e.leaveVisual()
+		}
 		e.pend = pending{}
 		return
 	}
@@ -60,12 +64,17 @@ func (e *Editor) normalKey(k Key) {
 		p.await = `"`
 	case name == "g" || isFind(name):
 		p.await = name
-	case (name == "i" || name == "a") && p.op != "":
+	case (name == "i" || name == "a") && (p.op != "" || visual):
 		p.await = name
 	case isMotion(name):
 		c.op, c.motion = p.op, name
 		e.pend = pending{}
 		e.exec(c)
+		return
+	case isOperator(name) && visual:
+		c.op = name
+		e.pend = pending{}
+		e.visualOp(c)
 		return
 	case isOperator(name) && p.op == "":
 		p.op = name
@@ -74,10 +83,14 @@ func (e *Editor) normalKey(k Key) {
 		e.pend = pending{}
 		e.exec(c)
 		return
-	case p.op == "" && isCommand(name):
+	case p.op == "" && e.command(name, visual):
 		c.op = name
 		e.pend = pending{}
-		e.exec(c)
+		if visual {
+			e.visualOp(c)
+		} else {
+			e.exec(c)
+		}
 		return
 	default:
 		e.res.Handled = !idle
@@ -87,12 +100,19 @@ func (e *Editor) normalKey(k Key) {
 	p.keys = append(p.keys, name)
 }
 
-// isCommand reports a NORMAL-mode command that is not a motion or an
-// operator.
-func isCommand(name string) bool {
+// command reports whether name is a command (not a motion or operator)
+// in the current mode.
+func (e *Editor) command(name string, visual bool) bool {
+	if visual {
+		switch name {
+		case "v", "V", "o", "x", "p", "P", "ctrl+d", "ctrl+u":
+			return true
+		}
+		return false
+	}
 	switch name {
 	case "x", "p", "P", "D", "C", "o", "O", "i", "a", "I", "A", "u", "ctrl+r", ".",
-		"ctrl+d", "ctrl+u":
+		"v", "V", "ctrl+d", "ctrl+u":
 		return true
 	}
 	return false
@@ -118,6 +138,7 @@ func (e *Editor) complete(k Key) {
 	c := cmd{reg: p.reg, count: p.total(), op: p.op}
 	await := p.await
 	p.await = ""
+	visual := e.mode == Visual || e.mode == VisualLine
 	switch {
 	case !ok:
 		e.pend = pending{}
@@ -132,7 +153,7 @@ func (e *Editor) complete(k Key) {
 		c.motion = "gg"
 		e.pend = pending{}
 		e.exec(c)
-	case await == "g" && (r == 't' || r == 'T') && p.op == "":
+	case await == "g" && (r == 't' || r == 'T') && p.op == "" && !visual:
 		e.pend = pending{}
 		switch {
 		case r == 't' && c.count > 0:
@@ -149,7 +170,11 @@ func (e *Editor) complete(k Key) {
 	case await == "i" || await == "a":
 		c.motion = await + string(r)
 		e.pend = pending{}
-		e.exec(c)
+		if visual {
+			e.selectObject(c)
+		} else {
+			e.exec(c)
+		}
 	default:
 		e.pend = pending{}
 	}
