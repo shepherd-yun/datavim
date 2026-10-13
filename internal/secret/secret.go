@@ -18,6 +18,8 @@ var ErrNotFound = errors.New("secret not found")
 type Store interface {
 	Get(name string) (string, error)
 	Set(name, password string) error
+	// Delete removes the password; a missing one is not an error.
+	Delete(name string) error
 }
 
 // Keyring is a Store backed by the macOS Keychain (or the platform equivalent).
@@ -46,6 +48,14 @@ func (k Keyring) Get(name string) (string, error) {
 // Set stores the password for the named connection.
 func (Keyring) Set(name, password string) error {
 	return keyring.Set(service, name, password)
+}
+
+// Delete removes the stored password for the named connection.
+func (Keyring) Delete(name string) error {
+	if err := keyring.Delete(service, name); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+		return err
+	}
+	return nil
 }
 
 // EnvVar is the environment variable that overrides the keychain, e.g.
