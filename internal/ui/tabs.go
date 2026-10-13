@@ -178,8 +178,8 @@ func (t *dataTab) Update(msg tea.Msg) tea.Cmd {
 	return nil
 }
 
-func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
-	g := t.grid
+// gridAction handles the cursor, scroll and cell-detail actions every grid shares.
+func gridAction(g *grid.Model, a keymap.Action) (tea.Cmd, bool) {
 	switch a {
 	case keymap.Down:
 		g.Move(1, 0)
@@ -201,6 +201,31 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 		g.LineStart()
 	case keymap.LineEnd:
 		g.LineEnd()
+	case keymap.ScrollLeft:
+		g.ScrollColumns(-1)
+	case keymap.ScrollRight:
+		g.ScrollColumns(1)
+	case keymap.CellDetail:
+		if col, v, ok := g.Cell(); ok {
+			text := v.Text
+			if v.Null {
+				text = "NULL"
+			}
+			return openOverlay(overlay.NewDetail(col.Name, text)), true
+		}
+	default:
+		return nil, false
+	}
+	return nil, true
+}
+
+func (t *dataTab) Find(q string, forward bool) bool { return t.grid.Find(q, forward) }
+
+func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
+	if cmd, ok := gridAction(t.grid, a); ok {
+		return cmd
+	}
+	switch a {
 	case keymap.NextPage:
 		if t.hasMore && !t.loading {
 			return t.load(t.page + 1)
@@ -213,14 +238,6 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 		if !t.loading {
 			t.orderKnown = false
 			return t.load(t.page)
-		}
-	case keymap.CellDetail:
-		if col, v, ok := g.Cell(); ok {
-			text := v.Text
-			if v.Null {
-				text = "NULL"
-			}
-			return openOverlay(overlay.NewDetail(col.Name, text))
 		}
 	}
 	return nil

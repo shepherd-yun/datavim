@@ -16,17 +16,32 @@ import (
 )
 
 type fakeConn struct {
-	mu      sync.Mutex
-	queries []string
-	rows    int // rows returned by every Query
+	mu       sync.Mutex
+	queries  []string
+	execs    []string
+	rows     int              // rows returned by every Query
+	fail     map[string]error // statement text -> error
+	pingErr  error            // returned by every session Ping
+	sessions []*fakeSession
 }
 
-func (c *fakeConn) Query(_ context.Context, q string, _ ...any) (*db.ResultSet, error) {
+// slowQuery blocks until its context is cancelled.
+const slowQuery = "select sleep"
+
+func (c *fakeConn) Query(ctx context.Context, q string, _ ...any) (*db.ResultSet, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.queries = append(c.queries, q)
+	err, rows := c.fail[q], c.rows
+	c.mu.Unlock()
+	if q == slowQuery {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if err != nil {
+		return nil, err
+	}
 	rs := &db.ResultSet{Columns: []db.ColumnInfo{{Name: "id"}, {Name: "name"}}}
-	for i := range c.rows {
+	for i := range rows {
 		rs.Rows = append(rs.Rows, []db.Value{{Text: strconv.Itoa(i + 1)}, {Text: fmt.Sprintf("user%d", i+1)}})
 	}
 	return rs, nil
@@ -58,8 +73,43 @@ func (c *fakeConn) lastQuery() string {
 	return c.queries[len(c.queries)-1]
 }
 
-func (c *fakeConn) Exec(context.Context, string, ...any) (db.ExecResult, error) {
-	return db.ExecResult{}, nil
+func (c *fakeConn) Exec(_ context.Context, q string, _ ...any) (db.ExecResult, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.execs = append(c.execs, q)
+	if err := c.fail[q]; err != nil {
+		return db.ExecResult{}, err
+	}
+	return db.ExecResult{RowsAffected: 1}, nil
+}
+
+func (c *fakeConn) execList() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return slices.Clone(c.execs)
+}
+
+func (c *fakeConn) setFail(q string, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.fail == nil {
+		c.fail = map[string]error{}
+	}
+	c.fail[q] = err
+}
+
+func (c *fakeConn) Session(context.Context) (db.Session, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	s := &fakeSession{conn: c}
+	c.sessions = append(c.sessions, s)
+	return s, nil
+}
+
+func (c *fakeConn) sessionCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.sessions)
 }
 func (c *fakeConn) Meta() db.MetaReader { return fakeMeta{} }
 func (c *fakeConn) Dialect() db.Dialect { return fakeDialect{} }
@@ -200,8 +250,6 @@ type fakeSession struct {
 	closed bool
 }
 
-func (c *fakeConn) Session(context.Context) (db.Session, error) { return &fakeSession{conn: c}, nil }
-
 func (s *fakeSession) Query(ctx context.Context, q string, args ...any) (*db.ResultSet, error) {
 	return s.conn.Query(ctx, q, args...)
 }
@@ -214,5 +262,15 @@ func (s *fakeSession) Stream(ctx context.Context, q string, onColumns func([]db.
 	return s.conn.Stream(ctx, q, onColumns, onRow)
 }
 
-func (s *fakeSession) Ping(context.Context) error { return nil }
-func (s *fakeSession) Close() error               { s.closed = true; return nil }
+func (s *fakeSession) Ping(context.Context) error {
+	s.conn.mu.Lock()
+	defer s.conn.mu.Unlock()
+	return s.conn.pingErr
+}
+
+func (s *fakeSession) Close() error {
+	s.conn.mu.Lock()
+	defer s.conn.mu.Unlock()
+	s.closed = true
+	return nil
+}
