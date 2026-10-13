@@ -67,3 +67,21 @@ func TestVisualEmptyText(t *testing.T) {
 		t.Fatal(e.Text())
 	}
 }
+
+func TestReplacingTheTextLeavesVisualMode(t *testing.T) {
+	for _, replace := range []func(e *Editor, s string){(*Editor).ReplaceAll, (*Editor).SetText} {
+		e := newAt(t, "a\nb\nc\n|d")
+		feed(e, "vk")
+		replace(e, "x")
+		if e.Mode() != Normal {
+			t.Fatalf("mode after replacing the text: %s", e.Mode())
+		}
+		if _, _, ok := e.Selection(); ok {
+			t.Fatal("no selection after replacing the text")
+		}
+		feed(e, "vd")
+		if e.Text() != "" {
+			t.Fatalf("text = %q", e.Text())
+		}
+	}
+}

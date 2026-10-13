@@ -140,6 +140,7 @@ func (e *Editor) SetText(s string) {
 	e.buf.version = v + 1
 	e.hist.reset()
 	e.pend, e.rec = pending{}, nil
+	e.dropSelection()
 	e.SetCursor(e.buf.end())
 }
 
@@ -149,7 +150,16 @@ func (e *Editor) ReplaceAll(s string) {
 	e.hist.commit()
 	e.change(Pos{}, e.buf.end(), s)
 	e.hist.commit()
+	e.dropSelection()
 	e.SetCursor(e.buf.end())
+}
+
+// dropSelection leaves VISUAL mode when the whole text is replaced: the
+// selection's anchor may no longer be in the text.
+func (e *Editor) dropSelection() {
+	if e.mode == Visual || e.mode == VisualLine {
+		e.mode = Normal
+	}
 }
 
 // InsertText inserts s at the cursor: typed text in INSERT mode, a change
