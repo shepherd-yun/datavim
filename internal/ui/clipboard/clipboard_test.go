@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-func TestUsePbcopy(t *testing.T) {
-	found := func(string) (string, error) { return "/usr/bin/pbcopy", nil }
+func TestUseMacTool(t *testing.T) {
+	found := func(string) (string, error) { return "/usr/bin/tool", nil }
 	missing := func(string) (string, error) { return "", errors.New("not found") }
 	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
 	cases := []struct {
@@ -21,8 +21,10 @@ func TestUsePbcopy(t *testing.T) {
 		{"linux", nil, found, false},
 	}
 	for _, c := range cases {
-		if got := usePbcopy(c.goos, env(c.env), c.look); got != c.want {
-			t.Errorf("usePbcopy(%s, %v) = %v", c.goos, c.env, got)
+		for _, tool := range []string{"pbcopy", "pbpaste"} {
+			if got := useMacTool(tool, c.goos, env(c.env), c.look); got != c.want {
+				t.Errorf("useMacTool(%s, %s, %v) = %v", tool, c.goos, c.env, got)
+			}
 		}
 	}
 }

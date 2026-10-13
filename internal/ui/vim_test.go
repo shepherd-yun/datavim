@@ -1,9 +1,13 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
@@ -41,7 +45,7 @@ func TestConsoleShowsVimModesAndPendingKeys(t *testing.T) {
 	c := openLocalConsole(t, m)
 	c.editor.SetValue("select 1")
 	press(t, m, "v")
-	if s := screen(m); !strings.Contains(s, " VISUAL ") {
+	if s := screen(m); !strings.Contains(s, " VISUAL ") || !strings.Contains(s, "enter runs the selection") {
 		t.Fatalf("VISUAL:\n%s", s)
 	}
 	press(t, m, "V")
@@ -55,6 +59,106 @@ func TestConsoleShowsVimModesAndPendingKeys(t *testing.T) {
 	press(t, m, "esc")
 	if strings.Contains(screen(m), `"a2d`) {
 		t.Fatal("esc clears the pending keys")
+	}
+}
+
+func TestConsoleRunsTheVisualSelection(t *testing.T) {
+	b := newFakeBackend()
+	c := newConsole(t, b, "local")
+	c.editor.SetValue("select 1;\nupdate t set a = 1 where id = 1;\nselect 3;")
+	c.editor.Top()
+	for _, k := range []string{"V", "j"} {
+		c.TakeKey(uitest.Key(k))
+	}
+	runTab(t, c, c.Handle(keymap.RunStatement))
+	if got := b.conn.execList(); !slices.Contains(got, "update t set a = 1 where id = 1") {
+		t.Fatalf("execs = %v", got)
+	}
+	if strings.Contains(b.conn.lastQuery(), "select 3") {
+		t.Fatal("only the selection runs")
+	}
+	if c.editor.Visual() {
+		t.Fatal("running the selection leaves VISUAL mode")
+	}
+}
+
+func TestSelectedStatementsPointIntoTheText(t *testing.T) {
+	text := "select 1;\nselect 2; select 3;"
+	from := strings.Index(text, "select 2")
+	stmts := selectedStatements(text, from, len(text), 0)
+	if len(stmts) != 2 || text[stmts[1].Start:stmts[1].End] != "select 3" {
+		t.Fatalf("stmts = %+v", stmts)
+	}
+}
+
+func TestGtSwitchesTabs(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m) // tab 1: users data
+	press(t, m, "ctrl+h", "space", "c")
+	if m.active != 1 {
+		t.Fatalf("console is tab 2, active %d", m.active)
+	}
+	press(t, m, "g", "t") // wraps to the first tab
+	if m.active != 0 {
+		t.Fatalf("gt: active %d", m.active)
+	}
+	press(t, m, "2") // from the data tab, 2 still goes to tab 2
+	press(t, m, "g", "T")
+	if m.active != 0 {
+		t.Fatalf("gT from the console: active %d", m.active)
+	}
+	press(t, m, "2", "1", "g", "t") // in the console, 1gt goes to tab 1
+	if m.active != 0 {
+		t.Fatalf("1gt: active %d", m.active)
+	}
+	press(t, m, "2", "9", "g", "t")
+	if m.active != 1 {
+		t.Fatal("9gt without a tab 9 stays")
+	}
+}
+
+func TestConsoleClipboardRegister(t *testing.T) {
+	b := newFakeBackend()
+	c := newConsole(t, b, "local")
+	c.editor.SetValue("select 1")
+	c.editor.Top()
+	clip := captureClipboard(t)
+	for _, k := range []string{"\"", "+", "y", "y"} {
+		cmd, used := c.TakeKey(uitest.Key(k))
+		if !used {
+			t.Fatalf("%s not used", k)
+		}
+		runTab(t, c, cmd)
+	}
+	if *clip != "select 1\n" {
+		t.Fatalf("\"+yy copies the line: %q", *clip)
+	}
+	fakeClipboard(t, "-- x\n")
+	var cmd tea.Cmd
+	for _, k := range []string{"\"", "+", "p"} {
+		cmd, _ = c.TakeKey(uitest.Key(k))
+	}
+	if c.clipPaste == nil {
+		t.Fatal("\"+p waits for the clipboard")
+	}
+	runTab(t, c, cmd)
+	if got := c.editor.Value(); got != "select 1\n-- x" {
+		t.Fatalf("pasted: %q", got)
+	}
+	c.Update(clipboardTextMsg{tabID: c.id, text: "late"})
+	if strings.Contains(c.editor.Value(), "late") {
+		t.Fatal("an answer nobody waits for is dropped")
+	}
+}
+
+func TestClipboardAnswerGoesToTheActiveConsole(t *testing.T) {
+	m, _ := newTestModel(t)
+	c := openLocalConsole(t, m)
+	c.editor.SetValue("x")
+	press(t, m, "\"", "+", "P")
+	m.Update(tea.ClipboardMsg{Content: "y"})
+	if got := c.editor.Value(); got != "yx" {
+		t.Fatalf("OSC 52 answer pasted: %q", got)
 	}
 }
 

@@ -20,8 +20,11 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
 )
 
-// copyToClipboard is replaced in tests.
-var copyToClipboard = clipboard.Copy
+// copyToClipboard and readClipboard are replaced in tests.
+var (
+	copyToClipboard = clipboard.Copy
+	readClipboard   = clipboard.Read
+)
 
 const exportTimeout = 10 * time.Minute
 
