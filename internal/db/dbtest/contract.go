@@ -200,4 +200,33 @@ func RunContract(t *testing.T, conn db.Conn, ns db.Namespace) {
 			t.Errorf("missing DDL err = %v, want ErrNotFound", err)
 		}
 	})
+
+	t.Run("Stream delivers columns and can stop early", func(t *testing.T) {
+		q := "SELECT id FROM " + d.QualifiedName(ref("users")) + " ORDER BY id"
+		var cols []db.ColumnInfo
+		var rows [][]db.Value
+		err := conn.Stream(ctx, q,
+			func(c []db.ColumnInfo) { cols = c },
+			func(r []db.Value) error {
+				rows = append(rows, r)
+				return db.ErrStop
+			})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cols) != 1 || cols[0].Name != "id" || len(rows) != 1 || rows[0][0].Text != "1" {
+			t.Fatalf("cols=%v rows=%v", cols, rows)
+		}
+		if _, err := conn.Query(ctx, "SELECT 1"); err != nil {
+			t.Fatalf("conn unusable after an abandoned stream: %v", err)
+		}
+
+		cols = nil
+		err = conn.Stream(ctx, "SELECT id, name FROM "+d.QualifiedName(ref("users"))+" WHERE id < 0",
+			func(c []db.ColumnInfo) { cols = c },
+			func([]db.Value) error { return errors.New("no rows expected") })
+		if err != nil || len(cols) != 2 {
+			t.Fatalf("empty result: cols=%v err=%v", cols, err)
+		}
+	})
 }

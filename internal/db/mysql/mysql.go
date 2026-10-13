@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/hex"
+	"errors"
 	"net"
 	"net/url"
 	"strconv"
@@ -91,20 +92,41 @@ func (c *conn) Exec(ctx context.Context, query string, args ...any) (db.ExecResu
 	return db.ExecResult{RowsAffected: n}, err
 }
 
+type queryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
 func (c *conn) Query(ctx context.Context, query string, args ...any) (*db.ResultSet, error) {
-	rows, err := c.db.QueryContext(ctx, query, args...)
+	return db.Collect(func(onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
+		return stream(ctx, c.db, query, args, onColumns, onRow, func() {})
+	})
+}
+
+func (c *conn) Stream(ctx context.Context, query string, onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	return stream(ctx, c.db, query, nil, onColumns, onRow, cancel)
+}
+
+// stream reads rows as text. When onRow returns db.ErrStop, abandon is called
+// before the rows are closed so the rest of the result is not read.
+func stream(ctx context.Context, q queryer, query string, args []any,
+	onColumns func([]db.ColumnInfo), onRow func([]db.Value) error, abandon func(),
+) error {
+	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer func() { _ = rows.Close() }()
 	types, err := rows.ColumnTypes()
 	if err != nil {
-		return nil, err
+		return err
 	}
-	rs := &db.ResultSet{Columns: make([]db.ColumnInfo, len(types))}
+	cols := make([]db.ColumnInfo, len(types))
 	for i, ct := range types {
-		rs.Columns[i] = db.ColumnInfo{Name: ct.Name(), DatabaseType: ct.DatabaseTypeName()}
+		cols[i] = db.ColumnInfo{Name: ct.Name(), DatabaseType: ct.DatabaseTypeName()}
 	}
+	onColumns(cols)
 	dest := make([]sql.NullString, len(types))
 	ptrs := make([]any, len(types))
 	for i := range dest {
@@ -112,7 +134,7 @@ func (c *conn) Query(ctx context.Context, query string, args ...any) (*db.Result
 	}
 	for rows.Next() {
 		if err := rows.Scan(ptrs...); err != nil {
-			return nil, err
+			return err
 		}
 		row := make([]db.Value, len(dest))
 		for i, v := range dest {
@@ -122,9 +144,15 @@ func (c *conn) Query(ctx context.Context, query string, args ...any) (*db.Result
 				row[i] = db.Value{Null: true}
 			}
 		}
-		rs.Rows = append(rs.Rows, row)
+		if err := onRow(row); err != nil {
+			if errors.Is(err, db.ErrStop) {
+				abandon()
+				return nil
+			}
+			return err
+		}
 	}
-	return rs, rows.Err()
+	return rows.Err()
 }
 
 type dialect struct{}

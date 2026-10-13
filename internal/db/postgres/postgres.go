@@ -3,6 +3,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net"
 	"net/url"
@@ -75,25 +76,44 @@ func (c *conn) Exec(ctx context.Context, sql string, args ...any) (db.ExecResult
 	return db.ExecResult{RowsAffected: tag.RowsAffected()}, nil
 }
 
-// Query asks the server for text-format results so every value is shown
-// exactly as psql would print it.
+type pgxQuerier interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+}
+
 func (c *conn) Query(ctx context.Context, sql string, args ...any) (*db.ResultSet, error) {
-	rows, err := c.pool.Query(ctx, sql, append([]any{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)...)
+	return db.Collect(func(onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
+		return stream(ctx, c.pool, sql, args, onColumns, onRow)
+	})
+}
+
+func (c *conn) Stream(ctx context.Context, sql string, onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
+	return stream(ctx, c.pool, sql, nil, onColumns, onRow)
+}
+
+// stream asks the server for text-format results so every value is shown
+// exactly as psql would print it.
+func stream(ctx context.Context, q pgxQuerier, sql string, args []any,
+	onColumns func([]db.ColumnInfo), onRow func([]db.Value) error,
+) error {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	rows, err := q.Query(ctx, sql, append([]any{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)...)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	defer rows.Close()
 
 	typeMap := rows.Conn().TypeMap()
 	fields := rows.FieldDescriptions()
-	rs := &db.ResultSet{Columns: make([]db.ColumnInfo, len(fields))}
+	cols := make([]db.ColumnInfo, len(fields))
 	for i, f := range fields {
 		typ := fmt.Sprintf("oid:%d", f.DataTypeOID)
 		if t, ok := typeMap.TypeForOID(f.DataTypeOID); ok {
 			typ = t.Name
 		}
-		rs.Columns[i] = db.ColumnInfo{Name: f.Name, DatabaseType: typ}
+		cols[i] = db.ColumnInfo{Name: f.Name, DatabaseType: typ}
 	}
+	onColumns(cols)
 	for rows.Next() {
 		raw := rows.RawValues()
 		row := make([]db.Value, len(raw))
@@ -104,9 +124,15 @@ func (c *conn) Query(ctx context.Context, sql string, args ...any) (*db.ResultSe
 				row[i] = db.Value{Text: string(b)}
 			}
 		}
-		rs.Rows = append(rs.Rows, row)
+		if err := onRow(row); err != nil {
+			if errors.Is(err, db.ErrStop) {
+				cancel() // abandon the rest instead of reading it
+				return nil
+			}
+			return err
+		}
 	}
-	return rs, rows.Err()
+	return rows.Err()
 }
 
 type dialect struct{}
