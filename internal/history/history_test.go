@@ -1,6 +1,7 @@
 package history
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -104,5 +105,59 @@ func TestMemoryStore(t *testing.T) {
 	}
 	if got, _ := s.History("", 5); len(got) != 1 {
 		t.Fatalf("memory store: %v", got)
+	}
+}
+
+func TestRecentNewestFirstAndDeduplicated(t *testing.T) {
+	s, path := open(t)
+	base := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	users := Recent{Kind: RecentData, Conn: "local", Database: "app", Name: "users"}
+	console := Recent{Kind: RecentConsole, Conn: "local", Database: "app"}
+	structure := Recent{Kind: RecentStructure, Conn: "pg", Database: "app", Schema: "public", Name: "users"}
+	for i, r := range []Recent{users, console, structure, users} {
+		r.Time = base.Add(time.Duration(i) * time.Minute)
+		if err := s.AddRecent(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.Recent(10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 3 || got[0].Kind != RecentData || got[1].Kind != RecentStructure || got[2].Kind != RecentConsole {
+		t.Fatalf("order: %+v", got)
+	}
+	if !got[0].Time.Equal(base.Add(3*time.Minute)) || got[1].Schema != "public" || got[2].Name != "" {
+		t.Fatalf("fields: %+v", got)
+	}
+	if two, _ := s.Recent(2); len(two) != 2 {
+		t.Fatalf("limit: %d", len(two))
+	}
+	_ = s.Close()
+	s2, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s2.Close() }()
+	if again, _ := s2.Recent(10); len(again) != 3 {
+		t.Fatalf("kept across restarts: %+v", again)
+	}
+}
+
+func TestRecentIsPruned(t *testing.T) {
+	s, _ := open(t)
+	base := time.Date(2026, 10, 14, 9, 0, 0, 0, time.UTC)
+	for i := range maxRecent + 5 {
+		r := Recent{Kind: RecentData, Conn: "c", Database: "d", Name: fmt.Sprint(i), Time: base.Add(time.Duration(i) * time.Second)}
+		if err := s.AddRecent(r); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := s.Recent(1000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != maxRecent || got[0].Name != fmt.Sprint(maxRecent+4) || got[len(got)-1].Name != "5" {
+		t.Fatalf("kept %d, newest %q, oldest %q", len(got), got[0].Name, got[len(got)-1].Name)
 	}
 }

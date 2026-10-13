@@ -296,6 +296,7 @@ type fakeStore struct {
 	mu      sync.Mutex
 	entries []history.Entry
 	drafts  map[string]string
+	recents []history.Recent // oldest first
 }
 
 func newFakeStore() *fakeStore { return &fakeStore{drafts: map[string]string{}} }
@@ -444,4 +445,24 @@ func fakeCatalog() db.Catalog {
 		},
 		Routines: []db.Routine{{Namespace: app, Name: "add_one", Kind: db.RoutineFunction}},
 	}
+}
+
+func (s *fakeStore) AddRecent(r history.Recent) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.recents = slices.DeleteFunc(s.recents, func(o history.Recent) bool {
+		return o.Kind == r.Kind && o.Conn == r.Conn && o.Database == r.Database && o.Schema == r.Schema && o.Name == r.Name
+	})
+	s.recents = append(s.recents, r)
+	return nil
+}
+
+func (s *fakeStore) Recent(limit int) ([]history.Recent, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []history.Recent
+	for i := len(s.recents) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, s.recents[i])
+	}
+	return out, nil
 }
