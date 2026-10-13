@@ -42,6 +42,13 @@ const (
 
 type whichKeyMsg struct{ gen int }
 
+// quitConfirmedMsg and closeTabConfirmedMsg come from the open-transaction
+// confirmations.
+type (
+	quitConfirmedMsg     struct{}
+	closeTabConfirmedMsg struct{ tabID int }
+)
+
 // Model is the root Bubble Tea model.
 type Model struct {
 	backend  Backend
@@ -124,6 +131,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.passwordSubmitted(msg)
 	case overlay.CommandMsg:
 		return m, m.runCommand(msg.Text)
+	case quitConfirmedMsg:
+		return m, m.quit()
+	case closeTabConfirmedMsg:
+		for i, t := range m.tabs {
+			if t.ID() == msg.tabID {
+				return m, m.closeTab(i)
+			}
+		}
 	case openOverlayMsg:
 		m.overlay = msg.overlay
 	case tea.PasteMsg:
@@ -226,7 +241,12 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	}
 	switch a {
 	case keymap.Quit:
-		return m.quit()
+		return m.requestQuit(false)
+	case keymap.ToggleTx:
+		if c, ok := m.activeTab().(*consoleTab); ok {
+			return c.toggleTx()
+		}
+		m.setStatus("manual commit belongs to a console · <space>c opens one", true)
 	case keymap.Cancel:
 		if c, ok := m.activeTab().(canceler); ok && m.focus == focusTabs {
 			return c.cancelRun()
@@ -355,17 +375,113 @@ func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
 }
 
 func (m *Model) runCommand(text string) tea.Cmd {
-	switch cmd := strings.TrimSpace(text); cmd {
+	cmd := strings.TrimSpace(text)
+	if opt, ok := strings.CutPrefix(cmd, "set "); ok {
+		return m.setOption(strings.TrimSpace(opt))
+	}
+	switch cmd {
 	case "":
-	case "q", "q!", "close":
-		if len(m.tabs) == 0 {
-			return m.quit()
+	case "q", "close":
+		return m.requestClose(false)
+	case "q!":
+		return m.requestClose(true)
+	case "qa", "quit":
+		return m.requestQuit(false)
+	case "qa!":
+		return m.requestQuit(true)
+	case "commit", "rollback":
+		if c, ok := m.activeTab().(*consoleTab); ok {
+			return c.endTx(cmd == "commit")
 		}
-		return m.closeTab(m.active)
-	case "qa", "qa!", "quit":
-		return m.quit()
+		m.setStatus("no open transaction: the active tab is not a console", true)
 	default:
 		m.setStatus("unknown command: "+cmd, true)
+	}
+	return nil
+}
+
+// requestClose closes the active tab, asking first when it holds an open
+// transaction (unless force). With no tabs it quits, like vim.
+func (m *Model) requestClose(force bool) tea.Cmd {
+	t := m.activeTab()
+	if t == nil {
+		return m.requestQuit(force)
+	}
+	if c, ok := t.(*consoleTab); ok && c.openTx() && !force {
+		m.overlay = overlay.NewConfirm("Open transaction", []string{
+			c.Title() + " has an open transaction (" + c.TxStatus() + ").",
+			"Closing the console rolls it back.",
+		}, "", closeTabConfirmedMsg{tabID: t.ID()})
+		return nil
+	}
+	return m.closeTab(m.active)
+}
+
+// requestQuit quits, asking first when consoles hold open transactions
+// (unless force).
+func (m *Model) requestQuit(force bool) tea.Cmd {
+	if open := m.openTransactions(); len(open) > 0 && !force {
+		m.overlay = overlay.NewConfirm("Open transactions", []string{
+			"Uncommitted transactions in: " + strings.Join(open, ", ") + ".",
+			"Quitting rolls them back.",
+		}, "", quitConfirmedMsg{})
+		return nil
+	}
+	return m.quit()
+}
+
+// openTransactions names the consoles with an uncommitted transaction.
+func (m *Model) openTransactions() []string {
+	var out []string
+	for _, t := range m.tabs {
+		if c, ok := t.(*consoleTab); ok && c.openTx() {
+			out = append(out, c.Title())
+		}
+	}
+	return out
+}
+
+// setOption handles :set readonly / noreadonly for the connection in context.
+func (m *Model) setOption(opt string) tea.Cmd {
+	var ro bool
+	switch opt {
+	case "readonly", "ro":
+		ro = true
+	case "noreadonly", "noro":
+	default:
+		m.setStatus("unknown option: "+opt+" (readonly, noreadonly)", true)
+		return nil
+	}
+	cfg, ok := m.contextConfig()
+	if !ok {
+		m.setStatus("select a connection first", true)
+		return nil
+	}
+	if cfg.IsReadOnly() == ro {
+		state := "read-write"
+		if ro {
+			state = "read-only"
+		}
+		m.setStatus(cfg.Name+" is already "+state, false)
+		return nil
+	}
+	for _, t := range m.tabs {
+		if c, ok := t.(*consoleTab); ok && c.conn == cfg.Name && c.openTx() {
+			m.setStatus("a console on "+cfg.Name+" has an open transaction · :commit or :rollback first", true)
+			return nil
+		}
+	}
+	if err := m.backend.SetReadOnly(cfg.Name, ro); err != nil {
+		m.setStatus(err.Error(), true)
+		return nil
+	}
+	switch {
+	case ro:
+		m.setStatus(cfg.Name+" is read-only again", false)
+	case cfg.Env == config.EnvProd:
+		m.setStatus(cfg.Name+" is read-write for this session · writes still ask for confirmation", false)
+	default:
+		m.setStatus(cfg.Name+" is read-write for this session", false)
 	}
 	return nil
 }
@@ -740,6 +856,11 @@ func (m *Model) renderStatus() string {
 	}
 	if ok && cfg.IsReadOnly() {
 		parts = append(parts, theme.Muted.Render("RO"))
+	}
+	if c, ok := m.activeTab().(*consoleTab); ok {
+		if tx := c.TxStatus(); tx != "" {
+			parts = append(parts, theme.Accent.Render(tx))
+		}
 	}
 	if len(m.pending) > 0 {
 		parts = append(parts, m.keys.Display(m.pending))

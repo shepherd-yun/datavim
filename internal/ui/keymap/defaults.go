@@ -20,6 +20,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(LeaderToken, "c"), OpenConsole, "Open console"},
 		{Global, keys(LeaderToken, "n"), NewConnection, "New connection"},
 		{Global, keys(LeaderToken, "h"), History, "SQL history"},
+		{Global, keys(LeaderToken, "t"), ToggleTx, "Toggle manual commit"},
 	}
 	for _, c := range []struct{ key, format, desc string }{
 		{"t", "tsv", "Copy as TSV"},
