@@ -706,7 +706,9 @@ func (m *Model) renderTabs(width, height int) string {
 		return theme.Box("sqlvim", welcome, width, height, false)
 	}
 	focused := m.focus == focusTabs
-	return theme.Box(m.tabBar(), t.View(focused), width, height, focused)
+	conn, _ := t.Target()
+	cfg, _ := m.backend.Connection(conn)
+	return theme.Frame(m.tabBar(), t.View(focused), width, height, focused, cfg.Env == config.EnvProd)
 }
 
 func (m *Model) tabBar() string {
@@ -726,7 +728,19 @@ func (m *Model) renderStatus() string {
 	if m.cmdline != nil {
 		return textutil.Fit(m.cmdline.View(m.width, 1), m.width)
 	}
-	parts := []string{theme.Mode.Render(" " + m.mode() + " ")}
+	cfg, ok := m.contextConfig()
+	prod := ok && cfg.Env == config.EnvProd
+	mode := theme.Mode
+	if prod {
+		mode = theme.ProdMode
+	}
+	parts := []string{mode.Render(" " + m.mode() + " ")}
+	if prod {
+		parts = append(parts, theme.Prod.Render("[PROD]"))
+	}
+	if ok && cfg.IsReadOnly() {
+		parts = append(parts, theme.Muted.Render("RO"))
+	}
 	if len(m.pending) > 0 {
 		parts = append(parts, m.keys.Display(m.pending))
 	}
@@ -747,6 +761,15 @@ func (m *Model) renderStatus() string {
 		return textutil.Fit(left, m.width)
 	}
 	return left + strings.Repeat(" ", gap) + right
+}
+
+// contextConfig is the configuration of the connection the user is looking at.
+func (m *Model) contextConfig() (config.Connection, bool) {
+	conn, _ := m.contextNamespace()
+	if conn == "" {
+		return config.Connection{}, false
+	}
+	return m.backend.Connection(conn)
 }
 
 func (m *Model) location() string {
