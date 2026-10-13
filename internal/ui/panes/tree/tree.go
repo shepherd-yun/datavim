@@ -194,6 +194,48 @@ func (m *Model) AddRoot(n *Node) {
 	m.selected = n
 }
 
+// ReplaceRoot swaps the connection conn for n (an edited connection),
+// keeping its place; the cursor moves to n if it was anywhere under conn.
+func (m *Model) ReplaceRoot(conn string, n *Node) {
+	for i, r := range m.roots {
+		if r.Conn == conn {
+			if m.under(r) {
+				m.selected = n
+			}
+			m.roots[i] = n
+		}
+	}
+}
+
+// RemoveRoot drops the connection conn; the cursor moves to the root that
+// takes its place.
+func (m *Model) RemoveRoot(conn string) {
+	for i, r := range m.roots {
+		if r.Conn != conn {
+			continue
+		}
+		sel := m.under(r)
+		m.roots = append(m.roots[:i], m.roots[i+1:]...)
+		if sel {
+			m.selected = nil
+			if len(m.roots) > 0 {
+				m.selected = m.roots[min(i, len(m.roots)-1)]
+			}
+		}
+		return
+	}
+}
+
+// under reports whether the selection is root or one of its descendants.
+func (m *Model) under(root *Node) bool {
+	for n := m.selected; n != nil; n = n.parent {
+		if n == root {
+			return true
+		}
+	}
+	return false
+}
+
 // SetBroken marks the root of conn as disconnected (or clears the mark).
 func (m *Model) SetBroken(conn string, broken bool) {
 	for _, r := range m.roots {

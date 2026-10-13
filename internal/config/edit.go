@@ -27,10 +27,10 @@ func UpdateConnection(dir, name string, c Connection) (Connection, error) {
 	}
 	idx := -1
 	for i, b := range blocks {
-		switch {
-		case b.conn.Name == name:
+		switch b.conn.Name {
+		case name:
 			idx = i
-		case b.conn.Name == c.Name:
+		case c.Name:
 			return c, fmt.Errorf("connection %q already exists", c.Name)
 		}
 	}
@@ -105,8 +105,11 @@ func readBlocks(path string) ([]string, []block, error) {
 			end--
 		}
 		var cf connectionsFile
-		if err := toml.Unmarshal([]byte(strings.Join(lines[i:end], "\n")), &cf); err != nil || len(cf.Connections) != 1 {
-			return nil, nil, fmt.Errorf("%s:%d: cannot read this [[connection]] block: %v", path, i+1, err)
+		if err := toml.Unmarshal([]byte(strings.Join(lines[i:end], "\n")), &cf); err != nil {
+			return nil, nil, fmt.Errorf("%s:%d: cannot read this [[connection]] block: %w", path, i+1, err)
+		}
+		if len(cf.Connections) != 1 {
+			return nil, nil, fmt.Errorf("%s:%d: cannot read this [[connection]] block", path, i+1)
 		}
 		c, err := Normalize(cf.Connections[0])
 		if err != nil {
@@ -141,7 +144,7 @@ func editBlock(body []string, old, c Connection) ([]string, error) {
 			continue
 		}
 		line := ""
-		if !(f.optional && f.new == "") {
+		if !f.optional || f.new != "" {
 			enc, err := toml.Marshal(map[string]any{f.key: f.new})
 			if err != nil {
 				return nil, err

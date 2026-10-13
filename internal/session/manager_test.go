@@ -511,3 +511,21 @@ func TestPersistFailureChangesNothing(t *testing.T) {
 		t.Fatal("nothing changed")
 	}
 }
+
+type brokenKeychain struct{ fakeSecrets }
+
+func (brokenKeychain) Delete(string) error { return errors.New("keychain locked") }
+
+func TestKeychainFailureAfterSavingIsMarked(t *testing.T) {
+	sec := &brokenKeychain{fakeSecrets{m: map[string]string{}}}
+	m := NewManager([]config.Connection{{Name: "local", Driver: "postgres"}}, sec, &fakeDriver{name: "postgres"})
+	err := m.RemoveConnection("local")
+	if !errors.Is(err, ErrKeychain) || len(m.Connections()) != 0 {
+		t.Fatalf("err = %v, connections = %v", err, m.Connections())
+	}
+	m.PersistRemove = func(string) error { return errors.New("disk full") }
+	m.conns = []config.Connection{{Name: "x", Driver: "postgres"}}
+	if err := m.RemoveConnection("x"); errors.Is(err, ErrKeychain) {
+		t.Fatal("a failure to save is not a keychain failure")
+	}
+}

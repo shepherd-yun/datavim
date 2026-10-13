@@ -324,8 +324,10 @@ func TestUpdateConnectionTouchesOnlyItsBlock(t *testing.T) {
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, "connections.toml"))
 	got := string(data)
-	for _, keep := range []string{"# my connections", `name = "local"   # the laptop`, "# production, careful",
-		"readonly = true", `params   = { sslmode = "require" }`, "user     = 'app'", `name = "last"`} {
+	for _, keep := range []string{
+		"# my connections", `name = "local"   # the laptop`, "# production, careful",
+		"readonly = true", `params   = { sslmode = "require" }`, "user     = 'app'", `name = "last"`,
+	} {
 		if !strings.Contains(got, keep) {
 			t.Errorf("lost %q:\n%s", keep, got)
 		}

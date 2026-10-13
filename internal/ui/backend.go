@@ -20,6 +20,11 @@ type Backend interface {
 	// AddConnection saves a new connection to connections.toml (and its
 	// password to the keychain when save is set).
 	AddConnection(c config.Connection, password string, save bool) error
+	// UpdateConnection rewrites the connection called old in
+	// connections.toml; an empty password keeps the current one.
+	UpdateConnection(old string, c config.Connection, password string, save bool) error
+	// RemoveConnection deletes a connection and its saved password.
+	RemoveConnection(name string) error
 	// SetReadOnly switches a connection between read-only and read-write
 	// for this run only.
 	SetReadOnly(name string, ro bool) error

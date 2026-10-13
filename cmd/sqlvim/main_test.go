@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/zalando/go-keyring"
+
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
 )
@@ -63,5 +65,30 @@ func TestNewManagerUsesTunnels(t *testing.T) {
 func TestLocalUser(t *testing.T) {
 	if localUser() == "" {
 		t.Fatal("the default ssh user is the local user")
+	}
+}
+
+func TestNewManagerPersistsEditsAndRemovals(t *testing.T) {
+	keyring.MockInit() // never touch the real keychain
+	dir := t.TempDir()
+	mgr := newManager(&config.Config{}, dir, nil)
+	if err := mgr.AddConnection(config.Connection{Name: "sqlvim-test-a", Driver: "mysql"}, "", false); err != nil {
+		t.Fatal(err)
+	}
+	if err := mgr.UpdateConnection("sqlvim-test-a", config.Connection{Name: "sqlvim-test-b", Driver: "postgres"}, "", false); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Connections) != 1 || cfg.Connections[0].Name != "sqlvim-test-b" || cfg.Connections[0].Driver != "postgres" {
+		t.Fatalf("connections = %+v", cfg.Connections)
+	}
+	if err := mgr.RemoveConnection("sqlvim-test-b"); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := config.Load(dir); len(cfg.Connections) != 0 {
+		t.Fatalf("connections = %+v", cfg.Connections)
 	}
 }

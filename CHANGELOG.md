@@ -4,6 +4,19 @@ All notable changes to this project are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Edit (`e`) and delete (`dd`) connections from the tree. Only the connection's own block
+  in `connections.toml` is rewritten, keeping comments, `params` and `readonly`; a saved
+  password follows a rename and is removed with the connection.
+- Pasting (Cmd+V / bracketed paste) into the connection form, password and passphrase
+  prompts, confirmations, the history filter and the `:` command line.
+
+### Fixed
+- `:set noreadonly` / `:set readonly` no longer freeze the UI on PostgreSQL while a console
+  holds a session.
+
 ## [0.3.0] - 2026-10-13
 
 ### Added
