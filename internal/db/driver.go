@@ -28,10 +28,22 @@ type Driver interface {
 	Open(ctx context.Context, cfg ConnConfig) (Conn, error)
 }
 
-// Conn is an open, pooled connection. It is safe for concurrent use.
-type Conn interface {
+// ErrStop, returned by a Stream row callback, abandons the rest of the result.
+var ErrStop = errors.New("stop streaming")
+
+// Querier runs SQL. Conn and Session both implement it.
+type Querier interface {
 	Query(ctx context.Context, sql string, args ...any) (*ResultSet, error)
 	Exec(ctx context.Context, sql string, args ...any) (ExecResult, error)
+	// Stream runs a query, calling onColumns once (even for an empty result)
+	// and onRow for each row. If onRow returns ErrStop the rest of the result
+	// is abandoned and Stream returns nil.
+	Stream(ctx context.Context, sql string, onColumns func([]ColumnInfo), onRow func([]Value) error) error
+}
+
+// Conn is an open, pooled connection. It is safe for concurrent use.
+type Conn interface {
+	Querier
 	Meta() MetaReader
 	Dialect() Dialect
 	Close() error

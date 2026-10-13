@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -28,6 +29,23 @@ func (c *fakeConn) Query(_ context.Context, q string, _ ...any) (*db.ResultSet, 
 		rs.Rows = append(rs.Rows, []db.Value{{Text: strconv.Itoa(i + 1)}, {Text: fmt.Sprintf("user%d", i+1)}})
 	}
 	return rs, nil
+}
+
+func (c *fakeConn) Stream(ctx context.Context, q string, onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
+	rs, err := c.Query(ctx, q)
+	if err != nil {
+		return err
+	}
+	onColumns(rs.Columns)
+	for _, r := range rs.Rows {
+		if err := onRow(r); err != nil {
+			if errors.Is(err, db.ErrStop) {
+				return nil
+			}
+			return err
+		}
+	}
+	return nil
 }
 
 func (c *fakeConn) lastQuery() string {
