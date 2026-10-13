@@ -473,9 +473,9 @@ func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
 	node, tabID := m.retryNode, m.retryTab
 	m.retryNode, m.retryTab = nil, 0
 	retry := m.retryFailedMeta(msg.Conn)
-	if t := m.tabByID(tabID); t != nil {
-		if conn, _ := t.Target(); conn == msg.Conn {
-			return tea.Batch(retry, t.Handle(keymap.Refresh))
+	if t, ok := m.tabByID(tabID).(passwordRetrier); ok {
+		if conn, _ := m.tabByID(tabID).Target(); conn == msg.Conn {
+			return tea.Batch(retry, t.retryAfterPassword())
 		}
 	}
 	if node == nil || node.Conn != msg.Conn {
@@ -486,9 +486,9 @@ func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
 	return tea.Batch(retry, loadChildren(m.backend, node))
 }
 
-// askPassword opens the password prompt when a data or structure tab could
-// not load for want of one; the tab reloads once it is entered. (The tree
-// asks in childrenLoaded; consoles say how to enter one.)
+// askPassword opens the password prompt when a tab could not load or run
+// for want of one; the tab tries again once it is entered. (The tree asks
+// in childrenLoaded.)
 func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 	if !errors.Is(err, session.ErrPasswordRequired) || m.overlay != nil {
 		return
@@ -497,6 +497,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 	case pageLoadedMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case structureLoadedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
+	case runDoneMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	default:
 		return

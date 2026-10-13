@@ -407,3 +407,12 @@ func (t *structureTab) View(bool) string {
 	}
 	return t.view.View()
 }
+
+// passwordRetrier is a tab that failed for want of a password and can try
+// again once it is entered.
+type passwordRetrier interface {
+	retryAfterPassword() tea.Cmd
+}
+
+func (t *dataTab) retryAfterPassword() tea.Cmd      { return t.Handle(keymap.Refresh) }
+func (t *structureTab) retryAfterPassword() tea.Cmd { return t.Handle(keymap.Refresh) }

@@ -124,7 +124,8 @@ type consoleTab struct {
 	pending   []sqlx.Statement // waiting for confirmation
 	last      *runner.Result   // the result set on screen
 	lastLimit int
-	runText   string // editor text of the run being started; "" for COMMIT, ROLLBACK and load-more
+	runText   string      // editor text of the run being started; "" for COMMIT, ROLLBACK and load-more
+	attempt   *runAttempt // the latest run, kept to retry it once a password is entered
 	status    string
 	statusErr bool
 
@@ -434,6 +435,7 @@ func (t *consoleTab) run(stmts []sqlx.Statement) tea.Cmd {
 }
 
 func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.Cmd {
+	t.attempt = &runAttempt{stmts: stmts, limit: limit, more: more, text: t.runText}
 	began := false
 	if t.manualTx && !t.inTx && sqlx.TransactionEffect(stmts[0].Text, t.dialect) == sqlx.TxNone {
 		stmts = append([]sqlx.Statement{{Text: beginSQL(t.dialect), Start: -1, End: -1}}, stmts...)
@@ -585,7 +587,7 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 	if m.err != nil {
 		text := m.err.Error()
 		if errors.Is(m.err, session.ErrPasswordRequired) {
-			text = "password required: select " + t.conn + " in the tree and press p"
+			text = "password required for " + t.conn
 		}
 		t.log("✗ " + text)
 		t.setStatus(text, true)
@@ -928,4 +930,23 @@ func (t *consoleTab) locateError(text string, r runner.Result) string {
 	line := strings.Count(before, "\n") + 1
 	col := utf8.RuneCountInString(before[strings.LastIndexByte(before, '\n')+1:]) + 1
 	return fmt.Sprintf("line %d, col %d: %s", line, col, msg)
+}
+
+// runAttempt is what execute was asked to run.
+type runAttempt struct {
+	stmts []sqlx.Statement
+	limit int
+	more  bool
+	text  string
+}
+
+// retryAfterPassword runs the latest attempt again; the root model calls it
+// once the password whose absence made it fail is entered.
+func (t *consoleTab) retryAfterPassword() tea.Cmd {
+	a := t.attempt
+	if a == nil || t.running {
+		return nil
+	}
+	t.runText = a.text
+	return t.execute(a.stmts, a.limit, a.more)
 }
