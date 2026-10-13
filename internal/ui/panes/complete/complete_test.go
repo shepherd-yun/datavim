@@ -18,8 +18,11 @@ func labels(cs []Candidate) []string {
 
 func TestRank(t *testing.T) {
 	cands := []Candidate{
-		{Label: "name", Kind: Column}, {Label: "nickname", Kind: Column}, {Label: "users", Kind: Table},
-		{Label: "NOT", Kind: Keyword}, {Label: "NULL", Kind: Keyword},
+		{Label: "name", Kind: Column},
+		{Label: "nickname", Kind: Column},
+		{Label: "users", Kind: Table},
+		{Label: "NOT", Kind: Keyword},
+		{Label: "NULL", Kind: Keyword},
 	}
 	if got := strings.Join(labels(Rank("n", cands, 10)), ","); got != "name,nickname,NOT,NULL" {
 		t.Errorf("prefix matches keep their order: %s", got)
