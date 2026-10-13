@@ -31,6 +31,7 @@ type Node struct {
 	Loaded   bool
 	Loading  bool
 	Err      string
+	Broken   bool // the connection was lost and reconnecting failed
 	Children []*Node
 
 	parent *Node
@@ -179,9 +180,50 @@ func (m *Model) SetChildren(n *Node, children []*Node, err error) {
 func (m *Model) ResetConn(conn string) {
 	for _, r := range m.roots {
 		if r.Conn == conn {
-			r.Children, r.Loaded, r.Expanded, r.Loading, r.Err = nil, false, false, false, ""
+			r.Children, r.Loaded, r.Expanded, r.Loading, r.Err, r.Broken = nil, false, false, false, "", false
 		}
 	}
+}
+
+// Empty reports whether there are no connections.
+func (m *Model) Empty() bool { return len(m.roots) == 0 }
+
+// AddRoot appends a connection and selects it.
+func (m *Model) AddRoot(n *Node) {
+	m.roots = append(m.roots, n)
+	m.selected = n
+}
+
+// SetBroken marks the root of conn as disconnected (or clears the mark).
+func (m *Model) SetBroken(conn string, broken bool) {
+	for _, r := range m.roots {
+		if r.Conn == conn {
+			r.Broken = broken
+		}
+	}
+}
+
+// Find selects the next visible node (wrapping; backwards when forward is
+// false) whose name contains q, ignoring case.
+func (m *Model) Find(q string, forward bool) bool {
+	rows := m.visible()
+	if q == "" || len(rows) == 0 {
+		return false
+	}
+	q = strings.ToLower(q)
+	step := 1
+	if !forward {
+		step = -1
+	}
+	cur := m.cursor(rows)
+	for i := 1; i <= len(rows); i++ {
+		k := ((cur+step*i)%len(rows) + len(rows)) % len(rows)
+		if strings.Contains(strings.ToLower(rows[k].node.Name), q) {
+			m.selected = rows[k].node
+			return true
+		}
+	}
+	return false
 }
 
 // View renders the visible window of the tree.
@@ -216,6 +258,9 @@ func (m *Model) View(width int, focused bool) string {
 		}
 		if n.Loading {
 			label += " " + theme.Muted.Render("loading…")
+		}
+		if n.Broken {
+			label += " " + theme.Error.Render("✗ disconnected · enter to retry")
 		}
 		if n.Err != "" {
 			label += " " + theme.Error.Render("✗ "+textutil.Sanitize(n.Err))
