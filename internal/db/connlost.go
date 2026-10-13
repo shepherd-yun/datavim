@@ -19,9 +19,11 @@ func IsConnLost(err error) bool {
 	if err == nil || errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 		return false
 	}
-	var ne net.Error
+	// Only errors from the network layer count: matching any net.Error would
+	// also match syscall.Errno, i.e. every local file-system error.
+	var oe *net.OpError
 	return errors.Is(err, ErrConnLost) || errors.Is(err, driver.ErrBadConn) ||
 		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, net.ErrClosed) || errors.Is(err, syscall.ECONNRESET) ||
-		errors.Is(err, syscall.EPIPE) || errors.As(err, &ne)
+		errors.Is(err, syscall.EPIPE) || errors.As(err, &oe)
 }
