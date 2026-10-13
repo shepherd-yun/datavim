@@ -1,0 +1,29 @@
+# Copy to ~/.config/sqlvim/connections.toml
+# Passwords are NOT stored here: sqlvim asks on first connect and can save
+# them to the macOS Keychain (service "sqlvim", account = connection name).
+# SQLVIM_PASSWORD_<NAME> (e.g. SQLVIM_PASSWORD_LOCAL_MYSQL) overrides the keychain.
+
+[[connection]]
+name     = "local-mysql"
+driver   = "mysql"
+host     = "127.0.0.1"
+port     = 3306
+user     = "root"
+database = "app"
+
+[[connection]]
+name     = "local-pg"
+driver   = "postgres"
+host     = "127.0.0.1"
+port     = 5432
+user     = "postgres"
+database = "app"
+params   = { sslmode = "disable" }
+
+[[connection]]
+name     = "prod-pg"
+driver   = "postgres"
+host     = "10.0.1.5"
+user     = "readonly"
+database = "app"
+env      = "prod"          # marked [PROD]; read-only by default
