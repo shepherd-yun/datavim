@@ -7,6 +7,7 @@ import (
 
 // exec runs a NORMAL-mode command.
 func (e *Editor) exec(c cmd) {
+	changed := e.buf.version
 	switch {
 	case c.op == "" && c.motion != "":
 		e.move(c)
@@ -14,6 +15,15 @@ func (e *Editor) exec(c cmd) {
 		e.operate(c)
 	default:
 		e.run(c)
+	}
+	if !e.replay && isChange(c.op) {
+		ch := &change{cmd: c}
+		switch {
+		case e.mode == Insert:
+			e.rec = ch
+		case e.buf.version != changed || c.reg == '+':
+			e.dot = ch
+		}
 	}
 	if e.mode != Insert {
 		e.hist.commit()
@@ -354,6 +364,8 @@ func (e *Editor) run(c cmd) {
 			}
 			e.cur = p
 		}
+	case ".":
+		e.repeat(c)
 	case "ctrl+d", "ctrl+u":
 		dir := "j"
 		if c.op == "ctrl+u" {
