@@ -100,3 +100,56 @@ func classOf(t chroma.TokenType) Class {
 	}
 	return Plain
 }
+
+// Highlighter highlights a growing, changing text such as the console
+// editor's. It splits the text into statements and the gaps between them
+// and keeps the spans of each piece, so an edit re-highlights only the
+// piece it touches. Use it from one goroutine.
+type Highlighter struct {
+	d      sqlx.Dialect
+	cache  map[string][]Span // piece text -> spans relative to the piece
+	misses int               // pieces highlighted (for tests)
+}
+
+// NewHighlighter returns an empty highlighter for d.
+func NewHighlighter(d sqlx.Dialect) *Highlighter {
+	return &Highlighter{d: d, cache: map[string][]Span{}}
+}
+
+// Spans classifies src like SQL does.
+func (h *Highlighter) Spans(src string) []Span {
+	if src == "" {
+		return nil
+	}
+	var bounds []int
+	for _, st := range sqlx.Split(src, h.d) {
+		bounds = append(bounds, st.Start, st.End)
+	}
+	bounds = append(bounds, len(src))
+	next := make(map[string][]Span, len(bounds))
+	var out []Span
+	at := 0
+	for _, b := range bounds {
+		if b <= at {
+			continue
+		}
+		piece := src[at:b]
+		spans, ok := h.cache[piece]
+		if !ok {
+			spans = SQL(piece, h.d)
+			h.misses++
+		}
+		next[piece] = spans
+		for _, s := range spans {
+			s.Start, s.End = s.Start+at, s.End+at
+			if n := len(out); n > 0 && out[n-1].Class == s.Class && out[n-1].End == s.Start {
+				out[n-1].End = s.End
+			} else {
+				out = append(out, s)
+			}
+		}
+		at = b
+	}
+	h.cache = next
+	return out
+}

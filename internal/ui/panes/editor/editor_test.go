@@ -234,3 +234,33 @@ func TestCursorAPI(t *testing.T) {
 		t.Fatalf("replace: %q at %d", m.Value(), m.Offset())
 	}
 }
+
+func TestTypingEditsKeepTheCursor(t *testing.T) {
+	m := New()
+	m.SetSize(40, 5)
+	m.EnterInsert()
+	typeText(m, "ab")
+	m.Update(uitest.Key("enter"))
+	typeText(m, "李c")
+	if m.Value() != "ab\n李c" || m.Offset() != len("ab\n李c") {
+		t.Fatalf("typed %q at %d", m.Value(), m.Offset())
+	}
+	m.Update(uitest.Key("backspace"))
+	m.Update(uitest.Key("backspace"))
+	if m.Value() != "ab\n" || m.Offset() != 3 {
+		t.Fatalf("backspace over a wide rune: %q at %d", m.Value(), m.Offset())
+	}
+	m.Update(uitest.Key("backspace")) // joins the lines
+	if m.Value() != "ab" || m.Offset() != 2 {
+		t.Fatalf("backspace at a line start: %q at %d", m.Value(), m.Offset())
+	}
+	m.Top()
+	m.Update(uitest.Key("backspace"))
+	if m.Value() != "ab" || m.Offset() != 0 {
+		t.Fatalf("backspace at the start does nothing: %q", m.Value())
+	}
+	m.Update(tea.PasteMsg{Content: "x\ny"})
+	if m.Value() != "x\nyab" || m.Offset() != 3 {
+		t.Fatalf("paste: %q at %d", m.Value(), m.Offset())
+	}
+}

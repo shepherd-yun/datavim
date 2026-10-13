@@ -76,6 +76,9 @@ func (m *Model) Update(msg tea.Msg) tea.Cmd {
 	if !m.insert {
 		return nil
 	}
+	if m.fastEdit(msg) {
+		return nil
+	}
 	var cmd tea.Cmd
 	m.ta, cmd = m.ta.Update(msg)
 	return cmd
@@ -127,23 +130,20 @@ func (m *Model) Cursor() (line, col int) { return m.ta.Line(), m.ta.Column() }
 
 // SetCursor moves the cursor to line and column (in runes), clamped.
 func (m *Model) SetCursor(line, col int) {
-	line = textutil.Clamp(line, 0, m.ta.LineCount()-1)
-	m.ta.MoveToBegin()
-	// CursorDown moves by screen row, so a line the textarea wraps takes
-	// several steps.
-	for i := 0; m.ta.Line() < line && i < 1<<20; i++ {
-		m.ta.CursorDown()
+	lines := strings.Split(m.ta.Value(), "\n")
+	line = textutil.Clamp(line, 0, len(lines)-1)
+	off := 0
+	for _, l := range lines[:line] {
+		off += len(l) + 1
 	}
-	m.ta.SetCursorColumn(col)
+	r := []rune(lines[line])
+	m.SetCursorOffset(off + len(string(r[:textutil.Clamp(col, 0, len(r))])))
 }
 
 // SetCursorOffset moves the cursor to a byte offset into Value().
 func (m *Model) SetCursorOffset(off int) {
 	v := m.ta.Value()
-	before := v[:textutil.Clamp(off, 0, len(v))]
-	line := strings.Count(before, "\n")
-	col := utf8.RuneCountInString(before[strings.LastIndexByte(before, '\n')+1:])
-	m.SetCursor(line, col)
+	m.setValueAt(v, textutil.Clamp(off, 0, len(v)))
 }
 
 // ReplaceBeforeCursor replaces the text from byte offset start to the
@@ -151,10 +151,53 @@ func (m *Model) SetCursorOffset(off int) {
 func (m *Model) ReplaceBeforeCursor(start int, s string) {
 	v, cur := m.ta.Value(), m.Offset()
 	start = textutil.Clamp(start, 0, cur)
-	m.ta.SetValue(v[:start] + s + v[cur:])
-	m.SetCursorOffset(start + len(s))
+	m.setValueAt(v[:start]+s+v[cur:], start+len(s))
+}
+
+// setValueAt replaces the text with v and puts the cursor at byte offset
+// off (on a rune boundary). The textarea moves the cursor by one screen row
+// at a time, each step costing time linear in the text; setting the text
+// after the cursor and then inserting the text before it at the start
+// leaves the cursor in place in linear time.
+func (m *Model) setValueAt(v string, off int) {
+	for off > 0 && off < len(v) && !utf8.RuneStart(v[off]) {
+		off--
+	}
+	m.ta.SetValue(v[off:])
+	m.ta.MoveToBegin()
+	m.ta.InsertString(v[:off])
 }
 
 // CursorPos is where the last View drew the cursor, relative to the
 // editor's top-left corner (line numbers included).
 func (m *Model) CursorPos() (x, y int) { return m.curX, m.curY }
+
+// fastEdit applies typing, enter, backspace and pastes directly. The
+// textarea's own Update renders the whole text on every call, which is
+// slow for long consoles and unused here (View draws the editor).
+func (m *Model) fastEdit(msg tea.Msg) bool {
+	if m.ta.HasSelection() {
+		return false
+	}
+	switch msg := msg.(type) {
+	case tea.PasteMsg:
+		m.ta.InsertString(msg.Content)
+		return true
+	case tea.KeyPressMsg:
+		switch k := msg.Key(); {
+		case msg.String() == "enter":
+			m.ta.InsertString("\n")
+		case msg.String() == "backspace":
+			if off := m.Offset(); off > 0 {
+				_, size := utf8.DecodeLastRuneInString(m.ta.Value()[:off])
+				m.ReplaceBeforeCursor(off-size, "")
+			}
+		case k.Text != "" && k.Mod&^tea.ModShift == 0:
+			m.ta.InsertString(k.Text)
+		default:
+			return false
+		}
+		return true
+	}
+	return false
+}

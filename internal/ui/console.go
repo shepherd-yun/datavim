@@ -141,7 +141,7 @@ func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn strin
 		catalogs: catalogs, metaKey: key, defNS: defaultNamespace(cfg, key, ns),
 		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth),
 	}
-	t.editor.SetHighlighter(func(src string) []highlight.Span { return highlight.SQL(src, d) })
+	t.editor.SetHighlighter(highlight.NewHighlighter(d).Spans)
 	return t
 }
 
