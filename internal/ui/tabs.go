@@ -91,25 +91,30 @@ type dataTab struct {
 	pageSize int
 	grid     *grid.Model
 
-	page       int
-	hasMore    bool
-	loading    bool
-	err        string
-	status     string // what the last key did; cleared by the next one
-	statusErr  bool
-	query      tableQuery
-	known      bool        // meta (key, columns) has been read
-	cols       []db.Column // the table's columns, for types in the cell editor
-	key        edit.Key    // how rows are located
-	table      *edit.Table // the page with its staged changes
-	height     int
-	wantColumn string // column to put the cursor on once data is shown
+	page        int
+	hasMore     bool
+	loading     bool
+	err         string
+	status      string // what the last key did; cleared by the next one
+	statusErr   bool
+	query       tableQuery
+	known       bool        // meta (key, columns) has been read
+	cols        []db.Column // the table's columns, for types in the cell editor
+	key         edit.Key    // how rows are located
+	table       *edit.Table // the page with its staged changes
+	store       Store
+	submitting  bool     // a submit is running
+	gen         int      // tells the current preview from stale ones
+	pendingSQL  []string // the previewed statements, until confirmed
+	retrySubmit bool     // the last submit wanted a password
+	height      int
+	wantColumn  string // column to put the cursor on once data is shown
 }
 
-func newDataTab(id int, b Backend, conn string, ref db.TableRef, s config.Settings) *dataTab {
+func newDataTab(id int, b Backend, st Store, conn string, ref db.TableRef, s config.Settings) *dataTab {
 	cfg, _ := b.Connection(conn)
 	t := &dataTab{
-		id: id, backend: b, conn: conn, ref: ref, dialect: sqlx.DialectOf(cfg.Driver), pageSize: s.PageSize,
+		id: id, backend: b, store: st, conn: conn, ref: ref, dialect: sqlx.DialectOf(cfg.Driver), pageSize: s.PageSize,
 		grid: grid.New(nil, s.MaxColumnWidth),
 	}
 	t.grid.SetMarks(t.mark)
@@ -235,6 +240,14 @@ func (t *dataTab) Update(msg tea.Msg) tea.Cmd {
 		t.pageLoaded(m)
 	case cellEditedMsg:
 		t.cellEdited(m)
+	case submitConfirmedMsg:
+		if m.gen == t.gen && t.pendingSQL != nil && !t.submitting {
+			stmts := t.pendingSQL
+			t.pendingSQL = nil
+			return t.apply(stmts)
+		}
+	case editsAppliedMsg:
+		return t.applied(m)
 	case filterMsg:
 		where := strings.TrimSpace(strings.TrimRight(strings.TrimSpace(m.text), ";"))
 		return t.applyQuery(func(q *tableQuery) { q.where = where })
@@ -382,6 +395,8 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 		t.undoEdit()
 	case keymap.UndoAllEdits:
 		t.undoAll()
+	case keymap.SubmitEdits:
+		return t.submit()
 
 	}
 	return nil
@@ -586,5 +601,12 @@ type passwordRetrier interface {
 	retryAfterPassword() tea.Cmd
 }
 
-func (t *dataTab) retryAfterPassword() tea.Cmd      { return t.Handle(keymap.Refresh) }
+func (t *dataTab) retryAfterPassword() tea.Cmd {
+	if t.retrySubmit {
+		t.retrySubmit = false
+		return t.submit()
+	}
+	return t.Handle(keymap.Refresh)
+}
+
 func (t *structureTab) retryAfterPassword() tea.Cmd { return t.Handle(keymap.Refresh) }
