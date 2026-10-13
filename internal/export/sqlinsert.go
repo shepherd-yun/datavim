@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
 type insertWriter struct {
@@ -24,12 +25,7 @@ func newInsert(w io.Writer, o Options) *insertWriter {
 	return &insertWriter{w: bufio.NewWriter(w), driver: o.Driver, table: table}
 }
 
-func (i *insertWriter) ident(s string) string {
-	if i.driver == "postgres" {
-		return db.Quote(s, '"')
-	}
-	return db.Quote(s, '`')
-}
+func (i *insertWriter) ident(s string) string { return sqlx.QuoteIdent(sqlx.DialectOf(i.driver), s) }
 
 func (i *insertWriter) WriteHeader(cols []db.ColumnInfo) error {
 	i.cols = cols
@@ -55,19 +51,7 @@ func (i *insertWriter) WriteRow(row []db.Value) error {
 }
 
 func (i *insertWriter) literal(c db.ColumnInfo, v db.Value) string {
-	switch {
-	case v.Null:
-		return "NULL"
-	case isNumericType(c.DatabaseType) && isNumber(v.Text):
-		return v.Text
-	case i.driver == "mysql" && isBinaryType(c.DatabaseType) && strings.HasPrefix(v.Text, "0x"):
-		return v.Text
-	}
-	s := v.Text
-	if i.driver == "mysql" {
-		s = strings.ReplaceAll(s, `\`, `\\`)
-	}
-	return "'" + strings.ReplaceAll(s, "'", "''") + "'"
+	return sqlx.Literal(sqlx.DialectOf(i.driver), c.DatabaseType, v)
 }
 
 func (i *insertWriter) Close() error { return i.w.Flush() }
