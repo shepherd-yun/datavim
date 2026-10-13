@@ -12,6 +12,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
@@ -42,6 +43,7 @@ type whichKeyMsg struct{ gen int }
 // Model is the root Bubble Tea model.
 type Model struct {
 	backend  Backend
+	store    Store
 	settings config.Settings
 	keys     *keymap.Keymap
 
@@ -71,7 +73,7 @@ type Model struct {
 }
 
 // New builds the root model with one tree root per configured connection.
-func New(b Backend, settings config.Settings) *Model {
+func New(b Backend, st Store, settings config.Settings) *Model {
 	conns := b.Connections()
 	roots := make([]*tree.Node, len(conns))
 	for i, c := range conns {
@@ -79,6 +81,7 @@ func New(b Backend, settings config.Settings) *Model {
 	}
 	return &Model{
 		backend:       b,
+		store:         st,
 		settings:      settings,
 		keys:          keymap.Default(),
 		showTree:      true,
@@ -119,6 +122,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if c := m.capturingTab(); c != nil {
 			return m, c.Input(msg)
 		}
+	case historyLoadedMsg:
+		m.historyLoaded(msg)
+	case historyPickedMsg:
+		return m, m.useHistory(msg.entry)
 	case overlay.SearchMsg:
 		m.lastSearch = msg.Text
 		m.find(true)
@@ -208,6 +215,8 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 			return nil
 		}
 		return m.openConsole(conn, ns)
+	case keymap.History:
+		return loadHistory(m.store)
 	case keymap.Search:
 		m.cmdline = overlay.NewSearchLine()
 	case keymap.SearchNext:
@@ -488,7 +497,7 @@ func (m *Model) contextNamespace() (string, db.Namespace) {
 
 func (m *Model) openConsole(conn string, ns db.Namespace) tea.Cmd {
 	return m.openTab(consoleTabKey(conn, ns), func(id int) tab {
-		return newConsoleTab(id, m.backend, conn, ns, m.settings, m.timings)
+		return newConsoleTab(id, m.backend, m.store, conn, ns, m.settings, m.timings)
 	})
 }
 
@@ -515,6 +524,63 @@ func (m *Model) quit() tea.Cmd {
 		}
 		return tea.QuitMsg{}
 	}
+}
+
+const historyLimit = 500
+
+type historyLoadedMsg struct {
+	entries []history.Entry
+	err     error
+}
+
+type historyPickedMsg struct{ entry history.Entry }
+
+func loadHistory(st Store) tea.Cmd {
+	return func() tea.Msg {
+		entries, err := st.History("", historyLimit)
+		return historyLoadedMsg{entries: entries, err: err}
+	}
+}
+
+func historyLabel(e history.Entry) string {
+	loc := e.Conn
+	if e.Database != "" {
+		loc += "/" + e.Database
+	}
+	mark := "✓"
+	if e.Err != "" {
+		mark = "✗"
+	}
+	return fmt.Sprintf("%s %s  %s  %s", mark, e.Time.Local().Format("01-02 15:04"), loc, strings.Join(strings.Fields(e.SQL), " "))
+}
+
+func (m *Model) historyLoaded(msg historyLoadedMsg) {
+	switch {
+	case msg.err != nil:
+		m.setStatus("history: "+msg.err.Error(), true)
+	case len(msg.entries) == 0:
+		m.setStatus("no SQL history yet", false)
+	default:
+		labels := make([]string, len(msg.entries))
+		for i, e := range msg.entries {
+			labels[i] = historyLabel(e)
+		}
+		entries := msg.entries
+		m.overlay = overlay.NewPicker("SQL history", labels, func(i int) tea.Msg { return historyPickedMsg{entry: entries[i]} })
+	}
+}
+
+func (m *Model) useHistory(e history.Entry) tea.Cmd {
+	if c, ok := m.activeTab().(*consoleTab); ok && m.focus == focusTabs {
+		return c.insertText(e.SQL)
+	}
+	if _, ok := m.backend.Connection(e.Conn); !ok {
+		m.setStatus("connection "+e.Conn+" no longer exists", true)
+		return nil
+	}
+	open := m.openConsole(e.Conn, db.Namespace{Database: e.Database})
+	c := m.activeTab().(*consoleTab)
+	return tea.Batch(open, c.insertText(e.SQL))
 }
 
 // ---- layout and rendering ----

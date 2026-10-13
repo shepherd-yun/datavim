@@ -14,6 +14,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db/mysql"
 	"github.com/shepherd-yun/sqlvim/internal/db/postgres"
+	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/secret"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui"
@@ -65,11 +66,17 @@ func run(args []string, stdout io.Writer) error {
 	}
 	defer closeLog()
 
+	st, err := openStore(filepath.Dir(logPath))
+	if err != nil {
+		return err
+	}
+	defer func() { _ = st.Close() }()
+
 	mgr := session.NewManager(cfg.Connections, secret.Keyring{}, mysql.Driver{}, postgres.Driver{})
 	defer mgr.CloseAll()
 
 	slog.Info("starting", "version", version, "connections", len(cfg.Connections))
-	if _, err := tea.NewProgram(ui.New(mgr, cfg.Settings)).Run(); err != nil {
+	if _, err := tea.NewProgram(ui.New(mgr, st, cfg.Settings)).Run(); err != nil {
 		slog.Error("program exited", "err", err)
 		return fmt.Errorf("%w (log: %s)", err, logPath)
 	}
@@ -95,4 +102,15 @@ func setupLogging(debug bool) (path string, closeFn func(), err error) {
 	}
 	slog.SetDefault(slog.New(slog.NewTextHandler(f, &slog.HandlerOptions{Level: level})))
 	return path, func() { _ = f.Close() }, nil
+}
+
+// openStore opens state.db, falling back to an in-memory store so a broken
+// state file never stops sqlvim from starting.
+func openStore(stateDir string) (*history.Store, error) {
+	st, err := history.Open(filepath.Join(stateDir, "state.db"))
+	if err == nil {
+		return st, nil
+	}
+	slog.Warn("state database unavailable; history and drafts will not be kept", "err", err)
+	return history.Open(":memory:")
 }

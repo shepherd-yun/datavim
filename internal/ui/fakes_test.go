@@ -12,6 +12,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 )
 
@@ -273,4 +274,48 @@ func (s *fakeSession) Close() error {
 	defer s.conn.mu.Unlock()
 	s.closed = true
 	return nil
+}
+
+type fakeStore struct {
+	mu      sync.Mutex
+	entries []history.Entry
+	drafts  map[string]string
+}
+
+func newFakeStore() *fakeStore { return &fakeStore{drafts: map[string]string{}} }
+
+func (s *fakeStore) AddHistory(e history.Entry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.entries = append(s.entries, e)
+	return nil
+}
+
+func (s *fakeStore) History(_ string, limit int) ([]history.Entry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []history.Entry
+	for i := len(s.entries) - 1; i >= 0 && len(out) < limit; i-- {
+		out = append(out, s.entries[i])
+	}
+	return out, nil
+}
+
+func (s *fakeStore) SaveDraft(key, text string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.drafts[key] = text
+	return nil
+}
+
+func (s *fakeStore) Draft(key string) (string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.drafts[key], nil
+}
+
+func (s *fakeStore) draft(key string) string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.drafts[key]
 }
