@@ -59,13 +59,36 @@ func (q tableQuery) check(d sqlx.Dialect, ref db.TableRef) error {
 	return nil
 }
 
-// valueFilter matches rows whose col equals v.
-func valueFilter(d sqlx.Dialect, col db.ColumnInfo, v db.Value) string {
-	name := sqlx.QuoteIdent(d, col.Name)
+// compareFilter is col op v, op being = <> > or <; a NULL v turns = and <>
+// into IS NULL and IS NOT NULL.
+func compareFilter(d sqlx.Dialect, col db.ColumnInfo, op string, v db.Value) string {
 	if v.Null {
-		return name + " IS NULL"
+		return nullFilter(d, col.Name, op == "<>")
 	}
-	return name + " = " + sqlx.Literal(d, col.DatabaseType, v)
+	return sqlx.QuoteIdent(d, col.Name) + " " + op + " " + sqlx.Literal(d, col.DatabaseType, v)
+}
+
+// nullFilter is col IS NULL, or IS NOT NULL with not.
+func nullFilter(d sqlx.Dialect, col string, not bool) string {
+	if not {
+		return sqlx.QuoteIdent(d, col) + " IS NOT NULL"
+	}
+	return sqlx.QuoteIdent(d, col) + " IS NULL"
+}
+
+// likeEscaper makes % _ and \ match themselves in a LIKE pattern (\ is the
+// default escape on MySQL and PostgreSQL).
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// containsFilter matches rows whose col contains s, ignoring case: ILIKE on
+// PostgreSQL, with ::text so numbers, dates and uuids match too, and LIKE
+// on MySQL, whose default collations ignore case.
+func containsFilter(d sqlx.Dialect, col, s string) string {
+	pattern := sqlx.Literal(d, "TEXT", db.Value{Text: "%" + likeEscaper.Replace(s) + "%"})
+	if d == sqlx.Postgres {
+		return sqlx.QuoteIdent(d, col) + "::text ILIKE " + pattern
+	}
+	return sqlx.QuoteIdent(d, col) + " LIKE " + pattern
 }
 
 // andFilter narrows the filter old with cond.

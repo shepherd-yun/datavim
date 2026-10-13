@@ -363,7 +363,7 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 			t.setStatus("no cell to filter by", true)
 			return nil
 		}
-		cond := valueFilter(t.dialect, col, v)
+		cond := compareFilter(t.dialect, col, "=", v)
 		return t.applyQuery(func(q *tableQuery) { q.where = andFilter(q.where, cond) })
 	case keymap.FilterPrompt:
 		id := t.id
