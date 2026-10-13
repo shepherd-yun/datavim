@@ -157,7 +157,6 @@ func (t *dataTab) load(page int, q tableQuery) tea.Cmd {
 			var err error
 			msg.rs, msg.ids, msg.hasMore, err = fetchPage(ctx, c, d, ref, msg.query, page, size)
 			return err
-
 		})
 		return msg
 	}
@@ -442,7 +441,6 @@ func (t *dataTab) statusLine() string {
 		return theme.Accent.Render("● "+plural(n, "change")) + theme.Muted.Render(" · <space>w submit · U discard · "+info)
 	}
 	return theme.Muted.Render(info)
-
 }
 
 // pageInfo describes the rows shown: their numbers, filter, sort and paging.

@@ -262,6 +262,7 @@ func TestSelectColumn(t *testing.T) {
 		t.Fatal("unknown column or no data")
 	}
 }
+
 func TestMarks(t *testing.T) {
 	m := New(rs(), 40)
 	m.SetMarks(func(r, c int) Mark {

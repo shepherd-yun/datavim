@@ -90,8 +90,10 @@ func TestPlanPostgres(t *testing.T) {
 
 func TestPlanWithoutKey(t *testing.T) {
 	wide := []db.ColumnInfo{
-		{Name: "id", DatabaseType: "BIGINT"}, {Name: "price", DatabaseType: "FLOAT"},
-		{Name: "doc", DatabaseType: "JSON"}, {Name: "name", DatabaseType: "VARCHAR"},
+		{Name: "id", DatabaseType: "BIGINT"},
+		{Name: "price", DatabaseType: "FLOAT"},
+		{Name: "doc", DatabaseType: "JSON"},
+		{Name: "name", DatabaseType: "VARCHAR"},
 	}
 	rows := [][]db.Value{{{Text: "1"}, {Text: "1.5"}, {Text: "{}"}, {Null: true}}}
 	tb := New(wide, rows, nil)
