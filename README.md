@@ -3,10 +3,10 @@
 A terminal SQL client for MySQL and PostgreSQL with vim keys and DataGrip-style workflows.
 一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL 和 PostgreSQL。
 
-> Status: v0.3 — browse databases and tables, write and run SQL in a console
-> (with `$EDITOR` support), copy and export results, SQL history, SSH tunnels
-> (agent, keys, ProxyJump), production safeguards and manual transactions.
-> Search, completion and highlighting arrive in v0.4.
+> Status: v0.4 — browse databases and tables, write and run SQL in a highlighted console
+> with completion, search everything with `<Space><Space>`, reopen recent tabs, copy and
+> export results, SQL history, SSH tunnels (agent, keys, ProxyJump), production safeguards
+> and manual transactions. A built-in vim editor arrives in v0.5.
 
 ## Install
 
@@ -80,16 +80,32 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `e` / `dd` | Tree: edit / delete the selected connection (saved to `connections.toml`) |
 | `<Space>s` | Table structure |
 | `<Space>b` | Toggle tree |
-| `<Space>r` | Refresh |
+| `<Space>r` | Refresh the tree node or tab and reload the connection's metadata |
 | `?` | Help for the focused pane |
 | `:q` / `:qa` | Close tab / quit |
 | `<Space>t` | Console: toggle manual commit (`TX n` in the status bar) |
 | `:commit` / `:rollback` | Console: end the transaction |
 | `:set noreadonly` / `:set readonly` | Unlock / lock the connection for this session |
 | `:q!` / `:qa!` | Close / quit without asking about open transactions |
+| `<Space><Space>` | Search tables, views, columns, routines, schemas and databases (`@` searches every connection; `Enter` opens, `Ctrl-s` opens the structure) |
+| `<Space>e` | Recently opened tables, structures and consoles |
+| `Ctrl-n` / `Ctrl-p`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (opens the popup when closed) |
+| `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes it) |
 
 Press `<Space>` and wait to see every leader key.
 Ghostty users can map Cmd shortcuts to leader keys: [docs/examples/ghostty.conf](docs/examples/ghostty.conf).
+
+## Search and completion
+
+sqlvim reads each connection's catalog (tables, views, columns, routines) in the
+background the first time you use it — the whole server for MySQL, one database at a time
+for PostgreSQL — and keeps it in memory. `<Space>r` reloads it; running DDL in a console
+reloads it automatically.
+
+In the console, completion pops up as you type: tables after `FROM`/`JOIN`/`UPDATE`/`INTO`,
+columns of the statement's tables (and of `alias.`), keywords elsewhere. Names that need
+quoting (`order`, `MixedCase` on PostgreSQL) are inserted quoted. When a statement fails
+with a syntax error, the cursor jumps to where the server says the error is.
 
 ## Safety
 

@@ -6,7 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-14
+
 ### Added
+- `<Space><Space>` searches tables, views, columns, routines, schemas and databases of the
+  connection in context (`@` for every connection); `Enter` opens data, `Ctrl-s` the structure.
+- `<Space>e` lists recently opened tables, structures and consoles, kept across restarts.
+- Console completion for tables, columns, aliases and keywords, with quoting where needed.
+- Syntax highlighting in the console editor and in the structure view's DDL.
+- The console cursor jumps to the position of a syntax error reported by the server.
+- Catalogs load in the background; `<Space>r` and DDL in a console reload them.
 - Edit (`e`) and delete (`dd`) connections from the tree. Only the connection's own block
   in `connections.toml` is rewritten, keeping comments, `params` and `readonly`; a saved
   password follows a rename and is removed with the connection.
