@@ -43,6 +43,18 @@ func TestQuoteIfNeeded(t *testing.T) {
 		{"we`ird", MySQL, "`we``ird`"},
 		{`we"ird`, Postgres, `"we""ird"`},
 		{"", MySQL, "``"},
+		{"range", MySQL, "`range`"},
+		{"interval", MySQL, "`interval`"},
+		{"rank", MySQL, "`rank`"},
+		{"condition", MySQL, "`condition`"},
+		{"status", MySQL, "status"},
+		{"name", MySQL, "name"},
+		{"range", Postgres, "range"},
+		{"offset", Postgres, `"offset"`},
+		{"analyze", Postgres, `"analyze"`},
+		{"returning", Postgres, `"returning"`},
+		{"name", Postgres, "name"},
+		{"rank", Postgres, "rank"},
 	} {
 		if got := QuoteIfNeeded(tc.name, tc.d); got != tc.want {
 			t.Errorf("QuoteIfNeeded(%q, %v) = %s, want %s", tc.name, tc.d, got, tc.want)
