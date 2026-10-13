@@ -1,0 +1,158 @@
+// Package complete is the console's completion popup.
+package complete
+
+import (
+	"fmt"
+	"strings"
+
+	"github.com/charmbracelet/x/ansi"
+	"github.com/sahilm/fuzzy"
+
+	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
+	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+)
+
+// Kind tags a candidate.
+type Kind int
+
+const (
+	Keyword Kind = iota
+	Table
+	View
+	Column
+	Namespace // a database (MySQL) or schema (PostgreSQL)
+)
+
+var tags = [...]string{"kw", "table", "view", "col", "ns"}
+
+// Candidate is one completion.
+type Candidate struct {
+	Text   string // inserted text, quoted if needed
+	Label  string // the name as shown and matched
+	Kind   Kind
+	Detail string // e.g. a column type
+}
+
+// Rank keeps the candidates whose label starts with prefix (ignoring case)
+// in their given order, then the others that match it fuzzily, best first;
+// at most limit. An empty prefix keeps every candidate.
+func Rank(prefix string, cands []Candidate, limit int) []Candidate {
+	var out []Candidate
+	if prefix == "" {
+		out = append(out, cands...)
+	} else {
+		p := strings.ToLower(prefix)
+		var rest []int
+		for i, c := range cands {
+			if strings.HasPrefix(strings.ToLower(c.Label), p) {
+				out = append(out, c)
+			} else {
+				rest = append(rest, i)
+			}
+		}
+		labels := make([]string, len(rest))
+		for i, k := range rest {
+			labels[i] = cands[k].Label
+		}
+		for _, m := range fuzzy.Find(prefix, labels) {
+			out = append(out, cands[rest[m.Index]])
+		}
+	}
+	if len(out) > limit {
+		out = out[:limit]
+	}
+	return out
+}
+
+const maxRows = 10
+
+// Model is the popup: candidates and the selected one (-1 before the user
+// picks one).
+type Model struct {
+	items  []Candidate
+	sel    int
+	offset int
+}
+
+// New opens a popup on items with nothing selected.
+func New(items []Candidate) *Model { return &Model{items: items, sel: -1} }
+
+func (m *Model) Len() int { return len(m.items) }
+
+// Next selects the next candidate, wrapping around.
+func (m *Model) Next() {
+	if n := len(m.items); n > 0 {
+		m.sel = (m.sel + 1) % n
+	}
+}
+
+// Prev selects the previous candidate, wrapping around.
+func (m *Model) Prev() {
+	if n := len(m.items); n > 0 {
+		if m.sel <= 0 {
+			m.sel = n - 1
+		} else {
+			m.sel--
+		}
+	}
+}
+
+// Selected returns the selected candidate, if any.
+func (m *Model) Selected() (Candidate, bool) {
+	if m.sel < 0 || m.sel >= len(m.items) {
+		return Candidate{}, false
+	}
+	return m.items[m.sel], true
+}
+
+// Chosen is the candidate to insert: the selected one, else the first.
+func (m *Model) Chosen() Candidate {
+	if c, ok := m.Selected(); ok {
+		return c
+	}
+	if len(m.items) == 0 {
+		return Candidate{}
+	}
+	return m.items[0]
+}
+
+func pad(s string, w int) string { return s + strings.Repeat(" ", max(w-ansi.StringWidth(s), 0)) }
+
+// View draws the popup with a border, at most maxW wide and maxH tall.
+func (m *Model) View(maxW, maxH int) string {
+	h := min(len(m.items), maxRows, max(maxH-2, 1))
+	if m.sel >= 0 {
+		if m.sel < m.offset {
+			m.offset = m.sel
+		}
+		if m.sel >= m.offset+h {
+			m.offset = m.sel - h + 1
+		}
+	}
+	labelW, detailW := 0, 0
+	for _, c := range m.items {
+		labelW = max(labelW, ansi.StringWidth(textutil.Sanitize(c.Label)))
+		detailW = max(detailW, ansi.StringWidth(textutil.Sanitize(c.Detail)))
+	}
+	inner := 6 + labelW
+	if detailW > 0 {
+		inner += 2 + detailW
+	}
+	w := max(min(inner+2, maxW), 2)
+	lines := make([]string, 0, h)
+	for i := m.offset; i < len(m.items) && i < m.offset+h; i++ {
+		c := m.items[i]
+		tag := fmt.Sprintf("%-5s ", tags[c.Kind])
+		label := pad(textutil.Sanitize(c.Label), labelW)
+		detail := ""
+		if c.Detail != "" {
+			detail = "  " + textutil.Sanitize(c.Detail)
+		}
+		if i == m.sel {
+			lines = append(lines, theme.Selected.Render(textutil.Fit(tag+label+detail, w-2)))
+			continue
+		}
+		lines = append(lines, textutil.Fit(theme.Muted.Render(tag)+label+theme.Muted.Render(detail), w-2))
+	}
+	return theme.Box("", strings.Join(lines, "\n"), w, h+2, true)
+}
