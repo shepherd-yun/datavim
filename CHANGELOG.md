@@ -6,6 +6,24 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-14
+
+### Added
+- A built-in vim editor in the console: NORMAL, INSERT, VISUAL and V-LINE modes, motions
+  (`w b e W B E 0 ^ $ gg G f F t T % { }`), operators `d c y > <` with motions, text
+  objects and counts, `x p P o O D C I A`, undo / redo, `.` repeat and registers
+  `"a`–`"z`; `"+` reads and writes the system clipboard (pbcopy / pbpaste locally,
+  OSC 52 over SSH).
+- `Enter` in VISUAL mode runs the selected statements.
+- `gt` / `gT` / `{n}gt` switch tabs from the console editor.
+- The console status line shows the command being typed (`"a2d`), and `?` lists the
+  editor's keys.
+
+### Changed
+- In the console editor the digits `1`–`9` are counts; they still go to a tab everywhere else.
+- Text from `<Space>v` and from SQL history can be undone with `u`.
+- The Bubbles dependency is gone.
+
 ## [0.4.0] - 2026-10-14
 
 ### Added
