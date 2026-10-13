@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"sync"
 
@@ -107,6 +108,9 @@ type fakeBackend struct {
 	needPassword bool
 	connErr      error
 	passwords    []string
+	resets       []string
+	added        []config.Connection
+	addErr       error
 }
 
 func newFakeBackend() *fakeBackend {
@@ -119,7 +123,43 @@ func newFakeBackend() *fakeBackend {
 	}
 }
 
-func (f *fakeBackend) Connections() []config.Connection { return f.conns }
+func (f *fakeBackend) Connections() []config.Connection {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.conns)
+}
+
+func (f *fakeBackend) Connection(name string) (config.Connection, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, c := range f.conns {
+		if c.Name == name {
+			return c, true
+		}
+	}
+	return config.Connection{}, false
+}
+
+func (f *fakeBackend) Reset(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.resets = append(f.resets, name)
+}
+
+func (f *fakeBackend) AddConnection(c config.Connection, _ string, _ bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.addErr != nil {
+		return f.addErr
+	}
+	c, err := config.Normalize(c)
+	if err != nil {
+		return err
+	}
+	f.added = append(f.added, c)
+	f.conns = append(f.conns, c)
+	return nil
+}
 
 func (f *fakeBackend) Conn(context.Context, string, string) (db.Conn, error) {
 	f.mu.Lock()
