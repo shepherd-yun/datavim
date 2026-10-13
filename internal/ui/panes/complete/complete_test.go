@@ -46,26 +46,31 @@ func TestRank(t *testing.T) {
 
 func TestSelection(t *testing.T) {
 	m := New([]Candidate{{Label: "a"}, {Label: "b"}, {Label: "c"}})
-	if _, ok := m.Selected(); ok || m.Chosen().Label != "a" || m.Len() != 3 {
-		t.Fatal("nothing selected at first; Chosen falls back to the first")
+	if c, ok := m.Selected(); !ok || c.Label != "a" || m.Chosen().Label != "a" || m.Len() != 3 {
+		t.Fatal("the first candidate is selected at first")
 	}
 	m.Next()
 	m.Next()
-	if c, _ := m.Selected(); c.Label != "b" {
+	if c, _ := m.Selected(); c.Label != "c" {
 		t.Fatalf("selected %q", c.Label)
 	}
-	m.Prev()
+	m.Next()
+	if c, _ := m.Selected(); c.Label != "a" {
+		t.Fatalf("Next wraps: %q", c.Label)
+	}
 	m.Prev()
 	if c, _ := m.Selected(); c.Label != "c" {
 		t.Fatalf("Prev wraps: %q", c.Label)
 	}
-	m2 := New([]Candidate{{Label: "a"}, {Label: "b"}})
-	m2.Prev()
-	if c, _ := m2.Selected(); c.Label != "b" {
-		t.Fatalf("Prev from nothing selects the last: %q", c.Label)
-	}
 	if (&Model{}).Chosen() != (Candidate{}) {
 		t.Fatal("empty popup chooses nothing")
+	}
+}
+
+func TestRankPutsExactMatchesFirst(t *testing.T) {
+	cands := []Candidate{{Label: "order_id", Kind: Column}, {Label: "OR", Kind: Keyword}, {Label: "ORDER", Kind: Keyword}}
+	if got := labels(Rank("or", cands, 10)); len(got) != 3 || got[0] != "OR" || got[1] != "order_id" {
+		t.Fatalf("exact match first, then the rest in order: %v", got)
 	}
 }
 

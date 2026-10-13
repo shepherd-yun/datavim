@@ -46,18 +46,14 @@ func (t *consoleTab) popupKey(key string) (cmd tea.Cmd, used bool) {
 		return nil, false
 	}
 	switch key {
-	case "ctrl+n", "tab":
+	case "down", "ctrl+n", "tab":
 		t.popup.Next()
-	case "ctrl+p", "shift+tab":
+	case "up", "ctrl+p", "shift+tab":
 		t.popup.Prev()
-	case "ctrl+y":
+	case "enter", "ctrl+y":
 		return t.acceptCompletion(), true
-	case "esc":
+	case "esc": // closes the popup; a second esc leaves INSERT mode
 		t.popup = nil
-		t.editor.ExitInsert()
-	case "enter":
-		t.popup = nil
-		return nil, false // the editor still gets the newline
 	default:
 		return nil, false
 	}

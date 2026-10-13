@@ -89,8 +89,8 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `:q!` / `:qa!` | Close / quit without asking about open transactions |
 | `<Space><Space>` | Search tables, views, columns, routines, schemas and databases (`@` searches every connection; `Enter` opens, `Ctrl-s` opens the structure) |
 | `<Space>e` | Recently opened tables, structures and consoles |
-| `Ctrl-n` / `Ctrl-p`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (opens the popup when closed) |
-| `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes it) |
+| `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (`Ctrl-n` / `Ctrl-p` open the popup when closed) |
+| `Enter` / `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes the popup, a second `Esc` leaves insert mode) |
 
 Press `<Space>` and wait to see every leader key.
 Ghostty users can map Cmd shortcuts to leader keys: [docs/examples/ghostty.conf](docs/examples/ghostty.conf).

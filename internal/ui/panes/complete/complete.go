@@ -33,9 +33,10 @@ type Candidate struct {
 	Detail string // e.g. a column type
 }
 
-// Rank keeps the candidates whose label starts with prefix (ignoring case)
-// in their given order, then the others that match it fuzzily, best first;
-// at most limit. An empty prefix keeps every candidate.
+// Rank puts the candidates whose label is prefix (ignoring case) first,
+// then those that start with it in their given order, then the others that
+// match it fuzzily, best first; at most limit. An empty prefix keeps every
+// candidate.
 func Rank(prefix string, cands []Candidate, limit int) []Candidate {
 	var out []Candidate
 	if prefix == "" {
@@ -43,13 +44,18 @@ func Rank(prefix string, cands []Candidate, limit int) []Candidate {
 	} else {
 		p := strings.ToLower(prefix)
 		var rest []int
+		var starts []Candidate
 		for i, c := range cands {
-			if strings.HasPrefix(strings.ToLower(c.Label), p) {
+			switch l := strings.ToLower(c.Label); {
+			case l == p:
 				out = append(out, c)
-			} else {
+			case strings.HasPrefix(l, p):
+				starts = append(starts, c)
+			default:
 				rest = append(rest, i)
 			}
 		}
+		out = append(out, starts...)
 		labels := make([]string, len(rest))
 		for i, k := range rest {
 			labels[i] = cands[k].Label
@@ -66,16 +72,15 @@ func Rank(prefix string, cands []Candidate, limit int) []Candidate {
 
 const maxRows = 10
 
-// Model is the popup: candidates and the selected one (-1 before the user
-// picks one).
+// Model is the popup: candidates and the selected one.
 type Model struct {
 	items  []Candidate
 	sel    int
 	offset int
 }
 
-// New opens a popup on items with nothing selected.
-func New(items []Candidate) *Model { return &Model{items: items, sel: -1} }
+// New opens a popup on items with the first one selected.
+func New(items []Candidate) *Model { return &Model{items: items} }
 
 func (m *Model) Len() int { return len(m.items) }
 

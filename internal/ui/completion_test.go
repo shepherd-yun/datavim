@@ -36,7 +36,7 @@ func insertConsole(t *testing.T) *consoleTab {
 func typeIn(t *testing.T, c *consoleTab, keys ...string) {
 	t.Helper()
 	for _, k := range keys {
-		if len([]rune(k)) == 1 || strings.Contains(k, "+") || k == "enter" || k == "esc" || k == "tab" || k == "left" {
+		if len([]rune(k)) == 1 || strings.Contains(k, "+") || k == "enter" || k == "esc" || k == "tab" || k == "left" || k == "up" || k == "down" {
 			runTab(t, c, c.Input(uitest.Key(k)))
 			continue
 		}
@@ -55,7 +55,7 @@ func TestConsoleCompletesTablesAndColumns(t *testing.T) {
 	if !strings.Contains(consoleView(c), "table users") {
 		t.Fatalf("popup drawn:\n%s", consoleView(c))
 	}
-	typeIn(t, c, "ctrl+y")
+	typeIn(t, c, "enter")
 	if c.editor.Value() != "select * from users" || c.popup != nil {
 		t.Fatalf("accepted: %q, popup %v", c.editor.Value(), c.popup)
 	}
@@ -63,7 +63,7 @@ func TestConsoleCompletesTablesAndColumns(t *testing.T) {
 	if c.popup == nil || c.popup.Chosen().Label != "name" {
 		t.Fatalf("column popup = %+v", c.popup)
 	}
-	typeIn(t, c, "ctrl+n", "ctrl+y")
+	typeIn(t, c, "enter")
 	if c.editor.Value() != "select * from users where name" {
 		t.Fatalf("value = %q", c.editor.Value())
 	}
@@ -107,21 +107,31 @@ func TestConsoleCompletionKeys(t *testing.T) {
 	if c.popup == nil || c.popup.Len() != 4 {
 		t.Fatalf("ctrl+n opens the popup with every table and namespace: %+v", c.popup)
 	}
-	typeIn(t, c, "tab", "tab", "shift+tab", "ctrl+y")
-	if c.editor.Value() != "select * from active" {
-		t.Fatalf("tab / shift+tab select: %q", c.editor.Value())
+	typeIn(t, c, "down", "down", "up", "enter")
+	if c.editor.Value() != "select * from `order`" {
+		t.Fatalf("down / up select, enter accepts: %q", c.editor.Value())
+	}
+
+	c = insertConsole(t)
+	typeIn(t, c, "select * from ", "ctrl+n", "tab", "tab", "shift+tab", "ctrl+y")
+	if c.editor.Value() != "select * from `order`" {
+		t.Fatalf("tab / shift+tab select, ctrl+y accepts: %q", c.editor.Value())
 	}
 
 	c = insertConsole(t)
 	typeIn(t, c, "select * from us", "esc")
-	if c.popup != nil || c.CapturesInput() {
-		t.Fatal("esc closes the popup and leaves INSERT mode")
+	if c.popup != nil || !c.CapturesInput() {
+		t.Fatal("esc closes the popup and stays in INSERT mode")
+	}
+	typeIn(t, c, "esc")
+	if c.CapturesInput() {
+		t.Fatal("a second esc leaves INSERT mode")
 	}
 
 	c = insertConsole(t)
-	typeIn(t, c, "select * from us", "enter")
-	if c.popup != nil || c.editor.Value() != "select * from us\n" {
-		t.Fatalf("enter closes the popup and inserts a newline: %q", c.editor.Value())
+	typeIn(t, c, "select 1", "enter")
+	if c.popup != nil || c.editor.Value() != "select 1\n" {
+		t.Fatalf("without a popup enter inserts a newline: %q", c.editor.Value())
 	}
 
 	c = insertConsole(t)
