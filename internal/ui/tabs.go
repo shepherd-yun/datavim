@@ -223,6 +223,10 @@ func gridAction(g *grid.Model, a keymap.Action) (tea.Cmd, bool) {
 		g.ScrollColumns(-1)
 	case keymap.ScrollRight:
 		g.ScrollColumns(1)
+	case keymap.ScrollHalfLeft:
+		g.ScrollHalf(-1)
+	case keymap.ScrollHalfRight:
+		g.ScrollHalf(1)
 	case keymap.CellDetail:
 		if col, v, ok := g.Cell(); ok {
 			text := v.Text

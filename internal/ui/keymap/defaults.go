@@ -123,6 +123,8 @@ func gridBindings(ctx Context) []Binding {
 		Binding{ctx, keys("$"), LineEnd, "Last column"},
 		Binding{ctx, keys("z", "h"), ScrollLeft, "Scroll left"},
 		Binding{ctx, keys("z", "l"), ScrollRight, "Scroll right"},
+		Binding{ctx, keys("z", "H"), ScrollHalfLeft, "Scroll half a screen left"},
+		Binding{ctx, keys("z", "L"), ScrollHalfRight, "Scroll half a screen right"},
 		Binding{ctx, keys("y", "l"), YankCell, "Copy cell"},
 		Binding{ctx, keys("y", "y"), YankRow, "Copy row"},
 		Binding{ctx, keys("K"), CellDetail, "Show cell value"},

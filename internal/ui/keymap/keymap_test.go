@@ -134,6 +134,8 @@ func TestV02Bindings(t *testing.T) {
 		{Results, []string{"y", "y"}, YankRow},
 		{Grid, []string{"y", "l"}, YankCell},
 		{Grid, []string{"z", "l"}, ScrollRight},
+		{Grid, []string{"z", "H"}, ScrollHalfLeft},
+		{Results, []string{"z", "L"}, ScrollHalfRight},
 		{Grid, []string{"/"}, Search},
 		{Tree, []string{"N"}, SearchPrev},
 		{Grid, []string{"space", "y", "c"}, CopyAs("csv")},
