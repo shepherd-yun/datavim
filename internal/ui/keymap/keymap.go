@@ -77,6 +77,7 @@ const (
 	YankRow          Action = "yank.row"
 	ToggleTx         Action = "tx.toggle"
 	GlobalSearch     Action = "search.global"
+	Recent           Action = "recent.open"
 )
 
 const (
