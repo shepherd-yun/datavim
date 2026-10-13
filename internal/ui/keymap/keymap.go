@@ -76,6 +76,7 @@ const (
 	YankCell         Action = "yank.cell"
 	YankRow          Action = "yank.row"
 	ToggleTx         Action = "tx.toggle"
+	GlobalSearch     Action = "search.global"
 )
 
 const (

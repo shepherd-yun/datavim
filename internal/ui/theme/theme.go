@@ -106,3 +106,15 @@ func HighlightLines(src string, spans []highlight.Span) []string {
 	}
 	return append(lines, b.String())
 }
+
+var kindTags = map[string]lipgloss.Style{
+	"table":    lipgloss.NewStyle().Foreground(ColorAccent),
+	"view":     lipgloss.NewStyle().Foreground(lipgloss.Color("13")),
+	"column":   lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
+	"routine":  lipgloss.NewStyle().Foreground(lipgloss.Color("10")),
+	"schema":   lipgloss.NewStyle().Foreground(ColorFocus),
+	"database": lipgloss.NewStyle().Foreground(ColorFocus).Bold(true),
+}
+
+// KindTag colors the kind tag of a search result.
+func KindTag(kind string) lipgloss.Style { return kindTags[kind] }

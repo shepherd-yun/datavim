@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/shepherd-yun/sqlvim/internal/db"
 )
 
 func fixture() *Model {
@@ -208,5 +210,33 @@ func TestReplaceAndRemoveRoot(t *testing.T) {
 	m.RemoveRoot("prod")
 	if !m.Empty() || m.Selected() != nil {
 		t.Fatal("empty tree")
+	}
+}
+
+func TestReveal(t *testing.T) {
+	m := fixture()
+	local := m.roots[0]
+	path := []string{"app", "public"}
+	n, res := m.Reveal("local", path)
+	if res != NeedsLoad || n != local || !local.Loading {
+		t.Fatalf("first step: %v %v", n, res)
+	}
+	if _, res := m.Reveal("local", path); res != Waiting {
+		t.Fatalf("while loading: %v", res)
+	}
+	m.SetChildren(local, []*Node{{Kind: KindDatabase, Name: "app", Conn: "local", NS: db.Namespace{Database: "app"}}}, nil)
+	app := local.Children[0]
+	if n, res := m.Reveal("local", path); res != NeedsLoad || n != app || m.Selected() != app {
+		t.Fatalf("second step: %v %v", n, res)
+	}
+	m.SetChildren(app, []*Node{{Kind: KindSchema, Name: "public", Conn: "local", NS: db.Namespace{Database: "app", Schema: "public"}}}, nil)
+	if _, res := m.Reveal("local", path); res != Revealed || m.Selected().Name != "public" {
+		t.Fatalf("done: %v, selected %q", res, m.Selected().Name)
+	}
+	if _, res := m.Reveal("local", []string{"nope"}); res != NotFound {
+		t.Fatal("unknown database")
+	}
+	if _, res := m.Reveal("nope", nil); res != NotFound {
+		t.Fatal("unknown connection")
 	}
 }

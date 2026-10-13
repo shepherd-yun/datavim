@@ -70,3 +70,14 @@ func TestHighlightLines(t *testing.T) {
 		t.Fatalf("empty: %q", got)
 	}
 }
+
+func TestKindTag(t *testing.T) {
+	for _, k := range []string{"table", "view", "column", "routine", "schema", "database"} {
+		if KindTag(k).Render("x") == "x" {
+			t.Errorf("%s has no color", k)
+		}
+	}
+	if KindTag("other").Render("x") != "x" {
+		t.Error("unknown kinds are plain")
+	}
+}
