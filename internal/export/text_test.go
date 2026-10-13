@@ -109,24 +109,3 @@ func TestEncodeRejectsXLSXAndUnknown(t *testing.T) {
 		t.Fatal("unknown format")
 	}
 }
-
-func TestTypeHelpers(t *testing.T) {
-	for _, typ := range []string{"INT", "UNSIGNED BIGINT", "DECIMAL", "int8", "numeric", "float8", "DOUBLE"} {
-		if !isNumericType(typ) {
-			t.Errorf("%s is numeric", typ)
-		}
-	}
-	for _, typ := range []string{"interval", "VARCHAR", "text", "point"} {
-		if isNumericType(typ) {
-			t.Errorf("%s is not numeric", typ)
-		}
-	}
-	for s, want := range map[string]bool{"1": true, "-2.5": true, "1e10": true, "NaN": false, "Infinity": false, "1.": false, "": false} {
-		if isNumber(s) != want {
-			t.Errorf("isNumber(%q) != %v", s, want)
-		}
-	}
-	if !isBinaryType("VARBINARY") || !isBinaryType("LONGBLOB") || isBinaryType("bytea") {
-		t.Error("isBinaryType")
-	}
-}

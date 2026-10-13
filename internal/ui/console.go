@@ -315,13 +315,6 @@ func (t *consoleTab) editorAction(a keymap.Action) tea.Cmd {
 // reconnects until the user runs again.
 var errTxLost = errors.New("transaction lost: the connection dropped and the server rolled back its uncommitted changes · run again to reconnect")
 
-func beginSQL(d sqlx.Dialect) string {
-	if d == sqlx.Postgres {
-		return "BEGIN"
-	}
-	return "START TRANSACTION"
-}
-
 // toggleTx switches between autocommit and manual commit.
 func (t *consoleTab) toggleTx() tea.Cmd {
 	if t.manualTx && t.inTx {
@@ -473,7 +466,7 @@ func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.C
 	t.attempt = &runAttempt{stmts: stmts, limit: limit, more: more, text: t.runText}
 	began := false
 	if t.manualTx && !t.inTx && sqlx.TransactionEffect(stmts[0].Text, t.dialect) == sqlx.TxNone {
-		stmts = append([]sqlx.Statement{{Text: beginSQL(t.dialect), Start: -1, End: -1}}, stmts...)
+		stmts = append([]sqlx.Statement{{Text: sqlx.BeginSQL(t.dialect), Start: -1, End: -1}}, stmts...)
 		began = true
 	}
 	ctx, cancel := context.WithCancel(context.Background())
