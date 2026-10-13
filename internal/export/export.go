@@ -66,12 +66,16 @@ func New(f Format, w io.Writer, o Options) (Writer, error) {
 		return newJSON(w), nil
 	case Markdown:
 		return newMarkdown(w), nil
+	case SQL:
+		return newInsert(w, o), nil
+	case XLSX:
+		return newXLSX(w)
 	}
 	return nil, fmt.Errorf("unknown export format %q", f)
 }
 
-// WriteResult writes rs through w and closes w.
-func WriteResult(w Writer, rs *db.ResultSet) error {
+// WriteRows writes rs through w without closing it (for ToFile's fill).
+func WriteRows(w Writer, rs *db.ResultSet) error {
 	if err := w.WriteHeader(rs.Columns); err != nil {
 		return err
 	}
@@ -79,6 +83,14 @@ func WriteResult(w Writer, rs *db.ResultSet) error {
 		if err := w.WriteRow(r); err != nil {
 			return err
 		}
+	}
+	return nil
+}
+
+// WriteResult writes rs through w and closes w.
+func WriteResult(w Writer, rs *db.ResultSet) error {
+	if err := WriteRows(w, rs); err != nil {
+		return err
 	}
 	return w.Close()
 }
