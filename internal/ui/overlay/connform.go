@@ -94,6 +94,13 @@ func (f *ConnForm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 	return f, nil
 }
 
+// Paste types text into the current field; choice fields ignore it.
+func (f *ConnForm) Paste(text string) {
+	if fd := &f.fields[f.cur]; fd.choices == nil {
+		fd.input.paste(text)
+	}
+}
+
 func (f *ConnForm) text(i int) string { return strings.TrimSpace(f.fields[i].input.String()) }
 
 func (f *ConnForm) value(i int) string { return f.fields[i].choices[f.fields[i].choice] }

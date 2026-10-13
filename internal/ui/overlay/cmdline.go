@@ -40,3 +40,6 @@ func (c *CmdLine) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 
 // View renders the single status-bar line.
 func (c *CmdLine) View(_, _ int) string { return c.prefix + c.input.String() + "█" }
+
+// Paste appends text to the input.
+func (c *CmdLine) Paste(text string) { c.input.paste(text) }

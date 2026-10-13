@@ -86,3 +86,9 @@ func (p *Picker) View(width, height int) string {
 		theme.Muted.Render("type to filter · ↑/↓ move · enter pick · esc close")
 	return theme.Box(p.title, body, w, h, true)
 }
+
+// Paste appends text to the filter.
+func (p *Picker) Paste(text string) {
+	p.filter.paste(text)
+	p.refilter()
+}

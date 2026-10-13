@@ -42,3 +42,6 @@ func (s *Secret) View(width, _ int) string {
 	)
 	return theme.Box(s.title, strings.Join(body, "\n"), w, len(body)+2, true)
 }
+
+// Paste appends text to the input.
+func (s *Secret) Paste(text string) { s.input.paste(text) }

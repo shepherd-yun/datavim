@@ -15,6 +15,12 @@ type Overlay interface {
 	View(width, height int) string
 }
 
+// Paster is an overlay with a text input that accepts a terminal paste
+// (bracketed paste arrives as one tea.PasteMsg, not as key presses).
+type Paster interface {
+	Paste(text string)
+}
+
 const reset = "\x1b[0m"
 
 // PlaceAt draws box over base with its top-left corner at (x, y).
