@@ -166,6 +166,10 @@ func Normalize(c Connection) (Connection, error) {
 	if c.Host == "" {
 		c.Host = "localhost"
 	}
+	c.SSH = strings.TrimSpace(c.SSH)
+	if strings.ContainsAny(c.SSH, " \t") {
+		return c, fmt.Errorf("connection %q: ssh must be one Host alias from ~/.ssh/config, got %q", c.Name, c.SSH)
+	}
 	switch c.Env {
 	case "":
 		c.Env = EnvDev
@@ -204,6 +208,7 @@ type connBlock struct {
 	Port     int    `toml:"port"`
 	User     string `toml:"user,omitempty"`
 	Database string `toml:"database,omitempty"`
+	SSH      string `toml:"ssh,omitempty"`
 	Env      Env    `toml:"env"`
 }
 
@@ -227,7 +232,7 @@ func AppendConnection(dir string, c Connection) (Connection, error) {
 		Connection []connBlock `toml:"connection"`
 	}{[]connBlock{{
 		Name: c.Name, Driver: c.Driver, Host: c.Host, Port: c.Port,
-		User: c.User, Database: c.Database, Env: c.Env,
+		User: c.User, Database: c.Database, SSH: c.SSH, Env: c.Env,
 	}}})
 	if err != nil {
 		return c, err
