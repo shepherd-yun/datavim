@@ -196,3 +196,14 @@ func TestConnectionEditBindings(t *testing.T) {
 		t.Errorf("dd: %q %v", a, res)
 	}
 }
+func TestFilterAndSortBindings(t *testing.T) {
+	k := Default()
+	for key, want := range map[string]Action{"f": FilterValue, "F": FilterPrompt, "s": SortColumn} {
+		if a, res := k.Resolve(Grid, []string{key}); a != want || res != Matched {
+			t.Errorf("grid %s: %q %v", key, a, res)
+		}
+		if _, res := k.Resolve(Results, []string{key}); res == Matched {
+			t.Errorf("console results are not filtered: %s", key)
+		}
+	}
+}

@@ -30,13 +30,13 @@ const exportTimeout = 10 * time.Minute
 
 // exportSrc is what a tab offers for copy and export.
 type exportSrc struct {
-	rs      *db.ResultSet
-	name    string // file name base
-	opts    export.Options
-	conn    string
-	ref     db.TableRef
-	orderBy []string
-	whole   bool // the whole table can be streamed (data tabs)
+	rs    *db.ResultSet
+	name  string // file name base
+	opts  export.Options
+	conn  string
+	ref   db.TableRef
+	query tableQuery // data tabs: the filter and order of a whole-table export
+	whole bool       // the whole table can be streamed (data tabs)
 }
 
 type (
@@ -78,8 +78,10 @@ func tableParts(driver string, ref db.TableRef) []string {
 
 func (t *dataTab) exportSource() exportSrc {
 	cfg, _ := t.backend.Connection(t.conn)
+	q := t.query
+	q.rowID = false
 	return exportSrc{
-		rs: t.grid.Result(), name: t.ref.Name, conn: t.conn, ref: t.ref, orderBy: t.orderBy, whole: true,
+		rs: t.grid.Result(), name: t.ref.Name, conn: t.conn, ref: t.ref, query: q, whole: true,
 		opts: export.Options{Driver: cfg.Driver, Table: tableParts(cfg.Driver, t.ref)},
 	}
 }
@@ -175,11 +177,16 @@ func (m *Model) exportAs(f export.Format) tea.Cmd {
 	}
 	id := m.activeTab().ID()
 	if src.whole {
+		whole := "Whole table"
+		if src.query.where != "" {
+			whole = "Every row matching the filter"
+		}
 		m.overlay = overlay.NewChoice("Export "+f.Label(),
-			[]string{fmt.Sprintf("Current page (%d rows)", len(src.rs.Rows)), "Whole table"},
+			[]string{fmt.Sprintf("Current page (%d rows)", len(src.rs.Rows)), whole},
 			func(i int) tea.Msg { return exportScopeMsg{tabID: id, format: f, whole: i == 1} })
 		return nil
 	}
+
 	m.askExportPath(id, f, false, src.name)
 	return nil
 }
@@ -232,7 +239,7 @@ func streamTable(ctx context.Context, c db.Conn, src exportSrc, f export.Format,
 	*rows = 0
 	return export.ToFile(path, f, src.opts, func(w export.Writer) error {
 		var headerErr error
-		err := c.Stream(ctx, selectAll(c.Dialect(), src.ref, src.orderBy),
+		err := c.Stream(ctx, src.query.sql(sqlx.DialectOf(src.opts.Driver), src.ref),
 			func(cols []db.ColumnInfo) { headerErr = w.WriteHeader(cols) },
 			func(row []db.Value) error {
 				if headerErr != nil {

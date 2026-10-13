@@ -148,3 +148,19 @@ func TestExpandHome(t *testing.T) {
 		}
 	}
 }
+func TestExportWholeTableKeepsFilterAndSort(t *testing.T) {
+	m, b := newTestModel(t)
+	dir := t.TempDir()
+	m.settings.ExportDir = dir
+	openUsers(t, m)
+	d := m.activeTab().(*dataTab)
+	drain(t, m, d.Update(filterMsg{tabID: d.id, text: "id > 0"}))
+	press(t, m, "space", "x", "j")
+	if !strings.Contains(screen(m), "Every row matching the filter") {
+		t.Fatalf("scope choice:\n%s", screen(m))
+	}
+	press(t, m, "j", "enter", "enter")
+	if got, want := b.conn.lastQuery(), "SELECT * FROM `app`.`users` WHERE (id > 0\n) ORDER BY `id`"; got != want {
+		t.Fatalf("query = %q, want %q", got, want)
+	}
+}
