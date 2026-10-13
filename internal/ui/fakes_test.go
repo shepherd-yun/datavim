@@ -162,6 +162,7 @@ type fakeBackend struct {
 	resets       []string
 	added        []config.Connection
 	addErr       error
+	lostConns    int
 }
 
 func newFakeBackend() *fakeBackend {
@@ -215,6 +216,10 @@ func (f *fakeBackend) AddConnection(c config.Connection, _ string, _ bool) error
 func (f *fakeBackend) Conn(context.Context, string, string) (db.Conn, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	if f.lostConns > 0 {
+		f.lostConns--
+		return nil, fmt.Errorf("%w: connection reset by peer", db.ErrConnLost)
+	}
 	if f.connErr != nil {
 		return nil, f.connErr
 	}
@@ -318,4 +323,16 @@ func (s *fakeStore) draft(key string) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.drafts[key]
+}
+
+func (f *fakeBackend) setLost(n int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.lostConns = n
+}
+
+func (f *fakeBackend) resetList() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.resets)
 }

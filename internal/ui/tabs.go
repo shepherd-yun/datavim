@@ -60,6 +60,7 @@ func structureTabKey(conn string, ref db.TableRef) string { return "struct\x00" 
 
 type pageLoadedMsg struct {
 	tabID   int
+	conn    string
 	page    int
 	rs      *db.ResultSet
 	hasMore bool
@@ -112,21 +113,19 @@ func (t *dataTab) load(page int) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
 		defer cancel()
-		msg := pageLoadedMsg{tabID: id, page: page, orderBy: orderBy}
-		c, err := b.Conn(ctx, conn, ref.Database)
-		if err != nil {
-			msg.err = err
-			return msg
-		}
-		if !known {
-			cols, err := c.Meta().Columns(ctx, ref)
-			if err != nil {
-				msg.err = err
-				return msg
+		msg := pageLoadedMsg{tabID: id, conn: conn, page: page, orderBy: orderBy}
+		msg.err = withConn(ctx, b, conn, ref.Database, func(c db.Conn) error {
+			if !known {
+				cols, err := c.Meta().Columns(ctx, ref)
+				if err != nil {
+					return err
+				}
+				msg.orderBy = primaryKey(cols)
 			}
-			msg.orderBy = primaryKey(cols)
-		}
-		msg.rs, msg.hasMore, msg.err = fetchPage(ctx, c, ref, msg.orderBy, page, size)
+			var err error
+			msg.rs, msg.hasMore, err = fetchPage(ctx, c, ref, msg.orderBy, page, size)
+			return err
+		})
 		return msg
 	}
 }
@@ -278,6 +277,7 @@ func (t *dataTab) statusLine() string {
 
 type structureLoadedMsg struct {
 	tabID int
+	conn  string
 	data  structure.Data
 	err   error
 }
@@ -312,12 +312,13 @@ func (t *structureTab) load() tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 		defer cancel()
-		c, err := b.Conn(ctx, conn, ref.Database)
-		if err != nil {
-			return structureLoadedMsg{tabID: id, err: err}
-		}
-		data, err := fetchStructure(ctx, c.Meta(), ref)
-		return structureLoadedMsg{tabID: id, data: data, err: err}
+		msg := structureLoadedMsg{tabID: id, conn: conn}
+		msg.err = withConn(ctx, b, conn, ref.Database, func(c db.Conn) error {
+			var err error
+			msg.data, err = fetchStructure(ctx, c.Meta(), ref)
+			return err
+		})
+		return msg
 	}
 }
 

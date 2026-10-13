@@ -24,7 +24,12 @@ func loadChildren(b Backend, n *tree.Node) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 		defer cancel()
-		children, err := fetchChildren(ctx, b, kind, connName, ns)
+		var children []*tree.Node
+		err := withConn(ctx, b, connName, ns.Database, func(c db.Conn) error {
+			var err error
+			children, err = fetchChildren(ctx, c, kind, connName, ns)
+			return err
+		})
 		if err != nil {
 			slog.Warn("load tree children", "conn", connName, "database", ns.Database, "schema", ns.Schema, "err", err)
 		}
@@ -32,12 +37,8 @@ func loadChildren(b Backend, n *tree.Node) tea.Cmd {
 	}
 }
 
-func fetchChildren(ctx context.Context, b Backend, kind tree.Kind, connName string, ns db.Namespace) ([]*tree.Node, error) {
-	conn, err := b.Conn(ctx, connName, ns.Database)
-	if err != nil {
-		return nil, err
-	}
-	meta := conn.Meta()
+func fetchChildren(ctx context.Context, c db.Conn, kind tree.Kind, connName string, ns db.Namespace) ([]*tree.Node, error) {
+	meta := c.Meta()
 	switch kind {
 	case tree.KindConn:
 		names, err := meta.Databases(ctx)
