@@ -16,8 +16,9 @@ import (
 func newTestModel(t *testing.T) (*Model, *fakeBackend) {
 	t.Helper()
 	b := newFakeBackend()
-	m := New(b, config.Settings{PageSize: 2, MaxColumnWidth: 40})
+	m := New(b, config.Settings{PageSize: 2, MaxColumnWidth: 40, MaxRows: 10})
 	m.whichKeyDelay = 0
+	m.timings = timings{}
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	return m, b
 }
@@ -268,5 +269,147 @@ func TestTinySizesDoNotPanic(t *testing.T) {
 	for _, size := range [][2]int{{0, 0}, {1, 1}, {10, 3}, {20, 5}, {200, 60}} {
 		m.Update(tea.WindowSizeMsg{Width: size[0], Height: size[1]})
 		_ = m.render()
+	}
+}
+
+func typeKeys(t *testing.T, m *Model, s string) {
+	t.Helper()
+	for _, r := range s {
+		press(t, m, string(r))
+	}
+}
+
+func TestOpenConsoleTypeAndRun(t *testing.T) {
+	m, b := newTestModel(t)
+	press(t, m, "l", "j") // cursor on database "app"
+	press(t, m, "space", "c")
+	if s := screen(m); !strings.Contains(s, "[1]console:app") {
+		t.Fatalf("console tab:\n%s", s)
+	}
+	press(t, m, "i")
+	if !strings.Contains(screen(m), " INSERT ") {
+		t.Fatalf("status shows INSERT:\n%s", screen(m))
+	}
+	typeKeys(t, m, "select 1")
+	press(t, m, "1") // digits are text in INSERT, not "go to tab"
+	press(t, m, "esc", "enter")
+	if got := b.conn.lastQuery(); got != "select 11" {
+		t.Fatalf("ran %q", got)
+	}
+	if s := screen(m); !strings.Contains(s, "user1") || !strings.Contains(s, " NORMAL ") {
+		t.Fatalf("result:\n%s", s)
+	}
+	press(t, m, "ctrl+h", "space", "c")
+	if len(m.tabs) != 1 {
+		t.Fatal("<space>c on the same database reuses the console")
+	}
+}
+
+func TestPasteGoesToTheEditorInInsertMode(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "l", "j", "space", "c", "i")
+	m.Update(tea.PasteMsg{Content: "select 42"})
+	c := m.activeTab().(*consoleTab)
+	if c.editor.Value() != "select 42" {
+		t.Fatalf("editor = %q", c.editor.Value())
+	}
+}
+
+func TestCtrlCCancelsButNeverQuits(t *testing.T) {
+	m, _ := newTestModel(t)
+	if press(t, m, "ctrl+c") {
+		t.Fatal("ctrl+c must not quit")
+	}
+	if !strings.Contains(screen(m), ":qa quits") {
+		t.Fatalf("hint:\n%s", screen(m))
+	}
+}
+
+func TestConsoleNeedsAConnection(t *testing.T) {
+	b := newFakeBackend()
+	b.conns = nil
+	m := New(b, config.Settings{PageSize: 2, MaxColumnWidth: 40, MaxRows: 10})
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.whichKeyDelay = 0
+	press(t, m, "space", "c")
+	if !strings.Contains(screen(m), "select a connection first") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+func TestSearchTreeAndGrid(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "/")
+	if !strings.Contains(screen(m), "/█") {
+		t.Fatal("search line in the status bar")
+	}
+	press(t, m, "p", "r", "enter")
+	if m.tree.Selected().Name != "prod" {
+		t.Fatalf("selected %q", m.tree.Selected().Name)
+	}
+	press(t, m, "n")
+	if m.tree.Selected().Name != "prod" {
+		t.Fatal("n repeats (only one match)")
+	}
+	press(t, m, "/", "z", "z", "enter")
+	if !strings.Contains(screen(m), "pattern not found: zz") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+
+	press(t, m, "g", "g") // back to the first connection
+	openUsers(t, m)
+	press(t, m, "/", "u", "s", "e", "r", "2", "enter")
+	tab := m.activeTab().(*dataTab)
+	if _, v, _ := tab.grid.Cell(); v.Text != "user2" {
+		t.Fatalf("grid search at %q", v.Text)
+	}
+	press(t, m, "N")
+	if _, v, _ := tab.grid.Cell(); v.Text != "user2" {
+		t.Fatal("N wraps back to the only match")
+	}
+}
+
+func TestQuitClosesConsoleSessions(t *testing.T) {
+	m, b := newTestModel(t)
+	press(t, m, "l", "j", "space", "c", "enter") // empty editor: nothing runs
+	c := m.activeTab().(*consoleTab)
+	c.editor.SetValue("select 1")
+	press(t, m, "enter")
+	if b.conn.sessionCount() != 1 {
+		t.Fatal("a session was opened")
+	}
+	if !press(t, m, ":", "q", "a", "enter") {
+		t.Fatal(":qa quits")
+	}
+	if !b.conn.sessions[0].closed {
+		t.Fatal("sessions are closed on quit")
+	}
+}
+
+func TestCloseTabClosesItsSession(t *testing.T) {
+	m, b := newTestModel(t)
+	press(t, m, "l", "j", "space", "c")
+	m.activeTab().(*consoleTab).editor.SetValue("select 1")
+	press(t, m, "enter", ":", "q", "enter")
+	if len(m.tabs) != 0 || !b.conn.sessions[0].closed {
+		t.Fatal(":q closes the console and its session")
+	}
+}
+
+func TestLateRunResultForClosedTabClosesSession(t *testing.T) {
+	m, _ := newTestModel(t)
+	s := &fakeSession{conn: &fakeConn{}}
+	_, cmd := m.Update(runDoneMsg{tabID: 99, session: s})
+	drain(t, m, cmd)
+	if !s.closed {
+		t.Fatal("orphaned sessions are closed")
+	}
+}
+
+func TestStructureFromConsoleNeedsATable(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "l", "j", "space", "c", "space", "s")
+	if !strings.Contains(screen(m), "select a table first") {
+		t.Fatalf("screen:\n%s", screen(m))
 	}
 }

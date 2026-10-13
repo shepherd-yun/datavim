@@ -24,7 +24,9 @@ const defaultWhichKeyDelay = 300 * time.Millisecond
 
 const welcome = `Select a table in the tree and press l or enter.
 
+<space>c   SQL console
 <space>s   table structure
+<space>n   new connection
 ?          help
 :qa        quit`
 
@@ -63,6 +65,9 @@ type Model struct {
 
 	status    string
 	statusErr bool
+
+	timings    timings
+	lastSearch string
 }
 
 // New builds the root model with one tree root per configured connection.
@@ -79,6 +84,7 @@ func New(b Backend, settings config.Settings) *Model {
 		showTree:      true,
 		tree:          tree.New(roots),
 		whichKeyDelay: defaultWhichKeyDelay,
+		timings:       defaultTimings,
 	}
 }
 
@@ -109,9 +115,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.runCommand(msg.Text)
 	case openOverlayMsg:
 		m.overlay = msg.overlay
+	case tea.PasteMsg:
+		if c := m.capturingTab(); c != nil {
+			return m, c.Input(msg)
+		}
+	case overlay.SearchMsg:
+		m.lastSearch = msg.Text
+		m.find(true)
 	case tabMsg:
 		if t := m.tabByID(msg.TabID()); t != nil {
 			return m, t.Update(msg)
+		}
+		if d, ok := msg.(runDoneMsg); ok && d.session != nil {
+			s := d.session
+			return m, func() tea.Msg { _ = s.Close(); return nil }
 		}
 	}
 	return m, nil
@@ -132,6 +149,9 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) tea.Cmd {
 		next, cmd := m.overlay.HandleKey(msg)
 		m.overlay = next
 		return cmd
+	}
+	if c := m.capturingTab(); c != nil {
+		return c.Input(msg)
 	}
 	key := msg.String()
 	if key == "esc" && len(m.pending) > 0 {
@@ -175,7 +195,25 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	}
 	switch a {
 	case keymap.Quit:
-		return tea.Quit
+		return m.quit()
+	case keymap.Cancel:
+		if c, ok := m.activeTab().(canceler); ok && m.focus == focusTabs {
+			return c.cancelRun()
+		}
+		m.setStatus("no query is running · :qa quits", false)
+	case keymap.OpenConsole:
+		conn, ns := m.contextNamespace()
+		if conn == "" {
+			m.setStatus("select a connection first", true)
+			return nil
+		}
+		return m.openConsole(conn, ns)
+	case keymap.Search:
+		m.cmdline = overlay.NewSearchLine()
+	case keymap.SearchNext:
+		m.find(true)
+	case keymap.SearchPrev:
+		m.find(false)
 	case keymap.CommandLine:
 		m.cmdline = overlay.NewCmdLine()
 	case keymap.Help:
@@ -280,11 +318,11 @@ func (m *Model) runCommand(text string) tea.Cmd {
 	case "":
 	case "q", "q!", "close":
 		if len(m.tabs) == 0 {
-			return tea.Quit
+			return m.quit()
 		}
-		m.closeTab(m.active)
+		return m.closeTab(m.active)
 	case "qa", "qa!", "quit":
-		return tea.Quit
+		return m.quit()
 	default:
 		m.setStatus("unknown command: "+cmd, true)
 	}
@@ -343,7 +381,8 @@ func (m *Model) gotoTab(i int) {
 	}
 }
 
-func (m *Model) closeTab(i int) {
+func (m *Model) closeTab(i int) tea.Cmd {
+	cmd := shutdownCmd(m.tabs[i])
 	m.tabs = append(m.tabs[:i], m.tabs[i+1:]...)
 	m.active = textutil.Clamp(m.active, 0, len(m.tabs)-1)
 	if len(m.tabs) == 0 {
@@ -351,6 +390,7 @@ func (m *Model) closeTab(i int) {
 		m.focus = focusTree
 	}
 	m.layout()
+	return cmd
 }
 
 func (m *Model) openTab(key string, create func(id int) tab) tea.Cmd {
@@ -387,11 +427,94 @@ func (m *Model) openStructureFromContext() tea.Cmd {
 			return m.openStructure(n.Conn, n.TableRef())
 		}
 	} else if t := m.activeTab(); t != nil {
-		conn, ref := t.Target()
-		return m.openStructure(conn, ref)
+		if conn, ref := t.Target(); ref.Name != "" {
+			return m.openStructure(conn, ref)
+		}
 	}
 	m.setStatus("select a table first", true)
 	return nil
+}
+
+// capturingTab returns the focused tab when it wants raw input (INSERT mode).
+func (m *Model) capturingTab() inputCapturer {
+	if m.focus != focusTabs {
+		return nil
+	}
+	if c, ok := m.activeTab().(inputCapturer); ok && c.CapturesInput() {
+		return c
+	}
+	return nil
+}
+
+func (m *Model) mode() string {
+	if m.focus == focusTabs {
+		if md, ok := m.activeTab().(moder); ok {
+			return md.Mode()
+		}
+	}
+	return "NORMAL"
+}
+
+func (m *Model) find(forward bool) {
+	q := m.lastSearch
+	if q == "" {
+		m.setStatus("no previous search", true)
+		return
+	}
+	found := false
+	if m.focus == focusTree {
+		found = m.tree.Find(q, forward)
+	} else if f, ok := m.activeTab().(finder); ok {
+		found = f.Find(q, forward)
+	}
+	if !found {
+		m.setStatus("pattern not found: "+q, true)
+	}
+}
+
+// contextNamespace is the connection and namespace the user is looking at.
+func (m *Model) contextNamespace() (string, db.Namespace) {
+	if m.focus == focusTabs {
+		if t := m.activeTab(); t != nil {
+			conn, ref := t.Target()
+			return conn, ref.Namespace
+		}
+	}
+	if n := m.tree.Selected(); n != nil {
+		return n.Conn, n.NS
+	}
+	return "", db.Namespace{}
+}
+
+func (m *Model) openConsole(conn string, ns db.Namespace) tea.Cmd {
+	return m.openTab(consoleTabKey(conn, ns), func(id int) tab {
+		return newConsoleTab(id, m.backend, conn, ns, m.settings, m.timings)
+	})
+}
+
+func shutdownCmd(t tab) tea.Cmd {
+	s, ok := t.(shutdowner)
+	if !ok {
+		return nil
+	}
+	f := s.shutdown()
+	return func() tea.Msg { f(); return nil }
+}
+
+// quit runs every tab's cleanup, then quits.
+func (m *Model) quit() tea.Cmd {
+	var fs []func()
+	for _, t := range m.tabs {
+		if s, ok := t.(shutdowner); ok {
+			fs = append(fs, s.shutdown())
+		}
+	}
+	return func() tea.Msg {
+		for _, f := range fs {
+			f()
+		}
+		return tea.QuitMsg{}
+	}
 }
 
 // ---- layout and rendering ----
@@ -467,7 +590,7 @@ func (m *Model) renderStatus() string {
 	if m.cmdline != nil {
 		return textutil.Fit(m.cmdline.View(m.width, 1), m.width)
 	}
-	parts := []string{theme.Mode.Render(" NORMAL ")}
+	parts := []string{theme.Mode.Render(" " + m.mode() + " ")}
 	if len(m.pending) > 0 {
 		parts = append(parts, m.keys.Display(m.pending))
 	}
