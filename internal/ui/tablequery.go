@@ -84,11 +84,17 @@ var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
 // PostgreSQL, with ::text so numbers, dates and uuids match too, and LIKE
 // on MySQL, whose default collations ignore case.
 func containsFilter(d sqlx.Dialect, col, s string) string {
-	pattern := sqlx.Literal(d, "TEXT", db.Value{Text: "%" + likeEscaper.Replace(s) + "%"})
+	return likeFilter(d, col, "%"+likeEscaper.Replace(s)+"%")
+}
+
+// likeFilter matches col against a LIKE pattern as typed, % and _ being
+// wildcards; it ignores case like containsFilter.
+func likeFilter(d sqlx.Dialect, col, pattern string) string {
+	lit := sqlx.Literal(d, "TEXT", db.Value{Text: pattern})
 	if d == sqlx.Postgres {
-		return sqlx.QuoteIdent(d, col) + "::text ILIKE " + pattern
+		return sqlx.QuoteIdent(d, col) + "::text ILIKE " + lit
 	}
-	return sqlx.QuoteIdent(d, col) + " LIKE " + pattern
+	return sqlx.QuoteIdent(d, col) + " LIKE " + lit
 }
 
 // andFilter narrows the filter old with cond.

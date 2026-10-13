@@ -81,6 +81,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `K` | Show full cell value |
 | `ff` / `f!` | Filter: the column equals / is not the cell's value (NULL → `IS NULL` / `IS NOT NULL`) |
 | `fs` or `f~` | Filter: the column contains… (asks, starting from the cell; ignores case; `%` `_` match themselves) |
+| `fl` | Filter: the column is LIKE a pattern you type (`%` any text, `_` one character; starts from `%cell%`; ignores case) |
 | `f>` / `f<` | Filter: the column is greater / less than… (asks, starting from the cell) |
 | `fn` / `fN` | Filter: the column is / is not NULL |
 | `fx` | Clear the filter |

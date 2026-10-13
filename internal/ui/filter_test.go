@@ -213,3 +213,25 @@ func TestFilterPromptBringsBackAFailedFilter(t *testing.T) {
 		t.Fatalf("a later success forgets it: %q", got)
 	}
 }
+
+func TestFilterMenuLike(t *testing.T) {
+	b := newFakeBackend()
+	tab := loadedDataTab(t, b)
+	tab.Handle(keymap.Right)
+	p := promptFor(t, tab, keymap.FilterLike)
+	if v := ansi.Strip(p.View(80, 24)); !strings.Contains(v, "name LIKE") || !strings.Contains(v, "%user1%") {
+		t.Fatalf("the prompt names the column and starts from %%cell%%:\n%s", v)
+	}
+	tab.Update(run(tab.Update(filterValueMsg{tabID: 1, action: keymap.FilterLike, col: colNamed("name"), text: "user_%"})))
+	if got := b.conn.lastQuery(); !strings.Contains(got, "WHERE (`name` LIKE 'user_%'\n)") {
+		t.Fatalf("like keeps the wildcards: %q", got)
+	}
+}
+
+func TestFilterMenuShowsTheChoices(t *testing.T) {
+	m, _, _ := openUsersTab(t)
+	press(t, m, "f")
+	if s := screen(m); !strings.Contains(s, "LIKE pattern") || !strings.Contains(s, "contains") {
+		t.Fatalf("f lists the filters:\n%s", s)
+	}
+}

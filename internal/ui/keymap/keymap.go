@@ -81,6 +81,7 @@ const (
 	FilterEqual      Action = "filter.eq"
 	FilterNotEqual   Action = "filter.ne"
 	FilterContains   Action = "filter.contains"
+	FilterLike       Action = "filter.like"
 	FilterGreater    Action = "filter.gt"
 	FilterLess       Action = "filter.lt"
 	FilterNull       Action = "filter.null"

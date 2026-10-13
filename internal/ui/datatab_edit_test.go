@@ -93,7 +93,7 @@ func TestUnsavedChangesBlockReloads(t *testing.T) {
 	m, b, d := openUsersTab(t)
 	press(t, m, "l", "i", "x", "enter")
 	before := b.conn.lastQuery()
-	for _, keys := range [][]string{{"]"}, {"s"}, {"f", "f"}, {"f", "s"}, {"f", "x"}, {"F"}, {"space", "r"}} {
+	for _, keys := range [][]string{{"]"}, {"s"}, {"f", "f"}, {"f", "s"}, {"f", "x"}, {"f", "l"}, {"F"}, {"space", "r"}} {
 		press(t, m, keys...)
 		if b.conn.lastQuery() != before || m.overlay != nil {
 			t.Fatalf("%v reloaded with unsaved changes", keys)
