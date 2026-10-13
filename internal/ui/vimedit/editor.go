@@ -89,6 +89,7 @@ type Editor struct {
 	cur    Pos
 	want   int // the column j and k aim for, or wantEnd
 	mode   Mode
+	anchor Pos // where the visual selection started
 	height int // lines on screen; ctrl+d and ctrl+u move half of it
 
 	regs map[rune]register
