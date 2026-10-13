@@ -55,5 +55,5 @@ func (p *Password) View(width, _ int) string {
 	return theme.Box("Connect", body, w, 7, true)
 }
 
-// Paste appends text to the input.
+// Paste inserts text at the cursor.
 func (p *Password) Paste(text string) { p.input.paste(text) }
