@@ -64,7 +64,7 @@ func (c *Confirm) View(width, height int) string {
 		body = append(body, theme.Muted.Render("y confirm · n/esc cancel"))
 	} else {
 		body = append(body, "Type "+theme.Title.Render(textutil.Sanitize(c.expect))+" to continue:",
-			"> "+c.input.String()+"█")
+			"> "+c.input.View(w-4))
 		if c.wrong {
 			body = append(body, theme.Error.Render("does not match"))
 		}

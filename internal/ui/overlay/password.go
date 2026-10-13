@@ -40,18 +40,19 @@ func (p *Password) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 }
 
 func (p *Password) View(width, _ int) string {
+	w := max(min(width-4, 50), 10)
 	check := "[ ]"
 	if p.save {
 		check = "[x]"
 	}
 	body := strings.Join([]string{
 		"Password for " + theme.Title.Render(p.conn) + ":",
-		"> " + strings.Repeat("•", p.input.Len()) + "█",
+		"> " + p.input.ViewMasked(w-4, '•'),
 		"",
 		check + " save to Keychain (tab)",
 		theme.Muted.Render("enter connect · esc cancel"),
 	}, "\n")
-	return theme.Box("Connect", body, max(min(width-4, 50), 10), 7, true)
+	return theme.Box("Connect", body, w, 7, true)
 }
 
 // Paste appends text to the input.

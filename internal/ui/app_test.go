@@ -209,7 +209,7 @@ func TestCommandLine(t *testing.T) {
 	m, _ := newTestModel(t)
 	openUsers(t, m)
 	press(t, m, ":")
-	if !strings.Contains(screen(m), ":█") {
+	if lines := strings.Split(screen(m), "\n"); m.cmdline == nil || !strings.HasPrefix(lines[len(lines)-1], ":") {
 		t.Fatal("command line shown in the status bar")
 	}
 	press(t, m, "q", "enter")
@@ -345,7 +345,7 @@ func TestConsoleNeedsAConnection(t *testing.T) {
 func TestSearchTreeAndGrid(t *testing.T) {
 	m, _ := newTestModel(t)
 	press(t, m, "/")
-	if !strings.Contains(screen(m), "/█") {
+	if lines := strings.Split(screen(m), "\n"); m.cmdline == nil || !strings.HasPrefix(lines[len(lines)-1], "/") {
 		t.Fatal("search line in the status bar")
 	}
 	press(t, m, "p", "r", "enter")
