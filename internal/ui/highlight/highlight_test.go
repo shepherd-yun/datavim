@@ -111,3 +111,39 @@ func TestHighlighterReusesUnchangedStatements(t *testing.T) {
 		t.Fatalf("an edit at the end re-highlighted %d segments", n)
 	}
 }
+
+func TestSQLConstantsAndBacktickIdentifiers(t *testing.T) {
+	src := "SELECT `order`.`from`, `we``ird`, 'a`b' FROM `select` WHERE x IS NULL AND y = TRUE -- c`x"
+	spans := SQL(src, sqlx.MySQL)
+	for _, tc := range []struct {
+		text string
+		want Class
+	}{
+		{"`order`", Plain},
+		{"order`", Plain},
+		{"`from`", Plain},
+		{"from`", Plain},
+		{"`we``ird`", Plain},
+		{"``ird", Plain},
+		{"ird`", Plain},
+		{"'a`b'", String},
+		{"`b'", String},
+		{"`select`", Plain},
+		{"select`", Plain},
+		{"FROM", Keyword},
+		{"NULL", Keyword},
+		{"TRUE", Keyword},
+		{"c`x", Comment},
+	} {
+		i := strings.Index(src, tc.text)
+		for off := i; off < i+len(tc.text); off++ {
+			if got := classAt(spans, off); got != tc.want {
+				t.Errorf("%q byte %d (%q) is class %d, want %d", tc.text, off-i, src[off], got, tc.want)
+				break
+			}
+		}
+	}
+	if got := classAt(SQL("SELECT null", sqlx.Postgres), len("SELECT ")); got != Keyword {
+		t.Errorf("PostgreSQL null is class %d", got)
+	}
+}
