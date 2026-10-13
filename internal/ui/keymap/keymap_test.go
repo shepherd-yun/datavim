@@ -24,6 +24,8 @@ func TestResolve(t *testing.T) {
 		{Tree, []string{"g"}, "", Pending},
 		{Tree, []string{"g", "g"}, Top, Matched},
 		{Tree, []string{"space"}, "", Pending},
+		{Tree, []string{"space", "space"}, GlobalSearch, Matched},
+		{Console, []string{"space", "space"}, GlobalSearch, Matched},
 		{Tree, []string{"space", "s"}, OpenStructure, Matched},
 		{Grid, []string{"space", "b"}, ToggleTree, Matched},
 		{Tree, []string{"3"}, GotoTab(3), Matched},

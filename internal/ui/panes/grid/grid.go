@@ -241,6 +241,32 @@ func (m *Model) ScrollColumns(n int) {
 	}
 }
 
+// SelectColumn moves the cursor to the column called name (exactly, else
+// ignoring case) and reports whether there is one.
+func (m *Model) SelectColumn(name string) bool {
+	if m.rs == nil {
+		return false
+	}
+	idx := -1
+	for i, c := range m.rs.Columns {
+		if c.Name == name {
+			idx = i
+			break
+		}
+	}
+	for i := 0; idx < 0 && i < len(m.rs.Columns); i++ {
+		if strings.EqualFold(m.rs.Columns[i].Name, name) {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		return false
+	}
+	m.col = idx
+	m.scrollIntoView()
+	return true
+}
+
 // Find moves to the next cell (row-major, wrapping) whose text contains q,
 // ignoring case; backwards when forward is false. NULL cells never match.
 func (m *Model) Find(q string, forward bool) bool {

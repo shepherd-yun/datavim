@@ -327,3 +327,51 @@ func icon(n *Node) string {
 		return "▸"
 	}
 }
+
+// RevealResult says how far Reveal got.
+type RevealResult int
+
+const (
+	Revealed  RevealResult = iota // the whole path is expanded and its end selected
+	NeedsLoad                     // the returned node was marked loading: load its children, then call Reveal again
+	Waiting                       // a node on the path is loading already: call Reveal again when it is done
+	NotFound                      // the connection or a name on the path does not exist
+)
+
+// Reveal expands the tree of conn along path (database, then schema) and
+// selects the deepest node it reaches.
+func (m *Model) Reveal(conn string, path []string) (*Node, RevealResult) {
+	var n *Node
+	for _, r := range m.roots {
+		if r.Conn == conn {
+			n = r
+		}
+	}
+	if n == nil {
+		return nil, NotFound
+	}
+	for _, name := range path {
+		m.selected = n
+		switch {
+		case n.Loading:
+			return nil, Waiting
+		case !n.Loaded:
+			m.StartLoad(n)
+			return n, NeedsLoad
+		}
+		n.Expanded = true
+		var next *Node
+		for _, c := range n.Children {
+			if c.Name == name {
+				next = c
+				break
+			}
+		}
+		if next == nil {
+			return nil, NotFound
+		}
+		n = next
+	}
+	m.selected = n
+	return nil, Revealed
+}

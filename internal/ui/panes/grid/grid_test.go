@@ -200,3 +200,20 @@ func TestRowAndReplaceResult(t *testing.T) {
 		t.Fatalf("cursor clamped to the last row, at %q", v.Text)
 	}
 }
+
+func TestSelectColumn(t *testing.T) {
+	m := New(&db.ResultSet{
+		Columns: []db.ColumnInfo{{Name: "id"}, {Name: "name"}, {Name: "Email"}},
+		Rows:    [][]db.Value{{{Text: "1"}, {Text: "a"}, {Text: "a@x"}}},
+	}, 40)
+	m.SetSize(20, 5)
+	if !m.SelectColumn("email") {
+		t.Fatal("matches ignoring case")
+	}
+	if col, _, _ := m.Cell(); col.Name != "Email" {
+		t.Fatalf("cursor on %q", col.Name)
+	}
+	if m.SelectColumn("nope") || New(nil, 40).SelectColumn("id") {
+		t.Fatal("unknown column or no data")
+	}
+}
