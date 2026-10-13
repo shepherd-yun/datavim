@@ -118,3 +118,85 @@ func TestEmptyAndTinySizes(t *testing.T) {
 		_ = m.View(true) // must not panic
 	}
 }
+
+func TestScrollColumns(t *testing.T) {
+	m := New(rs(), 40)
+	m.SetSize(14, 10) // id(2) + name(5) fit; email(7) does not
+	m.ScrollColumns(1)
+	if !strings.HasPrefix(view(m, true)[0], "name") {
+		t.Fatalf("zl scrolls one column: %q", view(m, true)[0])
+	}
+	if col, _, _ := m.Cell(); col.Name != "name" {
+		t.Fatalf("cursor pulled into view, got %s", col.Name)
+	}
+	m.ScrollColumns(1)
+	if col, _, _ := m.Cell(); col.Name != "email" {
+		t.Fatalf("cursor follows, got %s", col.Name)
+	}
+	m.ScrollColumns(-5)
+	if !strings.HasPrefix(view(m, true)[0], "id") {
+		t.Fatalf("clamped at the first column: %q", view(m, true)[0])
+	}
+	if col, _, _ := m.Cell(); col.Name != "name" {
+		t.Fatalf("cursor kept inside the view, got %s", col.Name)
+	}
+	m.ScrollColumns(99)
+	if col, _, _ := m.Cell(); col.Name != "note" {
+		t.Fatalf("clamped at the last column, got %s", col.Name)
+	}
+	New(nil, 40).ScrollColumns(1) // must not panic
+}
+
+func TestFind(t *testing.T) {
+	m := New(rs(), 40)
+	m.SetSize(80, 10)
+	if !m.Find("BOB", true) {
+		t.Fatal("case-insensitive match")
+	}
+	if _, v, _ := m.Cell(); v.Text != "bob" {
+		t.Fatalf("at %q", v.Text)
+	}
+	if !m.Find("a", true) { // wraps to row 0: "alice"
+		t.Fatal("wraps around")
+	}
+	if _, v, _ := m.Cell(); v.Text != "alice" {
+		t.Fatalf("at %q", v.Text)
+	}
+	// cursor is on alice (0,1); searching backwards wraps to the last match, a@x.com (0,2)
+	if !m.Find("a", false) {
+		t.Fatal("backward search")
+	}
+	if _, v, _ := m.Cell(); v.Text != "a@x.com" {
+		t.Fatalf("backward at %q", v.Text)
+	}
+	if m.Find("NULL", true) {
+		t.Fatal("NULL cells never match")
+	}
+	if m.Find("", true) || New(nil, 40).Find("x", true) {
+		t.Fatal("empty query or grid")
+	}
+}
+
+func TestRowAndReplaceResult(t *testing.T) {
+	m := New(rs(), 40)
+	m.SetSize(80, 10)
+	m.Move(1, 1)
+	row, ok := m.Row()
+	if !ok || row[1].Text != "李雷" {
+		t.Fatalf("Row = %v, %v", row, ok)
+	}
+	bigger := rs()
+	bigger.Rows = append(bigger.Rows, []db.Value{{Text: "4"}, {Text: "dan"}, {Null: true}, {Null: true}})
+	m.ReplaceResult(bigger)
+	if _, v, _ := m.Cell(); v.Text != "李雷" {
+		t.Fatalf("cursor kept, at %q", v.Text)
+	}
+	if m.Result() != bigger || m.RowCount() != 4 {
+		t.Fatal("data replaced")
+	}
+	m.Bottom()
+	m.ReplaceResult(rs())
+	if _, v, _ := m.Cell(); v.Text != "bob" {
+		t.Fatalf("cursor clamped to the last row, at %q", v.Text)
+	}
+}

@@ -202,3 +202,66 @@ func cellText(v db.Value) string {
 	}
 	return textutil.Sanitize(s)
 }
+
+// Result returns the data shown (nil when empty).
+func (m *Model) Result() *db.ResultSet { return m.rs }
+
+// Row returns the row under the cursor.
+func (m *Model) Row() ([]db.Value, bool) {
+	if m.RowCount() == 0 {
+		return nil, false
+	}
+	return m.rs.Rows[m.row], true
+}
+
+// ReplaceResult swaps in new data (e.g. more rows of the same query) and
+// keeps the cursor where it was, clamped to the new data.
+func (m *Model) ReplaceResult(rs *db.ResultSet) {
+	row, col, rowOff, colOff := m.row, m.col, m.rowOff, m.colOff
+	m.SetResult(rs)
+	m.rowOff, m.colOff = rowOff, colOff
+	m.row, m.col = row, col
+	m.Move(0, 0)
+	m.colOff = textutil.Clamp(m.colOff, 0, max(m.colCount()-1, 0))
+}
+
+// ScrollColumns scrolls the view n columns right (negative: left) and pulls
+// the cursor back into view if it scrolled off.
+func (m *Model) ScrollColumns(n int) {
+	if m.colCount() == 0 {
+		return
+	}
+	m.colOff = textutil.Clamp(m.colOff+n, 0, m.colCount()-1)
+	vis := m.visibleColumns()
+	if m.col < m.colOff {
+		m.col = m.colOff
+	}
+	if last := vis[len(vis)-1]; m.col > last {
+		m.col = last
+	}
+}
+
+// Find moves to the next cell (row-major, wrapping) whose text contains q,
+// ignoring case; backwards when forward is false. NULL cells never match.
+func (m *Model) Find(q string, forward bool) bool {
+	rows, cols := m.RowCount(), m.colCount()
+	if q == "" || rows == 0 || cols == 0 {
+		return false
+	}
+	q = strings.ToLower(q)
+	total := rows * cols
+	step := 1
+	if !forward {
+		step = -1
+	}
+	start := m.row*cols + m.col
+	for i := 1; i <= total; i++ {
+		k := ((start+step*i)%total + total) % total
+		r, c := k/cols, k%cols
+		if v := m.rs.Rows[r][c]; !v.Null && strings.Contains(strings.ToLower(v.Text), q) {
+			m.row, m.col = r, c
+			return true
+		}
+	}
+	return false
+}
