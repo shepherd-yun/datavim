@@ -160,3 +160,11 @@ func TestGuardMissingWhereDialog(t *testing.T) {
 		t.Fatalf("check = %+v", c)
 	}
 }
+
+func TestRunRecordsWhereEachStatementStarts(t *testing.T) {
+	src := "select 1;\n  select 2"
+	res := Run(context.Background(), &fakeQ{}, stmts(src), sqlx.MySQL, 10)
+	if len(res) != 2 || res[0].Start != 0 || res[1].Start != strings.Index(src, "select 2") {
+		t.Fatalf("starts: %+v", res)
+	}
+}
