@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
@@ -36,11 +38,20 @@ type Model struct {
 	section       Section
 	offset        int
 	width, height int
+	dialect       sqlx.Dialect
+	ddl           []string // highlighted DDL lines
 }
 
-func New() *Model { return &Model{} }
+// New returns an empty view; d selects the DDL highlighting.
+func New(d sqlx.Dialect) *Model { return &Model{dialect: d} }
 
-func (m *Model) SetData(d Data)   { m.data, m.offset = d, 0 }
+// SetData replaces what the view shows.
+func (m *Model) SetData(d Data) {
+	m.data, m.offset = d, 0
+	clean := textutil.SanitizeText(d.DDL)
+	m.ddl = theme.HighlightLines(clean, highlight.SQL(clean, m.dialect))
+}
+
 func (m *Model) SetSize(w, h int) { m.width, m.height = max(w, 0), max(h, 0) }
 func (m *Model) Section() Section { return m.section }
 func (m *Model) NextSection()     { m.section, m.offset = (m.section+1)%sectionCount, 0 }
@@ -96,7 +107,7 @@ func (m *Model) lines() []string {
 		}
 		return textutil.Table([]string{"Name", "Columns", "References"}, rows)
 	default:
-		return strings.Split(m.data.DDL, "\n")
+		return m.ddl
 	}
 }
 
@@ -119,7 +130,10 @@ func (m *Model) View() string {
 	m.offset = textutil.Clamp(m.offset, 0, m.maxOffset())
 	end := min(m.offset+m.bodyHeight(), len(lines))
 	for _, l := range lines[m.offset:end] {
-		out = append(out, textutil.Fit(textutil.Sanitize(l), m.width))
+		if m.section != DDL { // DDL lines are sanitized before highlighting
+			l = textutil.Sanitize(l)
+		}
+		out = append(out, textutil.Fit(l, m.width))
 	}
 	if len(out) > m.height {
 		out = out[:m.height]

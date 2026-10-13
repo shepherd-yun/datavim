@@ -7,6 +7,9 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
+	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
 
 func data() Data {
@@ -27,7 +30,7 @@ func data() Data {
 }
 
 func TestSections(t *testing.T) {
-	m := New()
+	m := New(sqlx.MySQL)
 	m.SetSize(80, 20)
 	m.SetData(data())
 	v := ansi.Strip(m.View())
@@ -59,7 +62,7 @@ func TestSections(t *testing.T) {
 }
 
 func TestScrollClamps(t *testing.T) {
-	m := New()
+	m := New(sqlx.MySQL)
 	m.SetSize(40, 4) // header + blank + 2 body lines
 	d := data()
 	d.DDL = "l1\nl2\nl3\nl4\nl5"
@@ -75,4 +78,25 @@ func TestScrollClamps(t *testing.T) {
 	}
 	m.SetSize(0, 0)
 	_ = m.View() // must not panic
+}
+
+func TestDDLIsHighlightedAndSanitized(t *testing.T) {
+	m := New(sqlx.MySQL)
+	m.SetSize(60, 10)
+	d := data()
+	d.DDL = "CREATE TABLE users (\n  id bigint -- \x1b[2J\n);"
+	m.SetData(d)
+	for m.Section() != DDL {
+		m.NextSection()
+	}
+	v := m.View()
+	if !strings.Contains(v, theme.Syntax(highlight.Keyword).Render("CREATE")) {
+		t.Fatalf("DDL keywords are colored:\n%q", v)
+	}
+	if strings.Contains(v, "\x1b[2J") {
+		t.Fatal("escape sequences from the server are not passed through")
+	}
+	if !strings.Contains(ansi.Strip(v), "CREATE TABLE users (") {
+		t.Fatalf("DDL text:\n%s", ansi.Strip(v))
+	}
 }

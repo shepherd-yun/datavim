@@ -7,6 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 )
 
@@ -68,4 +69,40 @@ func Frame(title, body string, width, height int, focused, danger bool) string {
 	}
 	lines = append(lines, border.Render("└"+strings.Repeat("─", inner)+"┘"))
 	return strings.Join(lines, "\n")
+}
+
+// syntax colors SQL by highlight class; Plain is left unstyled.
+var syntax = map[highlight.Class]lipgloss.Style{
+	highlight.Keyword:  lipgloss.NewStyle().Bold(true).Foreground(ColorFocus),
+	highlight.Builtin:  lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
+	highlight.String:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
+	highlight.Number:   lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
+	highlight.Comment:  lipgloss.NewStyle().Italic(true).Foreground(ColorBorder),
+	highlight.Operator: lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
+}
+
+// Syntax is the style of a highlight class.
+func Syntax(c highlight.Class) lipgloss.Style { return syntax[c] }
+
+// HighlightLines colors src by spans and splits it into lines. src must be
+// free of control characters other than \n (see textutil.SanitizeText).
+func HighlightLines(src string, spans []highlight.Span) []string {
+	var lines []string
+	var b strings.Builder
+	for _, s := range spans {
+		for i, part := range strings.Split(src[s.Start:s.End], "\n") {
+			if i > 0 {
+				lines = append(lines, b.String())
+				b.Reset()
+			}
+			switch {
+			case part == "":
+			case s.Class == highlight.Plain:
+				b.WriteString(part)
+			default:
+				b.WriteString(Syntax(s.Class).Render(part))
+			}
+		}
+	}
+	return append(lines, b.String())
 }

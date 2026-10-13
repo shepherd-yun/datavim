@@ -24,6 +24,15 @@ func Sanitize(s string) string {
 	}, s)
 }
 
+// SanitizeText is Sanitize for multi-line text: newlines are kept.
+func SanitizeText(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, l := range lines {
+		lines[i] = Sanitize(l)
+	}
+	return strings.Join(lines, "\n")
+}
+
 // Fit truncates s to width cells (ending in "…") and pads it to exactly width.
 func Fit(s string, width int) string {
 	if width <= 0 {

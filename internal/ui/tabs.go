@@ -11,6 +11,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
@@ -295,7 +296,8 @@ type structureTab struct {
 }
 
 func newStructureTab(id int, b Backend, conn string, ref db.TableRef) *structureTab {
-	return &structureTab{id: id, backend: b, conn: conn, ref: ref, view: structure.New()}
+	cfg, _ := b.Connection(conn)
+	return &structureTab{id: id, backend: b, conn: conn, ref: ref, view: structure.New(sqlx.DialectOf(cfg.Driver))}
 }
 
 func (t *structureTab) ID() int                       { return t.id }
