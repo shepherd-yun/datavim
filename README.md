@@ -3,10 +3,10 @@
 A terminal SQL client for MySQL and PostgreSQL with vim keys and DataGrip-style workflows.
 一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL 和 PostgreSQL。
 
-> Status: v0.4 — browse databases and tables, write and run SQL in a highlighted console
-> with completion, search everything with `<Space><Space>`, reopen recent tabs, copy and
-> export results, SQL history, SSH tunnels (agent, keys, ProxyJump), production safeguards
-> and manual transactions. A built-in vim editor arrives in v0.5.
+> Status: v0.5 — browse databases and tables, write and run SQL in a highlighted console
+> with a built-in vim editor and completion, search everything with `<Space><Space>`,
+> reopen recent tabs, copy and export results, SQL history, SSH tunnels (agent, keys,
+> ProxyJump), production safeguards and manual transactions. Editing table data arrives in v0.6.
 
 ## Install
 
@@ -60,7 +60,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `l` / `Enter` | Expand node / open table (retry a disconnected connection) |
 | `h` | Collapse / go to parent |
 | `Tab`, `Ctrl-h` `Ctrl-l` | Switch pane |
-| `1`–`9` | Go to tab |
+| `1`–`9` | Go to tab (in the console editor digits are counts: use `gt` / `gT` / `{n}gt`) |
 | `/` `n` `N` | Search in the tree or a result grid |
 | `[` `]` | Previous / next page (data), section (structure); `]` loads more console rows |
 | `zh` `zl` | Scroll a grid sideways |
@@ -68,8 +68,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `yl` / `yy` | Copy cell / row |
 | `p` | Re-enter connection password (tree) |
 | `<Space>c` | SQL console for the selected connection / database |
-| `i` `a` / `Esc` | Console: insert mode / back to normal mode |
-| `Enter` / `R` | Console: run statement under cursor / run all (`Ctrl-Enter` or `Ctrl-j` in insert mode) |
+| `Enter` / `R` | Console: run statement under cursor, or the visual selection / run all (`Ctrl-Enter` or `Ctrl-j` in insert mode) |
 | `Ctrl-c` | Cancel the running query (never quits) |
 | `Ctrl-j` / `Ctrl-k` | Console: results / editor; `M` toggles the message log |
 | `<Space>v` | Edit the console in `$EDITOR` |
@@ -94,6 +93,20 @@ a changed host key is an error. `ProxyCommand` is not supported.
 
 Press `<Space>` and wait to see every leader key.
 Ghostty users can map Cmd shortcuts to leader keys: [docs/examples/ghostty.conf](docs/examples/ghostty.conf).
+
+## Console editor
+
+The console is a vim editor: NORMAL, INSERT, VISUAL (`v`) and V-LINE (`V`) modes;
+motions `h j k l w b e W B E 0 ^ $ gg G f F t T % { }` and `Ctrl-d` `Ctrl-u`; operators
+`d c y > <` with a motion, a text object (`iw aw i" a" i' a' i( a( i[ a[ i{ a{`) or doubled
+(`dd` `cc` `yy` `>>` `<<`); `x D C p P o O i a I A`; `u` / `Ctrl-r` undo and redo; `.`
+repeats the last change; counts (`3dd`, `2dw`); registers `"a`–`"z`, and `"+` for the
+system clipboard. In the editor the digits are counts, so `gt` / `gT` / `{n}gt` switch
+tabs. `Enter` in VISUAL mode runs the selected statements. `>` and `<` indent by four
+spaces; `Tab` in INSERT mode types four spaces.
+
+Not built in: macros, ex ranges, windows, `/` search — `<Space>v` opens the console in
+`$EDITOR` for those.
 
 ## Search and completion
 
