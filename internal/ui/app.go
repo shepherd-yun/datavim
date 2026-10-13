@@ -140,6 +140,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.exportTo(msg)
 	case exportDoneMsg:
 		m.exportDone(msg)
+	case overlay.ConnFormMsg:
+		return m, addConnection(m.backend, msg)
+	case connAddedMsg:
+		m.connAdded(msg)
 	case overlay.SearchMsg:
 		m.lastSearch = msg.Text
 		m.find(true)
@@ -261,6 +265,8 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		m.toggleTree()
 	case keymap.YankCell, keymap.YankRow:
 		return m.yank(a)
+	case keymap.NewConnection:
+		m.overlay = overlay.NewConnForm()
 	case keymap.OpenStructure:
 		return m.openStructureFromContext()
 	default:
@@ -620,6 +626,29 @@ func (m *Model) noteConn(conn string, err error) {
 	}
 }
 
+type connAddedMsg struct {
+	conn config.Connection
+	err  error
+}
+
+func addConnection(b Backend, msg overlay.ConnFormMsg) tea.Cmd {
+	return func() tea.Msg {
+		err := b.AddConnection(msg.Conn, msg.Password, msg.Save)
+		return connAddedMsg{conn: msg.Conn, err: err}
+	}
+}
+
+func (m *Model) connAdded(msg connAddedMsg) {
+	if msg.err != nil {
+		m.setStatus("cannot add connection: "+msg.err.Error(), true)
+		return
+	}
+	c := msg.conn
+	m.tree.AddRoot(&tree.Node{Kind: tree.KindConn, Name: c.Name, Conn: c.Name, Prod: c.Env == config.EnvProd})
+	m.setFocus(focusTree)
+	m.setStatus("added connection "+c.Name+" to connections.toml", false)
+}
+
 // ---- layout and rendering ----
 
 func (m *Model) treeWidth() int {
@@ -649,7 +678,11 @@ func (m *Model) render() string {
 	var panes []string
 	if treeW > 0 {
 		focused := m.focus == focusTree
-		panes = append(panes, theme.Box("Connections", m.tree.View(max(treeW-2, 0), focused), treeW, bodyH, focused))
+		body := m.tree.View(max(treeW-2, 0), focused)
+		if m.tree.Empty() {
+			body = theme.Muted.Render("No connections\n<space>n add one")
+		}
+		panes = append(panes, theme.Box("Connections", body, treeW, bodyH, focused))
 	}
 	if w := m.width - treeW; w > 0 {
 		panes = append(panes, m.renderTabs(w, bodyH))

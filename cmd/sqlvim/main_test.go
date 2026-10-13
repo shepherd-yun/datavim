@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/shepherd-yun/sqlvim/internal/config"
 )
 
 func TestRunPrintsVersion(t *testing.T) {
@@ -18,15 +20,6 @@ func TestRunPrintsVersion(t *testing.T) {
 	}
 }
 
-func TestRunWithoutConnectionsExplainsWhatToDo(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	dir := t.TempDir()
-	err := run([]string{"--config", dir}, &bytes.Buffer{})
-	if err == nil || !strings.Contains(err.Error(), "connections.toml") {
-		t.Fatalf("err = %v", err)
-	}
-}
-
 func TestRunReportsConfigErrors(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	dir := t.TempDir()
@@ -36,5 +29,20 @@ func TestRunReportsConfigErrors(t *testing.T) {
 	err := run([]string{"--config", dir}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), "connections.toml:") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestNewManagerPersistsAddedConnections(t *testing.T) {
+	dir := t.TempDir()
+	mgr := newManager(&config.Config{}, dir)
+	if err := mgr.AddConnection(config.Connection{Name: "local", Driver: "mysql"}, "", false); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Connections) != 1 || cfg.Connections[0].Name != "local" {
+		t.Fatalf("connections = %+v", cfg.Connections)
 	}
 }

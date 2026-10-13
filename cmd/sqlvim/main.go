@@ -55,10 +55,6 @@ func run(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if len(cfg.Connections) == 0 {
-		return fmt.Errorf("no connections configured: create %s (see docs/examples/connections.toml)",
-			filepath.Join(dir, "connections.toml"))
-	}
 
 	logPath, closeLog, err := setupLogging(*debug)
 	if err != nil {
@@ -72,7 +68,7 @@ func run(args []string, stdout io.Writer) error {
 	}
 	defer func() { _ = st.Close() }()
 
-	mgr := session.NewManager(cfg.Connections, secret.Keyring{}, mysql.Driver{}, postgres.Driver{})
+	mgr := newManager(cfg, dir)
 	defer mgr.CloseAll()
 
 	slog.Info("starting", "version", version, "connections", len(cfg.Connections))
@@ -113,4 +109,15 @@ func openStore(stateDir string) (*history.Store, error) {
 	}
 	slog.Warn("state database unavailable; history and drafts will not be kept", "err", err)
 	return history.Open(":memory:")
+}
+
+// newManager builds the session manager; connections added in the UI are
+// appended to dir/connections.toml.
+func newManager(cfg *config.Config, dir string) *session.Manager {
+	mgr := session.NewManager(cfg.Connections, secret.Keyring{}, mysql.Driver{}, postgres.Driver{})
+	mgr.Persist = func(c config.Connection) error {
+		_, err := config.AppendConnection(dir, c)
+		return err
+	}
+	return mgr
 }

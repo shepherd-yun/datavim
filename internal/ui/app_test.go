@@ -447,3 +447,40 @@ func TestHistoryEmptyAndMissingConnection(t *testing.T) {
 		t.Fatalf("screen:\n%s", screen(m))
 	}
 }
+
+func TestNewConnectionForm(t *testing.T) {
+	m, b := newTestModel(t)
+	press(t, m, "space", "n")
+	if !strings.Contains(screen(m), "New connection") {
+		t.Fatalf("form:\n%s", screen(m))
+	}
+	press(t, m, "n", "e", "w", "ctrl+s")
+	if len(b.added) != 1 || b.added[0].Name != "new" {
+		t.Fatalf("added = %+v", b.added)
+	}
+	if s := screen(m); !strings.Contains(s, "added connection new") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	if n := m.tree.Selected(); n == nil || n.Name != "new" || m.focus != focusTree {
+		t.Fatal("the new connection is selected in the tree")
+	}
+}
+
+func TestNewConnectionError(t *testing.T) {
+	m, b := newTestModel(t)
+	b.addErr = errors.New("connection \"local\" already exists")
+	press(t, m, "space", "n", "l", "o", "c", "a", "l", "ctrl+s")
+	if s := screen(m); !strings.Contains(s, "already exists") {
+		t.Fatalf("screen:\n%s", s)
+	}
+}
+
+func TestEmptyConfigShowsHowToAddAConnection(t *testing.T) {
+	b := newFakeBackend()
+	b.conns = nil
+	m := New(b, newFakeStore(), config.Settings{PageSize: 2, MaxColumnWidth: 40, MaxRows: 10})
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	if s := screen(m); !strings.Contains(s, "No connections") || !strings.Contains(s, "<space>n") {
+		t.Fatalf("screen:\n%s", s)
+	}
+}
