@@ -71,6 +71,9 @@ func dsnConfig(cfg db.ConnConfig) (*gomysql.Config, error) {
 			return nil, err
 		}
 	}
+	// Data edits check that every UPDATE found exactly one row; without
+	// this MySQL counts only rows whose values changed.
+	mc.ClientFoundRows = true
 	if cfg.ReadOnly {
 		if mc.Params == nil {
 			mc.Params = map[string]string{}
