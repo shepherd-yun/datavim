@@ -49,10 +49,10 @@ func (p *Prompt) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 	key := msg.String()
 	if p.popup != nil {
 		switch key {
-		case "tab", "down", "ctrl+n":
+		case "tab", "down", "ctrl+n", "ctrl+j":
 			p.popup.Next()
 			return p, nil
-		case "shift+tab", "up", "ctrl+p":
+		case "shift+tab", "up", "ctrl+p", "ctrl+k":
 			p.popup.Prev()
 			return p, nil
 		case "enter":

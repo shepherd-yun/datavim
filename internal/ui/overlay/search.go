@@ -53,9 +53,9 @@ func (s *Search) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 			return s, nil
 		}
 		return nil, emit(SearchPickMsg{Index: s.cur, Structure: msg.String() == "ctrl+s"})
-	case "down", "ctrl+n":
+	case "down", "ctrl+n", "ctrl+j":
 		s.cur = textutil.Clamp(s.cur+1, 0, len(s.items)-1)
-	case "up", "ctrl+p":
+	case "up", "ctrl+p", "ctrl+k":
 		s.cur = textutil.Clamp(s.cur-1, 0, len(s.items)-1)
 	default:
 		before := s.query.String()

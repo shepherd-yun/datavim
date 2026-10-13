@@ -32,6 +32,9 @@ func TestPickerFiltersAndPicks(t *testing.T) {
 	if o, msg := send(t, NewPicker("x", items, pick), "ctrl+n", "ctrl+n", "ctrl+n", "ctrl+p", "enter"); o != nil || msg != (okMsg{1}) {
 		t.Fatalf("navigation clamps: %v", msg)
 	}
+	if o, msg := send(t, NewPicker("x", items, pick), "ctrl+j", "ctrl+j", "ctrl+k", "enter"); o != nil || msg != (okMsg{1}) {
+		t.Fatalf("ctrl+j/k move like ctrl+n/p: %v", msg)
+	}
 }
 
 func TestPickerTinySize(_ *testing.T) {

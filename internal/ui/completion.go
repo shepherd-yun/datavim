@@ -46,9 +46,9 @@ func (t *consoleTab) popupKey(key string) (cmd tea.Cmd, used bool) {
 		return nil, false
 	}
 	switch key {
-	case "down", "ctrl+n", "tab":
+	case "down", "ctrl+n", "ctrl+j", "tab":
 		t.popup.Next()
-	case "up", "ctrl+p", "shift+tab":
+	case "up", "ctrl+p", "ctrl+k", "shift+tab":
 		t.popup.Prev()
 	case "enter", "ctrl+y":
 		return t.acceptCompletion(), true
