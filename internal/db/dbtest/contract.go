@@ -212,6 +212,68 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 	})
 
+	t.Run("Catalog lists namespaces, tables, columns and routines", func(t *testing.T) {
+		c, err := conn.Meta().Catalog(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !slices.Contains(c.Databases, ns.Database) {
+			t.Errorf("Databases = %v, want %q", c.Databases, ns.Database)
+		}
+		if !slices.Contains(c.Namespaces, ns) {
+			t.Errorf("Namespaces = %v, want %v", c.Namespaces, ns)
+		}
+		for _, n := range c.Namespaces {
+			if strings.HasPrefix(n.Schema, "pg_") || n.Schema == "information_schema" ||
+				n.Schema == "" && slices.Contains([]string{"mysql", "information_schema", "performance_schema", "sys"}, n.Database) {
+				t.Errorf("system namespace %v listed", n)
+			}
+		}
+		kinds := map[string]db.TableKind{}
+		for _, tb := range c.Tables {
+			if tb.Namespace == ns {
+				kinds[tb.Name] = tb.Kind
+			}
+		}
+		want := map[string]db.TableKind{
+			"users": db.TableKindTable, "orders": db.TableKindTable, "order": db.TableKindTable,
+			"MixedCase": db.TableKindTable, "active_users": db.TableKindView,
+		}
+		if diff := cmp.Diff(want, kinds); diff != "" {
+			t.Errorf("tables (-want +got):\n%s", diff)
+		}
+		var userCols []string
+		for _, col := range c.Columns {
+			if col.Table == ref("users") {
+				userCols = append(userCols, col.Name)
+				if col.Type == "" {
+					t.Errorf("column %s has no type", col.Name)
+				}
+			}
+		}
+		if diff := cmp.Diff([]string{"id", "name", "email", "note"}, userCols); diff != "" {
+			t.Errorf("users columns (-want +got):\n%s", diff)
+		}
+		var fn *db.Routine
+		for i, r := range c.Routines {
+			if r.Namespace == ns && r.Name == "add_one" {
+				fn = &c.Routines[i]
+			}
+		}
+		if fn == nil || fn.Kind != db.RoutineFunction {
+			t.Fatalf("routines = %+v, want function add_one", c.Routines)
+		}
+		ddl, err := conn.Meta().RoutineDDL(ctx, *fn)
+		if err != nil || !strings.Contains(ddl, "add_one") {
+			t.Errorf("RoutineDDL = %q, %v", ddl, err)
+		}
+		missing := *fn
+		missing.Name = "no_such_routine_xyz"
+		if _, err := conn.Meta().RoutineDDL(ctx, missing); !errors.Is(err, db.ErrNotFound) {
+			t.Errorf("missing routine err = %v, want ErrNotFound", err)
+		}
+	})
+
 	t.Run("Stream delivers columns and can stop early", func(t *testing.T) {
 		q := "SELECT id FROM " + d.QualifiedName(ref("users")) + " ORDER BY id"
 		var cols []db.ColumnInfo

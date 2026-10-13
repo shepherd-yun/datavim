@@ -155,21 +155,13 @@ func (m meta) DDL(ctx context.Context, t db.TableRef) (string, error) {
 		return "", err
 	}
 	defer func() { _ = rows.Close() }()
-	cols, err := rows.Columns()
+	vals, ok, err := firstRow(rows)
 	if err != nil {
 		return "", err
 	}
-	if !rows.Next() {
+	if !ok {
 		return "", notFound
 	}
 	// Tables return (Table, Create Table); views return (View, Create View, ...).
-	vals := make([]sql.NullString, len(cols))
-	ptrs := make([]any, len(cols))
-	for i := range vals {
-		ptrs[i] = &vals[i]
-	}
-	if err := rows.Scan(ptrs...); err != nil {
-		return "", err
-	}
 	return vals[1].String, nil
 }

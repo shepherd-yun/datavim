@@ -18,13 +18,15 @@ import (
 )
 
 type fakeConn struct {
-	mu       sync.Mutex
-	queries  []string
-	execs    []string
-	rows     int              // rows returned by every Query
-	fail     map[string]error // statement text -> error
-	pingErr  error            // returned by every session Ping
-	sessions []*fakeSession
+	mu         sync.Mutex
+	queries    []string
+	execs      []string
+	rows       int              // rows returned by every Query
+	fail       map[string]error // statement text -> error
+	pingErr    error            // returned by every session Ping
+	sessions   []*fakeSession
+	catalogs   int   // Catalog calls
+	catalogErr error // returned by Catalog
 }
 
 // slowQuery blocks until its context is cancelled.
@@ -113,11 +115,17 @@ func (c *fakeConn) sessionCount() int {
 	defer c.mu.Unlock()
 	return len(c.sessions)
 }
-func (c *fakeConn) Meta() db.MetaReader { return fakeMeta{} }
+func (c *fakeConn) Meta() db.MetaReader { return fakeMeta{c: c} }
+
+func (c *fakeConn) catalogCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.catalogs
+}
 func (c *fakeConn) Dialect() db.Dialect { return fakeDialect{} }
 func (c *fakeConn) Close() error        { return nil }
 
-type fakeMeta struct{}
+type fakeMeta struct{ c *fakeConn }
 
 func (fakeMeta) Databases(context.Context) ([]string, error)       { return []string{"app"}, nil }
 func (fakeMeta) Schemas(context.Context, string) ([]string, error) { return nil, nil }
@@ -401,4 +409,39 @@ func (f *fakeBackend) RemoveConnection(name string) error {
 		return fmt.Errorf("unknown connection %q", name)
 	}
 	return nil
+}
+
+func (m fakeMeta) Catalog(context.Context) (db.Catalog, error) {
+	m.c.mu.Lock()
+	defer m.c.mu.Unlock()
+	m.c.catalogs++
+	if m.c.catalogErr != nil {
+		return db.Catalog{}, m.c.catalogErr
+	}
+	return fakeCatalog(), nil
+}
+
+func (fakeMeta) RoutineDDL(_ context.Context, r db.Routine) (string, error) {
+	return "CREATE FUNCTION " + r.Name + "() RETURNS int RETURN 1", nil
+}
+
+// fakeCatalog is what fakeMeta.Catalog returns: the MySQL-style database app.
+func fakeCatalog() db.Catalog {
+	app := db.Namespace{Database: "app"}
+	users := db.TableRef{Namespace: app, Name: "users"}
+	return db.Catalog{
+		Databases:  []string{"app"},
+		Namespaces: []db.Namespace{app},
+		Tables: []db.CatalogTable{
+			{Namespace: app, Name: "active", Kind: db.TableKindView},
+			{Namespace: app, Name: "order"},
+			{Namespace: app, Name: "users"},
+		},
+		Columns: []db.CatalogColumn{
+			{Table: users, Name: "id", Type: "bigint"},
+			{Table: users, Name: "name", Type: "text"},
+			{Table: users, Name: "email", Type: "text"},
+		},
+		Routines: []db.Routine{{Namespace: app, Name: "add_one", Kind: db.RoutineFunction}},
+	}
 }

@@ -24,6 +24,7 @@ var fixture = []string{
 	"CREATE TABLE `order` (id INT)",
 	"CREATE TABLE `MixedCase` (id INT)",
 	"CREATE VIEW active_users AS SELECT id, name FROM users",
+	"CREATE FUNCTION add_one(x INT) RETURNS INT DETERMINISTIC RETURN x + 1",
 	"INSERT INTO users VALUES (1, 'alice', 'a@x.com', DEFAULT), (2, '李雷', '', NULL), (3, 'bob', NULL, 'multi\\nline')",
 }
 
