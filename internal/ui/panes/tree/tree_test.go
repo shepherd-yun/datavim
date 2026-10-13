@@ -140,3 +140,51 @@ func TestViewMarksProdAndHandlesEmpty(t *testing.T) {
 		t.Fatal("empty tree")
 	}
 }
+
+func TestFindVisibleNodes(t *testing.T) {
+	m := fixture()
+	m.Expand()
+	m.SetChildren(m.Selected(), []*Node{
+		{Kind: KindDatabase, Name: "app", Conn: "local"},
+		{Kind: KindDatabase, Name: "Archive", Conn: "local"},
+	}, nil)
+	if !m.Find("ar", true) || m.Selected().Name != "Archive" {
+		t.Fatalf("selected %q", m.Selected().Name)
+	}
+	if !m.Find("o", true) || m.Selected().Name != "prod" {
+		t.Fatalf("selected %q", m.Selected().Name)
+	}
+	if !m.Find("o", true) || m.Selected().Name != "local" {
+		t.Fatalf("wraps around, selected %q", m.Selected().Name)
+	}
+	if !m.Find("app", false) || m.Selected().Name != "app" {
+		t.Fatalf("backwards wraps, selected %q", m.Selected().Name)
+	}
+	if m.Find("zzz", true) || m.Find("", true) {
+		t.Fatal("no match")
+	}
+}
+
+func TestBrokenConnection(t *testing.T) {
+	m := fixture()
+	m.SetBroken("local", true)
+	if v := ansi.Strip(m.View(40, true)); !strings.Contains(v, "disconnected") {
+		t.Fatalf("view:\n%s", v)
+	}
+	m.ResetConn("local")
+	if v := ansi.Strip(m.View(40, true)); strings.Contains(v, "disconnected") {
+		t.Fatal("ResetConn clears the mark")
+	}
+}
+
+func TestAddRootAndEmpty(t *testing.T) {
+	m := New(nil)
+	m.SetHeight(5)
+	if !m.Empty() || m.Selected() != nil {
+		t.Fatal("empty tree")
+	}
+	m.AddRoot(&Node{Kind: KindConn, Name: "new", Conn: "new"})
+	if m.Empty() || m.Selected().Name != "new" {
+		t.Fatal("AddRoot selects the new connection")
+	}
+}
