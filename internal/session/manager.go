@@ -10,11 +10,19 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
 	"github.com/shepherd-yun/sqlvim/internal/secret"
 )
 
 // ErrPasswordRequired means no password is known; ask the user.
 var ErrPasswordRequired = errors.New("password required")
+
+// Tunneler opens SSH tunnels; *tunnel.Pool implements it.
+type Tunneler interface {
+	Connect(ctx context.Context, alias string) (db.DialFunc, error)
+	SetPassphrase(path, passphrase string)
+	TrustHost(e *tunnel.UnknownHostError) error
+}
 
 type connKey struct {
 	conn     string
@@ -28,6 +36,8 @@ type Manager struct {
 
 	// Persist, if set, saves connections added with AddConnection.
 	Persist func(config.Connection) error
+	// Tunnels, if set, opens the SSH tunnels of connections with ssh set.
+	Tunnels Tunneler
 
 	mu        sync.Mutex
 	conns     []config.Connection
@@ -96,6 +106,37 @@ func (m *Manager) AddConnection(c config.Connection, password string, save bool)
 	return m.SetPassword(c.Name, password, save)
 }
 
+// SetReadOnly switches name between read-only and read-write for this run
+// only (connections.toml is not changed). Open connections are closed so the
+// server-side read-only setting follows on the next use.
+func (m *Manager) SetReadOnly(name string, ro bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for i := range m.conns {
+		if m.conns[i].Name == name {
+			m.conns[i].ReadOnly = &ro
+			m.resetLocked(name)
+			return nil
+		}
+	}
+	return fmt.Errorf("unknown connection %q", name)
+}
+
+// SetPassphrase remembers an SSH key passphrase for this run.
+func (m *Manager) SetPassphrase(path, passphrase string) {
+	if m.Tunnels != nil {
+		m.Tunnels.SetPassphrase(path, passphrase)
+	}
+}
+
+// TrustHost adds an SSH host key to known_hosts.
+func (m *Manager) TrustHost(e *tunnel.UnknownHostError) error {
+	if m.Tunnels == nil {
+		return errors.New("ssh tunnels are not available")
+	}
+	return m.Tunnels.TrustHost(e)
+}
+
 // Reset closes every open connection of name; the next Conn reconnects.
 func (m *Manager) Reset(name string) {
 	m.mu.Lock()
@@ -118,9 +159,6 @@ func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, err
 	if err != nil {
 		return nil, err
 	}
-	if cfg.SSH != "" {
-		return nil, fmt.Errorf("connection %q: ssh tunnels are not supported yet", name)
-	}
 	if database == "" {
 		database = cfg.Database
 	}
@@ -140,9 +178,18 @@ func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, err
 	if err != nil {
 		return nil, err
 	}
+	var dial db.DialFunc
+	if cfg.SSH != "" {
+		if m.Tunnels == nil {
+			return nil, fmt.Errorf("connection %q: ssh tunnels are not available", name)
+		}
+		if dial, err = m.Tunnels.Connect(ctx, cfg.SSH); err != nil {
+			return nil, fmt.Errorf("connect %s via ssh %s: %w", name, cfg.SSH, err)
+		}
+	}
 	c, err = drv.Open(ctx, db.ConnConfig{
 		Host: cfg.Host, Port: cfg.Port, User: cfg.User, Password: pw,
-		Database: database, Params: cfg.Params, ReadOnly: cfg.IsReadOnly(),
+		Database: database, Params: cfg.Params, ReadOnly: cfg.IsReadOnly(), Dial: dial,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("connect %s: %w", name, err)

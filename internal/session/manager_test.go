@@ -3,11 +3,14 @@ package session
 import (
 	"context"
 	"errors"
+	"net"
+	"slices"
 	"sync"
 	"testing"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
 	"github.com/shepherd-yun/sqlvim/internal/secret"
 )
 
@@ -152,7 +155,7 @@ func TestErrors(t *testing.T) {
 	sec := &fakeSecrets{m: map[string]string{"t": "pw"}}
 	m2 := NewManager([]config.Connection{{Name: "t", Driver: "postgres", SSH: "bastion"}}, sec, &fakeDriver{name: "postgres"})
 	if _, err := m2.Conn(context.Background(), "t", ""); err == nil {
-		t.Error("ssh connections must error until v0.3")
+		t.Error("ssh connections need Tunnels")
 	}
 }
 
@@ -221,5 +224,132 @@ func TestResetClosesOnlyThatConnection(t *testing.T) {
 	c, _ := m.Conn(ctx, "local", "app")
 	if c == a {
 		t.Fatal("the next Conn reconnects")
+	}
+}
+
+type fakeTunnels struct {
+	mu      sync.Mutex
+	aliases []string
+	err     error
+	pass    map[string]string
+	trusted []string
+}
+
+func (f *fakeTunnels) Connect(_ context.Context, alias string) (db.DialFunc, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.aliases = append(f.aliases, alias)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return func(context.Context, string, string) (net.Conn, error) { return nil, errors.New("fake") }, nil
+}
+
+func (f *fakeTunnels) SetPassphrase(path, pass string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.pass == nil {
+		f.pass = map[string]string{}
+	}
+	f.pass[path] = pass
+}
+
+func (f *fakeTunnels) TrustHost(e *tunnel.UnknownHostError) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.trusted = append(f.trusted, e.Host)
+	return nil
+}
+
+func TestConnThroughSSHTunnel(t *testing.T) {
+	m, drv, sec := setup(true)
+	sec.m["local"] = "pw"
+	tun := &fakeTunnels{}
+	m.Tunnels = tun
+	m.conns[0].SSH = "bastion"
+	if _, err := m.Conn(context.Background(), "local", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(tun.aliases, []string{"bastion"}) || len(drv.opens) != 1 || drv.opens[0].Dial == nil {
+		t.Fatalf("aliases = %v, opens = %+v", tun.aliases, drv.opens)
+	}
+}
+
+func TestDirectConnectionsSkipTunnels(t *testing.T) {
+	m, drv, sec := setup(true)
+	sec.m["local"] = "pw"
+	tun := &fakeTunnels{}
+	m.Tunnels = tun
+	if _, err := m.Conn(context.Background(), "local", ""); err != nil {
+		t.Fatal(err)
+	}
+	if len(tun.aliases) != 0 || drv.opens[0].Dial != nil {
+		t.Fatalf("aliases = %v, dial set = %v", tun.aliases, drv.opens[0].Dial != nil)
+	}
+}
+
+func TestTunnelErrorsKeepTheirType(t *testing.T) {
+	m, drv, sec := setup(true)
+	sec.m["local"] = "pw"
+	m.Tunnels = &fakeTunnels{err: &tunnel.PassphraseError{Path: "/home/me/.ssh/id_ed25519"}}
+	m.conns[0].SSH = "bastion"
+	_, err := m.Conn(context.Background(), "local", "")
+	var pe *tunnel.PassphraseError
+	if !errors.As(err, &pe) || len(drv.opens) != 0 {
+		t.Fatalf("err = %v, opens = %d", err, len(drv.opens))
+	}
+}
+
+func TestSetReadOnly(t *testing.T) {
+	m, drv, sec := setup(true)
+	sec.m["local"] = "pw"
+	ctx := context.Background()
+	c1, err := m.Conn(ctx, "local", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := m.SetReadOnly("local", true); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, _ := m.Connection("local"); !cfg.IsReadOnly() {
+		t.Fatal("Connection reflects the override")
+	}
+	if !c1.(*fakeConn).closed {
+		t.Fatal("open connections are closed so the server-side guard follows")
+	}
+	if _, err := m.Conn(ctx, "local", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !drv.opens[1].ReadOnly {
+		t.Fatal("reopened read-only")
+	}
+	if err := m.SetReadOnly("local", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.Conn(ctx, "local", ""); err != nil {
+		t.Fatal(err)
+	}
+	if drv.opens[2].ReadOnly {
+		t.Fatal("reopened read-write")
+	}
+	if err := m.SetReadOnly("nope", true); err == nil {
+		t.Fatal("unknown connection must error")
+	}
+}
+
+func TestSetPassphraseAndTrustHostGoToTunnels(t *testing.T) {
+	m, _, _ := setup(true)
+	if err := m.TrustHost(&tunnel.UnknownHostError{Host: "h"}); err == nil {
+		t.Fatal("no tunnels: TrustHost errors")
+	}
+	m.SetPassphrase("/k", "x") // no tunnels: ignored
+	tun := &fakeTunnels{}
+	m.Tunnels = tun
+	m.SetPassphrase("/k", "s3")
+	if err := m.TrustHost(&tunnel.UnknownHostError{Host: "[h]:2222"}); err != nil {
+		t.Fatal(err)
+	}
+	if tun.pass["/k"] != "s3" || !slices.Equal(tun.trusted, []string{"[h]:2222"}) {
+		t.Fatalf("tunnels = %+v", tun)
 	}
 }
