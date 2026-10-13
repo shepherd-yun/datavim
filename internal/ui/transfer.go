@@ -56,6 +56,7 @@ type exportPathMsg struct {
 
 type exportDoneMsg struct {
 	path string
+	conn string
 	rows int
 	err  error
 }
@@ -216,11 +217,10 @@ func exportCmd(b Backend, src exportSrc, f export.Format, whole bool, path strin
 		ctx, cancel := context.WithTimeout(context.Background(), exportTimeout)
 		defer cancel()
 		rows := 0
-		c, err := b.Conn(ctx, src.conn, src.ref.Database)
-		if err == nil {
-			err = streamTable(ctx, c, src, f, path, &rows)
-		}
-		return exportDoneMsg{path: path, rows: rows, err: err}
+		err := withConn(ctx, b, src.conn, src.ref.Database, func(c db.Conn) error {
+			return streamTable(ctx, c, src, f, path, &rows)
+		})
+		return exportDoneMsg{path: path, conn: src.conn, rows: rows, err: err}
 	}
 }
 

@@ -105,6 +105,9 @@ func (m *Model) View() tea.View {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if f, ok := msg.(connFailure); ok {
+		defer m.noteConn(f.failure())
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -292,6 +295,10 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 		n := t.Selected()
 		if n == nil {
 			return nil
+		}
+		if n.Kind == tree.KindConn && n.Broken {
+			m.backend.Reset(n.Conn)
+			m.tree.ResetConn(n.Conn)
 		}
 		if n.IsTable() {
 			return m.openData(n.Conn, n.TableRef())
@@ -600,6 +607,17 @@ func (m *Model) useHistory(e history.Entry) tea.Cmd {
 	open := m.openConsole(e.Conn, db.Namespace{Database: e.Database})
 	c := m.activeTab().(*consoleTab)
 	return tea.Batch(open, c.insertText(e.SQL))
+}
+
+func (m *Model) noteConn(conn string, err error) {
+	switch {
+	case conn == "":
+	case db.IsConnLost(err):
+		m.tree.SetBroken(conn, true)
+		m.setStatus("connection "+conn+" lost: select it in the tree and press enter to retry", true)
+	case err == nil:
+		m.tree.SetBroken(conn, false)
+	}
 }
 
 // ---- layout and rendering ----

@@ -58,6 +58,7 @@ type (
 
 type runDoneMsg struct {
 	tabID       int
+	conn        string
 	gen         int
 	session     db.Session
 	results     []runner.Result
@@ -303,7 +304,7 @@ func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.C
 	t.session = nil // owned by the command until runDoneMsg hands it back
 	run := func() tea.Msg {
 		defer cancel()
-		msg := runDoneMsg{tabID: id, gen: gen, more: more, limit: limit}
+		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit}
 		sess, reconnected, err := ensureSession(ctx, b, conn, ns, s)
 		msg.reconnected = reconnected
 		if err != nil {
