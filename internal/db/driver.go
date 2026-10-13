@@ -83,6 +83,11 @@ type MetaReader interface {
 	Indexes(ctx context.Context, t TableRef) ([]Index, error)
 	ForeignKeys(ctx context.Context, t TableRef) ([]ForeignKey, error)
 	DDL(ctx context.Context, t TableRef) (string, error)
+	// Catalog reads every user namespace, table, column and routine at once:
+	// PostgreSQL those of the Conn's database, MySQL those of every database.
+	Catalog(ctx context.Context) (Catalog, error)
+	// RoutineDDL returns the CREATE statement of r, or ErrNotFound.
+	RoutineDDL(ctx context.Context, r Routine) (string, error)
 }
 
 // Dialect hides SQL syntax differences between engines.

@@ -76,3 +76,45 @@ type ResultSet struct {
 type ExecResult struct {
 	RowsAffected int64
 }
+
+// RoutineKind distinguishes stored functions from procedures.
+type RoutineKind int
+
+const (
+	RoutineFunction RoutineKind = iota
+	RoutineProcedure
+)
+
+// Routine is a stored function or procedure. Args is PostgreSQL's identity
+// argument list (it tells overloads apart); MySQL leaves it empty.
+type Routine struct {
+	Namespace Namespace
+	Name      string
+	Kind      RoutineKind
+	Args      string
+}
+
+// CatalogTable is a table or view with its namespace.
+type CatalogTable struct {
+	Namespace Namespace
+	Name      string
+	Kind      TableKind
+}
+
+// CatalogColumn is one column of a catalog table.
+type CatalogColumn struct {
+	Table TableRef
+	Name  string
+	Type  string
+}
+
+// Catalog is every user object a Conn can see, read in bulk for search and
+// completion. System databases and schemas are left out of Namespaces,
+// Tables, Columns and Routines.
+type Catalog struct {
+	Databases  []string    // every database on the server, as Databases returns them
+	Namespaces []Namespace // MySQL: one per user database; PostgreSQL: one per user schema of the Conn's database
+	Tables     []CatalogTable
+	Columns    []CatalogColumn // grouped by table, in column order
+	Routines   []Routine
+}

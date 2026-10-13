@@ -26,6 +26,7 @@ var fixture = []string{
 	`CREATE TABLE app."order" (id int)`,
 	`CREATE TABLE app."MixedCase" (id int)`,
 	`CREATE VIEW app.active_users AS SELECT id, name FROM app.users`,
+	`CREATE FUNCTION app.add_one(x int) RETURNS int LANGUAGE sql AS 'SELECT x + 1'`,
 	`INSERT INTO app.users VALUES (1, 'alice', 'a@x.com', DEFAULT), (2, '李雷', '', NULL), (3, 'bob', NULL, E'multi\nline')`,
 }
 
