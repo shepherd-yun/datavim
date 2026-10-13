@@ -53,7 +53,7 @@ func (s *session) Exec(ctx context.Context, sql string, args ...any) (db.ExecRes
 	err := s.run(ctx, func(ctx context.Context) error {
 		tag, err := s.c.Exec(ctx, sql, args...)
 		res.RowsAffected = tag.RowsAffected()
-		return err
+		return locate(err, sql)
 	})
 	return res, err
 }

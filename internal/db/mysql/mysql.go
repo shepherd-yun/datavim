@@ -99,7 +99,7 @@ func wrap(err error) error {
 func (c *conn) Exec(ctx context.Context, query string, args ...any) (db.ExecResult, error) {
 	res, err := c.db.ExecContext(ctx, query, args...)
 	if err != nil {
-		return db.ExecResult{}, wrap(err)
+		return db.ExecResult{}, wrap(locate(err, query))
 	}
 	n, err := res.RowsAffected()
 	return db.ExecResult{RowsAffected: n}, err
@@ -143,7 +143,7 @@ func stream(ctx context.Context, q queryer, query string, args []any,
 ) error {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
-		return err
+		return locate(err, query)
 	}
 	defer func() { _ = rows.Close() }()
 	types, err := rows.ColumnTypes()
@@ -180,7 +180,7 @@ func stream(ctx context.Context, q queryer, query string, args []any,
 			return err
 		}
 	}
-	return rows.Err()
+	return locate(rows.Err(), query)
 }
 
 type dialect struct{}

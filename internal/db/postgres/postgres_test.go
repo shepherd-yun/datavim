@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 )
@@ -113,5 +114,25 @@ func TestPoolConfigDialsThroughTunnel(t *testing.T) {
 	}
 	if !slices.Equal(dialed, []string{"tcp db.internal:5432"}) {
 		t.Fatalf("dialed = %v", dialed)
+	}
+}
+
+func TestLocate(t *testing.T) {
+	sql := "SELECT 'é', nope FROM t"
+	pgErr := &pgconn.PgError{Message: `column "nope" does not exist`, Code: "42703", Position: 13}
+	err := locate(pgErr, sql)
+	off, ok := db.ErrorOffset(err)
+	if !ok || !strings.HasPrefix(sql[off:], "nope") {
+		t.Fatalf("offset = %d, %v", off, ok)
+	}
+	var pe *pgconn.PgError
+	if !errors.As(err, &pe) || err.Error() != pgErr.Error() {
+		t.Fatal("the PgError stays reachable and the text is unchanged")
+	}
+	if _, ok := db.ErrorOffset(locate(&pgconn.PgError{Message: "x"}, sql)); ok {
+		t.Fatal("no position, no offset")
+	}
+	if locate(nil, sql) != nil {
+		t.Fatal("nil stays nil")
 	}
 }

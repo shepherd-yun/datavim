@@ -4,7 +4,11 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strconv"
+	"strings"
 	"testing"
+
+	gomysql "github.com/go-sql-driver/mysql"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 )
@@ -91,5 +95,46 @@ func TestDSNConfigDialsThroughTunnel(t *testing.T) {
 	}
 	if mc.DialFunc != nil {
 		t.Error("direct connections keep the driver's dialer")
+	}
+}
+
+func syntaxErr(near string, line int) error {
+	return &gomysql.MySQLError{Number: 1064, Message: "You have an error in your SQL syntax; " +
+		"check the manual that corresponds to your MySQL server version for the right syntax to use near '" +
+		near + "' at line " + strconv.Itoa(line)}
+}
+
+func TestLocate(t *testing.T) {
+	for _, tc := range []struct {
+		name, sql string
+		err       error
+		at        string // the text the offset points at; "" means the end
+	}{
+		{"first line", "SELECT * FORM users", syntaxErr("FORM users", 1), "FORM users"},
+		{"later line", "SELECT 1,\n  2 FROM t\nWHERE x", syntaxErr("WHERE x", 3), "WHERE x"},
+		{"end of input", "SELECT * FROM", syntaxErr("", 1), ""},
+		{"quote inside near", "SELECT 'it''s' x y", syntaxErr("y", 1), "y"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			want := len(tc.sql)
+			if tc.at != "" {
+				want = strings.Index(tc.sql, tc.at)
+			}
+			err := locate(tc.err, tc.sql)
+			if off, ok := db.ErrorOffset(err); !ok || off != want {
+				t.Fatalf("offset = %d, %v; want %d", off, ok, want)
+			}
+			var me *gomysql.MySQLError
+			if !errors.As(err, &me) || err.Error() != tc.err.Error() {
+				t.Fatal("the MySQLError stays reachable and the text is unchanged")
+			}
+		})
+	}
+	unknown := &gomysql.MySQLError{Number: 1054, Message: "Unknown column 'nope' in 'field list'"}
+	if _, ok := db.ErrorOffset(locate(unknown, "SELECT nope")); ok {
+		t.Fatal("errors without a position get no offset")
+	}
+	if locate(nil, "x") != nil {
+		t.Fatal("nil stays nil")
 	}
 }

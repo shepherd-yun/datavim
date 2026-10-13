@@ -105,7 +105,7 @@ func (c *conn) Close() error        { c.pool.Close(); return nil }
 func (c *conn) Exec(ctx context.Context, sql string, args ...any) (db.ExecResult, error) {
 	tag, err := c.pool.Exec(ctx, sql, args...)
 	if err != nil {
-		return db.ExecResult{}, err
+		return db.ExecResult{}, locate(err, sql)
 	}
 	return db.ExecResult{RowsAffected: tag.RowsAffected()}, nil
 }
@@ -133,7 +133,7 @@ func stream(ctx context.Context, q pgxQuerier, sql string, args []any,
 	defer cancel()
 	rows, err := q.Query(ctx, sql, append([]any{pgx.QueryResultFormats{pgx.TextFormatCode}}, args...)...)
 	if err != nil {
-		return err
+		return locate(err, sql)
 	}
 	defer rows.Close()
 
@@ -166,7 +166,7 @@ func stream(ctx context.Context, q pgxQuerier, sql string, args []any,
 			return err
 		}
 	}
-	return rows.Err()
+	return locate(rows.Err(), sql)
 }
 
 type dialect struct{}
