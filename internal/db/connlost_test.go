@@ -6,7 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
+	"os"
 	"syscall"
 	"testing"
 )
@@ -26,6 +28,11 @@ func TestIsConnLost(t *testing.T) {
 		{context.Canceled, false},
 		{fmt.Errorf("x: %w", context.DeadlineExceeded), false},
 		{errors.New("ERROR: syntax error at or near \"selec\""), false},
+		// Local file-system errors are not connection losses even though
+		// syscall.Errno satisfies net.Error.
+		{&fs.PathError{Op: "open", Path: "/tmp/users.xlsx", Err: syscall.EEXIST}, false},
+		{&fs.PathError{Op: "open", Path: "/nope/users.csv", Err: syscall.ENOENT}, false},
+		{&net.OpError{Op: "read", Net: "tcp", Err: &os.SyscallError{Syscall: "read", Err: syscall.ETIMEDOUT}}, true},
 	}
 	for _, c := range cases {
 		if got := IsConnLost(c.err); got != c.want {
