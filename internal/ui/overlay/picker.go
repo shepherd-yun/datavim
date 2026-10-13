@@ -47,9 +47,9 @@ func (p *Picker) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 			return p, nil
 		}
 		return nil, emit(p.pick(p.matches[p.cur]))
-	case "down", "ctrl+n":
+	case "down", "ctrl+n", "ctrl+j":
 		p.cur = textutil.Clamp(p.cur+1, 0, len(p.matches)-1)
-	case "up", "ctrl+p":
+	case "up", "ctrl+p", "ctrl+k":
 		p.cur = textutil.Clamp(p.cur-1, 0, len(p.matches)-1)
 	default:
 		before := p.filter.String()
