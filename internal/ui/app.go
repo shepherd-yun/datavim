@@ -150,6 +150,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.searchPicked(msg)
 	case routineLoadedMsg:
 		m.routineLoaded(msg)
+	case recentLoadedMsg:
+		m.recentLoaded(msg)
+	case recentPickedMsg:
+		return m, m.openRecent(msg.r)
 	case overlay.PasswordSubmittedMsg:
 		return m, m.passwordSubmitted(msg)
 	case passphraseMsg:
@@ -336,6 +340,8 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		return m.yank(a)
 	case keymap.GlobalSearch:
 		return m.openSearch()
+	case keymap.Recent:
+		return loadRecent(m.store)
 	case keymap.NewConnection:
 		m.overlay = overlay.NewConnForm()
 	case keymap.Refresh:
@@ -645,11 +651,12 @@ func (m *Model) closeTab(i int) tea.Cmd {
 	return cmd
 }
 
-func (m *Model) openTab(key string, create func(id int) tab) tea.Cmd {
+func (m *Model) openTab(key string, rec history.Recent, create func(id int) tab) tea.Cmd {
+	touch := recordRecent(m.store, rec)
 	for i, t := range m.tabs {
 		if t.Key() == key {
 			m.gotoTab(i)
-			return nil
+			return touch
 		}
 	}
 	m.nextTabID++
@@ -658,17 +665,17 @@ func (m *Model) openTab(key string, create func(id int) tab) tea.Cmd {
 	m.active = len(m.tabs) - 1
 	m.focus = focusTabs
 	m.layout()
-	return t.Init()
+	return tea.Batch(t.Init(), touch)
 }
 
 func (m *Model) openData(conn string, ref db.TableRef) tea.Cmd {
-	return tea.Batch(m.openTab(dataTabKey(conn, ref), func(id int) tab {
+	return tea.Batch(m.openTab(dataTabKey(conn, ref), history.Recent{Kind: history.RecentData, Conn: conn, Database: ref.Database, Schema: ref.Schema, Name: ref.Name}, func(id int) tab {
 		return newDataTab(id, m.backend, conn, ref, m.settings)
 	}), m.ensureMeta(conn, ref.Database))
 }
 
 func (m *Model) openStructure(conn string, ref db.TableRef) tea.Cmd {
-	return tea.Batch(m.openTab(structureTabKey(conn, ref), func(id int) tab {
+	return tea.Batch(m.openTab(structureTabKey(conn, ref), history.Recent{Kind: history.RecentStructure, Conn: conn, Database: ref.Database, Schema: ref.Schema, Name: ref.Name}, func(id int) tab {
 		return newStructureTab(id, m.backend, conn, ref)
 	}), m.ensureMeta(conn, ref.Database))
 }
@@ -739,7 +746,7 @@ func (m *Model) contextNamespace() (string, db.Namespace) {
 }
 
 func (m *Model) openConsole(conn string, ns db.Namespace) tea.Cmd {
-	return tea.Batch(m.openTab(consoleTabKey(conn, ns), func(id int) tab {
+	return tea.Batch(m.openTab(consoleTabKey(conn, ns), history.Recent{Kind: history.RecentConsole, Conn: conn, Database: ns.Database, Schema: ns.Schema}, func(id int) tab {
 		return newConsoleTab(id, m.backend, m.store, m.catalogs, conn, ns, m.settings, m.timings)
 	}), m.ensureMeta(conn, ns.Database))
 }
