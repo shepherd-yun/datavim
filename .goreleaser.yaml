@@ -1,0 +1,51 @@
+version: 2
+project_name: sqlvim
+
+builds:
+  - id: sqlvim
+    main: ./cmd/sqlvim
+    binary: sqlvim
+    env:
+      - CGO_ENABLED=0
+    goos: [darwin, linux]
+    goarch: [amd64, arm64]
+    flags: [-trimpath]
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+
+archives:
+  - formats: [tar.gz]
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - README.zh-CN.md
+      - CHANGELOG.md
+      - docs/examples/*
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  disable: true # notes come from CHANGELOG.md (--release-notes)
+
+release:
+  github:
+    owner: shepherd-yun
+    name: sqlvim
+
+homebrew_casks:
+  - name: sqlvim
+    repository:
+      owner: shepherd-yun
+      name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
+    homepage: https://github.com/shepherd-yun/sqlvim
+    description: Terminal SQL client for MySQL and PostgreSQL with vim keys
+    license: MIT
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/sqlvim"]
+          end
