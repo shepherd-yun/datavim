@@ -37,7 +37,7 @@ func welcomeText(k *keymap.Keymap) string {
 		label string
 	}{
 		{keymap.OpenConsole, "SQL console"},
-		{keymap.OpenStructure, "table structure"},
+		{keymap.OpenStructure, "table columns and structure"},
 		{keymap.NewConnection, "new connection"},
 		{keymap.Help, "help"},
 	} {
@@ -172,6 +172,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.searchPicked(msg)
 	case routineLoadedMsg:
 		m.routineLoaded(msg)
+	case columnsLoadedMsg:
+		m.columnsLoaded(msg)
+	case columnPickedMsg:
+		return m, m.columnPicked(msg)
 	case recentLoadedMsg:
 		m.recentLoaded(msg)
 	case recentPickedMsg:
@@ -402,7 +406,7 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		}
 		return cmd
 	case keymap.OpenStructure:
-		return m.openStructureFromContext()
+		return m.openColumnsFromContext()
 	default:
 		if m.focus == focusTree {
 			return m.treeAction(a)
@@ -796,14 +800,14 @@ func (m *Model) openStructure(conn string, ref db.TableRef) tea.Cmd {
 	}), m.ensureMeta(conn, ref.Database))
 }
 
-func (m *Model) openStructureFromContext() tea.Cmd {
+func (m *Model) openColumnsFromContext() tea.Cmd {
 	if m.focus == focusTree {
 		if n := m.tree.Selected(); n != nil && n.IsTable() {
-			return m.openStructure(n.Conn, n.TableRef())
+			return m.openColumns(n.Conn, n.TableRef())
 		}
 	} else if t := m.activeTab(); t != nil {
 		if conn, ref := t.Target(); ref.Name != "" {
-			return m.openStructure(conn, ref)
+			return m.openColumns(conn, ref)
 		}
 	}
 	m.setStatus("select a table first", true)

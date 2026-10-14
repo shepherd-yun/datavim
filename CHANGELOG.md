@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Changed
+- `<Space>s` opens a popup of the table's columns (key, type, NULL, default, comment) instead
+  of a structure tab. Type to filter by name or comment; `Enter` puts the data tab's cursor on
+  the column, opening the table's data first when needed; `Ctrl-s` opens the full structure.
 - An `@` search loads the metadata of every connection that was not loaded yet, so it finds
   tables in connections you have not opened; the popup counts the connections still loading.
 

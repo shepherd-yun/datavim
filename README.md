@@ -116,7 +116,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `<Space>x c/j/s/x` | Export result as CSV / JSON / SQL / xlsx |
 | `<Space>n` | New connection |
 | `e` / `dd` | Tree: edit / delete the selected connection (saved to `connections.toml`) |
-| `<Space>s` | Table structure |
+| `<Space>s` | Columns popup: type to filter, `Enter` puts the data tab's cursor on the column (opening the tab if need be), `Ctrl-s` opens the full structure (indexes, foreign keys, DDL) |
 | `<Space>b` | Toggle tree |
 | `<Space>r` | Refresh the tree node or tab and reload the connection's metadata |
 | `?` | Help for the focused pane |

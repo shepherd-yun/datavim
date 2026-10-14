@@ -111,7 +111,7 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 | `<Space>x c/j/s/x` | 导出结果为 CSV / JSON / SQL / xlsx |
 | `<Space>n` | 新建连接 |
 | `e` / `dd` | 树：编辑 / 删除选中的连接（保存到 `connections.toml`） |
-| `<Space>s` | 表结构 |
+| `<Space>s` | 列弹窗：输入即过滤，`Enter` 让数据 tab 的光标跳到该列（必要时先打开 tab），`Ctrl-s` 打开完整结构（索引、外键、DDL） |
 | `<Space>b` | 显示 / 隐藏树 |
 | `<Space>r` | 刷新树节点或 tab，并重新加载该连接的元数据 |
 | `?` | 当前面板的帮助 |

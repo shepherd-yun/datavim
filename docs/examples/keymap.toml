@@ -90,7 +90,7 @@
 #   sort.column            Sort by column: asc, desc, off
 #   sql.run                Run statement under cursor / selection
 #   sql.runall             Run all statements
-#   structure.open         Open structure
+#   structure.open         Columns / structure
 #   tab.goto.1             Go to tab 1
 #   tab.goto.2             Go to tab 2
 #   tab.goto.3             Go to tab 3

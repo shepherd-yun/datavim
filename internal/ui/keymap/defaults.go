@@ -15,7 +15,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(":"), CommandLine, "Command line"},
 		{Global, keys("ctrl+c"), Cancel, "Cancel query"},
 		{Global, keys(LeaderToken, "b"), ToggleTree, "Toggle tree"},
-		{Global, keys(LeaderToken, "s"), OpenStructure, "Open structure"},
+		{Global, keys(LeaderToken, "s"), OpenStructure, "Columns / structure"},
 		{Global, keys(LeaderToken, "r"), Refresh, "Refresh"},
 		{Global, keys(LeaderToken, "c"), OpenConsole, "Open console"},
 		{Global, keys(LeaderToken, "n"), NewConnection, "New connection"},

@@ -14,6 +14,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
@@ -118,15 +119,49 @@ func TestReopeningATableReusesItsTab(t *testing.T) {
 	}
 }
 
-func TestStructureViaLeader(t *testing.T) {
+func TestColumnsPopupFromTreeOpensDataAtColumn(t *testing.T) {
 	m, _ := newTestModel(t)
 	press(t, m, "l", "j", "l", "j") // cursor on users
 	press(t, m, "space", "s")
+	if _, ok := m.overlay.(*overlay.Columns); !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	if s := screen(m); !strings.Contains(s, "PK") || !strings.Contains(s, "2 columns") {
+		t.Fatalf("columns popup:\n%s", s)
+	}
+	press(t, m, "n", "a", "m", "e", "enter")
+	tab, ok := m.activeTab().(*dataTab)
+	if !ok || tab.ref.Name != "users" {
+		t.Fatalf("active tab = %#v", m.activeTab())
+	}
+	if c, ok := tab.grid.Column(); !ok || c.Name != "name" {
+		t.Fatalf("cursor on %q", c.Name)
+	}
+}
+
+func TestColumnsPopupMovesTheDataTabCursor(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	tab := m.activeTab().(*dataTab)
+	press(t, m, "l") // cursor on name
+	press(t, m, "space", "s", "up", "enter")
+	if c, _ := tab.grid.Column(); c.Name != "id" {
+		t.Fatalf("cursor on %q", c.Name)
+	}
+	if row, _ := tab.grid.Position(); row != 0 || len(m.tabs) != 1 {
+		t.Fatalf("row = %d, tabs = %d", row, len(m.tabs))
+	}
+}
+
+func TestColumnsPopupOpensTheStructure(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "l", "j", "l", "j") // cursor on users
+	press(t, m, "space", "s", "ctrl+s")
 	s := screen(m)
 	if !strings.Contains(s, "users:struct") || !strings.Contains(s, "[Columns]") {
 		t.Fatalf("structure tab:\n%s", s)
 	}
-	press(t, m, "space", "s") // from the structure tab: same table, no new tab
+	press(t, m, "space", "s", "ctrl+s") // from the structure tab: same table, no new tab
 	if len(m.tabs) != 1 {
 		t.Fatalf("tabs = %d", len(m.tabs))
 	}
@@ -143,11 +178,11 @@ func TestStructureNeedsATable(t *testing.T) {
 func TestWhichKey(t *testing.T) {
 	m, _ := newTestModel(t)
 	press(t, m, "space")
-	if !strings.Contains(screen(m), "Open structure") {
+	if !strings.Contains(screen(m), "Columns / structure") {
 		t.Fatalf("which-key not shown:\n%s", screen(m))
 	}
 	press(t, m, "esc")
-	if strings.Contains(screen(m), "Open structure") {
+	if strings.Contains(screen(m), "Columns / structure") {
 		t.Fatal("esc cancels the pending sequence")
 	}
 }
