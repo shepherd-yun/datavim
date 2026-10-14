@@ -1,0 +1,110 @@
+# Copy to ~/.config/sqlvim/keymap.toml. Every key is optional.
+# Keys are written the way `?` shows them: gg, <leader>s, <ctrl+d>, f<.
+# Values are action IDs; "" unbinds the keys. Binding keys a context already
+# uses replaces them; new keys are added and the defaults stay.
+# sqlvim refuses to start when a binding is unknown or conflicts with another
+# (one sequence may not be the start of a longer one in the same context).
+#
+# Contexts: global, tree, grid (table data), structure, console (keys the vim
+# editor leaves alone: enter, R, ctrl+j, M, <leader>…), results (console grid).
+
+# leader = ","          # default: space
+
+[grid]
+# "S" = "sort.column"   # sort with S …
+# "s" = ""              # … and free s
+
+[global]
+# "<leader>f" = "search.global"
+
+# Action IDs:
+#   app.cmdline            Command line
+#   app.help               Help
+#   app.quit               Quit
+#   cell.detail            Show cell value
+#   conn.delete            Delete connection
+#   conn.edit              Edit connection
+#   conn.new               New connection
+#   conn.password          Enter password
+#   console.editor         Focus editor
+#   console.messages       Toggle messages
+#   console.open           Open console
+#   console.results        Focus results
+#   copy.csv               Copy as CSV
+#   copy.json              Copy as JSON
+#   copy.md                Copy as Markdown
+#   copy.sql               Copy as INSERT
+#   copy.tsv               Copy as TSV
+#   edit.cell              Edit cell
+#   edit.delete            Delete row
+#   edit.insert            Add a row below
+#   edit.submit            Submit changes (:w)
+#   edit.undo              Undo the last change
+#   edit.undoall           Discard every change
+#   editor.external        Edit in $EDITOR
+#   export.csv             Export as CSV
+#   export.json            Export as JSON
+#   export.sql             Export as SQL
+#   export.xlsx            Export as xlsx
+#   filter.clear           Clear the filter
+#   filter.contains        Filter: contains… (LIKE %…%)
+#   filter.eq              Filter: equals this value
+#   filter.gt              Filter: greater than…
+#   filter.like            Filter: LIKE pattern… (% any, _ one char)
+#   filter.lt              Filter: less than…
+#   filter.ne              Filter: not this value
+#   filter.notnull         Filter: is not NULL
+#   filter.null            Filter: is NULL
+#   filter.prompt          Edit the filter (WHERE)
+#   focus.left             Focus tree
+#   focus.next             Next pane
+#   focus.prev             Previous pane
+#   focus.right            Focus tabs
+#   history.open           SQL history
+#   move.bottom            Go to bottom
+#   move.down              Move down
+#   move.halfpage.down     Half page down
+#   move.halfpage.up       Half page up
+#   move.left              Move left
+#   move.lineend           Last column
+#   move.linestart         First column
+#   move.right             Move right
+#   move.top               Go to top
+#   move.up                Move up
+#   page.next              Next page
+#   page.prev              Previous page
+#   query.cancel           Cancel query
+#   recent.open            Recent tabs
+#   refresh                Refresh
+#   results.more           Load more rows
+#   scroll.halfleft        Scroll half a screen left
+#   scroll.halfright       Scroll half a screen right
+#   scroll.left            Scroll left one column
+#   scroll.right           Scroll right one column
+#   search.global          Search everything
+#   search.next            Next match
+#   search.prev            Previous match
+#   search.start           Search
+#   section.next           Next section
+#   section.prev           Previous section
+#   sort.column            Sort by column: asc, desc, off
+#   sql.run                Run statement under cursor / selection
+#   sql.runall             Run all statements
+#   structure.open         Open structure
+#   tab.goto.1             Go to tab 1
+#   tab.goto.2             Go to tab 2
+#   tab.goto.3             Go to tab 3
+#   tab.goto.4             Go to tab 4
+#   tab.goto.5             Go to tab 5
+#   tab.goto.6             Go to tab 6
+#   tab.goto.7             Go to tab 7
+#   tab.goto.8             Go to tab 8
+#   tab.goto.9             Go to tab 9
+#   tab.next               Next tab (wraps)
+#   tab.prev               Previous tab (wraps)
+#   tree.collapse          Collapse / parent
+#   tree.expand            Expand / open
+#   tree.toggle            Toggle tree
+#   tx.toggle              Toggle manual commit
+#   yank.cell              Copy cell
+#   yank.row               Copy row
