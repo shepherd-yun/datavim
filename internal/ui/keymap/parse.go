@@ -8,20 +8,20 @@ import (
 )
 
 // ParseKeys reads a key sequence written the way Display shows it: "gg",
-// "<leader>s", "<ctrl+d>", "f<". A "<" that does not start a "<name>" is
-// the key "<" itself.
+// "<leader>s", "<ctrl+d>", "f<". A "<" not followed by a name of two or
+// more characters is the key "<" itself ("f<a" is f, <, a).
 func ParseKeys(s string) ([]string, error) {
 	if s == "" {
 		return nil, errors.New("empty key sequence")
 	}
 	var out []string
 	for i := 0; i < len(s); {
-		if s[i] == '<' && i+1 < len(s) && s[i+1] >= 'a' && s[i+1] <= 'z' {
-			end := strings.IndexByte(s[i+1:], '>')
-			if end < 0 || !isKeyName(s[i+1:i+1+end]) {
+		if word := nameWord(s[i+1:]); s[i] == '<' && len(word) >= 2 {
+			end := len(word)
+			if i+1+end >= len(s) || s[i+1+end] != '>' || !isKeyName(word) {
 				return nil, fmt.Errorf("unterminated or malformed <name> in %q", s)
 			}
-			name := s[i+1 : i+1+end]
+			name := word
 			if name == "leader" {
 				name = LeaderToken
 			}
@@ -34,6 +34,19 @@ func ParseKeys(s string) ([]string, error) {
 		i += size
 	}
 	return out, nil
+}
+
+// nameWord is the run of key-name characters s starts with, or "" unless
+// it starts with a letter.
+func nameWord(s string) string {
+	if s == "" || s[0] < 'a' || s[0] > 'z' {
+		return ""
+	}
+	n := 0
+	for n < len(s) && (s[n] >= 'a' && s[n] <= 'z' || s[n] >= '0' && s[n] <= '9' || s[n] == '+' || s[n] == '-') {
+		n++
+	}
+	return s[:n]
 }
 
 // isKeyName accepts Bubble Tea key names: "ctrl+d", "shift+tab", "f12".

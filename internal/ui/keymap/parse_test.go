@@ -22,6 +22,9 @@ func TestParseKeys(t *testing.T) {
 		{"<", []string{"<"}},
 		{"$", []string{"$"}},
 		{"é", []string{"é"}},
+		{"f<a", []string{"f", "<", "a"}},
+		{"<a>", []string{"<", "a", ">"}},
+		{"<--", []string{"<", "-", "-"}},
 	} {
 		got, err := ParseKeys(tc.in)
 		if err != nil || !slices.Equal(got, tc.want) {

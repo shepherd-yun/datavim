@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- Hints no longer end with a dangling ` · ` when `keymap.toml` unbinds the keys they name.
+- `keymap.toml` key sequences like `"f<a"` mean `f`, `<`, `a`; only `<` followed by a name of
+  two or more letters (`<ctrl+d>`) is read as a named key.
+
 ## [1.0.0] - 2026-10-14
 
 ### Added
