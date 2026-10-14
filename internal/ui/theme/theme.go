@@ -2,6 +2,12 @@
 package theme
 
 import (
+	"fmt"
+	"image/color"
+	"maps"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -11,29 +17,105 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 )
 
-var (
-	ColorBorder = lipgloss.Color("8")
-	ColorFocus  = lipgloss.Color("12")
-	ColorError  = lipgloss.Color("9")
-	ColorAccent = lipgloss.Color("14")
+// defaults are the theme slots and their colors: ANSI indexes, so the
+// terminal's own palette decides what they look like.
+var defaults = map[string]string{
+	"border": "8", "focus": "12", "error": "9", "accent": "14", "on_error": "15",
+	"visual_bg": "8", "visual_fg": "15", "changed": "11", "inserted": "10", "view": "13",
+	"builtin": "6", "string": "2", "number": "3", "operator": "5",
+}
 
-	Muted       = lipgloss.NewStyle().Foreground(ColorBorder)
-	Error       = lipgloss.NewStyle().Foreground(ColorError)
-	Prod        = lipgloss.NewStyle().Foreground(ColorError).Bold(true)
-	ProdMode    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("15")).Background(ColorError)
-	Accent      = lipgloss.NewStyle().Bold(true).Foreground(ColorAccent)
-	Title       = lipgloss.NewStyle().Bold(true)
-	Selected    = lipgloss.NewStyle().Reverse(true)
-	Visual      = lipgloss.NewStyle().Background(lipgloss.Color("8")).Foreground(lipgloss.Color("15"))
-	SelectedDim = lipgloss.NewStyle().Underline(true)
-	Mode        = lipgloss.NewStyle().Bold(true).Reverse(true)
-	Null        = lipgloss.NewStyle().Foreground(ColorBorder).Italic(true)
-	Changed     = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("11"))
-	Inserted    = lipgloss.NewStyle().Foreground(lipgloss.Color("10"))
-	Deleted     = lipgloss.NewStyle().Foreground(ColorError).Strikethrough(true)
-	Header      = lipgloss.NewStyle().Bold(true)
-	ActiveTab   = lipgloss.NewStyle().Bold(true).Foreground(ColorAccent)
+var (
+	ColorBorder, ColorFocus, ColorError, ColorAccent color.Color
+
+	Muted, Error, Prod, ProdMode, Accent, Title, Selected, Visual, SelectedDim, Mode,
+	Null, Changed, Inserted, Deleted, Header, ActiveTab lipgloss.Style
+
+	syntax   map[highlight.Class]lipgloss.Style
+	kindTags map[string]lipgloss.Style
 )
+
+func init() {
+	if err := Apply(nil); err != nil {
+		panic(err) // defaults are valid; covered by TestApplyNilRestoresDefaults
+	}
+}
+
+// Slots lists the keys config.toml's [theme] accepts.
+func Slots() []string { return slices.Sorted(maps.Keys(defaults)) }
+
+var hexColor = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
+
+func parseColor(s string) (color.Color, bool) {
+	if hexColor.MatchString(s) {
+		return lipgloss.Color(s), true
+	}
+	if n, err := strconv.Atoi(s); err == nil && n >= 0 && n <= 255 && strconv.Itoa(n) == s {
+		return lipgloss.Color(s), true
+	}
+	return nil, false
+}
+
+// Apply rebuilds every style from the default colors with overrides on top
+// (slot name -> ANSI index "0"–"255" or "#rgb" / "#rrggbb"). Nothing changes
+// when an override is invalid. Call it before the program starts.
+func Apply(overrides map[string]string) error {
+	c := make(map[string]color.Color, len(defaults))
+	for slot, v := range defaults {
+		c[slot], _ = parseColor(v)
+	}
+	for _, slot := range slices.Sorted(maps.Keys(overrides)) {
+		v := overrides[slot]
+		if _, ok := defaults[slot]; !ok {
+			return fmt.Errorf("theme.%s: unknown key (want one of %s)", slot, strings.Join(Slots(), ", "))
+		}
+		col, ok := parseColor(v)
+		if !ok {
+			return fmt.Errorf("theme.%s: invalid color %q (want 0–255 or #rrggbb)", slot, v)
+		}
+		c[slot] = col
+	}
+	build(c)
+	return nil
+}
+
+func build(c map[string]color.Color) {
+	ColorBorder, ColorFocus, ColorError, ColorAccent = c["border"], c["focus"], c["error"], c["accent"]
+
+	Muted = lipgloss.NewStyle().Foreground(ColorBorder)
+	Error = lipgloss.NewStyle().Foreground(ColorError)
+	Prod = lipgloss.NewStyle().Foreground(ColorError).Bold(true)
+	ProdMode = lipgloss.NewStyle().Bold(true).Foreground(c["on_error"]).Background(ColorError)
+	Accent = lipgloss.NewStyle().Bold(true).Foreground(ColorAccent)
+	Title = lipgloss.NewStyle().Bold(true)
+	Selected = lipgloss.NewStyle().Reverse(true)
+	Visual = lipgloss.NewStyle().Background(c["visual_bg"]).Foreground(c["visual_fg"])
+	SelectedDim = lipgloss.NewStyle().Underline(true)
+	Mode = lipgloss.NewStyle().Bold(true).Reverse(true)
+	Null = lipgloss.NewStyle().Foreground(ColorBorder).Italic(true)
+	Changed = lipgloss.NewStyle().Bold(true).Foreground(c["changed"])
+	Inserted = lipgloss.NewStyle().Foreground(c["inserted"])
+	Deleted = lipgloss.NewStyle().Foreground(ColorError).Strikethrough(true)
+	Header = lipgloss.NewStyle().Bold(true)
+	ActiveTab = lipgloss.NewStyle().Bold(true).Foreground(ColorAccent)
+
+	syntax = map[highlight.Class]lipgloss.Style{
+		highlight.Keyword:  lipgloss.NewStyle().Bold(true).Foreground(ColorFocus),
+		highlight.Builtin:  lipgloss.NewStyle().Foreground(c["builtin"]),
+		highlight.String:   lipgloss.NewStyle().Foreground(c["string"]),
+		highlight.Number:   lipgloss.NewStyle().Foreground(c["number"]),
+		highlight.Comment:  lipgloss.NewStyle().Italic(true).Foreground(ColorBorder),
+		highlight.Operator: lipgloss.NewStyle().Foreground(c["operator"]),
+	}
+	kindTags = map[string]lipgloss.Style{
+		"table":    lipgloss.NewStyle().Foreground(ColorAccent),
+		"view":     lipgloss.NewStyle().Foreground(c["view"]),
+		"column":   lipgloss.NewStyle().Foreground(c["changed"]),
+		"routine":  lipgloss.NewStyle().Foreground(c["inserted"]),
+		"schema":   lipgloss.NewStyle().Foreground(ColorFocus),
+		"database": lipgloss.NewStyle().Foreground(ColorFocus).Bold(true),
+	}
+}
 
 // Box frames body with a titled border of exactly width x height cells.
 func Box(title, body string, width, height int, focused bool) string {
@@ -77,16 +159,6 @@ func Frame(title, body string, width, height int, focused, danger bool) string {
 	return strings.Join(lines, "\n")
 }
 
-// syntax colors SQL by highlight class; Plain is left unstyled.
-var syntax = map[highlight.Class]lipgloss.Style{
-	highlight.Keyword:  lipgloss.NewStyle().Bold(true).Foreground(ColorFocus),
-	highlight.Builtin:  lipgloss.NewStyle().Foreground(lipgloss.Color("6")),
-	highlight.String:   lipgloss.NewStyle().Foreground(lipgloss.Color("2")),
-	highlight.Number:   lipgloss.NewStyle().Foreground(lipgloss.Color("3")),
-	highlight.Comment:  lipgloss.NewStyle().Italic(true).Foreground(ColorBorder),
-	highlight.Operator: lipgloss.NewStyle().Foreground(lipgloss.Color("5")),
-}
-
 // Syntax is the style of a highlight class.
 func Syntax(c highlight.Class) lipgloss.Style { return syntax[c] }
 
@@ -111,15 +183,6 @@ func HighlightLines(src string, spans []highlight.Span) []string {
 		}
 	}
 	return append(lines, b.String())
-}
-
-var kindTags = map[string]lipgloss.Style{
-	"table":    lipgloss.NewStyle().Foreground(ColorAccent),
-	"view":     lipgloss.NewStyle().Foreground(lipgloss.Color("13")),
-	"column":   lipgloss.NewStyle().Foreground(lipgloss.Color("11")),
-	"routine":  lipgloss.NewStyle().Foreground(lipgloss.Color("10")),
-	"schema":   lipgloss.NewStyle().Foreground(ColorFocus),
-	"database": lipgloss.NewStyle().Foreground(ColorFocus).Bold(true),
 }
 
 // KindTag colors the kind tag of a search result.
