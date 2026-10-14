@@ -1,19 +1,32 @@
 # sqlvim
 
 A terminal SQL client for MySQL and PostgreSQL with vim keys and DataGrip-style workflows.
-一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL 和 PostgreSQL。
 
-> Status: v0.6 — browse databases and tables, filter and sort table data, edit it in place
-> (changes are staged, previewed as SQL and submitted in one transaction), write and run SQL
-> in a highlighted console with a built-in vim editor and completion, search everything with
-> `<Space><Space>`, reopen recent tabs, copy and export results, SQL history, SSH tunnels
-> (agent, keys, ProxyJump), production safeguards and manual transactions.
+[中文说明](README.zh-CN.md)
+
+![sqlvim demo](docs/demo.gif)
+
+- Browse databases, filter and sort table data, and **edit it in place**: changes are staged,
+  shown as SQL and submitted in one transaction.
+- A highlighted SQL console with a **built-in vim editor**, completion and `$EDITOR` hand-off.
+- `<Space><Space>` searches every table, view, column and routine; `<Space>e` reopens recent tabs.
+- Copy and export results (TSV, CSV, JSON, Markdown, INSERT, xlsx), SQL history.
+- SSH tunnels (agent, keys, ProxyJump), production safeguards, manual transactions.
+- Your own keys (`keymap.toml`) and colors (`[theme]`).
 
 ## Install
 
 ```sh
+brew install shepherd-yun/tap/sqlvim
+```
+
+or with Go (the version in `go.mod`):
+
+```sh
 go install github.com/shepherd-yun/sqlvim/cmd/sqlvim@latest
 ```
+
+Binaries for macOS and Linux are on the [releases page](https://github.com/shepherd-yun/sqlvim/releases).
 
 ## Configure
 
@@ -120,8 +133,37 @@ a changed host key is an error. `ProxyCommand` is not supported.
 Filters made with `f…` are added with `AND`; `F` shows and edits the whole condition. Text inputs
 take readline keys: `←` `→`, `Home` `End` / `Ctrl-a` `Ctrl-e`, `Alt-b` `Alt-f`, `Ctrl-w`, `Ctrl-u`, `Ctrl-k`.
 
-Press `<Space>` and wait to see every leader key.
-Ghostty users can map Cmd shortcuts to leader keys: [docs/examples/ghostty.conf](docs/examples/ghostty.conf).
+Press `<Space>` and wait to see every leader key. These are the defaults; see Customize.
+
+## Customize
+
+**Keys** — `~/.config/sqlvim/keymap.toml` changes the leader and binds, rebinds or unbinds
+keys per context ([example with every action](docs/examples/keymap.toml)):
+
+```toml
+leader = ","
+
+[grid]
+"S" = "sort.column"
+"s" = ""
+```
+
+sqlvim checks the file at startup and names the binding that is unknown or conflicts.
+Help (`?`), which-key and the hints follow your keys. The console editor's vim keys, text
+inputs and popup lists keep their keys.
+
+**Colors** — a `[theme]` table in `config.toml`; values are ANSI indexes `"0"`–`"255"` or
+`"#rrggbb"`. Slots: `border` `focus` `error` `accent` `on_error` `visual_bg` `visual_fg`
+`changed` `inserted` `view` `builtin` `string` `number` `operator`.
+
+```toml
+[theme]
+focus  = "#7aa2f7"
+accent = "14"
+```
+
+**Ghostty** — map Cmd shortcuts to leader keys with
+[docs/examples/ghostty.conf](docs/examples/ghostty.conf), e.g. `keybind = cmd+e=text:\x20e`.
 
 ## Console editor
 
@@ -167,10 +209,13 @@ with a syntax error, the cursor jumps to where the server says the error is.
 make test               # unit tests
 make test-integration   # needs Docker (OrbStack: `orb start`)
 make lint
+make snapshot           # build release archives locally with GoReleaser
+make demo               # re-record docs/demo.gif (needs vhs and Docker)
 ```
 
 Logs: `~/.local/state/sqlvim/sqlvim.log` (`--debug` for more detail).
+See [CONTRIBUTING.md](CONTRIBUTING.md) before sending a pull request.
 
 ## License
 
-MIT
+MIT — see [LICENSE](LICENSE).

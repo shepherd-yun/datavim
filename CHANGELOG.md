@@ -6,7 +6,16 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [1.0.0] - 2026-10-14
+
 ### Added
+- `~/.config/sqlvim/keymap.toml`: change the leader and bind, rebind or unbind keys per
+  context; conflicts and unknown actions are reported at startup with the file and key.
+- `[theme]` in `config.toml`: override the colors of 14 slots with ANSI indexes or `#rrggbb`.
+- Hints, the welcome screen and the status bar name the keys you actually bound.
+- Releases for macOS and Linux (amd64, arm64) and a Homebrew cask:
+  `brew install shepherd-yun/tap/sqlvim`.
+- README in Chinese, a demo GIF, CONTRIBUTING and issue / pull request templates.
 - `H` / `L` switch to the previous / next tab, wrapping around, from any pane or tab.
 - `f` is a quick filter menu for the current column: `ff` equals, `f!` not equal, `fs` / `f~`
   contains, `fl` LIKE a typed pattern (`%` and `_` are wildcards), `f>` / `f<` greater / less
@@ -19,6 +28,7 @@ All notable changes to this project are documented here. The format follows
   readline keys: `←` `→`, `Home` `End`, `Ctrl-a` `Ctrl-e`, `Alt-b` `Alt-f`, `Ctrl-w`, `Ctrl-k`.
 
 ### Changed
+- Console hints write keys the way help does (`<enter> run`, `<ctrl+j> results`).
 - `f` alone no longer filters; `ff` filters by the cell's value.
 - `Ctrl-u` in a text input deletes to the start of the line instead of clearing it.
 - The console frames its editor and its results separately; `Ctrl-j` / `Ctrl-k` light the
@@ -127,3 +137,6 @@ All notable changes to this project are documented here. The format follows
 
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
+
+[Unreleased]: https://github.com/shepherd-yun/sqlvim/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/shepherd-yun/sqlvim/releases/tag/v1.0.0
