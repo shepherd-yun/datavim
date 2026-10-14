@@ -176,6 +176,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.columnsLoaded(msg)
 	case columnPickedMsg:
 		return m, m.columnPicked(msg)
+	case ddlLoadedMsg:
+		return m, m.ddlLoaded(msg)
+	case overlay.CopyMsg:
+		return m, m.copyText(msg)
 	case recentLoadedMsg:
 		m.recentLoaded(msg)
 	case recentPickedMsg:
@@ -392,7 +396,7 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	case keymap.Recent:
 		return loadRecent(m.store)
 	case keymap.NewConnection:
-		m.overlay = overlay.NewConnForm()
+		m.overlay = overlay.NewConnForm(m.keys)
 	case keymap.Refresh:
 		var cmd tea.Cmd
 		if conn, ns := m.contextNamespace(); conn != "" {
@@ -407,6 +411,10 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		return cmd
 	case keymap.OpenStructure:
 		return m.openColumnsFromContext()
+	case keymap.OpenFullStructure:
+		return m.openFullStructure()
+	case keymap.CopyDDL:
+		return m.copyDDL()
 	default:
 		if m.focus == focusTree {
 			return m.treeAction(a)
@@ -463,7 +471,7 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 	case keymap.EditConnection:
 		if n := t.Selected(); n != nil && m.canChange(n.Conn) {
 			if cfg, ok := m.backend.Connection(n.Conn); ok {
-				m.overlay = overlay.NewEditConnForm(cfg)
+				m.overlay = overlay.NewEditConnForm(m.keys, cfg)
 			}
 		}
 	case keymap.DeleteConnection:
@@ -801,17 +809,11 @@ func (m *Model) openStructure(conn string, ref db.TableRef) tea.Cmd {
 }
 
 func (m *Model) openColumnsFromContext() tea.Cmd {
-	if m.focus == focusTree {
-		if n := m.tree.Selected(); n != nil && n.IsTable() {
-			return m.openColumns(n.Conn, n.TableRef())
-		}
-	} else if t := m.activeTab(); t != nil {
-		if conn, ref := t.Target(); ref.Name != "" {
-			return m.openColumns(conn, ref)
-		}
+	conn, ref, ok := m.contextTable()
+	if !ok {
+		return nil
 	}
-	m.setStatus("select a table first", true)
-	return nil
+	return m.openColumns(conn, ref)
 }
 
 // keyTakingTab returns the focused tab when it reads keys before the

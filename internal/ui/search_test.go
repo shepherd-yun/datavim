@@ -36,7 +36,7 @@ func TestGlobalSearchOpensTablesAndStructures(t *testing.T) {
 		t.Fatalf("active tab = %#v", m.activeTab())
 	}
 	search(t, m, "users")
-	press(t, m, "ctrl+s")
+	press(t, m, "ctrl+o")
 	if tab, ok := m.activeTab().(*structureTab); !ok || tab.ref.Name != "users" {
 		t.Fatalf("active tab = %#v", m.activeTab())
 	}

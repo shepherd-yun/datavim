@@ -63,7 +63,7 @@ func (m *Model) showColumns(conn string, ref db.TableRef, cols []db.Column) {
 			current = c.Name
 		}
 	}
-	m.overlay = overlay.NewColumns(ref.Name, cols, current, func(name string, structure bool) tea.Msg {
+	m.overlay = overlay.NewColumns(m.keys, ref.Name, cols, current, func(name string, structure bool) tea.Msg {
 		return columnPickedMsg{conn: conn, ref: ref, name: name, structure: structure}
 	})
 }

@@ -8,6 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
@@ -43,6 +44,7 @@ const (
 
 // ConnForm is the <space>n new-connection form.
 type ConnForm struct {
+	keys     *keymap.Keymap
 	fields   []formField
 	cur      int
 	err      string
@@ -50,8 +52,8 @@ type ConnForm struct {
 }
 
 // NewConnForm builds an empty form.
-func NewConnForm() *ConnForm {
-	return &ConnForm{fields: []formField{
+func NewConnForm(keys *keymap.Keymap) *ConnForm {
+	return &ConnForm{keys: keys, fields: []formField{
 		ffName:     {label: "Name"},
 		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres"}},
 		ffHost:     {label: "Host", input: newField("localhost")},
@@ -66,8 +68,8 @@ func NewConnForm() *ConnForm {
 }
 
 // NewEditConnForm builds the form filled in with c, for <e> in the tree.
-func NewEditConnForm(c config.Connection) *ConnForm {
-	f := NewConnForm()
+func NewEditConnForm(keys *keymap.Keymap, c config.Connection) *ConnForm {
+	f := NewConnForm(keys)
 	f.original = c.Name
 	set := func(i int, v string) { f.fields[i].input = newField(v) }
 	set(ffName, c.Name)
@@ -92,6 +94,9 @@ func NewEditConnForm(c config.Connection) *ConnForm {
 
 func (f *ConnForm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 	fd := &f.fields[f.cur]
+	if f.keys.Triggers(keymap.Popup, keymap.SaveForm, msg.String()) {
+		return f.submit()
+	}
 	switch key := msg.String(); key {
 	case "esc":
 		return nil, nil
@@ -99,8 +104,6 @@ func (f *ConnForm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 		f.cur = (f.cur + 1) % len(f.fields)
 	case "shift+tab", "up":
 		f.cur = (f.cur + len(f.fields) - 1) % len(f.fields)
-	case "ctrl+s":
-		return f.submit()
 	case "enter":
 		if f.cur == len(f.fields)-1 {
 			return f.submit()
@@ -188,6 +191,6 @@ func (f *ConnForm) View(width, _ int) string {
 		lines = append(lines, theme.Muted.Render("Password: empty keeps the current one"))
 	}
 	lines = append(lines, theme.Muted.Render("SSH host: a Host alias from ~/.ssh/config (optional)"))
-	lines = append(lines, theme.Muted.Render("tab next · enter next/save · ctrl+s save · esc cancel"))
+	lines = append(lines, theme.Muted.Render(footer("tab next · enter next/save", popupHint(f.keys, keymap.SaveForm, "save"), "esc cancel")))
 	return theme.Box(title, strings.Join(lines, "\n"), w, len(lines)+2, true)
 }

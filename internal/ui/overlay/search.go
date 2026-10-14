@@ -6,6 +6,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
@@ -23,7 +24,8 @@ type SearchQueryMsg struct {
 	Gen  int
 }
 
-// SearchPickMsg reports the chosen row; Structure is set for ctrl+s.
+// SearchPickMsg reports the chosen row; Structure is set for the
+// popup's structure key (ctrl+o).
 type SearchPickMsg struct {
 	Index     int
 	Structure bool
@@ -32,6 +34,7 @@ type SearchPickMsg struct {
 // Search is the <space><space> popup. The root model computes the results
 // (asynchronously) and hands them back with SetResults.
 type Search struct {
+	keys     *keymap.Keymap
 	query    field
 	gen      int // generation of the current query
 	answered int // generation of the results shown
@@ -42,17 +45,19 @@ type Search struct {
 }
 
 // NewSearch opens an empty search; note explains missing results.
-func NewSearch(note string) *Search { return &Search{note: note} }
+func NewSearch(keys *keymap.Keymap, note string) *Search { return &Search{keys: keys, note: note} }
 
 func (s *Search) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
-	switch msg.String() {
-	case "esc":
-		return nil, nil
-	case "enter", "ctrl+s":
+	structure := s.keys.Triggers(keymap.Popup, keymap.OpenFullStructure, msg.String())
+	if msg.String() == "enter" || structure {
 		if len(s.items) == 0 {
 			return s, nil
 		}
-		return nil, emit(SearchPickMsg{Index: s.cur, Structure: msg.String() == "ctrl+s"})
+		return nil, emit(SearchPickMsg{Index: s.cur, Structure: structure})
+	}
+	switch msg.String() {
+	case "esc":
+		return nil, nil
 	case "down", "ctrl+n", "ctrl+j":
 		s.cur = textutil.Clamp(s.cur+1, 0, len(s.items)-1)
 	case "up", "ctrl+p", "ctrl+k":
@@ -125,11 +130,8 @@ func (s *Search) View(width, height int) string {
 		}
 		lines = append(lines, textutil.Fit(theme.KindTag(it.Kind).Render(tag)+label+"  "+theme.Muted.Render(where), w-2))
 	}
-	footer := "enter open · ctrl+s structure · ↑/↓ move · esc close"
-	if s.note != "" {
-		footer = s.note + " · " + footer
-	}
+	foot := footer(s.note, "enter open", popupHint(s.keys, keymap.OpenFullStructure, "structure"), "↑/↓ move · esc close")
 	body := textutil.PadLines(strings.Join(lines, "\n"), h-3) + "\n" +
-		theme.Muted.Render(textutil.Fit(textutil.Sanitize(footer), w-2))
+		theme.Muted.Render(textutil.Fit(textutil.Sanitize(foot), w-2))
 	return theme.Box("Search", body, w, h, true)
 }

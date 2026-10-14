@@ -10,6 +10,7 @@ type KeymapFile struct {
 	Structure map[string]string `toml:"structure"`
 	Console   map[string]string `toml:"console"`
 	Results   map[string]string `toml:"results"`
+	Popup     map[string]string `toml:"popup"`
 }
 
 // Overrides returns the tables present in the file, keyed by context name.
@@ -17,7 +18,7 @@ func (f KeymapFile) Overrides() map[string]map[string]string {
 	out := map[string]map[string]string{}
 	for name, m := range map[string]map[string]string{
 		"global": f.Global, "tree": f.Tree, "grid": f.Grid,
-		"structure": f.Structure, "console": f.Console, "results": f.Results,
+		"structure": f.Structure, "console": f.Console, "results": f.Results, "popup": f.Popup,
 	} {
 		if m != nil {
 			out[name] = m

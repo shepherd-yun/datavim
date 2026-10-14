@@ -6,7 +6,9 @@
 # (one sequence may not be the start of a longer one in the same context).
 #
 # Contexts: global, tree, grid (table data), structure, console (keys the vim
-# editor leaves alone: enter, R, ctrl+j, M, <leader>…), results (console grid).
+# editor leaves alone: enter, R, ctrl+j, M, <leader>…), results (console grid),
+# popup (one-key bindings read by popups: the structure key of the columns
+# popup and the search, the save key of the connection form).
 
 # leader = ","          # default: space
 
@@ -16,6 +18,10 @@
 
 [global]
 # "<leader>f" = "search.global"
+
+[popup]
+# "<ctrl+o>" = ""                # free ctrl+o …
+# "<ctrl+t>" = "structure.full"  # … and open the structure with ctrl+t
 
 # Action IDs:
 #   app.cmdline            Command line
@@ -35,6 +41,7 @@
 #   copy.md                Copy as Markdown
 #   copy.sql               Copy as INSERT
 #   copy.tsv               Copy as TSV
+#   ddl.copy               Copy DDL
 #   edit.cell              Edit cell
 #   edit.delete            Delete row
 #   edit.insert            Add a row below
@@ -56,6 +63,7 @@
 #   filter.notnull         Filter: is not NULL
 #   filter.null            Filter: is NULL
 #   filter.prompt          Edit the filter (WHERE)
+#   form.save              Save the form
 #   focus.left             Focus tree
 #   focus.next             Next pane
 #   focus.prev             Previous pane
@@ -90,6 +98,7 @@
 #   sort.column            Sort by column: asc, desc, off
 #   sql.run                Run statement under cursor / selection
 #   sql.runall             Run all statements
+#   structure.full         Open structure
 #   structure.open         Columns / structure
 #   tab.goto.1             Go to tab 1
 #   tab.goto.2             Go to tab 2

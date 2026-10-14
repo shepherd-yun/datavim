@@ -232,3 +232,40 @@ func TestEditBindings(t *testing.T) {
 		}
 	}
 }
+
+func TestDDLAndStructureBindings(t *testing.T) {
+	k := Default()
+	for _, ctx := range []Context{Tree, Grid, Structure} {
+		if a, res := k.Resolve(ctx, []string{"space", "y", "d"}); res != Matched || a != CopyDDL {
+			t.Errorf("%s: <space>yd = %v %v, want ddl.copy", ctx, a, res)
+		}
+		if a, res := k.Resolve(ctx, []string{"space", "S"}); res != Matched || a != OpenFullStructure {
+			t.Errorf("%s: <space>S = %v %v, want structure.full", ctx, a, res)
+		}
+	}
+	if _, ok := CopyFormat(CopyDDL); ok {
+		t.Fatal("copying the DDL is not a result format")
+	}
+}
+
+func TestPopupKeys(t *testing.T) {
+	k := Default()
+	if !k.Triggers(Popup, OpenFullStructure, "ctrl+o") {
+		t.Fatal("ctrl+o opens the structure from a popup")
+	}
+	if k.Triggers(Popup, OpenFullStructure, "ctrl+s") {
+		t.Fatal("ctrl+s no longer opens the structure (it is a common tmux prefix)")
+	}
+	if !k.Triggers(Popup, SaveForm, "ctrl+s") {
+		t.Fatal("ctrl+s saves a form")
+	}
+	if k.Triggers(Popup, OpenFullStructure, "S") {
+		t.Fatal("only the popup's own one-key bindings count, not <space>S")
+	}
+	if got := k.OwnKey(Popup, OpenFullStructure); got != "<ctrl+o>" {
+		t.Fatalf("OwnKey = %q", got)
+	}
+	if got := k.OwnKey(Popup, CopyDDL); got != "" {
+		t.Fatalf("OwnKey ignores globals: %q", got)
+	}
+}

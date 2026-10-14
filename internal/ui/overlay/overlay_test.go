@@ -81,6 +81,18 @@ func TestDetailPrettyPrintsJSONAndWraps(t *testing.T) {
 	}
 }
 
+func TestDetailCopiesTheOriginalText(t *testing.T) {
+	raw := `{"a":1}`
+	d := NewDetail("payload", raw)
+	if !strings.Contains(ansi.Strip(d.View(80, 20)), "y copy") {
+		t.Fatalf("title:\n%s", ansi.Strip(d.View(80, 20)))
+	}
+	o, msg := send(t, d, "y")
+	if o != d || msg != (CopyMsg{Text: raw, What: "payload"}) {
+		t.Fatalf("o=%v msg=%#v", o, msg)
+	}
+}
+
 func TestPasswordSubmit(t *testing.T) {
 	p := NewPassword("prod")
 	keys := []string{"s", "3", "c", "r", "x", "backspace", "t", "space", "tab", "enter"}

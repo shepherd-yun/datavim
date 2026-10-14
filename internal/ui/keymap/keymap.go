@@ -19,84 +19,90 @@ const (
 	Structure Context = "structure"
 	Console   Context = "console"
 	Results   Context = "results"
+	// Popup holds the keys popups read themselves (they bypass the keymap):
+	// only one-key bindings count there.
+	Popup Context = "popup"
 )
 
 // Action is what a key sequence does.
 type Action string
 
 const (
-	Quit             Action = "app.quit"
-	CommandLine      Action = "app.cmdline"
-	Help             Action = "app.help"
-	FocusNext        Action = "focus.next"
-	FocusPrev        Action = "focus.prev"
-	FocusLeft        Action = "focus.left"
-	FocusRight       Action = "focus.right"
-	ToggleTree       Action = "tree.toggle"
-	OpenStructure    Action = "structure.open"
-	Refresh          Action = "refresh"
-	Down             Action = "move.down"
-	Up               Action = "move.up"
-	Left             Action = "move.left"
-	Right            Action = "move.right"
-	Top              Action = "move.top"
-	Bottom           Action = "move.bottom"
-	HalfPageDown     Action = "move.halfpage.down"
-	HalfPageUp       Action = "move.halfpage.up"
-	LineStart        Action = "move.linestart"
-	LineEnd          Action = "move.lineend"
-	Expand           Action = "tree.expand"
-	Collapse         Action = "tree.collapse"
-	Password         Action = "conn.password"
-	PrevPage         Action = "page.prev"
-	NextPage         Action = "page.next"
-	CellDetail       Action = "cell.detail"
-	PrevSection      Action = "section.prev"
-	NextSection      Action = "section.next"
-	Cancel           Action = "query.cancel"
-	OpenConsole      Action = "console.open"
-	NewConnection    Action = "conn.new"
-	EditConnection   Action = "conn.edit"
-	DeleteConnection Action = "conn.delete"
-	History          Action = "history.open"
-	ExternalEdit     Action = "editor.external"
-	RunStatement     Action = "sql.run"
-	RunAll           Action = "sql.runall"
-	FocusResults     Action = "console.results"
-	FocusEditor      Action = "console.editor"
-	ToggleMessages   Action = "console.messages"
-	LoadMore         Action = "results.more"
-	Search           Action = "search.start"
-	SearchNext       Action = "search.next"
-	SearchPrev       Action = "search.prev"
-	ScrollLeft       Action = "scroll.left"
-	ScrollRight      Action = "scroll.right"
-	ScrollHalfLeft   Action = "scroll.halfleft"
-	ScrollHalfRight  Action = "scroll.halfright"
-	YankCell         Action = "yank.cell"
-	YankRow          Action = "yank.row"
-	ToggleTx         Action = "tx.toggle"
-	GlobalSearch     Action = "search.global"
-	Recent           Action = "recent.open"
-	FilterEqual      Action = "filter.eq"
-	FilterNotEqual   Action = "filter.ne"
-	FilterContains   Action = "filter.contains"
-	FilterLike       Action = "filter.like"
-	FilterGreater    Action = "filter.gt"
-	FilterLess       Action = "filter.lt"
-	FilterNull       Action = "filter.null"
-	FilterNotNull    Action = "filter.notnull"
-	FilterClear      Action = "filter.clear"
-	FilterPrompt     Action = "filter.prompt"
-	SortColumn       Action = "sort.column"
-	EditCell         Action = "edit.cell"
-	InsertRow        Action = "edit.insert"
-	DeleteRow        Action = "edit.delete"
-	UndoEdit         Action = "edit.undo"
-	UndoAllEdits     Action = "edit.undoall"
-	SubmitEdits      Action = "edit.submit"
-	NextTab          Action = "tab.next"
-	PrevTab          Action = "tab.prev"
+	Quit              Action = "app.quit"
+	CommandLine       Action = "app.cmdline"
+	Help              Action = "app.help"
+	FocusNext         Action = "focus.next"
+	FocusPrev         Action = "focus.prev"
+	FocusLeft         Action = "focus.left"
+	FocusRight        Action = "focus.right"
+	ToggleTree        Action = "tree.toggle"
+	OpenStructure     Action = "structure.open"
+	OpenFullStructure Action = "structure.full"
+	CopyDDL           Action = "ddl.copy"
+	SaveForm          Action = "form.save"
+	Refresh           Action = "refresh"
+	Down              Action = "move.down"
+	Up                Action = "move.up"
+	Left              Action = "move.left"
+	Right             Action = "move.right"
+	Top               Action = "move.top"
+	Bottom            Action = "move.bottom"
+	HalfPageDown      Action = "move.halfpage.down"
+	HalfPageUp        Action = "move.halfpage.up"
+	LineStart         Action = "move.linestart"
+	LineEnd           Action = "move.lineend"
+	Expand            Action = "tree.expand"
+	Collapse          Action = "tree.collapse"
+	Password          Action = "conn.password"
+	PrevPage          Action = "page.prev"
+	NextPage          Action = "page.next"
+	CellDetail        Action = "cell.detail"
+	PrevSection       Action = "section.prev"
+	NextSection       Action = "section.next"
+	Cancel            Action = "query.cancel"
+	OpenConsole       Action = "console.open"
+	NewConnection     Action = "conn.new"
+	EditConnection    Action = "conn.edit"
+	DeleteConnection  Action = "conn.delete"
+	History           Action = "history.open"
+	ExternalEdit      Action = "editor.external"
+	RunStatement      Action = "sql.run"
+	RunAll            Action = "sql.runall"
+	FocusResults      Action = "console.results"
+	FocusEditor       Action = "console.editor"
+	ToggleMessages    Action = "console.messages"
+	LoadMore          Action = "results.more"
+	Search            Action = "search.start"
+	SearchNext        Action = "search.next"
+	SearchPrev        Action = "search.prev"
+	ScrollLeft        Action = "scroll.left"
+	ScrollRight       Action = "scroll.right"
+	ScrollHalfLeft    Action = "scroll.halfleft"
+	ScrollHalfRight   Action = "scroll.halfright"
+	YankCell          Action = "yank.cell"
+	YankRow           Action = "yank.row"
+	ToggleTx          Action = "tx.toggle"
+	GlobalSearch      Action = "search.global"
+	Recent            Action = "recent.open"
+	FilterEqual       Action = "filter.eq"
+	FilterNotEqual    Action = "filter.ne"
+	FilterContains    Action = "filter.contains"
+	FilterLike        Action = "filter.like"
+	FilterGreater     Action = "filter.gt"
+	FilterLess        Action = "filter.lt"
+	FilterNull        Action = "filter.null"
+	FilterNotNull     Action = "filter.notnull"
+	FilterClear       Action = "filter.clear"
+	FilterPrompt      Action = "filter.prompt"
+	SortColumn        Action = "sort.column"
+	EditCell          Action = "edit.cell"
+	InsertRow         Action = "edit.insert"
+	DeleteRow         Action = "edit.delete"
+	UndoEdit          Action = "edit.undo"
+	UndoAllEdits      Action = "edit.undoall"
+	SubmitEdits       Action = "edit.submit"
+	NextTab           Action = "tab.next"
+	PrevTab           Action = "tab.prev"
 )
 
 const (
@@ -304,6 +310,28 @@ func (k *Keymap) KeysFor(ctx Context, a Action) string {
 		}
 	}
 	return ""
+}
+
+// OwnKey is how the first one-key binding of a in ctx itself (globals
+// aside) reads, or "": the hint matching Triggers.
+func (k *Keymap) OwnKey(ctx Context, a Action) string {
+	for _, b := range k.bindings {
+		if b.Context == ctx && b.Action == a && len(b.Keys) == 1 {
+			return k.Display(b.Keys)
+		}
+	}
+	return ""
+}
+
+// Triggers reports whether key alone is bound to a in ctx itself (globals
+// aside). Popups use it for the keys they handle without the keymap.
+func (k *Keymap) Triggers(ctx Context, a Action, key string) bool {
+	for _, b := range k.bindings {
+		if b.Context == ctx && b.Action == a && len(b.Keys) == 1 && b.Keys[0] == key {
+			return true
+		}
+	}
+	return false
 }
 
 // Display renders keys vim-style: "gg", "<space>s", "<ctrl+d>".

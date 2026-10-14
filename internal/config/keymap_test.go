@@ -16,6 +16,9 @@ leader = ","
 
 [global]
 "<leader>f" = "search.global"
+
+[popup]
+"<ctrl+t>" = "structure.full"
 `)
 	cfg, err := Load(dir)
 	if err != nil {
@@ -25,7 +28,8 @@ leader = ","
 		t.Fatalf("leader = %q", cfg.Keymap.Leader)
 	}
 	o := cfg.Keymap.Overrides()
-	if o["grid"]["S"] != "sort.column" || o["grid"]["s"] != "" || o["global"]["<leader>f"] != "search.global" {
+	if o["grid"]["S"] != "sort.column" || o["grid"]["s"] != "" || o["global"]["<leader>f"] != "search.global" ||
+		o["popup"]["<ctrl+t>"] != "structure.full" {
 		t.Fatalf("overrides = %v", o)
 	}
 	if _, ok := o["tree"]; ok {

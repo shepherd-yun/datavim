@@ -7,14 +7,17 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
 
 // Columns is the <space>s popup: a table's columns, filtered by typing.
-// enter picks the column under the cursor, ctrl+s asks for the full
-// structure (with an empty name when nothing matches).
+// enter picks the column under the cursor, the popup's structure key
+// (ctrl+o) asks for the full structure (with an empty name when nothing
+// matches).
 type Columns struct {
+	keys    *keymap.Keymap
 	title   string
 	cols    []db.Column
 	header  []string // column titles and their rule
@@ -28,7 +31,7 @@ type Columns struct {
 
 // NewColumns builds the popup with the cursor on the column called current,
 // if there is one.
-func NewColumns(title string, cols []db.Column, current string, pick func(name string, structure bool) tea.Msg) *Columns {
+func NewColumns(keys *keymap.Keymap, title string, cols []db.Column, current string, pick func(name string, structure bool) tea.Msg) *Columns {
 	rows := make([][]string, len(cols))
 	for i, c := range cols {
 		key, null, def := "", "NOT NULL", ""
@@ -44,7 +47,7 @@ func NewColumns(title string, cols []db.Column, current string, pick func(name s
 		rows[i] = []string{key, c.Name, c.Type, null, def, c.Comment}
 	}
 	lines := textutil.Table([]string{"", "Name", "Type", "Null", "Default", "Comment"}, rows)
-	c := &Columns{title: title, cols: cols, header: lines[:2], rows: lines[2 : 2+len(cols)], pick: pick}
+	c := &Columns{keys: keys, title: title, cols: cols, header: lines[:2], rows: lines[2 : 2+len(cols)], pick: pick}
 	c.refilter()
 	for i, col := range cols {
 		if col.Name == current {
@@ -73,6 +76,9 @@ func (c *Columns) selected() string {
 }
 
 func (c *Columns) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
+	if c.keys.Triggers(keymap.Popup, keymap.OpenFullStructure, msg.String()) {
+		return nil, emit(c.pick(c.selected(), true))
+	}
 	switch msg.String() {
 	case "esc":
 		return nil, nil
@@ -81,8 +87,6 @@ func (c *Columns) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 			return c, nil
 		}
 		return nil, emit(c.pick(c.selected(), false))
-	case "ctrl+s":
-		return nil, emit(c.pick(c.selected(), true))
 	case "down", "ctrl+n", "ctrl+j":
 		c.cur = textutil.Clamp(c.cur+1, 0, len(c.matches)-1)
 	case "up", "ctrl+p", "ctrl+k":
@@ -129,7 +133,7 @@ func (c *Columns) View(width, height int) string {
 		lines = append(lines, row)
 	}
 	body := textutil.PadLines(strings.Join(lines, "\n"), h-3) + "\n" +
-		theme.Muted.Render(textutil.Fit("enter go to column · ctrl+s full structure · ↑/↓ move · esc close", w-2))
+		theme.Muted.Render(textutil.Fit(footer("enter go to column", popupHint(c.keys, keymap.OpenFullStructure, "full structure"), "↑/↓ move · esc close"), w-2))
 	return theme.Box(c.title, body, w, h, true)
 }
 

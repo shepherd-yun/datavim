@@ -46,7 +46,7 @@ func (m *Model) openSearch() tea.Cmd {
 	if conn != "" {
 		cmd = m.ensureMeta(conn, ns.Database)
 	}
-	m.overlay = overlay.NewSearch(m.searchNote())
+	m.overlay = overlay.NewSearch(m.keys, m.searchNote())
 	return cmd
 }
 
@@ -157,7 +157,7 @@ func searchItem(h meta.Hit, all bool) overlay.SearchItem {
 	return overlay.SearchItem{Kind: h.Kind.String(), Label: h.Path, Where: w}
 }
 
-// searchPicked opens a result: a table's data (or structure with ctrl+s),
+// searchPicked opens a result: a table's data (or its structure),
 // a column's table with the cursor on the column, a routine's definition,
 // or a database or schema in the tree.
 func (m *Model) searchPicked(msg overlay.SearchPickMsg) tea.Cmd {

@@ -6,11 +6,12 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
 func TestSearchOverlay(t *testing.T) {
-	s := NewSearch("")
+	s := NewSearch(keymap.Default(), "")
 	if v := ansi.Strip(s.View(100, 30)); !strings.Contains(v, "@") {
 		t.Fatalf("empty query shows how to search everything:\n%s", v)
 	}
@@ -42,9 +43,12 @@ func TestSearchOverlay(t *testing.T) {
 		t.Fatal("enter picks the first row")
 	}
 	s.HandleKey(uitest.Key("down"))
-	next, cmd := s.HandleKey(uitest.Key("ctrl+s"))
+	if v := ansi.Strip(s.View(100, 30)); !strings.Contains(v, "<ctrl+o> structure") {
+		t.Fatalf("footer:\n%s", v)
+	}
+	next, cmd := s.HandleKey(uitest.Key("ctrl+o"))
 	if next != nil || cmd().(SearchPickMsg) != (SearchPickMsg{Index: 1, Structure: true}) {
-		t.Fatal("ctrl+s picks the structure and closes")
+		t.Fatal("ctrl+o picks the structure and closes")
 	}
 	s.Paste("x")
 	if text, gen := s.Requery(); text != "usx" || gen != 3 {

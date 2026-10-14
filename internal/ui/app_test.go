@@ -156,12 +156,12 @@ func TestColumnsPopupMovesTheDataTabCursor(t *testing.T) {
 func TestColumnsPopupOpensTheStructure(t *testing.T) {
 	m, _ := newTestModel(t)
 	press(t, m, "l", "j", "l", "j") // cursor on users
-	press(t, m, "space", "s", "ctrl+s")
+	press(t, m, "space", "s", "ctrl+o")
 	s := screen(m)
 	if !strings.Contains(s, "users:struct") || !strings.Contains(s, "[Columns]") {
 		t.Fatalf("structure tab:\n%s", s)
 	}
-	press(t, m, "space", "s", "ctrl+s") // from the structure tab: same table, no new tab
+	press(t, m, "space", "s", "ctrl+o") // from the structure tab: same table, no new tab
 	if len(m.tabs) != 1 {
 		t.Fatalf("tabs = %d", len(m.tabs))
 	}

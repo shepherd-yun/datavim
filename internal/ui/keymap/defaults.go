@@ -16,6 +16,8 @@ func DefaultBindings() []Binding {
 		{Global, keys("ctrl+c"), Cancel, "Cancel query"},
 		{Global, keys(LeaderToken, "b"), ToggleTree, "Toggle tree"},
 		{Global, keys(LeaderToken, "s"), OpenStructure, "Columns / structure"},
+		{Global, keys(LeaderToken, "S"), OpenFullStructure, "Open structure"},
+		{Global, keys(LeaderToken, "y", "d"), CopyDDL, "Copy DDL"},
 		{Global, keys(LeaderToken, "r"), Refresh, "Refresh"},
 		{Global, keys(LeaderToken, "c"), OpenConsole, "Open console"},
 		{Global, keys(LeaderToken, "n"), NewConnection, "New connection"},
@@ -110,6 +112,11 @@ func DefaultBindings() []Binding {
 	b = append(b,
 		Binding{Structure, keys("["), PrevSection, "Previous section"},
 		Binding{Structure, keys("]"), NextSection, "Next section"},
+	)
+
+	b = append(b,
+		Binding{Popup, keys("ctrl+o"), OpenFullStructure, "Open structure"},
+		Binding{Popup, keys("ctrl+s"), SaveForm, "Save the form"},
 	)
 	return b
 }

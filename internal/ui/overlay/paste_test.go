@@ -4,6 +4,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 )
 
 // paste delivers a terminal paste (bracketed paste) to o.
@@ -17,7 +19,7 @@ func paste(t *testing.T, o Overlay, text string) {
 }
 
 func TestPasteIntoConnForm(t *testing.T) {
-	f := NewConnForm()
+	f := NewConnForm(keymap.Default())
 	paste(t, f, "pg")
 	send(t, f, "tab")
 	paste(t, f, "postgres") // a choice field ignores pasted text

@@ -108,10 +108,12 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 | `<Space>v` | 在 `$EDITOR` 中编辑控制台内容 |
 | `<Space>h` | SQL 历史 |
 | `<Space>y t/c/j/m/i` | 复制结果为 TSV / CSV / JSON / Markdown / INSERT |
+| `<Space>yd` | 复制光标所在表的 DDL（树、数据 tab 或结构 tab）；在函数定义弹窗里按 `y` 复制其定义 |
 | `<Space>x c/j/s/x` | 导出结果为 CSV / JSON / SQL / xlsx |
 | `<Space>n` | 新建连接 |
 | `e` / `dd` | 树：编辑 / 删除选中的连接（保存到 `connections.toml`） |
-| `<Space>s` | 列弹窗：输入即过滤，`Enter` 让数据 tab 的光标跳到该列（必要时先打开 tab），`Ctrl-s` 打开完整结构（索引、外键、DDL） |
+| `<Space>s` | 列弹窗：输入即过滤，`Enter` 让数据 tab 的光标跳到该列（必要时先打开 tab），`Ctrl-o` 打开完整结构（索引、外键、DDL） |
+| `<Space>S` | 直接打开光标所在表的完整结构，不经过列弹窗 |
 | `<Space>b` | 显示 / 隐藏树 |
 | `<Space>r` | 刷新树节点或 tab，并重新加载该连接的元数据 |
 | `?` | 当前面板的帮助 |
@@ -120,7 +122,7 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 | `:commit` / `:rollback` | 控制台：结束事务 |
 | `:set noreadonly` / `:set readonly` | 本次会话解锁 / 锁定连接 |
 | `:q!` / `:qa!` | 关闭 / 退出，不询问未结束的事务 |
-| `<Space><Space>` | 搜索表、视图、列、函数、schema 和数据库（`@` 搜索所有连接，并加载尚未打开的连接的元数据；`Enter` 打开，`Ctrl-s` 打开结构） |
+| `<Space><Space>` | 搜索表、视图、列、函数、schema 和数据库（`@` 搜索所有连接，并加载尚未打开的连接的元数据；`Enter` 打开，`Ctrl-o` 打开结构） |
 | `<Space>e` | 最近打开的表、结构和控制台 |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |

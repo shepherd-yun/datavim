@@ -7,7 +7,7 @@ import (
 )
 
 // Contexts lists the tables keymap.toml may contain.
-func Contexts() []Context { return []Context{Global, Tree, Grid, Structure, Console, Results} }
+func Contexts() []Context { return []Context{Global, Tree, Grid, Structure, Console, Results, Popup} }
 
 // KnownActions maps every bindable action to its description.
 func KnownActions() map[Action]string {
@@ -40,7 +40,7 @@ func Custom(leader string, overrides map[Context]map[string]string) (*Keymap, er
 	bindings := DefaultBindings()
 	for _, ctx := range slices.Sorted(maps.Keys(overrides)) {
 		if !slices.Contains(Contexts(), ctx) {
-			return nil, fmt.Errorf("[%s]: unknown context (want one of global, tree, grid, structure, console, results)", ctx)
+			return nil, fmt.Errorf("[%s]: unknown context (want one of global, tree, grid, structure, console, results, popup)", ctx)
 		}
 		for _, ks := range slices.Sorted(maps.Keys(overrides[ctx])) {
 			keys, err := ParseKeys(ks)

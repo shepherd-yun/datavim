@@ -90,3 +90,15 @@ func TestKnownActionsCoverDefaults(t *testing.T) {
 		t.Error("app.quit can be bound although it has no default key")
 	}
 }
+
+func TestCustomRebindsPopupKeys(t *testing.T) {
+	k, err := Custom("", map[Context]map[string]string{
+		Popup: {"<ctrl+o>": "", "<ctrl+t>": "structure.full"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if k.Triggers(Popup, OpenFullStructure, "ctrl+o") || !k.Triggers(Popup, OpenFullStructure, "ctrl+t") {
+		t.Fatal("keymap.toml rebinds the popup's structure key")
+	}
+}

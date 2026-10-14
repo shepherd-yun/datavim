@@ -11,7 +11,7 @@ import (
 func TestRecentListsWhatWasOpened(t *testing.T) {
 	m, _ := newTestModel(t)
 	openUsers(t, m)
-	press(t, m, "space", "s", "ctrl+s")
+	press(t, m, "space", "s", "ctrl+o")
 	press(t, m, "space", "e")
 	s := screen(m)
 	data, structure := strings.Index(s, "data     local/app/users"), strings.Index(s, "struct   local/app/users")
@@ -75,7 +75,7 @@ func TestRecentAsksForThePassword(t *testing.T) {
 func TestSwitchingTabsUpdatesRecent(t *testing.T) {
 	m, _ := newTestModel(t)
 	openUsers(t, m)
-	press(t, m, "space", "s", "ctrl+s") // the structure tab is now the newest
+	press(t, m, "space", "s", "ctrl+o") // the structure tab is now the newest
 	press(t, m, "1")                    // back to the data tab
 	got, _ := m.store.Recent(1)
 	if len(got) != 1 || got[0].Kind != history.RecentData {
