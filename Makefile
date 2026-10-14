@@ -1,4 +1,4 @@
-.PHONY: build test test-integration lint run
+.PHONY: build test test-integration lint run snapshot release-notes demo
 
 build:
 	go build -o bin/sqlvim ./cmd/sqlvim
@@ -14,3 +14,9 @@ lint:
 
 run: build
 	./bin/sqlvim
+
+snapshot:
+	HOMEBREW_TAP_GITHUB_TOKEN=dummy goreleaser release --snapshot --clean
+
+release-notes:
+	@scripts/release-notes.sh $(VERSION)
