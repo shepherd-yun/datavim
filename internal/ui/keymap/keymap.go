@@ -295,6 +295,17 @@ func (k *Keymap) Help(ctx Context) []HelpEntry {
 	return out
 }
 
+// KeysFor is how the first binding of a reads in ctx ("<space>w"), or ""
+// when nothing in ctx triggers it. Hints use it so they follow keymap.toml.
+func (k *Keymap) KeysFor(ctx Context, a Action) string {
+	for _, b := range k.scope(ctx) {
+		if b.Action == a {
+			return k.Display(b.Keys)
+		}
+	}
+	return ""
+}
+
 // Display renders keys vim-style: "gg", "<space>s", "<ctrl+d>".
 func (k *Keymap) Display(keys []string) string {
 	var b strings.Builder
