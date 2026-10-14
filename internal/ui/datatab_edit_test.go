@@ -98,7 +98,7 @@ func TestUnsavedChangesBlockReloads(t *testing.T) {
 		if b.conn.lastQuery() != before || m.overlay != nil {
 			t.Fatalf("%v reloaded with unsaved changes", keys)
 		}
-		if !strings.Contains(screen(m), "1 unsaved change · <space>w submits, U discards") {
+		if !strings.Contains(screen(m), "1 unsaved change · <space>w submits · U discards") {
 			t.Fatalf("%v:\n%s", keys, screen(m))
 		}
 	}

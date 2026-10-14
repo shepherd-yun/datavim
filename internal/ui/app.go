@@ -28,13 +28,26 @@ import (
 
 const defaultWhichKeyDelay = 300 * time.Millisecond
 
-const welcome = `Select a table in the tree and press l or enter.
-
-<space>c   SQL console
-<space>s   table structure
-<space>n   new connection
-?          help
-:qa        quit`
+// welcomeText is the empty tab area, naming the keys the keymap really uses.
+func welcomeText(k *keymap.Keymap) string {
+	var b strings.Builder
+	b.WriteString("Select a table in the tree and press l or enter.\n\n")
+	for _, row := range []struct {
+		a     keymap.Action
+		label string
+	}{
+		{keymap.OpenConsole, "SQL console"},
+		{keymap.OpenStructure, "table structure"},
+		{keymap.NewConnection, "new connection"},
+		{keymap.Help, "help"},
+	} {
+		if keys := k.KeysFor(keymap.Tree, row.a); keys != "" {
+			fmt.Fprintf(&b, "%-10s %s\n", keys, row.label)
+		}
+	}
+	b.WriteString(":qa        quit")
+	return b.String()
+}
 
 type focus int
 
@@ -322,7 +335,7 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		if c, ok := m.activeTab().(*consoleTab); ok {
 			return c.toggleTx()
 		}
-		m.setStatus("manual commit belongs to a console · <space>c opens one", true)
+		m.setStatus(joinHints("manual commit belongs to a console", keyHint(m.keys, keymap.Global, keymap.OpenConsole, "opens one")), true)
 	case keymap.Cancel:
 		if c, ok := m.activeTab().(canceler); ok && m.focus == focusTabs {
 			return c.cancelRun()
@@ -472,7 +485,7 @@ func (m *Model) canChange(conn string) bool {
 			}
 		case *dataTab:
 			if t.conn == conn && t.changes() > 0 {
-				m.setStatus(t.Title()+" on "+conn+" has unsaved changes · <space>w submits, U discards", true)
+				m.setStatus(t.Title()+" on "+conn+" has unsaved changes · "+joinHints(keyHint(m.keys, keymap.Grid, keymap.SubmitEdits, "submits"), keyHint(m.keys, keymap.Grid, keymap.UndoAllEdits, "discards")), true)
 				return false
 			}
 		}
@@ -770,7 +783,9 @@ func (m *Model) openTab(key string, rec history.Recent, create func(id int) tab)
 
 func (m *Model) openData(conn string, ref db.TableRef) tea.Cmd {
 	return tea.Batch(m.openTab(dataTabKey(conn, ref), history.Recent{Kind: history.RecentData, Conn: conn, Database: ref.Database, Schema: ref.Schema, Name: ref.Name}, func(id int) tab {
-		return newDataTab(id, m.backend, m.store, conn, ref, m.settings)
+		t := newDataTab(id, m.backend, m.store, conn, ref, m.settings)
+		t.keys = m.keys
+		return t
 	}), m.ensureMeta(conn, ref.Database))
 }
 
@@ -889,7 +904,9 @@ func (m *Model) contextNamespace() (string, db.Namespace) {
 
 func (m *Model) openConsole(conn string, ns db.Namespace) tea.Cmd {
 	return tea.Batch(m.openTab(consoleTabKey(conn, ns), history.Recent{Kind: history.RecentConsole, Conn: conn, Database: ns.Database, Schema: ns.Schema}, func(id int) tab {
-		return newConsoleTab(id, m.backend, m.store, m.catalogs, conn, ns, m.settings, m.timings)
+		t := newConsoleTab(id, m.backend, m.store, m.catalogs, conn, ns, m.settings, m.timings)
+		t.keys = m.keys
+		return t
 	}), m.ensureMeta(conn, ns.Database))
 }
 
@@ -1112,7 +1129,7 @@ func (m *Model) render() string {
 		focused := m.focus == focusTree
 		body := m.tree.View(max(treeW-2, 0), focused)
 		if m.tree.Empty() {
-			body = theme.Muted.Render("No connections\n<space>n add one")
+			body = theme.Muted.Render("No connections\n" + keyHint(m.keys, keymap.Tree, keymap.NewConnection, "add one"))
 		}
 		panes = append(panes, theme.Box("Connections", body, treeW, bodyH, focused))
 	}
@@ -1135,7 +1152,7 @@ func (m *Model) render() string {
 func (m *Model) renderTabs(width, height int) string {
 	t := m.activeTab()
 	if t == nil {
-		return theme.Box("sqlvim", welcome, width, height, false)
+		return theme.Box("sqlvim", welcomeText(m.keys), width, height, false)
 	}
 	focused := m.focus == focusTabs
 	conn, _ := t.Target()
@@ -1196,7 +1213,11 @@ func (m *Model) renderStatus() string {
 		parts = append(parts, style.Render(textutil.Sanitize(m.status)))
 	}
 	left := strings.Join(parts, "  ")
-	right := theme.Muted.Render("<space> leader · ? help · : command")
+	right := theme.Muted.Render(joinHints(
+		m.keys.Display([]string{m.keys.Leader()})+" leader",
+		keyHint(m.keys, keymap.Global, keymap.Help, "help"),
+		keyHint(m.keys, keymap.Global, keymap.CommandLine, "command"),
+	))
 	gap := m.width - ansi.StringWidth(left) - ansi.StringWidth(right)
 	if gap < 1 {
 		return textutil.Fit(left, m.width)

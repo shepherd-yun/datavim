@@ -135,16 +135,22 @@ type dataTab struct {
 	height      int
 	wantColumn  string // column to put the cursor on once data is shown
 	failedWhere string // a filter the server rejected, offered again by F
+	keys        *keymap.Keymap
 }
 
 func newDataTab(id int, b Backend, st Store, conn string, ref db.TableRef, s config.Settings) *dataTab {
 	cfg, _ := b.Connection(conn)
 	t := &dataTab{
 		id: id, backend: b, store: st, conn: conn, ref: ref, dialect: sqlx.DialectOf(cfg.Driver), pageSize: s.PageSize,
-		grid: grid.New(nil, s.MaxColumnWidth),
+		grid: grid.New(nil, s.MaxColumnWidth), keys: keymap.Default(),
 	}
 	t.grid.SetMarks(t.mark)
 	return t
+}
+
+// unsavedHint is "<space>w submits · U discards" with the keymap's keys.
+func (t *dataTab) unsavedHint(submit, discard string) string {
+	return joinHints(keyHint(t.keys, keymap.Grid, keymap.SubmitEdits, submit), keyHint(t.keys, keymap.Grid, keymap.UndoAllEdits, discard))
 }
 
 func (t *dataTab) ID() int                       { return t.id }
@@ -384,7 +390,7 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 		keymap.FilterEqual, keymap.FilterNotEqual, keymap.FilterContains, keymap.FilterLike, keymap.FilterGreater,
 		keymap.FilterLess, keymap.FilterNull, keymap.FilterNotNull, keymap.FilterClear:
 		if n := t.changes(); n > 0 {
-			t.setStatus(plural(n, "unsaved change")+" · <space>w submits, U discards", true)
+			t.setStatus(plural(n, "unsaved change")+" · "+t.unsavedHint("submits", "discards"), true)
 			return nil
 		}
 	}
@@ -596,7 +602,7 @@ func (t *dataTab) statusLine() string {
 	}
 	info := textutil.Sanitize(t.pageInfo())
 	if n := t.changes(); n > 0 {
-		return theme.Accent.Render("● "+plural(n, "change")) + theme.Muted.Render(" · <space>w submit · U discard · "+info)
+		return theme.Accent.Render("● "+plural(n, "change")) + theme.Muted.Render(" · "+joinHints(t.unsavedHint("submit", "discard"), info))
 	}
 	return theme.Muted.Render(info)
 }

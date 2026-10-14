@@ -734,7 +734,7 @@ func TestConsoleFramesFollowFocus(t *testing.T) {
 		!strings.Contains(ansi.Strip(f[1]), "Results · 2 rows") {
 		t.Fatalf("editor focused, frames:\n%q", f)
 	}
-	if v := consoleView(c); !strings.Contains(v, "ctrl+j results") {
+	if v := consoleView(c); !strings.Contains(v, "<ctrl+j> results") {
 		t.Fatalf("editor hint:\n%s", v)
 	}
 
@@ -745,7 +745,7 @@ func TestConsoleFramesFollowFocus(t *testing.T) {
 	if v := c.View(true); strings.Contains(v, theme.Selected.Render("s")) || !strings.Contains(v, theme.SelectedDim.Render("s")) {
 		t.Fatal("the editor cursor is underlined, not a block, while the results have focus")
 	}
-	if v := consoleView(c); !strings.Contains(v, "ctrl+k editor") {
+	if v := consoleView(c); !strings.Contains(v, "<ctrl+k> editor") {
 		t.Fatalf("results hint:\n%s", v)
 	}
 }
