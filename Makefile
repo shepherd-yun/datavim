@@ -20,3 +20,7 @@ snapshot:
 
 release-notes:
 	@scripts/release-notes.sh $(VERSION)
+
+demo: build
+	docker compose -f docs/demo/docker-compose.yml up -d --wait
+	vhs docs/demo/demo.tape
