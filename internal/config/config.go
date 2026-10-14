@@ -87,6 +87,14 @@ func (s Settings) ExportDirectory(home string) string {
 type Config struct {
 	Connections []Connection
 	Settings    Settings
+	Theme       map[string]string // config.toml [theme]; ui/theme validates it
+	Keymap      KeymapFile
+}
+
+// settingsFile is config.toml: the settings plus the [theme] table.
+type settingsFile struct {
+	Settings
+	Theme map[string]string `toml:"theme"`
 }
 
 var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432}
@@ -95,7 +103,7 @@ type connectionsFile struct {
 	Connections []Connection `toml:"connection"`
 }
 
-// Load reads connections.toml and config.toml from dir. Missing files are not an error.
+// Load reads connections.toml, config.toml and keymap.toml from dir. Missing files are not an error.
 func Load(dir string) (*Config, error) {
 	cfg := &Config{Settings: DefaultSettings()}
 
@@ -111,9 +119,11 @@ func Load(dir string) (*Config, error) {
 	cfg.Connections = conns
 
 	settingsPath := filepath.Join(dir, "config.toml")
-	if err := decodeFile(settingsPath, &cfg.Settings); err != nil {
+	sf := settingsFile{Settings: cfg.Settings}
+	if err := decodeFile(settingsPath, &sf); err != nil {
 		return nil, err
 	}
+	cfg.Settings, cfg.Theme = sf.Settings, sf.Theme
 	if cfg.Settings.PageSize <= 0 {
 		return nil, fmt.Errorf("%s: page_size must be positive", settingsPath)
 	}
@@ -122,6 +132,9 @@ func Load(dir string) (*Config, error) {
 	}
 	if cfg.Settings.MaxRows <= 0 {
 		return nil, fmt.Errorf("%s: max_rows must be positive", settingsPath)
+	}
+	if err := decodeFile(filepath.Join(dir, "keymap.toml"), &cfg.Keymap); err != nil {
+		return nil, err
 	}
 	return cfg, nil
 }
