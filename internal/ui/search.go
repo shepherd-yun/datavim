@@ -8,6 +8,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/meta"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
 )
@@ -58,7 +59,7 @@ func (m *Model) searchNote() string {
 	case meta.Loading:
 		return "loading metadata of " + m.searchConn + "…"
 	case meta.Failed:
-		return "metadata of " + m.searchConn + " failed: " + m.catalogs.Err(m.searchKey).Error() + " · <space>r retries"
+		return "metadata of " + m.searchConn + " failed: " + m.catalogs.Err(m.searchKey).Error() + " · " + keyHint(m.keys, keymap.Global, keymap.Refresh, "retries")
 	}
 	return ""
 }

@@ -94,6 +94,7 @@ func consoleTabKey(conn string, ns db.Namespace) string {
 
 type consoleTab struct {
 	id        int
+	keys      *keymap.Keymap
 	backend   Backend
 	store     Store
 	editorCmd []string
@@ -145,7 +146,7 @@ func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn strin
 		id: id, backend: b, store: st, conn: conn, ns: ns, dialect: d,
 		maxRows: s.MaxRows, timings: tm, editorCmd: s.EditorCommand(os.Getenv),
 		catalogs: catalogs, metaKey: key, defNS: defaultNamespace(cfg, key, ns),
-		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth),
+		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), keys: keymap.Default(),
 	}
 	t.editor.SetHighlighter(highlight.NewHighlighter(d).Spans)
 	return t
@@ -236,6 +237,11 @@ func (t *consoleTab) Input(msg tea.Msg) tea.Cmd {
 // to the keymap (space, :, enter, ctrl+j …).
 func (t *consoleTab) TakeKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if t.onResults {
+		return nil, false
+	}
+	// The leader belongs to the keymap outside INSERT mode unless the editor
+	// is mid-command ("f," finds a comma).
+	if msg.String() == t.keys.Leader() && !t.editor.Insert() && t.editor.Pending() == "" {
 		return nil, false
 	}
 	before := t.editor.Version()
@@ -965,9 +971,17 @@ func (t *consoleTab) statusLine() string {
 	case t.status != "":
 		return theme.Muted.Render(textutil.Fit(textutil.Sanitize(t.status), t.width))
 	}
-	hint := "enter run · R run all · i insert · v select · u undo · ctrl+j results · <space>v $EDITOR"
+	hint := joinHints(
+		keyHint(t.keys, keymap.Console, keymap.RunStatement, "run"),
+		keyHint(t.keys, keymap.Console, keymap.RunAll, "run all"),
+		keyHint(t.keys, keymap.Console, keymap.FocusResults, "results"),
+		keyHint(t.keys, keymap.Console, keymap.ExternalEdit, "$EDITOR"),
+		"i insert · v select · u undo", // vim basics last: cut first when narrow
+	)
 	if t.onResults {
-		hint = "hjkl move · yy copy row · K show cell · / search · M messages · ctrl+k editor"
+		hint = joinHints("hjkl move · yy copy row · K show cell · / search",
+			keyHint(t.keys, keymap.Results, keymap.ToggleMessages, "messages"),
+			keyHint(t.keys, keymap.Results, keymap.FocusEditor, "editor"))
 	} else if t.editor.Visual() {
 		hint = "enter runs the selection · y d c > < · esc cancel"
 	}
