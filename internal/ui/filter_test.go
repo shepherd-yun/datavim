@@ -202,9 +202,9 @@ func TestFilterPromptChecksLocally(t *testing.T) {
 func TestFilterPromptBringsBackAFailedFilter(t *testing.T) {
 	b := newFakeBackend()
 	tab := loadedDataTab(t, b)
-	b.conn.setFail("SELECT * FROM `app`.`users` WHERE (nmae = 'x'\n)"+usersPage, errors.New("unknown column nmae"))
-	tab.Update(run(tab.Update(filterMsg{tabID: 1, text: "nmae = 'x'"})))
-	if got := promptText(t, filterPrompt(t, tab)); got != "nmae = 'x'" {
+	b.conn.setFail("SELECT * FROM `app`.`users` WHERE (nm = 'x'\n)"+usersPage, errors.New("unknown column nm"))
+	tab.Update(run(tab.Update(filterMsg{tabID: 1, text: "nm = 'x'"})))
+	if got := promptText(t, filterPrompt(t, tab)); got != "nm = 'x'" {
 		t.Fatalf("F brings back the failed filter: %q", got)
 	}
 	tab.Update(run(tab.Update(filterMsg{tabID: 1, text: "name = 'x'"})))
