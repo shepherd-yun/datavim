@@ -92,3 +92,33 @@ func TestNewManagerPersistsEditsAndRemovals(t *testing.T) {
 		t.Fatalf("connections = %+v", cfg.Connections)
 	}
 }
+
+func TestRunReportsKeymapErrors(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	for body, want := range map[string]string{
+		"[grid]\n\"f\" = \"sort.column\"\n": "keymap.toml: keymap: f (sort.column) is a prefix of",
+		"[grid]\n\"S\" = \"sort\"\n":        `keymap.toml: [grid] "S": unknown action "sort"`,
+		"leader = \"ab\"\n":                 `keymap.toml: leader "ab"`,
+	} {
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "keymap.toml"), []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		err := run([]string{"--config", dir}, &bytes.Buffer{})
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("keymap %q: err = %v, want %q", body, err, want)
+		}
+	}
+}
+
+func TestRunReportsThemeErrors(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte("[theme]\nfocus = \"bleu\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	err := run([]string{"--config", dir}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), `config.toml: theme.focus: invalid color "bleu"`) {
+		t.Fatalf("err = %v", err)
+	}
+}

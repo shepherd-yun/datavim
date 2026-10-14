@@ -113,6 +113,10 @@ func New(b Backend, st Store, settings config.Settings) *Model {
 	}
 }
 
+// SetKeymap replaces the built-in keymap (keymap.toml). Call it before the
+// program starts: open tabs keep the keymap they were created with.
+func (m *Model) SetKeymap(k *keymap.Keymap) { m.keys = k }
+
 func (m *Model) Init() tea.Cmd { return nil }
 
 func (m *Model) View() tea.View {

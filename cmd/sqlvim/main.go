@@ -20,6 +20,8 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/secret"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
@@ -57,6 +59,13 @@ func run(args []string, stdout io.Writer) error {
 	if err != nil {
 		return err
 	}
+	keys, err := buildKeymap(dir, cfg.Keymap)
+	if err != nil {
+		return err
+	}
+	if err := theme.Apply(cfg.Theme); err != nil {
+		return fmt.Errorf("%s: %w", filepath.Join(dir, "config.toml"), err)
+	}
 
 	logPath, closeLog, err := setupLogging(*debug)
 	if err != nil {
@@ -85,7 +94,9 @@ func run(args []string, stdout io.Writer) error {
 	defer mgr.CloseAll()
 
 	slog.Info("starting", "version", version, "connections", len(cfg.Connections))
-	if _, err := tea.NewProgram(ui.New(mgr, st, cfg.Settings)).Run(); err != nil {
+	model := ui.New(mgr, st, cfg.Settings)
+	model.SetKeymap(keys)
+	if _, err := tea.NewProgram(model).Run(); err != nil {
 		slog.Error("program exited", "err", err)
 		return fmt.Errorf("%w (log: %s)", err, logPath)
 	}
@@ -148,4 +159,17 @@ func localUser() string {
 		return u.Username
 	}
 	return os.Getenv("USER")
+}
+
+// buildKeymap applies keymap.toml to the built-in keymap; errors name the file.
+func buildKeymap(dir string, f config.KeymapFile) (*keymap.Keymap, error) {
+	overrides := map[keymap.Context]map[string]string{}
+	for ctx, m := range f.Overrides() {
+		overrides[keymap.Context(ctx)] = m
+	}
+	k, err := keymap.Custom(f.Leader, overrides)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", filepath.Join(dir, "keymap.toml"), err)
+	}
+	return k, nil
 }
