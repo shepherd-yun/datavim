@@ -125,7 +125,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `:commit` / `:rollback` | Console: end the transaction |
 | `:set noreadonly` / `:set readonly` | Unlock / lock the connection for this session |
 | `:q!` / `:qa!` | Close / quit without asking about open transactions |
-| `<Space><Space>` | Search tables, views, columns, routines, schemas and databases (`@` searches every connection; `Enter` opens, `Ctrl-s` opens the structure) |
+| `<Space><Space>` | Search tables, views, columns, routines, schemas and databases (`@` searches every connection and loads the metadata of those not opened yet; `Enter` opens, `Ctrl-s` opens the structure) |
 | `<Space>e` | Recently opened tables, structures and consoles |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (`Ctrl-n` / `Ctrl-p` open the popup when closed) |
 | `Enter` / `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes the popup, a second `Esc` leaves insert mode) |

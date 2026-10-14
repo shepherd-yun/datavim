@@ -40,7 +40,7 @@ type revealTarget struct {
 // openSearch shows the <space><space> popup for the connection in context.
 func (m *Model) openSearch() tea.Cmd {
 	conn, ns := m.contextNamespace()
-	m.searchConn, m.searchHits = conn, nil
+	m.searchConn, m.searchHits, m.searchAll = conn, nil, false
 	m.searchKey, _ = metaKeyFor(m.backend, conn, ns.Database)
 	var cmd tea.Cmd
 	if conn != "" {
@@ -52,6 +52,9 @@ func (m *Model) openSearch() tea.Cmd {
 
 // searchNote explains missing results: metadata loading or failed.
 func (m *Model) searchNote() string {
+	if m.searchAll {
+		return m.searchAllNote()
+	}
 	if m.searchConn == "" {
 		return ""
 	}
@@ -64,19 +67,54 @@ func (m *Model) searchNote() string {
 	return ""
 }
 
+// searchAllNote counts the connections whose catalog is still loading or
+// failed while the search spans every connection.
+func (m *Model) searchAllNote() string {
+	var loading, failed int
+	for _, c := range m.backend.Connections() {
+		k, _ := metaKeyFor(m.backend, c.Name, "")
+		switch _, st := m.catalogs.Get(k); st {
+		case meta.Loading:
+			loading++
+		case meta.Failed:
+			failed++
+		}
+	}
+	var notes []string
+	if loading > 0 {
+		notes = append(notes, "loading metadata of "+plural(loading, "connection")+"…")
+	}
+	if failed > 0 {
+		notes = append(notes, "metadata of "+plural(failed, "connection")+" failed")
+	}
+	return strings.Join(notes, " · ")
+}
+
 // runSearch matches text in a command. A leading @, or no connection in
-// context, searches the catalogs of every connection.
+// context, searches the catalogs of every connection; the first such
+// search loads the catalogs that were never loaded (a PostgreSQL
+// connection's default database).
 func (m *Model) runSearch(text string, gen int) tea.Cmd {
 	all := m.searchConn == "" || strings.HasPrefix(text, "@")
 	conn := m.searchConn
+	var loads []tea.Cmd
 	if all {
 		conn = ""
+		for _, c := range m.backend.Connections() {
+			loads = append(loads, m.ensureMeta(c.Name, ""))
+		}
+	}
+	if all != m.searchAll {
+		m.searchAll = all
+		if s, ok := m.overlay.(*overlay.Search); ok {
+			s.SetNote(m.searchNote())
+		}
 	}
 	snaps := m.catalogs.Snapshots(conn)
 	q := strings.TrimPrefix(text, "@")
-	return func() tea.Msg {
+	return tea.Batch(append(loads, func() tea.Msg {
 		return searchResultsMsg{gen: gen, hits: meta.Search(snaps, q, searchLimit), all: all}
-	}
+	})...)
 }
 
 func (m *Model) searchResults(msg searchResultsMsg) {

@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- An `@` search loads the metadata of every connection that was not loaded yet, so it finds
+  tables in connections you have not opened; the popup counts the connections still loading.
+
 ### Fixed
 - Hints no longer end with a dangling ` · ` when `keymap.toml` unbinds the keys they name.
 - `keymap.toml` key sequences like `"f<a"` mean `f`, `<`, `a`; only `<` followed by a name of

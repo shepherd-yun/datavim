@@ -9,6 +9,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/meta"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
 // search opens <space><space> and types query.
@@ -127,5 +128,35 @@ func TestGlobalSearchDropsStaleResultsAndTakesPastes(t *testing.T) {
 	drain(t, m, cmd)
 	if s := screen(m); !strings.Contains(s, "table    users") {
 		t.Fatalf("a paste runs the search:\n%s", s)
+	}
+}
+
+func TestGlobalSearchAtLoadsEveryConnection(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "G") // prod selected; nothing loaded yet
+	search(t, m, "@users")
+	conns := map[string]bool{}
+	for _, h := range m.searchHits {
+		if h.Kind == meta.ItemTable && h.Name == "users" {
+			conns[h.Conn] = true
+		}
+	}
+	if !conns["local"] || !conns["prod"] {
+		t.Fatalf("@ loads the catalogs of every connection: %v", conns)
+	}
+}
+
+func TestGlobalSearchAtNotesLoadingConnections(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "G")
+	press(t, m, "space", "space") // loads prod
+	_, cmd := m.Update(uitest.Key("@"))
+	_, cmd = m.Update(cmd()) // the query starts the load of local
+	if s := screen(m); !strings.Contains(s, "loading metadata of 1 connection…") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	drain(t, m, cmd)
+	if s := screen(m); strings.Contains(s, "loading metadata") {
+		t.Fatalf("note stays after the loads:\n%s", s)
 	}
 }

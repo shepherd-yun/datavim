@@ -100,6 +100,7 @@ type Model struct {
 	lastSearch string
 	searchConn string // connection the global search is scoped to
 	searchKey  meta.Key
+	searchAll  bool       // the current query searches every connection
 	searchHits []meta.Hit // the rows the search popup shows
 	revealing  *revealTarget
 }
