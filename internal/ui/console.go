@@ -187,9 +187,11 @@ func (t *consoleTab) Find(q string, forward bool) bool {
 	return false
 }
 
+// SetSize takes the size inside the tab area's frame. The console draws
+// that frame itself, split in two (see Framed), so it fills w+2 x h+2.
 func (t *consoleTab) SetSize(w, h int) {
 	t.width, t.height = max(w, 0), max(h, 0)
-	body := max(t.height-2, 0) // separator and status line
+	body := max(t.height-3, 0) // the extra frame border pair and the status line
 	t.editorH = min(max(body*2/5, 3), body)
 	t.editor.SetSize(t.width, t.editorH)
 	t.grid.SetSize(t.width, body-t.editorH)
@@ -904,34 +906,41 @@ func (t *consoleTab) externalEdit() tea.Cmd {
 
 // ---- view ----
 
-func (t *consoleTab) View(focused bool) string {
+func (t *consoleTab) View(focused bool) string { return t.Framed("", focused, false) }
+
+// Framed draws the editor and the results in frames of their own, the
+// focused one's border lit, under title (the tab bar).
+func (t *consoleTab) Framed(title string, focused, danger bool) string {
 	if t.height == 0 || t.width == 0 {
 		return ""
 	}
-	body := max(t.height-2, 0)
-	parts := []string{textutil.PadLines(t.editor.View(), t.editorH), t.separator()}
-	resultsH := body - t.editorH
+	onEditor, onResults := focused && !t.onResults, focused && t.onResults
+	resultsH := max(t.height-3, 0) - t.editorH
+	results := ""
 	if t.showMessages {
-		parts = append(parts, t.messagesView(resultsH))
+		results = t.messagesView(resultsH)
 	} else {
-		parts = append(parts, textutil.PadLines(t.grid.View(focused && t.onResults), resultsH))
+		results = textutil.PadLines(t.grid.View(onResults), resultsH)
 	}
-	parts = append(parts, t.statusLine())
-	return t.drawPopup(strings.Join(parts, "\n"))
+	t.editor.SetFocused(onEditor)
+	w := t.width + 2
+	top := theme.Frame(title, t.editor.View(), w, t.editorH+2, onEditor, danger)
+	bottom := theme.Frame(t.resultsTitle(), results+"\n"+t.statusLine(), w, resultsH+3, onResults, danger)
+	return t.drawPopup(top + "\n" + bottom)
 }
 
-func (t *consoleTab) separator() string {
-	label := "Results"
+func (t *consoleTab) resultsTitle() string {
 	if t.showMessages {
-		label = "Messages"
-	} else if rs := t.grid.Result(); rs != nil {
+		return "Messages"
+	}
+	label := "Results"
+	if rs := t.grid.Result(); rs != nil {
 		label += fmt.Sprintf(" · %d rows", len(rs.Rows))
 		if t.last != nil && t.last.Truncated {
 			label += " · truncated · ] more"
 		}
 	}
-	line := "── " + label + " " + strings.Repeat("─", t.width)
-	return theme.Muted.Render(textutil.Fit(line, t.width))
+	return label
 }
 
 func (t *consoleTab) messagesView(h int) string {
@@ -957,7 +966,9 @@ func (t *consoleTab) statusLine() string {
 		return theme.Muted.Render(textutil.Fit(textutil.Sanitize(t.status), t.width))
 	}
 	hint := "enter run · R run all · i insert · v select · u undo · ctrl+j results · <space>v $EDITOR"
-	if t.editor.Visual() {
+	if t.onResults {
+		hint = "hjkl move · yy copy row · K show cell · / search · M messages · ctrl+k editor"
+	} else if t.editor.Visual() {
 		hint = "enter runs the selection · y d c > < · esc cancel"
 	}
 	if t.manualTx {

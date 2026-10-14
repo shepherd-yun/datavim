@@ -144,7 +144,7 @@ func (m *Model) View() string {
 	}
 	out := make([]string, 0, m.height)
 	for r := m.top; r < len(rows) && len(out) < m.height; r++ {
-		out = append(out, drawRow(rows[r], digits, textW, curLine, ph))
+		out = append(out, drawRow(rows[r], digits, textW, curLine, ph, !m.blurred))
 	}
 	for len(out) < m.height {
 		out = append(out, strings.Repeat(" ", m.width))
@@ -152,11 +152,15 @@ func (m *Model) View() string {
 	return strings.Join(out, "\n")
 }
 
-func drawRow(r row, digits, textW, curLine int, placeholder string) string {
+func drawRow(r row, digits, textW, curLine int, placeholder string, focused bool) string {
+	cursor := theme.Selected
+	if !focused {
+		cursor = theme.SelectedDim
+	}
 	gutter := strings.Repeat(" ", digits+1)
 	if r.first {
 		num := fmt.Sprintf("%*d ", digits, r.line+1)
-		if r.line == curLine {
+		if r.line == curLine && focused {
 			gutter = num
 		} else {
 			gutter = theme.Muted.Render(num)
@@ -179,7 +183,7 @@ func drawRow(r row, digits, textW, curLine int, placeholder string) string {
 		c := r.cells[i]
 		if i == r.cursor {
 			flush()
-			b.WriteString(theme.Selected.Render(c.text))
+			b.WriteString(cursor.Render(c.text))
 			continue
 		}
 		if c.selected {
@@ -195,7 +199,7 @@ func drawRow(r row, digits, textW, curLine int, placeholder string) string {
 	}
 	flush()
 	if r.cursor == r.to {
-		b.WriteString(theme.Selected.Render(" "))
+		b.WriteString(cursor.Render(" "))
 		if placeholder != "" {
 			b.WriteString(theme.Muted.Render(placeholder))
 		}

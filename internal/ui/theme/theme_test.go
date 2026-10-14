@@ -35,12 +35,13 @@ func TestBoxLongTitleAndTinySizes(t *testing.T) {
 }
 
 func TestFrameDangerIsRed(t *testing.T) {
-	red := lipgloss.NewStyle().Foreground(ColorError).Render("┌")
-	for _, focused := range []bool{false, true} {
-		if got := Frame("t", "x", 10, 3, focused, true); !strings.HasPrefix(got, red) {
-			t.Errorf("focused=%v: danger frame is not red: %q", focused, got)
+	red := lipgloss.NewStyle().Foreground(ColorError)
+	reds := map[bool]string{true: red.Render("┌"), false: red.Faint(true).Render("┌")}
+	for focused, want := range reds {
+		if got := Frame("t", "x", 10, 3, focused, true); !strings.HasPrefix(got, want) {
+			t.Errorf("focused=%v: danger frame is not (faint when unfocused) red: %q", focused, got)
 		}
-		if got := Box("t", "x", 10, 3, focused); strings.HasPrefix(got, red) {
+		if got := Box("t", "x", 10, 3, focused); strings.HasPrefix(got, reds[true]) || strings.HasPrefix(got, reds[false]) {
 			t.Errorf("focused=%v: plain box is red", focused)
 		}
 	}

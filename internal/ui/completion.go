@@ -193,11 +193,12 @@ func (t *consoleTab) drawPopup(view string) string {
 		return view
 	}
 	x, y := t.editor.CursorPos()
+	x, y = x+1, y+1 // inside the editor's frame
 	box := t.popup.View(min(t.width, 60), min(t.height, 12))
 	w, h := lipgloss.Width(box), lipgloss.Height(box)
 	top := y + 1
-	if top+h > t.height {
+	if top+h > t.height+2 {
 		top = max(y-h, 0)
 	}
-	return overlay.PlaceAt(view, box, min(x, max(t.width-w, 0)), top)
+	return overlay.PlaceAt(view, box, min(x, max(t.width+2-w, 0)), top)
 }

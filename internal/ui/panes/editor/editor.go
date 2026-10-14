@@ -23,6 +23,7 @@ type Model struct {
 	curY      int
 
 	placeholder string
+	blurred     bool // draw the cursor and current line number as inactive
 }
 
 // New returns an empty editor in NORMAL mode.
@@ -30,6 +31,10 @@ func New() *Model { return &Model{vim: vimedit.New(), placeholder: defaultPlaceh
 
 // SetPlaceholder sets the hint shown in an empty editor ("" for none).
 func (m *Model) SetPlaceholder(s string) { m.placeholder = s }
+
+// SetFocused sets whether the editor has the keyboard: without it the
+// cursor is underlined instead of a solid block, as in the results grid.
+func (m *Model) SetFocused(on bool) { m.blurred = !on }
 
 // AppendAtEnd starts INSERT mode after the last character (vim's GA).
 func (m *Model) AppendAtEnd() {

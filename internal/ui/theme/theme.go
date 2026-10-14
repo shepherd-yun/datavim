@@ -41,7 +41,7 @@ func Box(title, body string, width, height int, focused bool) string {
 }
 
 // Frame is Box with a red border when danger is set (a prod connection),
-// whatever the focus.
+// whatever the focus; a prod frame without focus is faint red.
 func Frame(title, body string, width, height int, focused, danger bool) string {
 	if width < 2 || height < 2 {
 		return ""
@@ -49,8 +49,10 @@ func Frame(title, body string, width, height int, focused, danger bool) string {
 	inner := width - 2
 	border := lipgloss.NewStyle().Foreground(ColorBorder)
 	switch {
-	case danger:
+	case danger && focused:
 		border = border.Foreground(ColorError)
+	case danger:
+		border = border.Foreground(ColorError).Faint(true)
 	case focused:
 		border = border.Foreground(ColorFocus)
 	}
