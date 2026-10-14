@@ -59,7 +59,7 @@ func (m *Model) searchNote() string {
 	case meta.Loading:
 		return "loading metadata of " + m.searchConn + "…"
 	case meta.Failed:
-		return "metadata of " + m.searchConn + " failed: " + m.catalogs.Err(m.searchKey).Error() + " · " + keyHint(m.keys, keymap.Global, keymap.Refresh, "retries")
+		return joinHints("metadata of "+m.searchConn+" failed: "+m.catalogs.Err(m.searchKey).Error(), keyHint(m.keys, keymap.Global, keymap.Refresh, "retries"))
 	}
 	return ""
 }

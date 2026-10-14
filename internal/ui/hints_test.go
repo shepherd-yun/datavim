@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -82,5 +83,36 @@ func TestConsoleLeaderIsTextInInsertMode(t *testing.T) {
 	press(t, m, "l", "j", ",", "c", "i", "a", ",", "b")
 	if got := m.activeTab().(*consoleTab).editor.Value(); got != "a,b" {
 		t.Fatalf("editor = %q, want the leader typed as text", got)
+	}
+}
+
+func TestSearchNoteOmitsAnUnboundRetry(t *testing.T) {
+	m, b := newTestModel(t)
+	k, err := keymap.Custom("", map[keymap.Context]map[string]string{keymap.Global: {"<leader>r": ""}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.SetKeymap(k)
+	b.conn.mu.Lock()
+	b.conn.catalogErr = errors.New("permission denied")
+	b.conn.mu.Unlock()
+	press(t, m, "l")
+	search(t, m, "")
+	if got := m.searchNote(); got != "metadata of local failed: permission denied" {
+		t.Fatalf("searchNote = %q, want no dangling separator", got)
+	}
+}
+
+func TestUnsavedHintOmitsUnboundKeys(t *testing.T) {
+	m, _ := newTestModel(t)
+	k, err := keymap.Custom("", map[keymap.Context]map[string]string{keymap.Grid: {"<leader>w": "", "U": ""}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.SetKeymap(k)
+	openUsers(t, m)
+	press(t, m, "o", "]")
+	if s := screen(m); !strings.Contains(s, "1 unsaved change ") || strings.Contains(s, "1 unsaved change · ") {
+		t.Fatalf("status keeps a dangling separator:\n%s", s)
 	}
 }

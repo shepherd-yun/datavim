@@ -390,7 +390,7 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 		keymap.FilterEqual, keymap.FilterNotEqual, keymap.FilterContains, keymap.FilterLike, keymap.FilterGreater,
 		keymap.FilterLess, keymap.FilterNull, keymap.FilterNotNull, keymap.FilterClear:
 		if n := t.changes(); n > 0 {
-			t.setStatus(plural(n, "unsaved change")+" · "+t.unsavedHint("submits", "discards"), true)
+			t.setStatus(joinHints(plural(n, "unsaved change"), t.unsavedHint("submits", "discards")), true)
 			return nil
 		}
 	}

@@ -485,7 +485,7 @@ func (m *Model) canChange(conn string) bool {
 			}
 		case *dataTab:
 			if t.conn == conn && t.changes() > 0 {
-				m.setStatus(t.Title()+" on "+conn+" has unsaved changes · "+joinHints(keyHint(m.keys, keymap.Grid, keymap.SubmitEdits, "submits"), keyHint(m.keys, keymap.Grid, keymap.UndoAllEdits, "discards")), true)
+				m.setStatus(joinHints(t.Title()+" on "+conn+" has unsaved changes", t.unsavedHint("submits", "discards")), true)
 				return false
 			}
 		}
