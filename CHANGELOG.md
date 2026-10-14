@@ -21,6 +21,9 @@ All notable changes to this project are documented here. The format follows
 ### Changed
 - `f` alone no longer filters; `ff` filters by the cell's value.
 - `Ctrl-u` in a text input deletes to the start of the line instead of clearing it.
+- The console frames its editor and its results separately; `Ctrl-j` / `Ctrl-k` light the
+  focused one's border, the other's cursor turns into an underline, and the hint line follows
+  the focus. A prod tab's unfocused frames are faint red.
 
 ### Fixed
 - `gt` / `gT` switch tabs in table data, structure and console result tabs and in the tree,

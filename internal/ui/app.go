@@ -1136,7 +1136,11 @@ func (m *Model) renderTabs(width, height int) string {
 	focused := m.focus == focusTabs
 	conn, _ := t.Target()
 	cfg, _ := m.backend.Connection(conn)
-	return theme.Frame(m.tabBar(), t.View(focused), width, height, focused, cfg.Env == config.EnvProd)
+	danger := cfg.Env == config.EnvProd
+	if f, ok := t.(framer); ok {
+		return f.Framed(m.tabBar(), focused, danger)
+	}
+	return theme.Frame(m.tabBar(), t.View(focused), width, height, focused, danger)
 }
 
 func (m *Model) tabBar() string {

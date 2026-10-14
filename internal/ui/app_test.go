@@ -527,8 +527,9 @@ func TestProdConnectionIsRed(t *testing.T) {
 	if s := statusLine(prod); strings.Contains(s, "[PROD]") {
 		t.Fatalf("status for local: %s", s)
 	}
-	if !strings.Contains(prod.render(), redCorner) {
-		t.Fatal("the tab area stays red while it shows a prod tab")
+	faintRedCorner := lipgloss.NewStyle().Foreground(theme.ColorError).Faint(true).Render("┌")
+	if !strings.Contains(prod.render(), faintRedCorner) {
+		t.Fatal("the tab area stays (faint) red while it shows a prod tab")
 	}
 }
 

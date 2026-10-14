@@ -11,12 +11,14 @@ import (
 	"time"
 
 	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/meta"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
@@ -700,5 +702,50 @@ func TestConsoleAsksForThePasswordAndRunsAgain(t *testing.T) {
 	}
 	if c.statusErr {
 		t.Fatalf("status = %q", c.status)
+	}
+}
+
+func TestConsoleFramesFollowFocus(t *testing.T) {
+	c := newConsole(t, newFakeBackend(), "local")
+	c.editor.SetValue("select * from users")
+	runTab(t, c, c.Handle(keymap.RunStatement))
+	lit := lipgloss.NewStyle().Foreground(theme.ColorFocus).Render("┌")
+	plain := lipgloss.NewStyle().Foreground(theme.ColorBorder).Render("┌")
+	frames := func() []string { // the editor's and the results' top-left corners
+		var out []string
+		for _, l := range strings.Split(c.Framed("tabs", true, false), "\n") {
+			if strings.Contains(ansi.Strip(l), "┌") {
+				out = append(out, l)
+			}
+		}
+		return out
+	}
+
+	lines := strings.Split(ansi.Strip(c.Framed("tabs", true, false)), "\n")
+	if len(lines) != 24+2 {
+		t.Fatalf("%d lines, want 26", len(lines))
+	}
+	for _, l := range lines {
+		if w := ansi.StringWidth(l); w != 80+2 {
+			t.Fatalf("line %q width %d, want 82", l, w)
+		}
+	}
+	if f := frames(); len(f) != 2 || !strings.HasPrefix(f[0], lit) || !strings.HasPrefix(f[1], plain) ||
+		!strings.Contains(ansi.Strip(f[1]), "Results · 2 rows") {
+		t.Fatalf("editor focused, frames:\n%q", f)
+	}
+	if v := consoleView(c); !strings.Contains(v, "ctrl+j results") {
+		t.Fatalf("editor hint:\n%s", v)
+	}
+
+	c.Handle(keymap.FocusResults)
+	if f := frames(); !strings.HasPrefix(f[0], plain) || !strings.HasPrefix(f[1], lit) {
+		t.Fatalf("results focused, frames:\n%q", f)
+	}
+	if v := c.View(true); strings.Contains(v, theme.Selected.Render("s")) || !strings.Contains(v, theme.SelectedDim.Render("s")) {
+		t.Fatal("the editor cursor is underlined, not a block, while the results have focus")
+	}
+	if v := consoleView(c); !strings.Contains(v, "ctrl+k editor") {
+		t.Fatalf("results hint:\n%s", v)
 	}
 }

@@ -43,6 +43,13 @@ type tab interface {
 	View(focused bool) string
 }
 
+// framer is a tab that draws the tab area's frame itself, title and all:
+// the console frames its editor and its results apart so that the focused
+// one stands out.
+type framer interface {
+	Framed(title string, focused, danger bool) string
+}
+
 // tabMsg is an async result addressed to one tab.
 type tabMsg interface{ TabID() int }
 
