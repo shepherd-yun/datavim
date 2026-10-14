@@ -1,0 +1,15 @@
+name: Feature request
+description: An idea for sqlvim
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: The workflow, and how you do it today (DataGrip, psql, …).
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would help?
