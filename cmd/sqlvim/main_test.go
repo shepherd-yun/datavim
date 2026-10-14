@@ -11,6 +11,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
+	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
 
 func TestRunPrintsVersion(t *testing.T) {
@@ -120,5 +121,30 @@ func TestRunReportsThemeErrors(t *testing.T) {
 	err := run([]string{"--config", dir}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), `config.toml: theme.focus: invalid color "bleu"`) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+// The shipped examples must load: a typo there is the first thing a new user hits.
+func TestExamplesLoad(t *testing.T) {
+	dir := t.TempDir()
+	for _, name := range []string{"connections.toml", "config.toml", "keymap.toml"} {
+		data, err := os.ReadFile(filepath.Join("..", "..", "docs", "examples", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, name), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cfg, err := config.Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := buildKeymap(dir, cfg.Keymap); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = theme.Apply(nil) })
+	if err := theme.Apply(cfg.Theme); err != nil {
+		t.Fatal(err)
 	}
 }
