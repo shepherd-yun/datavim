@@ -428,7 +428,7 @@ func (t *diffTab) skippedDestructive() int {
 	return n
 }
 
-// box is a row's checkbox: [x], [ ], [-] for a partly picked table, or
+// box is a row's checkbox: [✓], [ ], [-] for a partly picked table, or
 // blank when nothing on the row can be scripted.
 func (t *diffTab) box(r diffRow) string {
 	o := t.objects[r.obj]
@@ -437,7 +437,7 @@ func (t *diffTab) box(r diffRow) string {
 		case !t.writable[p]:
 			return "   "
 		case t.picked[p]:
-			return "[x]"
+			return "[✓]"
 		}
 		return "[ ]"
 	}
@@ -454,7 +454,7 @@ func (t *diffTab) box(r diffRow) string {
 	case writable == 0:
 		return "   "
 	case picked == writable:
-		return "[x]"
+		return "[✓]"
 	case picked == 0:
 		return "[ ]"
 	}

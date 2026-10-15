@@ -26,7 +26,7 @@ import (
 // that do not fit.
 const dataCellWidth = 30
 
-// dataPrefix is the width of " [x] ~ " before a row's cells.
+// dataPrefix is the width of " [✓] ~ " before a row's cells.
 const dataPrefix = 7
 
 // dataView compares the rows of one pair of tables (spec §5.4). The diff
@@ -411,7 +411,7 @@ func (v *dataView) line(i int, cols []int) (plain, styled string) {
 	r := v.rows[i]
 	box := "[ ]"
 	if v.picked[i] {
-		box = "[x]"
+		box = "[✓]"
 	}
 	sign, style := "~", theme.Changed.Render
 	switch r.Status {

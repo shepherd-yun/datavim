@@ -113,6 +113,17 @@ func TestPasswordSubmit(t *testing.T) {
 	}
 }
 
+func TestPasswordSaveCheckbox(t *testing.T) {
+	p := NewPassword("p")
+	if v := ansi.Strip(p.View(60, 20)); !strings.Contains(v, "[✓] save to Keychain") {
+		t.Fatalf("saving is on by default:\n%s", v)
+	}
+	send(t, p, "tab")
+	if v := ansi.Strip(p.View(60, 20)); !strings.Contains(v, "[ ] save to Keychain") {
+		t.Fatalf("tab turns saving off:\n%s", v)
+	}
+}
+
 func TestPasswordCancel(t *testing.T) {
 	if o, msg := send(t, NewPassword("p"), "a", "esc"); o != nil || msg != nil {
 		t.Fatalf("esc: o=%v msg=%v", o, msg)

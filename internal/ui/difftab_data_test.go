@@ -48,9 +48,9 @@ func TestDataViewListsDifferingRows(t *testing.T) {
 		"local · app.users ──▶ local · app.users_bak",
 		"key: id", "3 differ (1 + · 1 - · 1 ~)", "1 delete skipped",
 		"the structures differ · comparing the 2 columns both have",
-		"[x] ~ 2   robert → bob",
+		"[✓] ~ 2   robert → bob",
 		"[ ] - 3   carol",
-		"[x] + 4   dave",
+		"[✓] + 4   dave",
 	)
 	if strings.Contains(screen(m), "alice") {
 		t.Fatalf("a row that is alike is listed:\n%s", screen(m))
@@ -119,7 +119,7 @@ func TestDataViewNamespacePicksTheTableUnderCursor(t *testing.T) {
 	b.conn.setData("users", userCols, userRow("1", "alice"))
 	staging.setData("users", userCols, userRow("1", "alicia"))
 	press(t, m, "j", "D") // on "~ users"
-	wantScreen(t, m, "local · app.users ──▶ staging · app.users", "[x] ~ 1   alicia → alice")
+	wantScreen(t, m, "local · app.users ──▶ staging · app.users", "[✓] ~ 1   alicia → alice")
 }
 
 func TestDataViewRowLimit(t *testing.T) {
@@ -211,7 +211,7 @@ func TestDataViewToggle(t *testing.T) {
 	press(t, m, "x") // the ~ row
 	wantScreen(t, m, "[ ] ~ 2")
 	press(t, m, "j", "x") // the - row
-	wantScreen(t, m, "[x] - 3")
+	wantScreen(t, m, "[✓] - 3")
 	if strings.Contains(screen(m), "delete skipped") {
 		t.Fatalf("the delete is picked:\n%s", screen(m))
 	}
@@ -241,8 +241,8 @@ func TestDataViewSwap(t *testing.T) {
 	press(t, m, "~")
 	wantScreen(t, m,
 		"local · app.users_bak ──▶ local · app.users",
-		"[x] ~ 2   bob → robert",
-		"[x] + 3   carol",
+		"[✓] ~ 2   bob → robert",
+		"[✓] + 3   carol",
 		"[ ] - 4   dave",
 	)
 }

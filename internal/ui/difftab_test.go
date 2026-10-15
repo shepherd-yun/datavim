@@ -72,8 +72,8 @@ func TestDiffTabListsChangesWithDefaults(t *testing.T) {
 		"1 table differs", "1 destructive skipped",
 		"▾ [-] ~ users_bak",
 		"[ ] - column legacy  int NULL  ⚠ destructive",
-		"[x] + column email  varchar(255) NULL",
-		"[x] ~ column name  varchar(50) → varchar(100)",
+		"[✓] + column email  varchar(255) NULL",
+		"[✓] ~ column name  varchar(50) → varchar(100)",
 	)
 	if !strings.Contains(screen(m), "[1]diff:users_bak") {
 		t.Errorf("tab title:\n%s", screen(m))
@@ -84,11 +84,11 @@ func TestDiffTabToggle(t *testing.T) {
 	m, b := newTestModel(t)
 	d := openUsersDiff(t, m, b)
 	press(t, m, "x") // on the table: everything
-	wantScreen(t, m, "[x] - column legacy", "▾ [x] ~ users_bak")
+	wantScreen(t, m, "[✓] - column legacy", "▾ [✓] ~ users_bak")
 	press(t, m, "x") // again: nothing
 	wantScreen(t, m, "[ ] - column legacy", "[ ] + column email", "▾ [ ] ~ users_bak")
 	press(t, m, "j", "j", "x") // email alone
-	wantScreen(t, m, "[x] + column email", "▾ [-] ~ users_bak")
+	wantScreen(t, m, "[✓] + column email", "▾ [-] ~ users_bak")
 	if !d.picked[pick{0, 1}] || d.picked[pick{0, 0}] {
 		t.Errorf("picked = %v", d.picked)
 	}
@@ -129,7 +129,7 @@ func TestDiffTabSwap(t *testing.T) {
 	press(t, m, "~")
 	wantScreen(t, m,
 		"local · app.users_bak ──▶ local · app.users",
-		"[ ] - column email", "[x] + column legacy",
+		"[ ] - column email", "[✓] + column legacy",
 		"~ column name  varchar(100) → varchar(50)  ⚠ lossy",
 	)
 }
@@ -180,7 +180,7 @@ func TestDiffTabNamespaces(t *testing.T) {
 	wantScreen(t, m,
 		"local · app ──▶ staging · app",
 		"2 tables differ · 1 identical · 1 destructive skipped",
-		"[x] + audit  (new table, 1 column)",
+		"[✓] + audit  (new table, 1 column)",
 		"[ ] - tmp  ⚠ destructive",
 	)
 }

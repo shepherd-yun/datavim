@@ -43,7 +43,7 @@ func (p *Password) View(width, _ int) string {
 	w := max(min(width-4, 50), 10)
 	check := "[ ]"
 	if p.save {
-		check = "[x]"
+		check = "[✓]"
 	}
 	body := strings.Join([]string{
 		"Password for " + theme.Title.Render(p.conn) + ":",
