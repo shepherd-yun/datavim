@@ -116,7 +116,8 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `<Space>yd` | Copy the DDL of the table under the cursor (tree, data or structure tab); `y` in a routine's definition copies it |
 | `<Space>x c/j/s/x` | Export result as CSV / JSON / SQL / xlsx |
 | `<Space>n` | New connection |
-| `e` | Tree: edit the selected connection (saved to `connections.toml`) |
+| `e` | Tree: edit the selected connection (saved to `connections.toml`), or modify the selected table |
+| `e` | Structure: modify the table — `i` edits a field (`h` / `l` pick it), `o` adds a column or index, `dd` deletes, `u` / `U` undo, `<Space>w` previews and runs the ALTER |
 | `dd` | Tree: delete the selected connection, or drop the selected table or view (type its name to confirm) |
 | `r` | Tree: rename the selected table or view |
 | `a` | Tree: actions on the selected node, including truncating a table |

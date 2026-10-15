@@ -25,6 +25,14 @@ All notable changes to this project are documented here. The format follows
   unpicked), `~` swaps the sides and `<Space>w` writes the script into a new console on the
   target, where the usual read-only and prod checks apply. Changes sqlvim cannot script stay in
   it as comments.
+- Modify Table: `e` on a table in the tree, or `e` in its structure tab, edits the columns
+  (name, type, NULL, default, comment) and indexes (name, kind, columns) with the data grid's
+  keys: `i` edits the field under the cursor (`h` / `l` move between fields), `o` adds a column
+  or index, `dd` deletes, `u` / `U` undo. `<Space>w` (or `:w`) previews the ALTER with the
+  destructive and lossy changes in red and runs it — PostgreSQL in one transaction — once you
+  press `y`, or type the table's name on a prod connection. A failed or cancelled (`Ctrl-c`)
+  submit keeps the edits. Foreign keys, column order, generated and auto-increment columns are
+  left to a console.
 
 ### Changed
 - The columns popup and the search open the structure with `Ctrl-o` instead of `Ctrl-s`,
@@ -32,6 +40,10 @@ All notable changes to this project are documented here. The format follows
   footers name the key you bound.
 - The action ID `conn.delete` is now `node.delete`; `keymap.toml` files that use the old ID
   keep working.
+- The action ID `conn.edit` is now `node.edit` (`e` in the tree edits a connection or modifies
+  a table); `keymap.toml` files that use the old ID keep working.
+- The structure tab has a cursor: `j` / `k` move over the rows of columns, indexes and foreign
+  keys, and a hint line at the bottom.
 
 ## [1.1.0] - 2026-10-14
 

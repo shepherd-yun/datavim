@@ -111,7 +111,8 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 | `<Space>yd` | 复制光标所在表的 DDL（树、数据 tab 或结构 tab）；在函数定义弹窗里按 `y` 复制其定义 |
 | `<Space>x c/j/s/x` | 导出结果为 CSV / JSON / SQL / xlsx |
 | `<Space>n` | 新建连接 |
-| `e` | 树：编辑选中的连接（保存到 `connections.toml`） |
+| `e` | 树：编辑选中的连接（保存到 `connections.toml`），或修改选中的表 |
+| `e` | 结构页：修改表——`i` 编辑字段（`h` / `l` 选择字段），`o` 新增列或索引，`dd` 删除，`u` / `U` 撤销，`<Space>w` 预览并执行 ALTER |
 | `dd` | 树：删除选中的连接，或删除选中的表 / 视图（需输入名字确认） |
 | `r` | 树：重命名选中的表或视图 |
 | `a` | 树：当前节点的动作菜单，包括清空表 |
