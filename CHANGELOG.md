@@ -7,6 +7,16 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Open `.sql` files in a console: `:e <file>` opens one on the connection and database in
+  context (`~` and relative paths work; files up to 2 MB). It runs like any console, the tab
+  shows `[+]` while it has unsaved changes, and `:w` saves it (`:w <file>` saves as, `:wq`
+  saves and closes, `:w!` overwrites a file changed on disk). In a file console `:w` only
+  saves the file; staged result edits are submitted with `<Space>w`. `:w <file>` in a plain
+  console turns it into a file console. Closing, quitting or editing the connection never
+  drops unsaved text silently. Files appear in `<Space>f`. A leading UTF-8 BOM is dropped.
+- `<Space>R` in the console runs from the statement under the cursor to the end. When one of
+  several statements fails, the status names it (`statement 2/3 failed`) and the cursor
+  moves to it.
 - Workspaces keep sets of connections apart, like DataGrip's: `sqlvim -w personal` (or
   `SQLVIM_WORKSPACE=personal`) opens a workspace with its own connections, keychain
   passwords, history and drafts, while `config.toml` and `keymap.toml` stay shared. Create

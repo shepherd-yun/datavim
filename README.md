@@ -149,6 +149,7 @@ picks the workspace by directory.
 | `p` | Re-enter connection password (tree) |
 | `<Space>c` | SQL console for the selected connection / database |
 | `Enter` / `R` | Console: run statement under cursor, or the visual selection / run all (`Ctrl-Enter` or `Ctrl-j` in insert mode) |
+| `<Space>R` | Console: run from the statement under the cursor to the end |
 | `Ctrl-c` | Cancel the running query (never quits) |
 | `Ctrl-j` / `Ctrl-k` | Console: results / editor; `M` toggles the message log |
 | `<Space>v` | Edit the console in `$EDITOR` |
@@ -173,12 +174,14 @@ picks the workspace by directory.
 | `<Space>r` | Refresh the tree node or tab and reload the connection's metadata |
 | `?` | Help for the focused pane |
 | `:q` / `:qa` | Close tab / quit |
+| `:e <file>` | Open a `.sql` file in a console on the connection / database in context |
+| `:w` / `:w <file>` / `:wq` | File console: save / save as (a plain console becomes a file console) / save and close; `:w!` overwrites a file changed on disk |
 | `<Space>t` | Console: toggle manual commit (`TX n` in the status bar) |
 | `:commit` / `:rollback` | Console: end the transaction |
 | `:set noreadonly` / `:set readonly` | Unlock / lock the connection for this session |
 | `:q!` / `:qa!` | Close / quit without asking about open transactions |
 | `<Space><Space>` | Search tables, views, columns, routines, schemas and databases in every connection, loading the metadata of those not opened yet (`db.table.column`, `table.column` or any part of it narrows by parent, fuzzily, and opening a column puts the cursor on it; `@` searches only the connection in context; `Enter` opens, `Ctrl-o` opens the structure). `Tab` / `Shift-Tab` switch to the lines of the open consoles (`Enter` jumps to the line) or the SQL history (an empty query lists the recent statements, `Enter` inserts one as `<Space>h` does) |
-| `<Space>f` | Recently opened tables, structures and consoles |
+| `<Space>f` | Recently opened tables, structures, consoles and files |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (`Ctrl-n` / `Ctrl-p` open the popup when closed) |
 | `Enter` / `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes the popup, a second `Esc` leaves insert mode) |
 

@@ -24,7 +24,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(LeaderToken, "h"), History, "SQL history"},
 		{Global, keys(LeaderToken, "t"), ToggleTx, "Toggle manual commit"},
 		{Global, keys(LeaderToken, LeaderToken), GlobalSearch, "Search everything"},
-		{Global, keys(LeaderToken, "f"), Recent, "Recent tabs"},
+		{Global, keys(LeaderToken, "f"), Recent, "Recent tabs and files"},
 		{Global, keys(LeaderToken, "l"), Locate, "Locate the current tab in the tree"},
 	}
 	for _, c := range []struct{ key, format, desc string }{

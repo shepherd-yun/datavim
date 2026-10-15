@@ -138,6 +138,7 @@ sqlvim --list-workspaces
 | `p` | 重新输入连接密码（树） |
 | `<Space>c` | 为选中的连接 / 数据库打开 SQL 控制台 |
 | `Enter` / `R` | 控制台：执行光标处语句或可视选区 / 执行全部（插入模式下 `Ctrl-Enter` 或 `Ctrl-j`） |
+| `<Space>R` | 控制台：从光标所在语句执行到末尾 |
 | `Ctrl-c` | 取消正在执行的查询（从不退出） |
 | `Ctrl-j` / `Ctrl-k` | 控制台：切到结果 / 编辑器；`M` 切换消息日志 |
 | `<Space>v` | 在 `$EDITOR` 中编辑控制台内容 |
@@ -162,12 +163,14 @@ sqlvim --list-workspaces
 | `<Space>r` | 刷新树节点或 tab，并重新加载该连接的元数据 |
 | `?` | 当前面板的帮助 |
 | `:q` / `:qa` | 关闭 tab / 退出 |
+| `:e <file>` | 在当前上下文的连接 / 数据库上，用控制台打开 `.sql` 文件 |
+| `:w` / `:w <file>` / `:wq` | 文件控制台：保存 / 另存为（普通控制台会变成文件控制台）/ 保存并关闭；`:w!` 覆盖磁盘上已被修改的文件 |
 | `<Space>t` | 控制台：切换手动提交（状态栏显示 `TX n`） |
 | `:commit` / `:rollback` | 控制台：结束事务 |
 | `:set noreadonly` / `:set readonly` | 本次会话解锁 / 锁定连接 |
 | `:q!` / `:qa!` | 关闭 / 退出，不询问未结束的事务 |
 | `<Space><Space>` | 搜索表、视图、列、函数、schema 和数据库，范围是所有连接，并加载尚未打开的连接的元数据（可以用 `db.table.column`、`table.column` 或其中一段按上级模糊限定，打开列时光标直接落在该列；`@` 开头只搜当前上下文的连接；`Enter` 打开，`Ctrl-o` 打开结构）。`Tab` / `Shift-Tab` 切换到搜索已打开 console 的内容（`Enter` 跳到那一行）或 SQL 历史（查询为空时列出最近的语句，`Enter` 像 `<Space>h` 一样插入语句） |
-| `<Space>f` | 最近打开的表、结构和控制台 |
+| `<Space>f` | 最近打开的表、结构、控制台和文件 |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |
 

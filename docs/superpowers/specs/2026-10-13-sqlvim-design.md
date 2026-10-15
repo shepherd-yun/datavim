@@ -297,6 +297,7 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 - 树：`l` / `→` 展开（表展开为列、键、外键、索引），`Enter` 打开表数据或定位到结构页；vim 折叠键 `zo` `zc` `za` `zO` `zC` `zR` `zM` `zx`
 - `?` 显示当前上下文的按键帮助
 - `:q` 关闭当前 tab；`:qa` 退出（有未提交修改或事务时询问）
+- `:e <file>` 用控制台打开 SQL 文件；文件控制台里 `:w` 保存文件而不是提交暂存修改（见 `2026-10-16-sql-file-console-design.md`）
 
 ### 6.3 Leader 键（默认 `<Space>`）
 
