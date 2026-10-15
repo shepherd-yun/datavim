@@ -312,6 +312,7 @@ type fakeBackend struct {
 	lostConns    int
 	passphrases  []string
 	trusted      []string
+	others       map[string]*fakeConn // connections with their own fakeConn; the rest share conn
 }
 
 func newFakeBackend() *fakeBackend {
@@ -362,7 +363,7 @@ func (f *fakeBackend) AddConnection(c config.Connection, _ string, _ bool) error
 	return nil
 }
 
-func (f *fakeBackend) Conn(context.Context, string, string) (db.Conn, error) {
+func (f *fakeBackend) Conn(_ context.Context, name, _ string) (db.Conn, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.lostConns > 0 {
@@ -375,7 +376,23 @@ func (f *fakeBackend) Conn(context.Context, string, string) (db.Conn, error) {
 	if f.needPassword {
 		return nil, session.ErrPasswordRequired
 	}
+	if c, ok := f.others[name]; ok {
+		return c, nil
+	}
 	return f.conn, nil
+}
+
+// addConn adds a connection with a fakeConn of its own.
+func (f *fakeBackend) addConn(cfg config.Connection) *fakeConn {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	c := &fakeConn{rows: 3}
+	if f.others == nil {
+		f.others = map[string]*fakeConn{}
+	}
+	f.others[cfg.Name] = c
+	f.conns = append(f.conns, cfg)
+	return c
 }
 
 func (f *fakeBackend) SetPassword(name, password string, save bool) error {

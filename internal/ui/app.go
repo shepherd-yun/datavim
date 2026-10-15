@@ -565,7 +565,7 @@ func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
 	m.retryNode, m.retryTab = nil, 0
 	retry := m.retryFailedMeta(msg.Conn)
 	if t, ok := m.tabByID(tabID).(passwordRetrier); ok {
-		if conn, _ := m.tabByID(tabID).Target(); conn == msg.Conn {
+		if usesConn(m.tabByID(tabID), msg.Conn) {
 			return tea.Batch(retry, t.retryAfterPassword())
 		}
 	}
@@ -575,6 +575,18 @@ func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
 	}
 	m.tree.StartLoad(node)
 	return tea.Batch(retry, loadChildren(m.backend, node))
+}
+
+// connUser is a tab that works on more connections than its Target.
+type connUser interface{ usesConn(conn string) bool }
+
+// usesConn reports whether t works on conn.
+func usesConn(t tab, conn string) bool {
+	if u, ok := t.(connUser); ok {
+		return u.usesConn(conn)
+	}
+	c, _ := t.Target()
+	return c == conn
 }
 
 // askPassword opens the password prompt when a tab could not load or run
@@ -592,6 +604,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 	case runDoneMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case editsAppliedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
+	case diffLoadedMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	default:
 		return
@@ -808,11 +822,16 @@ func (m *Model) closeTab(i int) tea.Cmd {
 }
 
 func (m *Model) openTab(key string, rec history.Recent, create func(id int) tab) tea.Cmd {
-	touch := recordRecent(m.store, rec)
+	return tea.Batch(m.showTab(key, create), recordRecent(m.store, rec))
+}
+
+// showTab switches to the tab with key, creating it when there is none,
+// without recording it among the recent tabs.
+func (m *Model) showTab(key string, create func(id int) tab) tea.Cmd {
 	for i, t := range m.tabs {
 		if t.Key() == key {
 			m.gotoTab(i)
-			return touch
+			return nil
 		}
 	}
 	m.nextTabID++
@@ -821,7 +840,16 @@ func (m *Model) openTab(key string, rec history.Recent, create func(id int) tab)
 	m.active = len(m.tabs) - 1
 	m.focus = focusTabs
 	m.layout()
-	return tea.Batch(t.Init(), touch)
+	return t.Init()
+}
+
+// openDiff opens, or switches to, the tab comparing src with tgt.
+func (m *Model) openDiff(src, tgt compareSide) tea.Cmd {
+	return m.showTab(diffTabKey(src, tgt), func(id int) tab {
+		t := newDiffTab(id, m.backend, src, tgt)
+		t.keys = m.keys
+		return t
+	})
 }
 
 func (m *Model) openData(conn string, ref db.TableRef) tea.Cmd {
