@@ -389,6 +389,16 @@ func TestPasteGoesToTheEditorInInsertMode(t *testing.T) {
 	}
 }
 
+func TestPasteGoesToTheEditorInNormalMode(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "l", "j", "space", "c")
+	m.Update(tea.PasteMsg{Content: "select 42"})
+	c := m.activeTab().(*consoleTab)
+	if c.editor.Value() != "select 42" || c.editor.Insert() {
+		t.Fatalf("editor = %q, mode %v", c.editor.Value(), c.editor.Mode())
+	}
+}
+
 func TestCtrlCCancelsButNeverQuits(t *testing.T) {
 	m, _ := newTestModel(t)
 	if press(t, m, "ctrl+c") {

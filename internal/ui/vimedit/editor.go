@@ -175,6 +175,45 @@ func (e *Editor) InsertText(s string) {
 	e.SetCursor(Pos{end.Line, end.Col - 1})
 }
 
+// Paste is a terminal paste (Cmd-V): typed in INSERT mode, put after the
+// cursor in NORMAL mode and in place of the selection in VISUAL mode, like
+// Neovim's. The registers are left alone; a half-typed command is dropped.
+func (e *Editor) Paste(s string) {
+	s = strings.ReplaceAll(s, "\r\n", "\n")
+	if s == "" {
+		return
+	}
+	e.pend = pending{}
+	switch e.mode {
+	case Insert:
+		e.InsertText(s)
+		return
+	case Visual, VisualLine:
+		from, to, _ := e.selection()
+		lines := e.mode == VisualLine
+		e.mode = Normal
+		if lines {
+			e.deleteLines(from.Line, to.Line)
+			s = strings.TrimSuffix(s, "\n")
+			if e.buf.last() == 0 && e.buf.lineLen(0) == 0 { // every line was selected
+				e.change(Pos{}, Pos{}, s)
+				e.cur = Pos{}
+				break
+			}
+			// lines deleted at the end of the text: paste below the new last line
+			e.putText(register{text: s + "\n", linewise: true}, from.Line <= e.buf.last(), 1)
+		} else {
+			e.change(from, to, "")
+			e.cur = from
+			e.putText(register{text: s}, true, 1)
+		}
+	default:
+		e.putText(register{text: s}, false, 1)
+	}
+	e.hist.commit()
+	e.fit()
+}
+
 // ReplaceBeforeCursor replaces the text from byte offset start to the
 // cursor with s, leaving the cursor after s (completion).
 func (e *Editor) ReplaceBeforeCursor(start int, s string) {

@@ -191,3 +191,45 @@ func TestSetCursorClampsToTheMode(t *testing.T) {
 		t.Fatalf("INSERT may sit after the last rune: %v", e.Cursor())
 	}
 }
+
+// A terminal paste (Cmd-V) works in every mode, like Neovim's: typed in
+// INSERT mode, put after the cursor in NORMAL mode, and replacing the
+// selection in VISUAL mode, without touching the registers.
+func TestPaste(t *testing.T) {
+	tests := []struct {
+		name, start, keys, paste, want string
+		mode                           Mode
+	}{
+		{"insert", "ab|c", "i", "XY", "abXY|c", Insert},
+		{"normal after cursor", "a|bc", "", "XY", "abX|Yc", Normal},
+		{"normal empty line", "|", "", "XY", "X|Y", Normal},
+		{"normal multiline", "a|bc", "", "X\nY", "ab|X\nYc", Normal},
+		{"normal crlf", "a|bc", "", "X\r\nY", "ab|X\nYc", Normal},
+		{"pending command dropped", "a|bc", "d", "XY", "abX|Yc", Normal},
+		{"visual", "a|bcd", "vl", "XY", "aX|Yd", Normal},
+		{"visual line", "one\n|two\nthree", "V", "XY", "one\n|XY\nthree", Normal},
+		{"visual line at the end", "one\n|two", "V", "XY\n", "one\n|XY", Normal},
+		{"visual line everything", "|one\ntwo", "Vj", "X\nY", "|X\nY", Normal},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			e := newAt(t, tt.start)
+			feed(e, tt.keys)
+			e.Paste(tt.paste)
+			if got := show(e); got != tt.want || e.Mode() != tt.mode || e.Pending() != "" {
+				t.Fatalf("got %q %v pending %q, want %q %v", got, e.Mode(), e.Pending(), tt.want, tt.mode)
+			}
+		})
+	}
+	e := newAt(t, "a|bc")
+	feed(e, "yl")
+	e.Paste("XY")
+	feed(e, "p")
+	if e.Text() != "abXYbc" {
+		t.Fatalf("the unnamed register is kept: %q", e.Text())
+	}
+	feed(e, "uu")
+	if e.Text() != "abc" {
+		t.Fatalf("a paste is one undo step: %q", e.Text())
+	}
+}

@@ -242,6 +242,24 @@ func (t *consoleTab) Input(msg tea.Msg) tea.Cmd {
 	return tea.Batch(cmd, t.scheduleDraft())
 }
 
+// Paste puts a terminal paste into the editor, in any mode; the results
+// grid ignores it.
+func (t *consoleTab) Paste(msg tea.PasteMsg) tea.Cmd {
+	if t.onResults {
+		return nil
+	}
+	if t.editor.Insert() {
+		return t.Input(msg)
+	}
+	before := t.editor.Version()
+	t.popup = nil
+	t.editor.Update(msg)
+	if t.editor.Version() == before {
+		return nil
+	}
+	return t.scheduleDraft()
+}
+
 // TakeKey gives a key pressed in NORMAL or VISUAL mode to the editor
 // before the keymap sees it; used is false when the editor leaves the key
 // to the keymap (space, :, enter, ctrl+j …).

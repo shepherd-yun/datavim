@@ -62,17 +62,15 @@ func KeyOf(msg tea.KeyPressMsg) vimedit.Key {
 	return k
 }
 
-// Update feeds a key press to the editor, or types a paste in INSERT
-// mode. Handled is false for keys the editor leaves to the console.
+// Update feeds a key press or a terminal paste (in any mode) to the
+// editor. Handled is false for keys the editor leaves to the console.
 func (m *Model) Update(msg tea.Msg) vimedit.Result {
 	switch msg := msg.(type) {
 	case tea.KeyPressMsg:
 		return m.vim.Feed(KeyOf(msg))
 	case tea.PasteMsg:
-		if m.Insert() {
-			m.vim.InsertText(msg.Content)
-			return vimedit.Result{Handled: true}
-		}
+		m.vim.Paste(msg.Content)
+		return vimedit.Result{Handled: true}
 	}
 	return vimedit.Result{}
 }

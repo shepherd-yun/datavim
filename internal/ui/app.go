@@ -214,7 +214,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case tea.PasteMsg:
 		// Like keys, a paste goes to the command line, then a popup, then
-		// a console in insert mode.
+		// a console's editor (in any mode, like Neovim).
 		switch p, ok := m.overlay.(overlay.Paster); {
 		case m.cmdline != nil:
 			m.cmdline.Paste(msg.Content)
@@ -224,9 +224,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.runSearch(s.Requery())
 			}
 		case m.overlay != nil:
-		default:
-			if c := m.capturingTab(); c != nil {
-				return m, c.Input(msg)
+		case m.focus == focusTabs:
+			if c, ok := m.activeTab().(*consoleTab); ok {
+				return m, c.Paste(msg)
 			}
 		}
 	case historyLoadedMsg:

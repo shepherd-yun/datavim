@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- A terminal paste (Cmd-V / Ctrl-Shift-V) works in every mode of the console editor and the
+  cell editor, like Neovim: NORMAL mode puts the text after the cursor and VISUAL mode replaces
+  the selection. It used to be ignored outside INSERT mode. The registers are left alone.
 - A plain `y` in the console editor and the cell editor copies to the system clipboard as well
   as the unnamed register (vim's `clipboard=unnamedplus`, for yanks only: `x`, `d` and `c` do
   not overwrite the clipboard). `"+p` still pastes from it.

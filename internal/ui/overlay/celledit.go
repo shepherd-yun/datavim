@@ -59,7 +59,7 @@ func (c *CellEditor) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 // Mode is the editor's vim mode, for the status bar.
 func (c *CellEditor) Mode() string { return c.ed.Mode().String() }
 
-// Paste types a terminal paste in INSERT mode.
+// Paste puts a terminal paste in, in any mode.
 func (c *CellEditor) Paste(text string) { c.ed.Update(tea.PasteMsg{Content: text}) }
 
 func (c *CellEditor) View(width, height int) string {
