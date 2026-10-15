@@ -74,10 +74,12 @@ type runDoneMsg struct {
 	err         error // opening the session failed
 	more        bool  // re-run of the shown statement with a higher limit
 	limit       int
-	readOnly    bool   // the connection was read-only when the run started
-	reopened    bool   // the session was reopened because readonly changed
-	began       bool   // a BEGIN was injected before the statements (manual commit)
-	text        string // the editor text the statements came from; "" if they did not
+	readOnly    bool          // the connection was read-only when the run started
+	reopened    bool          // the session was reopened because readonly changed
+	began       bool          // a BEGIN was injected before the statements (manual commit)
+	text        string        // the editor text the statements came from; "" if they did not
+	filter      *resultFilter // the run reads the shown result again, narrowed by this
+	note        string        // the status once the run succeeds
 }
 
 type runTickMsg struct{ tabID, gen int }
@@ -117,6 +119,12 @@ type consoleTab struct {
 	showMessages bool
 	messages     []string
 
+	res       *editableResult            // the result on screen, with its staged changes
+	shown     resultFilter               // the statement and filter of the result on screen
+	runFilter *resultFilter              // set before execute: the run reads the shown result again
+	runNote   string                     // set before execute: the status once the run succeeds
+	metas     map[db.TableRef]*tableMeta // keys of tables behind results; dropped when DDL runs
+
 	session   db.Session
 	sessionRO bool // the connection was read-only when session was opened
 	manualTx  bool // <space>t: statements run in a transaction until :commit / :rollback
@@ -150,6 +158,11 @@ func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn strin
 		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), keys: keymap.Default(),
 	}
 	t.editor.SetHighlighter(highlight.NewHighlighter(d).Spans)
+	t.res = &editableResult{
+		id: id, backend: b, conn: conn, dialect: d, keys: t.keys, keyCtx: keymap.Results,
+		grid: t.grid, host: t, readOnly: "run a query first",
+	}
+	t.grid.SetMarks(t.res.mark)
 	return t
 }
 
@@ -324,6 +337,9 @@ func (t *consoleTab) Handle(a keymap.Action) tea.Cmd {
 		if cmd, ok := gridAction(t.grid, a); ok {
 			return cmd
 		}
+		if cmd, ok := t.res.handle(a); ok {
+			return cmd
+		}
 		if a == keymap.LoadMore {
 			return t.loadMore()
 		}
@@ -474,6 +490,10 @@ func selectedStatements(text string, from, to int, d sqlx.Dialect) []sqlx.Statem
 }
 
 func (t *consoleTab) run(stmts []sqlx.Statement) tea.Cmd {
+	if t.res.changes() > 0 {
+		t.setStatus(t.res.unsavedNote(), true)
+		return nil
+	}
 	if t.running {
 		t.setStatus("a query is already running · ctrl+c to cancel", true)
 		return nil
@@ -499,7 +519,9 @@ func (t *consoleTab) run(stmts []sqlx.Statement) tea.Cmd {
 }
 
 func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.Cmd {
-	t.attempt = &runAttempt{stmts: stmts, limit: limit, more: more, text: t.runText}
+	filter, note := t.runFilter, t.runNote
+	t.runFilter, t.runNote = nil, ""
+	t.attempt = &runAttempt{stmts: stmts, limit: limit, more: more, text: t.runText, filter: filter, note: note}
 	began := false
 	if t.manualTx && !t.inTx && sqlx.TransactionEffect(stmts[0].Text, t.dialect) == sqlx.TxNone {
 		stmts = append([]sqlx.Statement{{Text: sqlx.BeginSQL(t.dialect), Start: -1, End: -1}}, stmts...)
@@ -517,7 +539,7 @@ func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.C
 	t.session = nil // owned by the command until runDoneMsg hands it back
 	run := func() tea.Msg {
 		defer cancel()
-		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit, readOnly: ro, began: began, text: text}
+		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit, readOnly: ro, began: began, text: text, filter: filter, note: note}
 		if s != nil && sessRO != ro {
 			// :set [no]readonly changed the connection: the session's
 			// server-side read-only setting no longer matches.
@@ -558,6 +580,10 @@ func (t *consoleTab) cancelRun() tea.Cmd {
 }
 
 func (t *consoleTab) loadMore() tea.Cmd {
+	if t.res.changes() > 0 {
+		t.setStatus(t.res.unsavedNote(), true)
+		return nil
+	}
 	switch {
 	case t.running:
 		t.setStatus("a query is already running", true)
@@ -567,13 +593,26 @@ func (t *consoleTab) loadMore() tea.Cmd {
 		t.setStatus("only read statements are re-run to load more rows", true)
 	default:
 		t.runText = ""
+		f := t.shown
+		t.runFilter = &f
 		return t.execute([]sqlx.Statement{{Text: t.last.SQL}}, t.lastLimit+t.maxRows, true)
 	}
 	return nil
 }
 
 func (t *consoleTab) Update(msg tea.Msg) tea.Cmd {
+	if cmd, ok := t.res.update(msg); ok {
+		return cmd
+	}
 	switch m := msg.(type) {
+	case consoleMetaMsg:
+		t.metaLoaded(m)
+		return nil
+	case consoleEditsMsg:
+		if m.gen == t.gen {
+			return t.editsDone(m)
+		}
+		return nil
 	case runTickMsg:
 		if t.running && m.gen == t.gen {
 			return t.tick(m.gen)
@@ -646,16 +685,7 @@ func (t *consoleTab) Update(msg tea.Msg) tea.Cmd {
 func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 	t.running, t.cancel = false, nil
 	t.session, t.sessionRO = m.session, m.readOnly
-	if m.reconnected {
-		t.log("reconnected to " + t.conn)
-	}
-	if m.reopened {
-		mode := "read-write"
-		if m.readOnly {
-			mode = "read-only"
-		}
-		t.log("session reopened " + mode + " (session state such as temporary tables was reset)")
-	}
+	t.sessionNotes(m.reconnected, m.reopened, m.readOnly)
 	if errors.Is(m.err, errTxLost) {
 		t.clearTx()
 	}
@@ -683,13 +713,22 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 		return nil
 	}
 	last := m.results[len(m.results)-1]
+	var meta tea.Cmd
 	if shown != nil {
+		t.shown = resultFilter{base: shown.SQL}
+		if m.filter != nil {
+			t.shown = *m.filter
+		}
+		t.res.failedWhere = ""
+		meta = t.resetResult(shown.Rows)
 		if m.more {
-			t.grid.ReplaceResult(shown.Rows)
+			t.grid.ReplaceResult(t.res.table.Result())
 		} else {
-			t.grid.SetResult(shown.Rows)
+			t.grid.SetResult(t.res.table.Result())
 		}
 		t.last, t.lastLimit = shown, m.limit
+	} else if m.filter != nil && last.Err != nil {
+		t.res.failedWhere = m.filter.where
 	}
 	switch {
 	case last.Err != nil:
@@ -700,18 +739,36 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 		t.showMessages = true
 	default:
 		t.showMessages = false
+		if m.note != "" {
+			t.setStatus(m.note, false)
+		}
 	}
 	recorded := m.results
 	if m.began && len(recorded) > 0 {
 		recorded = recorded[1:] // the injected BEGIN is not history
 	}
-	return tea.Batch(t.record(recorded), t.staleCatalog(m.results))
+	return tea.Batch(t.record(recorded), t.staleCatalog(m.results), meta)
+}
+
+// sessionNotes logs that the session was reconnected or reopened.
+func (t *consoleTab) sessionNotes(reconnected, reopened, readOnly bool) {
+	if reconnected {
+		t.log("reconnected to " + t.conn)
+	}
+	if reopened {
+		mode := "read-write"
+		if readOnly {
+			mode = "read-only"
+		}
+		t.log("session reopened " + mode + " (session state such as temporary tables was reset)")
+	}
 }
 
 // staleCatalog tells the root model that DDL ran, so the catalog changed.
 func (t *consoleTab) staleCatalog(results []runner.Result) tea.Cmd {
 	for _, r := range results {
 		if r.Err == nil && sqlx.Analyze(r.SQL, t.dialect).Kind == sqlx.DDL {
+			t.metas = nil // the tables behind results may have changed
 			conn, database := t.conn, t.ns.Database
 			return func() tea.Msg { return metaStaleMsg{conn: conn, database: database} }
 		}
@@ -1005,6 +1062,10 @@ func (t *consoleTab) statusLine() string {
 	case t.status != "":
 		return theme.Muted.Render(textutil.Fit(textutil.Sanitize(t.status), t.width))
 	}
+	if n := t.res.changes(); n > 0 {
+		return theme.Accent.Render("● "+plural(n, "change")) +
+			theme.Muted.Render(textutil.Fit(" · "+t.res.unsavedHint("submit", "discard"), t.width))
+	}
 	hint := joinHints(
 		keyHint(t.keys, keymap.Console, keymap.RunStatement, "run"),
 		keyHint(t.keys, keymap.Console, keymap.RunAll, "run all"),
@@ -1013,9 +1074,12 @@ func (t *consoleTab) statusLine() string {
 		"i insert · v select · u undo", // vim basics last: cut first when narrow
 	)
 	if t.onResults {
-		hint = joinHints("hjkl move · yy copy row · K show cell · / search",
+		hint = joinHints(
+			keyHint(t.keys, keymap.Results, keymap.EditCell, "edit"),
+			keyHint(t.keys, keymap.Results, keymap.FilterPrompt, "filter"),
 			keyHint(t.keys, keymap.Results, keymap.ToggleMessages, "messages"),
-			keyHint(t.keys, keymap.Results, keymap.FocusEditor, "editor"))
+			keyHint(t.keys, keymap.Results, keymap.FocusEditor, "editor"),
+			"hjkl move · yy copy row · K show cell · / search") // grid basics last: cut first when narrow
 	} else if t.editor.Visual() {
 		hint = "enter runs the selection · y d c > < · esc cancel"
 	}
@@ -1045,19 +1109,25 @@ func (t *consoleTab) locateError(text string, r runner.Result) string {
 
 // runAttempt is what execute was asked to run.
 type runAttempt struct {
-	stmts []sqlx.Statement
-	limit int
-	more  bool
-	text  string
+	stmts  []sqlx.Statement
+	limit  int
+	more   bool
+	text   string
+	filter *resultFilter
+	note   string
 }
 
 // retryAfterPassword runs the latest attempt again; the root model calls it
 // once the password whose absence made it fail is entered.
 func (t *consoleTab) retryAfterPassword() tea.Cmd {
+	if t.res.retrySubmit {
+		t.res.retrySubmit = false
+		return t.res.submit()
+	}
 	a := t.attempt
 	if a == nil || t.running {
 		return nil
 	}
-	t.runText = a.text
+	t.runText, t.runFilter, t.runNote = a.text, a.filter, a.note
 	return t.execute(a.stmts, a.limit, a.more)
 }

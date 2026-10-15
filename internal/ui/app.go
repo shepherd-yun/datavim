@@ -657,9 +657,12 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		return m.requestQuit(true)
 	case "w", "write":
 		if s, ok := m.activeTab().(stager); ok {
-			return s.submit()
+			// A console is a stager only while its result has staged changes.
+			if _, console := s.(*consoleTab); !console || s.changes() > 0 {
+				return s.submit()
+			}
 		}
-		m.setStatus("nothing to write: the active tab is not table data or a table being modified", true)
+		m.setStatus("nothing to write: the active tab has no staged changes to submit", true)
 
 	case "locate":
 		return m.locate()
@@ -1006,6 +1009,7 @@ func (m *Model) openConsole(conn string, ns db.Namespace) tea.Cmd {
 	return tea.Batch(m.openTab(consoleTabKey(conn, ns), history.Recent{Kind: history.RecentConsole, Conn: conn, Database: ns.Database, Schema: ns.Schema}, func(id int) tab {
 		t := newConsoleTab(id, m.backend, m.store, m.catalogs, conn, ns, m.settings, m.timings)
 		t.keys = m.keys
+		t.res.keys = m.keys
 		return t
 	}), m.ensureMeta(conn, ns.Database))
 }
@@ -1025,6 +1029,7 @@ func (m *Model) openScriptConsole(conn string, ns db.Namespace, text string) tea
 	open := m.showTab(key, func(id int) tab {
 		c = newConsoleTab(id, m.backend, m.store, m.catalogs, conn, ns, m.settings, m.timings)
 		c.keys, c.scratchKey = m.keys, key
+		c.res.keys = m.keys
 		return c
 	})
 	return tea.Batch(open, c.insertText(text), m.ensureMeta(conn, ns.Database))
