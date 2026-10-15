@@ -116,3 +116,11 @@ func TestUnsavedHintOmitsUnboundKeys(t *testing.T) {
 		t.Fatalf("status keeps a dangling separator:\n%s", s)
 	}
 }
+
+func TestWelcomeNamesTheOpenKey(t *testing.T) {
+	m, _ := newTestModel(t)
+	s := screen(m)
+	if !strings.Contains(s, "press <enter> to open it") || strings.Contains(s, "l or enter") {
+		t.Fatalf("welcome text must name tree.open's keys, not l:\n%s", s)
+	}
+}

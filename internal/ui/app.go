@@ -32,7 +32,9 @@ const defaultWhichKeyDelay = 300 * time.Millisecond
 // welcomeText is the empty tab area, naming the keys the keymap really uses.
 func welcomeText(k *keymap.Keymap) string {
 	var b strings.Builder
-	b.WriteString("Select a table in the tree and press l or enter.\n\n")
+	if keys := k.KeysFor(keymap.Tree, keymap.Open); keys != "" {
+		fmt.Fprintf(&b, "Select a table in the tree and press %s to open it.\n\n", keys)
+	}
 	for _, row := range []struct {
 		a     keymap.Action
 		label string
