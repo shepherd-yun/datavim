@@ -30,7 +30,11 @@ func TestResolve(t *testing.T) {
 		{Tree, []string{"space", "s"}, OpenStructure, Matched},
 		{Grid, []string{"space", "e"}, ToggleTree, Matched},
 		{Tree, []string{"3"}, GotoTab(3), Matched},
-		{Tree, []string{"z"}, "", NoMatch},
+		{Tree, []string{"z"}, "", Pending},
+		{Tree, []string{"z", "M"}, FoldCloseTree, Matched},
+		{Tree, []string{"z", "o"}, FoldOpen, Matched},
+		{Tree, []string{"enter"}, Open, Matched},
+		{Tree, []string{"right"}, Expand, Matched},
 		{Tree, []string{"space", "z"}, "", NoMatch},
 	}
 	for _, tt := range tests {

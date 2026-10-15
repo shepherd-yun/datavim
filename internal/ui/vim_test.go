@@ -120,7 +120,7 @@ func TestGtSwitchesTabs(t *testing.T) {
 func TestTabCyclingFromEveryTab(t *testing.T) {
 	m, _ := newTestModel(t)
 	openUsers(t, m)                     // tab 1: users data
-	press(t, m, "ctrl+h", "j", "l")     // tab 2: view "active"
+	press(t, m, "ctrl+h", "j", "enter") // tab 2: view "active"
 	press(t, m, "ctrl+h", "space", "c") // tab 3: console
 	if len(m.tabs) != 3 || m.active != 2 {
 		t.Fatalf("tabs=%d active=%d", len(m.tabs), m.active)

@@ -57,9 +57,9 @@ func DefaultBindings() []Binding {
 	b = append(b, vertical(Tree)...)
 	b = append(b, search(Tree)...)
 	b = append(b,
-		Binding{Tree, keys("l"), Expand, "Expand / open"},
-		Binding{Tree, keys("enter"), Expand, "Expand / open"},
-		Binding{Tree, keys("right"), Expand, "Expand / open"},
+		Binding{Tree, keys("l"), Expand, "Expand"},
+		Binding{Tree, keys("right"), Expand, "Expand"},
+		Binding{Tree, keys("enter"), Open, "Open: table data, a column or index in the structure, a foreign key's table"},
 		Binding{Tree, keys("h"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("left"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("p"), Password, "Enter password"},
@@ -71,6 +71,14 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("C"), Compare, "Compare with the marked node"},
 		Binding{Tree, keys("y", "y"), YankName, "Copy name"},
 		Binding{Tree, keys("y", "q"), YankQualified, "Copy qualified name (db.table)"},
+		Binding{Tree, keys("z", "o"), FoldOpen, "Expand"},
+		Binding{Tree, keys("z", "c"), FoldClose, "Collapse (on a leaf, its parent)"},
+		Binding{Tree, keys("z", "a"), FoldToggle, "Toggle expanded"},
+		Binding{Tree, keys("z", "O"), FoldOpenAll, "Expand everything loaded under the cursor"},
+		Binding{Tree, keys("z", "C"), FoldCloseAll, "Collapse everything under the cursor"},
+		Binding{Tree, keys("z", "R"), FoldOpenTree, "Expand everything loaded"},
+		Binding{Tree, keys("z", "M"), FoldCloseTree, "Collapse everything"},
+		Binding{Tree, keys("z", "x"), FoldFocus, "Collapse all but the path to the cursor"},
 	)
 
 	b = append(b, gridBindings(Grid)...)

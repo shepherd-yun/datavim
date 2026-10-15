@@ -464,26 +464,26 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 		t.HalfPage(-1)
 	case keymap.Collapse:
 		t.Collapse()
-	case keymap.Expand:
-		n := t.Selected()
-		if n == nil {
-			return nil
-		}
-		if n.Kind == tree.KindConn && n.Broken {
-			m.backend.Reset(n.Conn)
-			m.tree.ResetConn(n.Conn)
-		}
-		if n.IsTable() {
-			return m.openData(n.Conn, n.TableRef())
-		}
-		if t.Expand() {
-			return loadChildren(m.backend, n)
-		}
+	case keymap.Expand, keymap.FoldOpen:
+		return m.expandNode()
+	case keymap.Open:
+		return m.openNode()
+	case keymap.FoldToggle:
+		return m.toggleNode()
+	case keymap.FoldClose:
+		t.Fold()
+	case keymap.FoldOpenAll:
+		t.OpenLoaded(t.Selected())
+	case keymap.FoldCloseAll:
+		t.CloseAll(t.Selected())
+	case keymap.FoldOpenTree:
+		t.OpenTree()
+	case keymap.FoldCloseTree:
+		t.CloseTree()
+	case keymap.FoldFocus:
+		t.FocusPath()
 	case keymap.Refresh:
-		if n := t.Selected(); n != nil && n.Expandable() && !n.Loading {
-			t.StartLoad(n)
-			return loadChildren(m.backend, n)
-		}
+		return m.refreshNode()
 	case keymap.Password:
 		if n := t.Selected(); n != nil {
 			m.retryNode = nil

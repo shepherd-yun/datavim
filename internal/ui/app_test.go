@@ -71,7 +71,7 @@ func screen(m *Model) string { return ansi.Strip(m.render()) }
 // openUsers expands local -> app and opens the users table.
 func openUsers(t *testing.T, m *Model) {
 	t.Helper()
-	press(t, m, "l", "j", "l", "j", "l")
+	press(t, m, "l", "j", "l", "j", "enter")
 }
 
 func TestStartsWithConnections(t *testing.T) {
@@ -94,7 +94,7 @@ func TestBrowseToTableData(t *testing.T) {
 	if s := screen(m); !strings.Contains(s, "users") || !strings.Contains(s, "active") {
 		t.Fatalf("tables not loaded:\n%s", s)
 	}
-	press(t, m, "j", "l")
+	press(t, m, "j", "enter")
 	s := screen(m)
 	if !strings.Contains(s, "[1]users") || !strings.Contains(s, "user1") {
 		t.Fatalf("data tab not shown:\n%s", s)
@@ -113,7 +113,7 @@ func TestBrowseToTableData(t *testing.T) {
 func TestReopeningATableReusesItsTab(t *testing.T) {
 	m, _ := newTestModel(t)
 	openUsers(t, m)
-	press(t, m, "ctrl+h", "l")
+	press(t, m, "ctrl+h", "enter")
 	if len(m.tabs) != 1 {
 		t.Fatalf("tabs = %d, want 1", len(m.tabs))
 	}
@@ -190,11 +190,11 @@ func TestWhichKey(t *testing.T) {
 func TestHelpOverlay(t *testing.T) {
 	m, _ := newTestModel(t)
 	press(t, m, "?")
-	if s := screen(m); !strings.Contains(s, "Help") || !strings.Contains(s, "Expand / open") {
+	if s := screen(m); !strings.Contains(s, "Help") || !strings.Contains(s, "Expand") {
 		t.Fatalf("help:\n%s", s)
 	}
 	press(t, m, "esc")
-	if strings.Contains(screen(m), "Expand / open") {
+	if strings.Contains(screen(m), "Expand") {
 		t.Fatal("esc closes help")
 	}
 }
@@ -283,7 +283,7 @@ func TestFocusAndTabs(t *testing.T) {
 	if m.focus != focusTabs {
 		t.Fatal("ctrl+l focuses the tabs")
 	}
-	press(t, m, "ctrl+h", "j", "l") // open view "active"
+	press(t, m, "ctrl+h", "j", "enter") // open view "active"
 	if len(m.tabs) != 2 || m.active != 1 {
 		t.Fatalf("tabs=%d active=%d", len(m.tabs), m.active)
 	}
@@ -575,7 +575,7 @@ func statusLine(m *Model) string {
 // openProdUsers expands prod -> app and opens the users table.
 func openProdUsers(t *testing.T, m *Model) {
 	t.Helper()
-	press(t, m, "j", "l", "j", "l", "j", "l")
+	press(t, m, "j", "l", "j", "l", "j", "enter")
 }
 
 func TestProdConnectionIsRed(t *testing.T) {

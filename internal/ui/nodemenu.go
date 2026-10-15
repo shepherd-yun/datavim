@@ -50,7 +50,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			obj = "view"
 		}
 		entries = []entry{
-			{keymap.Expand, "Open data"},
+			{keymap.Open, "Open data"},
 			{keymap.OpenStructure, "Columns"},
 			{keymap.OpenFullStructure, "Open structure"},
 		}
