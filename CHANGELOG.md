@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Console results can be filtered and edited like table data. `f` and `F` narrow any SELECT
+  result by running it again on the server: a single-table query gets the condition in its
+  WHERE, any other query is wrapped in a subquery. A single-table SELECT of plain columns
+  that includes the table's key can be edited with `i`, `o`, `dd`, `u`, `U` and submitted
+  with `:w`. Changes join the console's open transaction behind a savepoint, so a failed
+  submit keeps the transaction and `:rollback` undoes them.
 - A terminal paste (Cmd-V / Ctrl-Shift-V) works in every mode of the console editor and the
   cell editor, like Neovim: NORMAL mode puts the text after the cursor and VISUAL mode replaces
   the selection. It used to be ignored outside INSERT mode. The registers are left alone.

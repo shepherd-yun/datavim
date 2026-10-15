@@ -55,7 +55,7 @@ primary key, else a unique index over NOT NULL columns; tables without one are m
 their values with `LIMIT 1` (MySQL) or by `ctid` (PostgreSQL), and the preview says so.
 Read-only connections refuse changes, PROD connections show `PROD ·` in the preview, and
 paging, refreshing, filtering, sorting, closing the tab or quitting ask or refuse while
-changes are staged. Console results stay read-only.
+changes are staged. The same filter and edit keys work on console results of a single-table SELECT.
 
 ## SSH tunnels
 

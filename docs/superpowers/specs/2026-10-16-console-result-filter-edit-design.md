@@ -1,7 +1,7 @@
 # 控制台结果的过滤与编辑 设计文档
 
 - 日期：2026-10-16
-- 状态：待审阅
+- 状态：已实现
 - 范围：控制台查询结果支持表数据 tab 同款的过滤（`f` / `F`）与编辑（`i` `o` `dd` `u` `U` `:w`）；修订主设计 §5.7、§5.8
 
 ## 1. 背景
@@ -114,7 +114,7 @@ type resultHost interface {
 ### 5.2 控制台
 
 1. `runDoneMsg` 带回 SELECT 结果集时，调用 `sqlx.ResultSource`，为这个结果创建 `editableResult`，记下 `Source` 或不可编辑的原因。
-2. 第一次按 `i` / `o` / `dd` 时，异步加载表的列和索引，得到 `key` 后再执行这次按键。复用 `dataTab` 的 meta 加载，结果通过带 `TabID()` 的消息送回。
+2. 结果显示时，如果能对应回单表，就异步加载该表的列和索引（按表缓存在控制台里，执行 DDL 后清空）；加载完成前按编辑键提示 `reading the keys of <table>…`。复用 `dataTab` 的 meta 加载，结果通过带 `TabID()` 的消息送回。
 3. 光标在结果区时，`consoleTab.Handle` 的顺序是 `gridAction` → `editableResult` → `LoadMore`。
 4. 有暂存修改时：
    - 编辑器照常可以编辑。
