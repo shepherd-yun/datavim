@@ -78,6 +78,7 @@ type Model struct {
 	focus         focus
 	showTree      bool
 	tree          *tree.Model
+	compareMark   *compareSide // the compare source marked with m
 
 	tabs      []tab
 	active    int
@@ -245,6 +246,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.connAdded(msg)
 	case connUpdatedMsg:
 		return m, m.connUpdated(msg)
+	case compareSourceMsg:
+		return m, m.startCompare(msg.src, msg.tgt)
 	case menuPickedMsg:
 		return m, m.dispatch(msg.action)
 	case renameEnteredMsg:
@@ -484,6 +487,10 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 				m.overlay = overlay.NewEditConnForm(m.keys, cfg)
 			}
 		}
+	case keymap.MarkCompare:
+		m.markCompare()
+	case keymap.Compare:
+		return m.compare()
 	case keymap.NodeActions:
 		m.openNodeMenu()
 	case keymap.TruncateTable:

@@ -41,6 +41,9 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			{keymap.OpenConsole, "Open console"},
 			{keymap.Refresh, "Refresh"},
 		}
+		if _, problem := m.compareSideOf(n); problem == "" {
+			entries = append(entries, entry{keymap.MarkCompare, "Mark for compare"}, entry{keymap.Compare, "Compare with the marked one"})
+		}
 	case tree.KindTable, tree.KindView:
 		obj := "table"
 		if n.Kind == tree.KindView {
@@ -55,7 +58,11 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			{keymap.RenameTable, "Rename " + obj},
 		}
 		if n.Kind == tree.KindTable {
-			entries = append(entries, entry{keymap.TruncateTable, "Truncate table"})
+			entries = append(entries,
+				entry{keymap.MarkCompare, "Mark for compare"},
+				entry{keymap.Compare, "Compare with the marked one"},
+				entry{keymap.TruncateTable, "Truncate table"},
+			)
 		}
 		entries = append(entries, entry{keymap.DeleteNode, "Drop " + obj})
 	}

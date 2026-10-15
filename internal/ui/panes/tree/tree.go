@@ -48,9 +48,20 @@ type row struct {
 }
 
 // Model holds the tree and the cursor.
+// MarkKey identifies a node across reloads, for the compare mark.
+type MarkKey struct {
+	Conn string
+	Kind Kind
+	NS   db.Namespace
+	Name string
+}
+
+func (n *Node) MarkKey() MarkKey { return MarkKey{Conn: n.Conn, Kind: n.Kind, NS: n.NS, Name: n.Name} }
+
 type Model struct {
 	roots    []*Node
 	selected *Node
+	mark     *MarkKey // the compare source, drawn with ◆
 	offset   int
 	height   int
 }
@@ -248,6 +259,9 @@ func (m *Model) SetBroken(conn string, broken bool) {
 	}
 }
 
+// SetMark draws ◆ before the node k names; nil clears the mark.
+func (m *Model) SetMark(k *MarkKey) { m.mark = k }
+
 // Find selects the next visible node (wrapping; backwards when forward is
 // false) whose name contains q, ignoring case.
 func (m *Model) Find(q string, forward bool) bool {
@@ -290,7 +304,11 @@ func (m *Model) View(width int, focused bool) string {
 	lines := make([]string, 0, end-m.offset)
 	for i := m.offset; i < end; i++ {
 		n := rows[i].node
-		label := strings.Repeat("  ", rows[i].depth) + icon(n) + " " + textutil.Sanitize(n.Name)
+		name := textutil.Sanitize(n.Name)
+		if m.mark != nil && n.MarkKey() == *m.mark {
+			name = "◆ " + name
+		}
+		label := strings.Repeat("  ", rows[i].depth) + icon(n) + " " + name
 		if i == cur {
 			if focused {
 				label = theme.Selected.Render(label)

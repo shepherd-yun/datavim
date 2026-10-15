@@ -72,3 +72,20 @@ func TestActionMenuShowsRemappedKeys(t *testing.T) {
 		}
 	}
 }
+
+func TestActionMenuOffersCompare(t *testing.T) {
+	m, _ := newTestModel(t)
+	selectNode(t, m, "local", "app", "users")
+	press(t, m, "a")
+	wantScreen(t, m, "Mark for compare", "Compare with the marked one")
+	press(t, m, "esc")
+	selectNode(t, m, "local", "app")
+	press(t, m, "a")
+	wantScreen(t, m, "Mark for compare")
+	press(t, m, "esc")
+	selectNode(t, m, "prod", "app") // a PostgreSQL database is not a namespace
+	press(t, m, "a")
+	if strings.Contains(screen(m), "Mark for compare") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
