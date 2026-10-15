@@ -71,12 +71,47 @@ func (t *consoleTab) busy() string {
 func (t *consoleTab) filter() string      { return t.shown.where }
 func (t *consoleTab) filterTitle() string { return "Filter result" }
 
-// Task 7 replaces these two.
-func (t *consoleTab) checkFilter(string) error { return sqlx.ErrNotSelect }
+// filtered is the shown result's statement narrowed by where.
+func (t *consoleTab) filtered(where string) (string, bool, error) {
+	if t.last == nil || t.last.Rows == nil || len(t.last.Rows.Columns) == 0 {
+		return "", false, sqlx.ErrNotSelect
+	}
+	names := make([]string, len(t.last.Rows.Columns))
+	for i, c := range t.last.Rows.Columns {
+		names[i] = c.Name
+	}
+	sql, ordered, err := sqlx.Filtered(t.dialect, t.shown.base, where, t.res.mapping != nil, names)
+	if err != nil {
+		return "", false, err
+	}
+	if err := checkSelect(t.dialect, sql); err != nil {
+		return "", false, err
+	}
+	return sql, ordered, nil
+}
 
-func (t *consoleTab) refilter(string) tea.Cmd {
-	t.setStatus(sqlx.ErrNotSelect.Error(), true)
-	return nil
+func (t *consoleTab) checkFilter(s string) error {
+	_, _, err := t.filtered(normFilter(s))
+	return err
+}
+
+// refilter reads the shown result again narrowed by where.
+func (t *consoleTab) refilter(where string) tea.Cmd {
+	if t.running {
+		t.setStatus("a query is already running · ctrl+c to cancel", true)
+		return nil
+	}
+	sql, ordered, err := t.filtered(where)
+	if err != nil {
+		t.setStatus(err.Error(), true)
+		return nil
+	}
+	t.runText = ""
+	t.runFilter = &resultFilter{base: t.shown.base, where: where}
+	if !ordered {
+		t.runNote = "order may not be kept: the ORDER BY names more than result columns"
+	}
+	return t.execute([]sqlx.Statement{{Text: sql}}, t.maxRows, false)
 }
 
 // resetResult makes rs the result to edit and finds the table behind it.

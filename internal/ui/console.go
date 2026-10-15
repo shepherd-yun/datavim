@@ -733,7 +733,9 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 	switch {
 	case last.Err != nil:
 		t.setStatus(t.locateError(m.text, last), true)
-		t.showMessages = true
+		// A failed re-read of the shown result (filter, load more) keeps
+		// its rows on screen.
+		t.showMessages = t.showMessages || m.filter == nil
 	case shown == nil || len(shown.Rows.Columns) == 0:
 		t.setStatus(fmt.Sprintf("%d statement(s) ok", len(m.results)), false)
 		t.showMessages = true
@@ -1033,6 +1035,9 @@ func (t *consoleTab) resultsTitle() string {
 	label := "Results"
 	if rs := t.grid.Result(); rs != nil {
 		label += fmt.Sprintf(" · %d rows", len(rs.Rows))
+		if t.shown.where != "" {
+			label += " · where " + oneLine(t.shown.where)
+		}
 		if t.last != nil && t.last.Truncated {
 			label += " · truncated · ] more"
 		}
