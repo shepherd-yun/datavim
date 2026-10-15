@@ -666,6 +666,13 @@ func (m *Model) runCommand(text string) tea.Cmd {
 	if verb == "e" || verb == "edit" {
 		return m.editFile(arg)
 	}
+	switch verb {
+	case "w", "write", "w!", "write!", "wq":
+		c, _ := m.activeTab().(*consoleTab)
+		if arg != "" || verb != "w" && verb != "write" || c != nil && c.file != nil {
+			return m.writeFile(arg, strings.HasSuffix(verb, "!"), verb == "wq")
+		}
+	}
 	switch cmd {
 	case "":
 	case "q", "close":
@@ -1102,6 +1109,40 @@ func (m *Model) fileRead(msg fileReadMsg) tea.Cmd {
 		c.editor.SetValue(f.saved)
 		return c
 	}), m.ensureMeta(msg.conn, msg.ns.Database))
+}
+
+// writeFile carries out :w [path], :w! [path] and :wq in a console.
+func (m *Model) writeFile(arg string, force, quit bool) tea.Cmd {
+	c, ok := m.activeTab().(*consoleTab)
+	if !ok {
+		m.setStatus("only a console can be written to a file", true)
+		return nil
+	}
+	if arg == "" && c.file == nil {
+		if quit {
+			m.setStatus(":wq needs a file · :w <path> first", true)
+			return nil
+		}
+		return m.runCommand("w") // :w! in a plain console: nothing to force
+	}
+	path := ""
+	if arg != "" {
+		p, err := absPath(arg)
+		if err != nil {
+			m.setStatus(err.Error(), true)
+			return nil
+		}
+		if key := fileTabKey(p, c.conn, c.ns); key != c.Key() {
+			for _, o := range m.tabs {
+				if o.Key() == key {
+					m.setStatus(tildePath(p)+" is open in another tab", true)
+					return nil
+				}
+			}
+		}
+		path = p
+	}
+	return c.save(path, force, quit)
 }
 
 func shutdownCmd(t tab) tea.Cmd {

@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -169,5 +171,200 @@ func TestFileConsoleMarksChangesAndKeepsNoDraft(t *testing.T) {
 		if strings.HasPrefix(k, "file:") {
 			t.Fatalf("draft saved for %s", k)
 		}
+	}
+}
+
+func readFile(t *testing.T, p string) string {
+	t.Helper()
+	b, err := os.ReadFile(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func TestWriteSavesTheFileKeepingItsMode(t *testing.T) {
+	m, _ := newTestModel(t)
+	p := writeSQL(t, "a.sql", "select 1;")
+	if err := os.Chmod(p, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	ex(t, m, "e "+p)
+	c := fileConsole(t, m)
+	c.editor.SetValue("select 2;\n")
+	ex(t, m, "w")
+	if got := readFile(t, p); got != "select 2;\n" {
+		t.Fatalf("disk %q", got)
+	}
+	if info, _ := os.Stat(p); info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode %v", info.Mode())
+	}
+	if c.Title() != "a.sql" || !strings.Contains(c.status, "written, 1 line") {
+		t.Fatalf("title %q status %q", c.Title(), c.status)
+	}
+}
+
+func TestWriteInAFileConsoleLeavesStagedEdits(t *testing.T) {
+	m, _ := newTestModel(t)
+	p := writeSQL(t, "a.sql", "")
+	ex(t, m, "e "+p)
+	c := fileConsole(t, m)
+	stageName(t, c)
+	ex(t, m, "w")
+	if c.changes() != 1 || c.res.pendingSQL != nil {
+		t.Fatalf("changes %d, preview %v: :w only saves the file", c.changes(), c.res.pendingSQL)
+	}
+	if readFile(t, p) != c.editor.Value() {
+		t.Fatal("file not written")
+	}
+}
+
+func TestWriteInAPlainConsoleIsUnchanged(t *testing.T) {
+	m, _ := newTestModel(t)
+	openLocalConsole(t, m)
+	ex(t, m, "w")
+	if !strings.Contains(m.status, "nothing to write") {
+		t.Fatalf("status %q", m.status)
+	}
+	ex(t, m, "w!")
+	if !strings.Contains(m.status, "nothing to write") {
+		t.Fatalf(":w! without a file: status %q", m.status)
+	}
+}
+
+// touch rewrites p with text and a later mtime.
+func touch(t *testing.T, p, text string) {
+	t.Helper()
+	if err := os.WriteFile(p, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	later := time.Now().Add(time.Hour)
+	if err := os.Chtimes(p, later, later); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWriteAsksWhenTheFileChangedOnDisk(t *testing.T) {
+	m, _ := newTestModel(t)
+	p := writeSQL(t, "a.sql", "select 1;")
+	ex(t, m, "e "+p)
+	c := fileConsole(t, m)
+	c.editor.SetValue("mine")
+	touch(t, p, "theirs")
+	ex(t, m, "w")
+	if !strings.Contains(screen(m), "changed on disk") || readFile(t, p) != "theirs" {
+		t.Fatalf("no confirm:\n%s", screen(m))
+	}
+	press(t, m, "n")
+	if readFile(t, p) != "theirs" {
+		t.Fatal("n keeps the disk file")
+	}
+	ex(t, m, "w")
+	press(t, m, "y")
+	if readFile(t, p) != "mine" {
+		t.Fatal("y overwrites")
+	}
+	touch(t, p, "theirs again")
+	ex(t, m, "w!")
+	if readFile(t, p) != "mine" {
+		t.Fatal(":w! writes without asking")
+	}
+}
+
+func TestWriteAsTurnsAPlainConsoleIntoAFileConsole(t *testing.T) {
+	m, _ := newTestModel(t)
+	c := openLocalConsole(t, m)
+	c.editor.SetValue("select 1;")
+	p := filepath.Join(t.TempDir(), "b.sql")
+	ex(t, m, "w "+p)
+	if readFile(t, p) != "select 1;" || c.file == nil || c.file.path != p || c.Title() != "b.sql" {
+		t.Fatalf("file %+v title %q", c.file, c.Title())
+	}
+}
+
+func TestWriteAsAPathOpenElsewhereFails(t *testing.T) {
+	m, _ := newTestModel(t)
+	p := writeSQL(t, "a.sql", "")
+	ex(t, m, "e "+p)
+	openLocalConsole(t, m)
+	ex(t, m, "w "+p)
+	if !strings.Contains(m.status, "is open in another tab") {
+		t.Fatalf("status %q", m.status)
+	}
+}
+
+func TestWriteAsAnExistingFileAsks(t *testing.T) {
+	m, _ := newTestModel(t)
+	p := writeSQL(t, "b.sql", "keep")
+	c := openLocalConsole(t, m)
+	c.editor.SetValue("new")
+	ex(t, m, "w "+p)
+	if !strings.Contains(screen(m), "overwrite") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	press(t, m, "n")
+	if readFile(t, p) != "keep" || c.file != nil {
+		t.Fatal("n keeps the file and the console plain")
+	}
+}
+
+func TestWriteCreatesANewFileButNotItsDirectory(t *testing.T) {
+	m, _ := newTestModel(t)
+	p := filepath.Join(t.TempDir(), "b.sql")
+	ex(t, m, "e "+p)
+	c := fileConsole(t, m)
+	c.editor.SetValue("x")
+	ex(t, m, "w")
+	if readFile(t, p) != "x" || c.Title() != "b.sql" {
+		t.Fatalf("title %q", c.Title())
+	}
+	ex(t, m, "w "+filepath.Join(t.TempDir(), "missing", "c.sql"))
+	if !strings.Contains(c.status, "write c.sql") {
+		t.Fatalf("status %q", c.status)
+	}
+}
+
+func TestWriteQuitClosesOnceWritten(t *testing.T) {
+	m, _ := newTestModel(t)
+	p := writeSQL(t, "a.sql", "")
+	ex(t, m, "e "+p)
+	fileConsole(t, m).editor.SetValue("x")
+	ex(t, m, "wq")
+	if len(m.tabs) != 0 || readFile(t, p) != "x" {
+		t.Fatalf("tabs %d", len(m.tabs))
+	}
+	openLocalConsole(t, m)
+	ex(t, m, "wq")
+	if len(m.tabs) != 1 || !strings.Contains(m.status, ":wq needs a file") {
+		t.Fatalf("plain console: tabs %d status %q", len(m.tabs), m.status)
+	}
+}
+
+func TestWriteFollowsSymlinks(t *testing.T) {
+	m, _ := newTestModel(t)
+	target := writeSQL(t, "real.sql", "a")
+	link := filepath.Join(t.TempDir(), "link.sql")
+	if err := os.Symlink(target, link); err != nil {
+		t.Fatal(err)
+	}
+	ex(t, m, "e "+link)
+	fileConsole(t, m).editor.SetValue("b")
+	ex(t, m, "w")
+	info, err := os.Lstat(link)
+	if err != nil || info.Mode()&fs.ModeSymlink == 0 || readFile(t, target) != "b" {
+		t.Fatalf("link %v err %v real %q", info.Mode(), err, readFile(t, target))
+	}
+}
+
+func TestEditsDuringASaveStayMarked(t *testing.T) {
+	m, _ := newTestModel(t)
+	ex(t, m, "e "+writeSQL(t, "a.sql", ""))
+	c := fileConsole(t, m)
+	c.editor.SetValue("first")
+	cmd := c.save("", false, false)
+	c.editor.SetValue("second")
+	drain(t, m, cmd)
+	if c.Title() != "a.sql [+]" {
+		t.Fatalf("title %q", c.Title())
 	}
 }

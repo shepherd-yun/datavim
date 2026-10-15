@@ -202,6 +202,44 @@ func (t *consoleTab) Title() string {
 // dirty reports a file console whose text differs from the file's.
 func (t *consoleTab) dirty() bool { return t.file != nil && t.editor.Value() != t.file.saved }
 
+// save writes the editor text to path, or to the console's file when path
+// is "". quit closes the tab once written.
+func (t *consoleTab) save(path string, force, quit bool) tea.Cmd {
+	var known *consoleFile
+	if t.file != nil && (path == "" || path == t.file.path) {
+		f := *t.file
+		known, path = &f, f.path
+	}
+	if path == "" {
+		t.setStatus("no file name · :w <path>", true)
+		return nil
+	}
+	id, text := t.id, t.editor.Value()
+	return func() tea.Msg {
+		f, conflict, err := writeSQLFile(path, text, known, force)
+		return fileSavedMsg{tabID: id, file: f, conflict: conflict, quit: quit, err: err}
+	}
+}
+
+func (t *consoleTab) saved(m fileSavedMsg) tea.Cmd {
+	switch {
+	case m.err != nil:
+		t.setStatus(m.err.Error(), true)
+		return nil
+	case m.conflict != "":
+		ok := saveConfirmedMsg{tabID: t.id, path: m.file.path, quit: m.quit}
+		return openOverlay(overlay.NewConfirm("Write file", []string{m.conflict}, "", ok))
+	}
+	f := m.file
+	t.file = &f
+	t.setStatus(fmt.Sprintf("%q written, %s", tildePath(f.path), plural(lineCount(f.saved), "line")), false)
+	if m.quit {
+		id := t.id
+		return func() tea.Msg { return closeTabConfirmedMsg{tabID: id} }
+	}
+	return nil
+}
+
 func (t *consoleTab) Context() keymap.Context {
 	if t.onResults {
 		return keymap.Results
@@ -627,6 +665,10 @@ func (t *consoleTab) Update(msg tea.Msg) tea.Cmd {
 	case consoleMetaMsg:
 		t.metaLoaded(m)
 		return nil
+	case fileSavedMsg:
+		return t.saved(m)
+	case saveConfirmedMsg:
+		return t.save(m.path, true, m.quit)
 	case consoleEditsMsg:
 		if m.gen == t.gen {
 			return t.editsDone(m)

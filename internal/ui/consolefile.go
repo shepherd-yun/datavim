@@ -110,3 +110,94 @@ func loadSQLFile(path string) (consoleFile, error) {
 	text = strings.TrimPrefix(text, "\ufeff")
 	return consoleFile{path: path, modTime: info.ModTime(), size: info.Size(), saved: text}, nil
 }
+
+type (
+	// fileSavedMsg reports a save: written (file), refused pending a
+	// question (conflict), or failed (err).
+	fileSavedMsg struct {
+		tabID    int
+		file     consoleFile
+		conflict string
+		quit     bool // :wq: close the tab once written
+		err      error
+	}
+	// saveConfirmedMsg saves again, overwriting, after the user agreed.
+	saveConfirmedMsg struct {
+		tabID int
+		path  string
+		quit  bool
+	}
+)
+
+func (m fileSavedMsg) TabID() int     { return m.tabID }
+func (m saveConfirmedMsg) TabID() int { return m.tabID }
+
+// writeSQLFile writes text to path atomically, through a symlink to its
+// target. Unless force, it writes nothing and returns a question instead when
+// path changed on disk since known was read, or when path is some other
+// existing file (known == nil).
+func writeSQLFile(path, text string, known *consoleFile, force bool) (consoleFile, string, error) {
+	name := filepath.Base(path)
+	fail := func(err error) (consoleFile, string, error) {
+		return consoleFile{}, "", fmt.Errorf("write %s: %w", name, err)
+	}
+	target := path
+	if r, err := filepath.EvalSymlinks(path); err == nil {
+		target = r
+	}
+	perm := fs.FileMode(0o644)
+	info, err := os.Stat(target)
+	switch {
+	case err == nil:
+		if info.IsDir() {
+			return fail(errors.New("is a directory"))
+		}
+		perm = info.Mode().Perm()
+		if !force {
+			asked := consoleFile{path: path}
+			if known == nil {
+				return asked, "overwrite " + tildePath(path) + "?", nil
+			}
+			if known.isNew || !info.ModTime().Equal(known.modTime) || info.Size() != known.size {
+				return asked, name + " changed on disk since it was opened — overwrite?", nil
+			}
+		}
+	case !errors.Is(err, fs.ErrNotExist):
+		return fail(err)
+	}
+	tmp, err := os.CreateTemp(filepath.Dir(target), "."+filepath.Base(target)+".*.tmp")
+	if err != nil {
+		return fail(err)
+	}
+	defer func() { _ = os.Remove(tmp.Name()) }() // fails harmlessly once renamed
+	if _, err := tmp.WriteString(text); err != nil {
+		_ = tmp.Close()
+		return fail(err)
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fail(err)
+	}
+	if err := tmp.Close(); err != nil {
+		return fail(err)
+	}
+	if err := os.Chmod(tmp.Name(), perm); err != nil {
+		return fail(err)
+	}
+	if err := os.Rename(tmp.Name(), target); err != nil {
+		return fail(err)
+	}
+	if info, err = os.Stat(target); err != nil {
+		return fail(err)
+	}
+	return consoleFile{path: path, modTime: info.ModTime(), size: info.Size(), saved: text}, "", nil
+}
+
+// lineCount counts the lines of text the way editors do.
+func lineCount(text string) int {
+	n := strings.Count(text, "\n")
+	if text != "" && !strings.HasSuffix(text, "\n") {
+		n++
+	}
+	return n
+}
