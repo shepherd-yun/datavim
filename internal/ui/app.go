@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -246,6 +247,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.connAdded(msg)
 	case connUpdatedMsg:
 		return m, m.connUpdated(msg)
+	case scriptConsoleMsg:
+		return m, m.openScriptConsole(msg.conn, msg.ns, msg.text)
 	case compareSourceMsg:
 		return m, m.startCompare(msg.src, msg.tgt)
 	case menuPickedMsg:
@@ -980,6 +983,26 @@ func (m *Model) openConsole(conn string, ns db.Namespace) tea.Cmd {
 		t.keys = m.keys
 		return t
 	}), m.ensureMeta(conn, ns.Database))
+}
+
+// scriptConsoleMsg asks for a new console on conn holding text.
+type scriptConsoleMsg struct {
+	conn string
+	ns   db.Namespace
+	text string
+}
+
+// openScriptConsole opens a new console on conn with text, apart from the
+// connection's usual console; it keeps no draft.
+func (m *Model) openScriptConsole(conn string, ns db.Namespace, text string) tea.Cmd {
+	key := consoleTabKey(conn, ns) + "\x00script\x00" + strconv.Itoa(m.nextTabID+1)
+	var c *consoleTab
+	open := m.showTab(key, func(id int) tab {
+		c = newConsoleTab(id, m.backend, m.store, m.catalogs, conn, ns, m.settings, m.timings)
+		c.keys, c.scratchKey = m.keys, key
+		return c
+	})
+	return tea.Batch(open, c.insertText(text), m.ensureMeta(conn, ns.Database))
 }
 
 func shutdownCmd(t tab) tea.Cmd {

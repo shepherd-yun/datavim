@@ -306,6 +306,8 @@ func (t *diffTab) Handle(a keymap.Action) tea.Cmd {
 		t.swap()
 	case keymap.Refresh:
 		return t.load()
+	case keymap.WriteScript:
+		return t.writeScript()
 	}
 	return nil
 }
@@ -565,4 +567,44 @@ func (t *diffTab) View(bool) string {
 	}
 	lines = lines[:max(t.height-1, 1)]
 	return strings.Join(append(lines, textutil.Fit(t.statusLine(), t.width)), "\n")
+}
+
+// writeScript asks for a console on the target holding the script of the
+// picked changes.
+func (t *diffTab) writeScript() tea.Cmd {
+	if t.loading || len(t.objects) == 0 {
+		t.setStatus("nothing to sync", true)
+		return nil
+	}
+	stmts, manual := schemadiff.Script(t.writer, t.tgt.ref.Namespace, t.objects, func(obj, change int) bool {
+		return t.picked[pick{obj, change}]
+	})
+	if len(stmts) == 0 {
+		msg := "nothing picked"
+		if len(manual) > 0 {
+			msg += " · " + plural(len(manual), "change") + " to make by hand"
+		}
+		t.setStatus(joinHints(msg, keyHint(t.keys, keymap.Diff, keymap.ToggleChange, "picks a change")), true)
+		return nil
+	}
+	conn, ns, text := t.tgt.conn, t.tgt.ref.Namespace, t.scriptText(stmts, manual)
+	return func() tea.Msg { return scriptConsoleMsg{conn: conn, ns: ns, text: text} }
+}
+
+func (t *diffTab) scriptText(stmts, manual []string) string {
+	var b strings.Builder
+	b.WriteString("-- sqlvim schema sync\n")
+	fmt.Fprintf(&b, "-- source: %s\n-- target: %s\n-- generated: %s\n",
+		t.src.label(), t.tgt.label(), t.now().Format("2006-01-02 15:04:05"))
+	b.WriteString("-- These statements change the target to match the source. Review them before running.\n")
+	for _, s := range stmts {
+		b.WriteString("\n" + s + ";\n")
+	}
+	if len(manual) > 0 {
+		b.WriteString("\n-- Not scripted, change by hand:\n")
+		for _, l := range manual {
+			b.WriteString("--   " + strings.ReplaceAll(l, "\n", " ") + "\n")
+		}
+	}
+	return b.String()
 }

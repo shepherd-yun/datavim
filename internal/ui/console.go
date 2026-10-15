@@ -93,22 +93,23 @@ func consoleTabKey(conn string, ns db.Namespace) string {
 }
 
 type consoleTab struct {
-	id        int
-	keys      *keymap.Keymap
-	backend   Backend
-	store     Store
-	editorCmd []string
-	draftGen  int
-	conn      string
-	ns        db.Namespace
-	dialect   sqlx.Dialect
-	maxRows   int
-	timings   timings
-	catalogs  *meta.Cache // shared with the root model; UI goroutine only
-	metaKey   meta.Key
-	defNS     db.Namespace    // where unqualified table names resolve
-	popup     *complete.Model // completion popup; nil when closed
-	popStart  int             // byte offset the popup's word starts at
+	id         int
+	scratchKey string // a script console's own tab key; such a console keeps no draft
+	keys       *keymap.Keymap
+	backend    Backend
+	store      Store
+	editorCmd  []string
+	draftGen   int
+	conn       string
+	ns         db.Namespace
+	dialect    sqlx.Dialect
+	maxRows    int
+	timings    timings
+	catalogs   *meta.Cache // shared with the root model; UI goroutine only
+	metaKey    meta.Key
+	defNS      db.Namespace    // where unqualified table names resolve
+	popup      *complete.Model // completion popup; nil when closed
+	popStart   int             // byte offset the popup's word starts at
 
 	editor       *editor.Model
 	grid         *grid.Model
@@ -152,14 +153,23 @@ func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn strin
 	return t
 }
 
-func (t *consoleTab) ID() int     { return t.id }
-func (t *consoleTab) Key() string { return consoleTabKey(t.conn, t.ns) }
+func (t *consoleTab) ID() int { return t.id }
+func (t *consoleTab) Key() string {
+	if t.scratchKey != "" {
+		return t.scratchKey
+	}
+	return consoleTabKey(t.conn, t.ns)
+}
 
 func (t *consoleTab) Title() string {
-	if t.ns.Database != "" {
-		return "console:" + t.ns.Database
+	prefix := "console:"
+	if t.scratchKey != "" {
+		prefix = "sync:"
 	}
-	return "console:" + t.conn
+	if t.ns.Database != "" {
+		return prefix + t.ns.Database
+	}
+	return prefix + t.conn
 }
 
 func (t *consoleTab) Context() keymap.Context {
@@ -862,6 +872,9 @@ func (m editTextMsg) TabID() int      { return m.tabID }
 func (m clipboardTextMsg) TabID() int { return m.tabID }
 
 func (t *consoleTab) Init() tea.Cmd {
+	if t.scratchKey != "" {
+		return nil
+	}
 	id, st, key := t.id, t.store, t.Key()
 	return func() tea.Msg {
 		text, err := st.Draft(key)
@@ -879,6 +892,9 @@ func (t *consoleTab) scheduleDraft() tea.Cmd {
 }
 
 func (t *consoleTab) saveDraft() func() {
+	if t.scratchKey != "" {
+		return func() {}
+	}
 	st, key, text := t.store, t.Key(), t.editor.Value()
 	return func() {
 		if err := st.SaveDraft(key, text); err != nil {
