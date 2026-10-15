@@ -11,7 +11,7 @@ func Contexts() []Context { return []Context{Global, Tree, Grid, Structure, Cons
 
 // KnownActions maps every bindable action to its description.
 func KnownActions() map[Action]string {
-	out := map[Action]string{Quit: "Quit"}
+	out := map[Action]string{Quit: "Quit", TruncateTable: "Truncate table"}
 	for _, b := range DefaultBindings() {
 		if out[b.Action] == "" {
 			out[b.Action] = b.Desc
@@ -19,6 +19,10 @@ func KnownActions() map[Action]string {
 	}
 	return out
 }
+
+// renamedActions maps action IDs of earlier versions to their current
+// names, so old keymap.toml files keep loading.
+var renamedActions = map[Action]Action{"conn.delete": DeleteNode}
 
 // Custom is the default keymap with another leader and keymap.toml's
 // overrides: per context, key sequence -> action, "" unbinds the keys.
@@ -48,6 +52,9 @@ func Custom(leader string, overrides map[Context]map[string]string) (*Keymap, er
 				return nil, fmt.Errorf("[%s] %q: %w", ctx, ks, err)
 			}
 			action := Action(overrides[ctx][ks])
+			if a, ok := renamedActions[action]; ok {
+				action = a
+			}
 			if action != "" && known[action] == "" {
 				return nil, fmt.Errorf("[%s] %q: unknown action %q", ctx, ks, action)
 			}

@@ -28,7 +28,6 @@
 #   app.help               Help
 #   app.quit               Quit
 #   cell.detail            Show cell value
-#   conn.delete            Delete connection
 #   conn.edit              Edit connection
 #   conn.new               New connection
 #   conn.password          Enter password
@@ -79,6 +78,8 @@
 #   move.right             Move right
 #   move.top               Go to top
 #   move.up                Move up
+#   node.actions           Actions on the selected node
+#   node.delete            Delete connection / drop table or view (was conn.delete)
 #   page.next              Next page
 #   page.prev              Previous page
 #   query.cancel           Cancel query
@@ -111,6 +112,8 @@
 #   tab.goto.9             Go to tab 9
 #   tab.next               Next tab (wraps)
 #   tab.prev               Previous tab (wraps)
+#   table.rename           Rename table or view
+#   table.truncate         Truncate table
 #   tree.collapse          Collapse / parent
 #   tree.expand            Expand / open
 #   tree.toggle            Toggle tree

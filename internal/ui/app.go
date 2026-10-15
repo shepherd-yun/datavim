@@ -474,7 +474,7 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 				m.overlay = overlay.NewEditConnForm(m.keys, cfg)
 			}
 		}
-	case keymap.DeleteConnection:
+	case keymap.DeleteNode:
 		if n := t.Selected(); n != nil && m.canChange(n.Conn) {
 			m.overlay = overlay.NewConfirm("Delete connection", []string{
 				"Delete " + n.Conn + " from connections.toml and its saved password?",

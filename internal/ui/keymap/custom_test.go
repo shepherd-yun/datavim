@@ -102,3 +102,26 @@ func TestCustomRebindsPopupKeys(t *testing.T) {
 		t.Fatal("keymap.toml rebinds the popup's structure key")
 	}
 }
+
+func TestCustomAcceptsRenamedAction(t *testing.T) {
+	k, err := Custom("", map[Context]map[string]string{Tree: {"x": "conn.delete"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, res := k.Resolve(Tree, []string{"x"}); a != DeleteNode || res != Matched {
+		t.Fatalf("x = %v %v", a, res)
+	}
+}
+
+func TestTruncateIsBindable(t *testing.T) {
+	if KnownActions()[TruncateTable] == "" {
+		t.Fatal("table.truncate cannot be bound")
+	}
+	k, err := Custom("", map[Context]map[string]string{Tree: {"T": "table.truncate"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := k.Resolve(Tree, []string{"T"}); a != TruncateTable {
+		t.Fatalf("T = %v", a)
+	}
+}

@@ -63,7 +63,9 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("left"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("p"), Password, "Enter password"},
 		Binding{Tree, keys("e"), EditConnection, "Edit connection"},
-		Binding{Tree, keys("d", "d"), DeleteConnection, "Delete connection"},
+		Binding{Tree, keys("d", "d"), DeleteNode, "Delete connection / drop table or view"},
+		Binding{Tree, keys("r"), RenameTable, "Rename table or view"},
+		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
 	)
 
 	b = append(b, gridBindings(Grid)...)
