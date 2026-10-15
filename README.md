@@ -39,6 +39,7 @@ Optional `~/.config/sqlvim/config.toml` (see [docs/examples/config.toml](docs/ex
 page_size        = 200
 max_column_width = 40
 max_rows         = 1000          # rows fetched per console query
+compare_max_rows = 100000        # rows a data compare reads per side
 editor           = "nvim"        # <space>v; default $VISUAL, $EDITOR, nvim
 export_dir       = "~/Downloads"
 ```
@@ -124,6 +125,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `m` / `C` | Tree: mark a table, MySQL database or PostgreSQL schema as the compare source / compare it with the selected one (without a mark, pick the source from the loaded metadata) |
 | `x` / `]c` `[c` / `~` | Diff tab: include or skip a change in the script / next, previous change / swap source and target |
 | `<Space>w` | Diff tab: write the picked changes as a script into a new console on the target (nothing runs until you run it there) |
+| `D` / `F` | Diff tab: compare the rows of the tables by their key, or go back to the structure / in the data view, a WHERE both sides are read with |
 | `<Space>s` | Columns popup: type to filter, `Enter` puts the data tab's cursor on the column (opening the tab if need be), `Ctrl-o` opens the full structure (indexes, foreign keys, DDL) |
 | `<Space>S` | Full structure of the table under the cursor, without the popup |
 | `<Space>b` | Toggle tree |

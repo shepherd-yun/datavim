@@ -38,6 +38,7 @@ macOS 与 Linux 的二进制包在 [Releases 页面](https://github.com/shepherd
 page_size        = 200
 max_column_width = 40
 max_rows         = 1000          # rows fetched per console query
+compare_max_rows = 100000        # rows a data compare reads per side
 editor           = "nvim"        # <space>v; default $VISUAL, $EDITOR, nvim
 export_dir       = "~/Downloads"
 ```
@@ -119,6 +120,7 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 | `m` / `C` | 树：把表、MySQL 库或 PostgreSQL schema 标记为对比源 / 与当前节点对比（没有标记时从已加载的元数据里选源） |
 | `x` / `]c` `[c` / `~` | Diff 标签页：变更纳入或不纳入脚本 / 下一处、上一处变更 / 交换源与目标 |
 | `<Space>w` | Diff 标签页：把勾选的变更写成脚本，放进目标连接的新 console（在那里运行才会执行） |
+| `D` / `F` | Diff 标签页：按键列对比两张表的数据，或回到结构 / 数据视图里设置两边共用的 WHERE |
 | `<Space>s` | 列弹窗：输入即过滤，`Enter` 让数据 tab 的光标跳到该列（必要时先打开 tab），`Ctrl-o` 打开完整结构（索引、外键、DDL） |
 | `<Space>S` | 直接打开光标所在表的完整结构，不经过列弹窗 |
 | `<Space>b` | 显示 / 隐藏树 |

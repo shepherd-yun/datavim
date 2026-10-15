@@ -33,6 +33,13 @@ All notable changes to this project are documented here. The format follows
   press `y`, or type the table's name on a prod connection. A failed or cancelled (`Ctrl-c`)
   submit keeps the edits. Foreign keys, column order, generated and auto-increment columns are
   left to a console.
+- Data compare: `D` in a diff tab compares the rows of the two tables (or of the `~` table under
+  the cursor) by their primary key, or a unique NOT NULL index both have. It lists the rows only
+  the source has (`+`), only the target has (`-`) and those whose values differ (`~`, shown as
+  target → source). `F` sets a WHERE both sides are read with, `x` picks rows (deletions start
+  unpicked), `~` swaps the sides, `h` / `l` scroll the columns, and `<Space>w` writes the
+  INSERT / UPDATE / DELETE script into a new console on the target. Each side reads at most
+  `compare_max_rows` rows (`config.toml`, default 100000); `D` goes back to the structure.
 
 ### Changed
 - The columns popup and the search open the structure with `Ctrl-o` instead of `Ctrl-s`,
