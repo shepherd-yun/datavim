@@ -90,6 +90,14 @@ func TestContract(t *testing.T) {
 			"CREATE TABLE cmp_dst (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NULL, " +
 				"qty INT NOT NULL DEFAULT 0, updated TIMESTAMP NULL, legacy INT, KEY cmp_legacy (legacy), KEY cmp_dst_name (name, qty))",
 		},
+		DataCompareSQL: []string{
+			"CREATE TABLE dat_src (id BIGINT PRIMARY KEY, name VARCHAR(50) NOT NULL, note TEXT, price DECIMAL(10,2), seen_at DATETIME)",
+			"CREATE TABLE dat_dst (id BIGINT PRIMARY KEY, name VARCHAR(50) NOT NULL, note TEXT, price DECIMAL(10,2), seen_at DATETIME)",
+			`INSERT INTO dat_src VALUES (1, 'same', 'x', 1.50, '2026-01-02 03:04:05'), (2, '李雷', '', NULL, NULL),
+				(3, 'it''s', 'back\\slash', 2.00, '2026-01-02 03:04:05'), (5, 'new', NULL, 9.99, NULL)`,
+			`INSERT INTO dat_dst VALUES (1, 'same', 'x', 1.50, '2026-01-02 03:04:05'), (2, '李雷', NULL, NULL, NULL),
+				(3, 'its', 'back\\slash', 2.00, '2026-01-02 03:04:06'), (4, 'gone', NULL, NULL, NULL)`,
+		},
 	})
 	// ON UPDATE is MySQL's own: TableSchema reads it, and the synced and
 	// created tables keep it.

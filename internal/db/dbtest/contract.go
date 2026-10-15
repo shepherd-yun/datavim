@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
+	"github.com/shepherd-yun/sqlvim/internal/datadiff"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/edit"
 	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
@@ -45,6 +46,12 @@ type Fixture struct {
 	// cmp_dst_name on (name, qty) where cmp_src has cmp_src_name on (name),
 	// no unique index cmp_src_email and no table comment.
 	CompareSQL []string
+	// DataCompareSQL creates dat_src and dat_dst, two tables of the same
+	// structure (id primary key, name NOT NULL, note, price, seen_at) and
+	// fills them: id 1 is alike; 2 has note '' in dat_src and NULL in
+	// dat_dst; 3 has name it's and note back\slash in dat_src, name its and
+	// another seen_at in dat_dst; 4 is only in dat_dst; 5 only in dat_src.
+	DataCompareSQL []string
 }
 
 // RunContract checks conn against the standard fixture created in f.NS.
@@ -978,6 +985,75 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		if _, ok := indexes["mod_t_qty"]; ok {
 			t.Errorf("the old name is gone: %+v", after.Indexes)
+		}
+	})
+
+	t.Run("data sync round-trips through datadiff and edit", func(t *testing.T) {
+		for _, q := range f.DataCompareSQL {
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		schema := func(name string) db.TableSchema {
+			t.Helper()
+			s, err := conn.Meta().TableSchema(ctx, ref(name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return s
+		}
+		spec, err := datadiff.NewSpec(schema("dat_src"), schema("dat_dst"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		dialect := sqlx.DialectOf(f.Driver)
+		compare := func(where string) ([]datadiff.Row, []db.ColumnInfo) {
+			t.Helper()
+			src := spec.NewSource(100)
+			if err := conn.Stream(ctx, spec.Query(dialect, ref("dat_src"), where), func([]db.ColumnInfo) {}, src.Add); err != nil {
+				t.Fatal(err)
+			}
+			m := src.Match()
+			var cols []db.ColumnInfo
+			if err := conn.Stream(ctx, spec.Query(dialect, ref("dat_dst"), where),
+				func(c []db.ColumnInfo) { cols = c }, m.Add); err != nil {
+				t.Fatal(err)
+			}
+			return m.Rows(), cols
+		}
+
+		rows, cols := compare("")
+		wantStatus := []datadiff.Status{datadiff.Changed, datadiff.Changed, datadiff.Removed, datadiff.Added}
+		var status []datadiff.Status
+		for _, r := range rows {
+			status = append(status, r.Status)
+		}
+		if diff := cmp.Diff(wantStatus, status); diff != "" {
+			t.Fatalf("ids 2, 3, 4, 5 (-want +got):\n%s\n%+v", diff, rows)
+		}
+
+		if narrowed, _ := compare(d.QuoteIdent("id") + " < 3"); len(narrowed) != 1 {
+			t.Fatalf("WHERE id < 3 read on both sides: %+v", narrowed)
+		}
+
+		small := spec.NewSource(3)
+		err = conn.Stream(ctx, spec.Query(dialect, ref("dat_src"), ""), func([]db.ColumnInfo) {}, small.Add)
+		var tm datadiff.TooManyRowsError
+		if !errors.As(err, &tm) {
+			t.Fatalf("4 rows past a limit of 3: %v", err)
+		}
+
+		stmts, err := spec.Script(dialect, ref("dat_dst"), cols, rows, func(int) bool { return true })
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, q := range stmts {
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		if left, _ := compare(""); len(left) != 0 {
+			t.Fatalf("after\n%s\nstill differ: %+v", strings.Join(stmts, ";\n"), left)
 		}
 	})
 }

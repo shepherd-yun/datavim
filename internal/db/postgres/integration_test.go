@@ -101,5 +101,13 @@ func TestContract(t *testing.T) {
 			`CREATE INDEX cmp_legacy ON app.cmp_dst (legacy)`,
 			`CREATE INDEX cmp_dst_name ON app.cmp_dst (name, qty)`,
 		},
+		DataCompareSQL: []string{
+			"CREATE TABLE app.dat_src (id BIGINT PRIMARY KEY, name VARCHAR(50) NOT NULL, note TEXT, price NUMERIC(10,2), seen_at TIMESTAMP)",
+			"CREATE TABLE app.dat_dst (id BIGINT PRIMARY KEY, name VARCHAR(50) NOT NULL, note TEXT, price NUMERIC(10,2), seen_at TIMESTAMP)",
+			`INSERT INTO app.dat_src VALUES (1, 'same', 'x', 1.50, '2026-01-02 03:04:05'), (2, '李雷', '', NULL, NULL),
+				(3, 'it''s', 'back\slash', 2.00, '2026-01-02 03:04:05'), (5, 'new', NULL, 9.99, NULL)`,
+			`INSERT INTO app.dat_dst VALUES (1, 'same', 'x', 1.50, '2026-01-02 03:04:05'), (2, '李雷', NULL, NULL, NULL),
+				(3, 'its', 'back\slash', 2.00, '2026-01-02 03:04:06'), (4, 'gone', NULL, NULL, NULL)`,
+		},
 	})
 }
