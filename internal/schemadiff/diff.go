@@ -77,7 +77,7 @@ func columnAttrs(old, nw db.Column) db.ColumnAttr {
 	if old.Nullable != nw.Nullable {
 		a |= db.AttrNullable
 	}
-	if (old.Default == nil) != (nw.Default == nil) || old.Default != nil && *old.Default != *nw.Default {
+	if (old.Default == nil) != (nw.Default == nil) || old.Default != nil && *old.Default != *nw.Default || old.OnUpdate != nw.OnUpdate {
 		a |= db.AttrDefault
 	}
 	if old.Comment != nw.Comment {

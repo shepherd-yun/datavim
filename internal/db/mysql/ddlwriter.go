@@ -48,6 +48,9 @@ func (w ddlWriter) columnDef(c db.Column) string {
 	if c.Default != nil && c.Generated == "" {
 		b.WriteString(" DEFAULT " + *c.Default)
 	}
+	if c.OnUpdate != "" {
+		b.WriteString(" ON UPDATE " + c.OnUpdate)
+	}
 	if c.AutoIncrement {
 		b.WriteString(" AUTO_INCREMENT")
 	}

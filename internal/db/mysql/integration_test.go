@@ -84,10 +84,24 @@ func TestContract(t *testing.T) {
 		CompareSQL: []string{
 			"CREATE TABLE cmp_src (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL COMMENT 'who', " +
 				"email VARCHAR(255), qty BIGINT NOT NULL DEFAULT 1, `Odd Col` VARCHAR(10), " +
-				"created TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP, KEY cmp_src_name (name), " +
+				"created TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP, updated TIMESTAMP NULL ON UPDATE CURRENT_TIMESTAMP, " +
+				"KEY cmp_src_name (name), " +
 				"UNIQUE KEY cmp_src_email (email)) COMMENT 'it''s the source'",
 			"CREATE TABLE cmp_dst (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NULL, " +
-				"qty INT NOT NULL DEFAULT 0, legacy INT, KEY cmp_legacy (legacy), KEY cmp_dst_name (name, qty))",
+				"qty INT NOT NULL DEFAULT 0, updated TIMESTAMP NULL, legacy INT, KEY cmp_legacy (legacy), KEY cmp_dst_name (name, qty))",
 		},
 	})
+	// ON UPDATE is MySQL's own: TableSchema reads it, and the synced and
+	// created tables keep it.
+	for _, name := range []string{"cmp_src", "cmp_dst", "cmp_new"} {
+		s, err := conn.Meta().TableSchema(ctx, db.TableRef{Namespace: db.Namespace{Database: "app"}, Name: name})
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, c := range s.Columns {
+			if c.Name == "updated" && c.OnUpdate != "CURRENT_TIMESTAMP" {
+				t.Errorf("%s.updated: OnUpdate = %q, want CURRENT_TIMESTAMP", name, c.OnUpdate)
+			}
+		}
+	}
 }

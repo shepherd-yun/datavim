@@ -218,3 +218,16 @@ func TestDiffTableForeignKeys(t *testing.T) {
 		t.Errorf("changes = %+v", got)
 	}
 }
+
+func TestDiffTableOnUpdate(t *testing.T) {
+	ts := db.Column{Name: "updated", Type: "timestamp", Nullable: true}
+	auto := ts
+	auto.OnUpdate = "CURRENT_TIMESTAMP"
+	got := DiffTable(table("t", []db.Column{ts}), table("t", []db.Column{auto}), nil)
+	if len(got) != 1 || got[0].Attrs != db.AttrDefault {
+		t.Fatalf("changes = %v", summary(got))
+	}
+	if d := Describe(got[0]); d != "~ column updated  no default → no default ON UPDATE CURRENT_TIMESTAMP" {
+		t.Errorf("Describe = %q", d)
+	}
+}

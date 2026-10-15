@@ -45,6 +45,16 @@ func normDefault(def *string, typ, extra string) *string {
 	return &d
 }
 
+// onUpdate is the ON UPDATE expression in extra, the lower-case EXTRA of
+// a column ("default_generated on update current_timestamp(3)"), or "".
+func onUpdate(extra string) string {
+	_, after, ok := strings.Cut(extra, "on update ")
+	if !ok {
+		return ""
+	}
+	return strings.ToUpper(strings.TrimSpace(after))
+}
+
 // quoteString writes s as a string literal. The server reads backslash
 // escapes in literals, so backslashes are doubled as well as quotes.
 func quoteString(s string) string {

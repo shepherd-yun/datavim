@@ -61,6 +61,9 @@ func columnText(c db.Column) string {
 	if c.Default != nil {
 		parts = append(parts, "DEFAULT "+*c.Default)
 	}
+	if c.OnUpdate != "" {
+		parts = append(parts, "ON UPDATE "+c.OnUpdate)
+	}
 	if c.AutoIncrement {
 		parts = append(parts, "auto increment")
 	}
@@ -84,6 +87,9 @@ func attrText(c db.Column, a db.ColumnAttr) string {
 			parts = append(parts, "no default")
 		} else {
 			parts = append(parts, "DEFAULT "+*c.Default)
+		}
+		if c.OnUpdate != "" {
+			parts = append(parts, "ON UPDATE "+c.OnUpdate)
 		}
 	}
 	if a&db.AttrCollation != 0 {

@@ -305,3 +305,25 @@ func TestAlterTable(t *testing.T) {
 		t.Errorf("no changes: %v %v", stmts, manual)
 	}
 }
+
+func TestOnUpdate(t *testing.T) {
+	for extra, want := range map[string]string{
+		"":                            "",
+		"default_generated":           "",
+		"on update current_timestamp": "CURRENT_TIMESTAMP",
+		"default_generated on update current_timestamp(3)": "CURRENT_TIMESTAMP(3)",
+	} {
+		if got := onUpdate(extra); got != want {
+			t.Errorf("onUpdate(%q) = %q, want %q", extra, got, want)
+		}
+	}
+	w := dialect{}.DDL()
+	users := db.TableRef{Namespace: db.Namespace{Database: "app"}, Name: "users"}
+	ct := "CURRENT_TIMESTAMP"
+	col := db.Column{Name: "updated", Type: "timestamp", Default: &ct, OnUpdate: "CURRENT_TIMESTAMP", Comment: "x"}
+	stmts, _ := w.AlterTable(users, []db.SchemaChange{{Kind: db.AlterColumn, Old: &col, New: &col, Attrs: db.AttrComment}})
+	want := "ALTER TABLE `app`.`users`\n  MODIFY COLUMN `updated` timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT 'x'"
+	if len(stmts) != 1 || stmts[0] != want {
+		t.Errorf("got\n%s\nwant\n%s", strings.Join(stmts, ";\n"), want)
+	}
+}

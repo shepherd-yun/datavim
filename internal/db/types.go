@@ -40,6 +40,7 @@ type Column struct {
 	AutoIncrement bool   // MySQL auto_increment; PostgreSQL identity or serial
 	Collation     string // only when it is not the default (the table's on MySQL, the type's on PostgreSQL)
 	Generated     string // the expression of a generated column
+	OnUpdate      string // MySQL ON UPDATE, such as CURRENT_TIMESTAMP(3)
 	Position      int    // 1-based; shown, never compared
 }
 

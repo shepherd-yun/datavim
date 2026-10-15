@@ -77,6 +77,7 @@ func (m meta) columnDetails(ctx context.Context, s *db.TableSchema) error {
 		c.Position = i + 1
 		c.Type = normType(c.Type)
 		c.AutoIncrement = strings.Contains(d.extra, "auto_increment")
+		c.OnUpdate = onUpdate(d.extra)
 		// "virtual generated" / "stored generated"; "default_generated"
 		// marks an expression default instead.
 		if strings.HasSuffix(d.extra, "generated") && !strings.Contains(d.extra, "default_generated") {
