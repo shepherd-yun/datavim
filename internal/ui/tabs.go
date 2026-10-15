@@ -772,3 +772,19 @@ func (t *dataTab) retryAfterPassword() tea.Cmd {
 }
 
 func (t *structureTab) retryAfterPassword() tea.Cmd { return t.Handle(keymap.Refresh) }
+
+// retargeter is a tab on one table that can follow a rename.
+type retargeter interface {
+	retarget(ref db.TableRef) tea.Cmd
+}
+
+// retarget points the tab at the renamed table and reloads it.
+func (t *dataTab) retarget(ref db.TableRef) tea.Cmd {
+	t.ref = ref
+	return t.Handle(keymap.Refresh)
+}
+
+func (t *structureTab) retarget(ref db.TableRef) tea.Cmd {
+	t.ref = ref
+	return t.Handle(keymap.Refresh)
+}

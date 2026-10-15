@@ -245,6 +245,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.connAdded(msg)
 	case connUpdatedMsg:
 		return m, m.connUpdated(msg)
+	case renameEnteredMsg:
+		return m, m.startTableOp(msg.op)
 	case tableOpPreparedMsg:
 		m.tableOpPrepared(msg)
 	case tableOpConfirmedMsg:
@@ -479,6 +481,12 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 			if cfg, ok := m.backend.Connection(n.Conn); ok {
 				m.overlay = overlay.NewEditConnForm(m.keys, cfg)
 			}
+		}
+	case keymap.RenameTable:
+		if n := t.Selected(); n != nil && n.IsTable() {
+			m.askRename(tableOp{kind: opRename, conn: n.Conn, ref: n.TableRef(), view: n.Kind == tree.KindView})
+		} else {
+			m.setStatus("select a table or view to rename", true)
 		}
 	case keymap.DeleteNode:
 		n := t.Selected()

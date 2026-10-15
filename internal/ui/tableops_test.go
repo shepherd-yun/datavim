@@ -199,3 +199,117 @@ func TestTablePath(t *testing.T) {
 		t.Fatal(got)
 	}
 }
+
+const renameUsers = "RENAME TABLE `app`.`users` TO `app`.`people`"
+
+// renameTo opens the rename prompt on the selected table and submits name.
+func renameTo(t *testing.T, m *Model, name string) {
+	t.Helper()
+	press(t, m, "r", "ctrl+u")
+	typeText(t, m, name)
+	press(t, m, "enter")
+}
+
+func TestRenameTable(t *testing.T) {
+	m, b := newTestModel(t)
+	selectNode(t, m, "local", "app", "users")
+	press(t, m, "r")
+	if s := screen(m); !strings.Contains(s, "Rename table users") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	press(t, m, "ctrl+u")
+	typeText(t, m, "people")
+	press(t, m, "enter")
+	if s := screen(m); !strings.Contains(s, renameUsers+";") {
+		t.Fatalf("preview missing:\n%s", s)
+	}
+	b.conn.setTables([]db.Table{{Name: "people"}, {Name: "active", Kind: db.TableKindView}})
+	press(t, m, "y")
+	if !slices.Contains(b.conn.execList(), renameUsers) {
+		t.Fatalf("execs = %v", b.conn.execList())
+	}
+	if n := m.tree.Selected(); n == nil || n.Name != "people" {
+		t.Fatalf("selected = %+v", n)
+	}
+	if !strings.Contains(statusLine(m), "renamed table users to people") {
+		t.Fatalf("status: %s", statusLine(m))
+	}
+}
+
+func TestRenameRetargetsTabs(t *testing.T) {
+	m, b := newTestModel(t)
+	openUsers(t, m)
+	press(t, m, "space", "S") // structure tab too
+	b.conn.setTables([]db.Table{{Name: "people"}})
+	press(t, m, "ctrl+h")
+	renameTo(t, m, "people")
+	press(t, m, "y")
+	if len(m.tabs) != 2 {
+		t.Fatalf("tabs = %d", len(m.tabs))
+	}
+	for _, tb := range m.tabs {
+		if _, ref := tb.Target(); ref.Name != "people" || !strings.HasPrefix(tb.Title(), "people") {
+			t.Fatalf("tab %q still on %s", tb.Title(), ref.Name)
+		}
+	}
+}
+
+func TestRenameRejectsUnchangedOrEmptyName(t *testing.T) {
+	m, b := newTestModel(t)
+	selectNode(t, m, "local", "app", "users")
+	press(t, m, "r", "enter")
+	if !strings.Contains(screen(m), "unchanged") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	press(t, m, "ctrl+u", "enter")
+	if !strings.Contains(screen(m), "enter a name") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	if len(b.conn.execList()) != 0 {
+		t.Fatalf("execs = %v", b.conn.execList())
+	}
+}
+
+func TestRenameOnProdNeedsName(t *testing.T) {
+	m, b := newTestModel(t)
+	if err := b.SetReadOnly("prod", false); err != nil { // prod is read-only by default
+		t.Fatal(err)
+	}
+	selectNode(t, m, "prod", "app", "users")
+	renameTo(t, m, "people")
+	if !strings.Contains(screen(m), "PROD · Rename table users") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	press(t, m, "y", "enter")
+	if slices.Contains(b.conn.execList(), renameUsers) {
+		t.Fatal("y alone renamed on prod")
+	}
+	press(t, m, "ctrl+u")
+	typeText(t, m, "users")
+	press(t, m, "enter")
+	if !slices.Contains(b.conn.execList(), renameUsers) {
+		t.Fatalf("execs = %v", b.conn.execList())
+	}
+}
+
+func TestRenameFailureKeepsTabs(t *testing.T) {
+	m, b := newTestModel(t)
+	b.conn.setFail(renameUsers, errors.New("table people already exists"))
+	openUsers(t, m)
+	press(t, m, "ctrl+h")
+	renameTo(t, m, "people")
+	press(t, m, "y")
+	if _, ref := m.tabs[0].Target(); ref.Name != "users" || !strings.Contains(statusLine(m), "already exists") {
+		t.Fatalf("tab on %s, status %s", ref.Name, statusLine(m))
+	}
+}
+
+func TestRenameBlockedByUnsavedChanges(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	press(t, m, "d", "d")
+	press(t, m, "ctrl+h", "r")
+	if strings.Contains(screen(m), "Rename table") || !strings.Contains(statusLine(m), "unsaved change") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}

@@ -2,7 +2,9 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"log/slog"
+	"strings"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -216,6 +218,8 @@ func (m *Model) tableOpDone(msg tableOpDoneMsg) tea.Cmd {
 	switch op.kind {
 	case opDrop:
 		cmds = append(cmds, m.closeTabsOfTable(op.conn, op.ref), m.reloadTables(op.conn, op.ref.Namespace, ""))
+	case opRename:
+		cmds = append(cmds, m.retargetTabs(op.conn, op.ref, op.renamed()), m.reloadTables(op.conn, op.ref.Namespace, op.newName))
 	}
 	return tea.Batch(cmds...)
 }
@@ -252,4 +256,43 @@ func tablePath(ns db.Namespace, name string) []string {
 		path = append(path, ns.Schema)
 	}
 	return append(path, name)
+}
+
+// renameEnteredMsg is the new name typed at the rename prompt.
+type renameEnteredMsg struct{ op tableOp }
+
+// askRename opens the prompt for the new name of the selected table.
+func (m *Model) askRename(op tableOp) {
+	if msg := m.tableOpBlocked(op); msg != "" {
+		m.setStatus(msg, true)
+		return
+	}
+	old := op.ref.Name
+	m.overlay = overlay.NewPrompt(op.title(), "New name:", old, func(s string) tea.Msg {
+		op.newName = strings.TrimSpace(s)
+		return renameEnteredMsg{op: op}
+	}, overlay.WithValidate(func(s string) error {
+		switch strings.TrimSpace(s) {
+		case "":
+			return errors.New("enter a name")
+		case old:
+			return errors.New("the name is unchanged")
+		}
+		return nil
+	}))
+}
+
+// retargetTabs points the tabs of from at to.
+func (m *Model) retargetTabs(conn string, from, to db.TableRef) tea.Cmd {
+	var cmds []tea.Cmd
+	for _, t := range m.tabs {
+		r, ok := t.(retargeter)
+		if !ok {
+			continue
+		}
+		if c, ref := t.Target(); c == conn && ref == from {
+			cmds = append(cmds, r.retarget(to))
+		}
+	}
+	return tea.Batch(cmds...)
 }
