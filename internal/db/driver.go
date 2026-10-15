@@ -95,4 +95,15 @@ type Dialect interface {
 	QuoteIdent(s string) string
 	QualifiedName(t TableRef) string
 	Paginate(sql string, limit, offset int) string
+	DDL() DDLWriter
+}
+
+// DDLWriter writes the engine's statements for changing tables. The
+// statements have no trailing semicolon.
+type DDLWriter interface {
+	// DropTable drops t; view selects DROP VIEW.
+	DropTable(t TableRef, view bool) string
+	// RenameTable renames t within its namespace.
+	RenameTable(t TableRef, newName string, view bool) string
+	TruncateTable(t TableRef) string
 }

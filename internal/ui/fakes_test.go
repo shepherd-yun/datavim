@@ -202,6 +202,25 @@ func (fakeDialect) Paginate(q string, limit, offset int) string {
 	return db.LimitOffset(q, limit, offset)
 }
 
+func (d fakeDialect) DDL() db.DDLWriter { return fakeDDL{d} }
+
+type fakeDDL struct{ d fakeDialect }
+
+func (w fakeDDL) DropTable(t db.TableRef, view bool) string {
+	if view {
+		return "DROP VIEW " + w.d.QualifiedName(t)
+	}
+	return "DROP TABLE " + w.d.QualifiedName(t)
+}
+
+func (w fakeDDL) RenameTable(t db.TableRef, newName string, _ bool) string {
+	to := t
+	to.Name = newName
+	return "RENAME TABLE " + w.d.QualifiedName(t) + " TO " + w.d.QualifiedName(to)
+}
+
+func (w fakeDDL) TruncateTable(t db.TableRef) string { return "TRUNCATE TABLE " + w.d.QualifiedName(t) }
+
 type fakeBackend struct {
 	mu           sync.Mutex
 	conns        []config.Connection

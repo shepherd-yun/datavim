@@ -150,3 +150,22 @@ func TestDSNConfigCountsMatchedRows(t *testing.T) {
 		}
 	}
 }
+
+func TestDDLWriter(t *testing.T) {
+	w := dialect{}.DDL()
+	users := db.TableRef{Namespace: db.Namespace{Database: "app"}, Name: "users"}
+	odd := db.TableRef{Namespace: db.Namespace{Database: "app"}, Name: "we`ird name"}
+	for _, c := range []struct{ got, want string }{
+		{w.DropTable(users, false), "DROP TABLE `app`.`users`"},
+		{w.DropTable(users, true), "DROP VIEW `app`.`users`"},
+		{w.RenameTable(users, "people", false), "RENAME TABLE `app`.`users` TO `app`.`people`"},
+		{w.RenameTable(users, "people", true), "RENAME TABLE `app`.`users` TO `app`.`people`"},
+		{w.TruncateTable(users), "TRUNCATE TABLE `app`.`users`"},
+		{w.DropTable(odd, false), "DROP TABLE `app`.`we``ird name`"},
+		{w.RenameTable(users, "Mixed Case", false), "RENAME TABLE `app`.`users` TO `app`.`Mixed Case`"},
+	} {
+		if c.got != c.want {
+			t.Errorf("got  %s\nwant %s", c.got, c.want)
+		}
+	}
+}

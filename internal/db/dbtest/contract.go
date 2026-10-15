@@ -593,4 +593,57 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			t.Fatalf("rows (-want +got):\n%s", diff)
 		}
 	})
+
+	t.Run("DDLWriter renames, truncates and drops tables and views", func(t *testing.T) {
+		w := d.DDL()
+		exec := func(q string) {
+			t.Helper()
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		kinds := func() map[string]db.TableKind {
+			t.Helper()
+			tables, err := conn.Meta().Tables(ctx, ns)
+			if err != nil {
+				t.Fatal(err)
+			}
+			out := map[string]db.TableKind{}
+			for _, tb := range tables {
+				out[tb.Name] = tb.Kind
+			}
+			return out
+		}
+		table, view := ref("Ops Tmp"), ref("ops_view")
+		exec("CREATE TABLE " + d.QualifiedName(table) + " (id int)")
+		exec("INSERT INTO " + d.QualifiedName(table) + " VALUES (1), (2)")
+		exec("CREATE VIEW " + d.QualifiedName(view) + " AS SELECT 1 AS one")
+
+		exec(w.RenameTable(table, "Ops Tmp2", false))
+		exec(w.RenameTable(view, "ops_view2", true))
+		table, view = ref("Ops Tmp2"), ref("ops_view2")
+		got := kinds()
+		if _, old := got["Ops Tmp"]; old || got["Ops Tmp2"] != db.TableKindTable || got["ops_view2"] != db.TableKindView {
+			t.Fatalf("after rename: %v", got)
+		}
+
+		exec(w.TruncateTable(table))
+		rs, err := conn.Query(ctx, "SELECT COUNT(*) FROM "+d.QualifiedName(table))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if n := rs.Rows[0][0].Text; n != "0" {
+			t.Fatalf("rows after truncate = %s", n)
+		}
+
+		exec(w.DropTable(view, true))
+		exec(w.DropTable(table, false))
+		got = kinds()
+		if _, ok := got["Ops Tmp2"]; ok {
+			t.Fatalf("table still there: %v", got)
+		}
+		if _, ok := got["ops_view2"]; ok {
+			t.Fatalf("view still there: %v", got)
+		}
+	})
 }

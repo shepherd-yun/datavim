@@ -136,3 +136,22 @@ func TestLocate(t *testing.T) {
 		t.Fatal("nil stays nil")
 	}
 }
+
+func TestDDLWriter(t *testing.T) {
+	w := dialect{}.DDL()
+	users := db.TableRef{Namespace: db.Namespace{Database: "app", Schema: "public"}, Name: "users"}
+	odd := db.TableRef{Namespace: db.Namespace{Database: "app", Schema: "public"}, Name: `we"ird name`}
+	for _, c := range []struct{ got, want string }{
+		{w.DropTable(users, false), `DROP TABLE "public"."users"`},
+		{w.DropTable(users, true), `DROP VIEW "public"."users"`},
+		{w.RenameTable(users, "people", false), `ALTER TABLE "public"."users" RENAME TO "people"`},
+		{w.RenameTable(users, "people", true), `ALTER VIEW "public"."users" RENAME TO "people"`},
+		{w.TruncateTable(users), `TRUNCATE TABLE "public"."users"`},
+		{w.DropTable(odd, false), `DROP TABLE "public"."we""ird name"`},
+		{w.RenameTable(users, "Mixed Case", false), `ALTER TABLE "public"."users" RENAME TO "Mixed Case"`},
+	} {
+		if c.got != c.want {
+			t.Errorf("got  %s\nwant %s", c.got, c.want)
+		}
+	}
+}
