@@ -109,49 +109,34 @@ type filterValueMsg struct {
 func (m filterValueMsg) TabID() int { return m.tabID }
 
 type dataTab struct {
-	id       int
-	backend  Backend
-	conn     string
-	ref      db.TableRef
-	dialect  sqlx.Dialect
-	pageSize int
-	grid     *grid.Model
+	editableResult // id, backend, conn, ref, dialect, keys, grid and the staged changes
 
-	page        int
-	hasMore     bool
-	loading     bool
-	err         string
-	status      string // what the last key did; cleared by the next one
-	statusErr   bool
-	query       tableQuery
-	known       bool        // meta (key, columns) has been read
-	cols        []db.Column // the table's columns, for types in the cell editor
-	key         edit.Key    // how rows are located
-	table       *edit.Table // the page with its staged changes
-	store       Store
-	submitting  bool     // a submit is running
-	gen         int      // tells the current preview from stale ones
-	pendingSQL  []string // the previewed statements, until confirmed
-	retrySubmit bool     // the last submit wanted a password
-	height      int
-	wantColumn  string // column to put the cursor on once data is shown
-	failedWhere string // a filter the server rejected, offered again by F
-	keys        *keymap.Keymap
+	pageSize   int
+	page       int
+	hasMore    bool
+	loading    bool
+	err        string
+	status     string // what the last key did; cleared by the next one
+	statusErr  bool
+	query      tableQuery
+	known      bool // meta (key, columns) has been read
+	store      Store
+	height     int
+	wantColumn string // column to put the cursor on once data is shown
 }
 
 func newDataTab(id int, b Backend, st Store, conn string, ref db.TableRef, s config.Settings) *dataTab {
 	cfg, _ := b.Connection(conn)
 	t := &dataTab{
-		id: id, backend: b, store: st, conn: conn, ref: ref, dialect: sqlx.DialectOf(cfg.Driver), pageSize: s.PageSize,
-		grid: grid.New(nil, s.MaxColumnWidth), keys: keymap.Default(),
+		editableResult: editableResult{
+			id: id, backend: b, conn: conn, ref: ref, dialect: sqlx.DialectOf(cfg.Driver),
+			grid: grid.New(nil, s.MaxColumnWidth), keys: keymap.Default(), keyCtx: keymap.Grid,
+		},
+		store: st, pageSize: s.PageSize,
 	}
+	t.host = t
 	t.grid.SetMarks(t.mark)
 	return t
-}
-
-// unsavedHint is "<space>w submits · U discards" with the keymap's keys.
-func (t *dataTab) unsavedHint(submit, discard string) string {
-	return joinHints(keyHint(t.keys, keymap.Grid, keymap.SubmitEdits, submit), keyHint(t.keys, keymap.Grid, keymap.UndoAllEdits, discard))
 }
 
 func (t *dataTab) ID() int                       { return t.id }
@@ -270,35 +255,12 @@ func (t *dataTab) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case pageLoadedMsg:
 		t.pageLoaded(m)
-	case cellEditedMsg:
-		t.cellEdited(m)
-	case submitConfirmedMsg:
-		if m.gen == t.gen && t.pendingSQL != nil && !t.submitting {
-			stmts := t.pendingSQL
-			t.pendingSQL = nil
-			return t.apply(stmts)
-		}
+		return nil
 	case editsAppliedMsg:
 		return t.applied(m)
-	case filterMsg:
-		where := normFilter(m.text)
-		return t.applyQuery(func(q *tableQuery) { q.where = where })
-	case filterValueMsg:
-		if m.text == "" {
-			return nil
-		}
-		switch m.action {
-		case keymap.FilterContains:
-			return t.addFilter(containsFilter(t.dialect, m.col.Name, m.text))
-		case keymap.FilterLike:
-			return t.addFilter(likeFilter(t.dialect, m.col.Name, m.text))
-		case keymap.FilterGreater:
-			return t.addFilter(compareFilter(t.dialect, m.col, ">", db.Value{Text: m.text}))
-		case keymap.FilterLess:
-			return t.addFilter(compareFilter(t.dialect, m.col, "<", db.Value{Text: m.text}))
-		}
 	}
-	return nil
+	cmd, _ := t.update(msg)
+	return cmd
 }
 
 func (t *dataTab) pageLoaded(m pageLoadedMsg) {
@@ -315,6 +277,10 @@ func (t *dataTab) pageLoaded(m pageLoadedMsg) {
 	t.query, t.known = m.query, true
 	if m.meta != nil {
 		t.cols, t.key = m.meta.cols, m.meta.key
+		t.addOnly = ""
+		if t.key.Kind == edit.NoKey {
+			t.addOnly = t.ref.Name + " has no primary or unique key: rows can only be added"
+		}
 	}
 	t.table = edit.New(m.rs.Columns, m.rs.Rows, m.ids)
 	t.grid.SetSort(t.query.sort, t.query.desc)
@@ -387,56 +353,29 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 		return cmd
 	}
 	switch a {
-	case keymap.NextPage, keymap.PrevPage, keymap.Refresh, keymap.FilterPrompt, keymap.SortColumn,
-		keymap.FilterEqual, keymap.FilterNotEqual, keymap.FilterContains, keymap.FilterLike, keymap.FilterGreater,
-		keymap.FilterLess, keymap.FilterNull, keymap.FilterNotNull, keymap.FilterClear:
-		if n := t.changes(); n > 0 {
-			t.setStatus(joinHints(plural(n, "unsaved change"), t.unsavedHint("submits", "discards")), true)
+	case keymap.NextPage, keymap.PrevPage, keymap.Refresh, keymap.SortColumn:
+		if t.changes() > 0 {
+			t.setStatus(t.unsavedNote(), true)
 			return nil
 		}
 	}
-
 	switch a {
 	case keymap.NextPage:
 		if t.hasMore && !t.loading {
 			return t.load(t.page+1, t.query)
 		}
+		return nil
 	case keymap.PrevPage:
 		if t.page > 0 && !t.loading {
 			return t.load(t.page-1, t.query)
 		}
+		return nil
 	case keymap.Refresh:
 		if !t.loading {
 			t.known = false
 			return t.load(t.page, t.query)
 		}
-	case keymap.FilterEqual, keymap.FilterNotEqual:
-		col, v, ok := t.grid.Cell()
-		if !ok {
-			t.setStatus("no cell to filter by", true)
-			return nil
-		}
-		op := "="
-		if a == keymap.FilterNotEqual {
-			op = "<>"
-		}
-		return t.addFilter(compareFilter(t.dialect, col, op, v))
-	case keymap.FilterNull, keymap.FilterNotNull:
-		col, ok := t.grid.Column()
-		if !ok {
-			t.setStatus("no column to filter by", true)
-			return nil
-		}
-		return t.addFilter(nullFilter(t.dialect, col.Name, a == keymap.FilterNotNull))
-	case keymap.FilterContains, keymap.FilterLike, keymap.FilterGreater, keymap.FilterLess:
-		return t.filterValuePrompt(a)
-	case keymap.FilterClear:
-		if t.query.where == "" {
-			return nil
-		}
-		return t.applyQuery(func(q *tableQuery) { q.where = "" })
-	case keymap.FilterPrompt:
-		return t.filterPrompt()
+		return nil
 	case keymap.SortColumn:
 		col, ok := t.grid.Column()
 		if !ok {
@@ -452,20 +391,9 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 				q.sort, q.desc = "", false
 			}
 		})
-	case keymap.EditCell:
-		return t.editCell()
-	case keymap.InsertRow:
-		t.insertRow()
-	case keymap.DeleteRow:
-		t.deleteRow()
-	case keymap.UndoEdit:
-		t.undoEdit()
-	case keymap.UndoAllEdits:
-		t.undoAll()
-	case keymap.SubmitEdits:
-		return t.submit()
 	}
-	return nil
+	cmd, _ := t.handle(a)
+	return cmd
 }
 
 // applyQuery reloads the first page with a changed filter or sort, keeping
@@ -486,60 +414,6 @@ func (t *dataTab) applyQuery(change func(*tableQuery)) tea.Cmd {
 	return t.load(0, q)
 }
 
-// addFilter narrows the filter with cond.
-func (t *dataTab) addFilter(cond string) tea.Cmd {
-	return t.applyQuery(func(q *tableQuery) { q.where = andFilter(q.where, cond) })
-}
-
-var filterVerbs = map[keymap.Action]string{
-	keymap.FilterContains: "contains",
-	keymap.FilterLike:     "LIKE",
-	keymap.FilterGreater:  ">",
-	keymap.FilterLess:     "<",
-}
-
-// filterValuePrompt asks for the value of fs, fl, f> or f<, starting from
-// the cell under the cursor (wrapped in % for fl).
-func (t *dataTab) filterValuePrompt(a keymap.Action) tea.Cmd {
-	col, ok := t.grid.Column()
-	if !ok {
-		t.setStatus("no column to filter by", true)
-		return nil
-	}
-	initial := ""
-	if _, v, ok := t.grid.Cell(); ok && !v.Null {
-		initial = v.Text
-	}
-	label := col.Name + " " + filterVerbs[a] + " …"
-	if a == keymap.FilterLike {
-		initial = "%" + initial + "%"
-		label += "  % any text · _ one character"
-	}
-	id := t.id
-	return openOverlay(overlay.NewPrompt("Filter "+t.ref.Name, label, initial,
-		func(s string) tea.Msg { return filterValueMsg{tabID: id, action: a, col: col, text: s} }))
-}
-
-// filterPrompt edits the WHERE condition, starting from a filter the
-// server just rejected, else the current one, else the cursor's column.
-func (t *dataTab) filterPrompt() tea.Cmd {
-	initial := t.query.where
-	switch {
-	case t.failedWhere != "":
-		initial = t.failedWhere
-	case initial == "":
-		if col, ok := t.grid.Column(); ok {
-			initial = sqlx.QuoteIfNeeded(col.Name, t.dialect) + " "
-		}
-	}
-	id := t.id
-	return openOverlay(overlay.NewPrompt("Filter "+t.ref.Name,
-		"WHERE …  e.g. name LIKE '%abc%' AND age > 18 · empty shows every row", initial,
-		func(s string) tea.Msg { return filterMsg{tabID: id, text: s} },
-		overlay.WithCompleter(t.completeFilter),
-		overlay.WithValidate(t.checkFilter)))
-}
-
 // checkFilter rejects a typed filter that is not a single condition.
 func (t *dataTab) checkFilter(s string) error {
 	q := t.query
@@ -551,12 +425,6 @@ var filterKeywords = []string{"AND", "OR", "NOT", "LIKE", "IN", "IS", "NULL", "B
 
 func isFilterWordRune(r rune) bool {
 	return r == '_' || r == '"' || r == '`' || unicode.IsLetter(r) || unicode.IsDigit(r)
-}
-
-// completeFilter offers the table's columns and condition keywords for the
-// word before the cursor in the F prompt.
-func (t *dataTab) completeFilter(text string, cursor int) (int, []complete.Candidate) {
-	return completeCondition(t.dialect, t.cols, text, cursor)
 }
 
 // completeCondition offers cols and condition keywords for the word before
