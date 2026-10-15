@@ -115,6 +115,7 @@ const (
 	NextChange        Action = "diff.next"
 	PrevChange        Action = "diff.prev"
 	WriteScript       Action = "diff.script"
+	DataDiff          Action = "diff.data"
 )
 
 const (

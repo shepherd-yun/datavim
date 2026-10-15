@@ -132,16 +132,18 @@ func DefaultBindings() []Binding {
 
 	b = append(b, vertical(Diff)...)
 	b = append(b,
-		Binding{Diff, keys("l"), Expand, "Expand the table"},
-		Binding{Diff, keys("enter"), Expand, "Expand the table"},
-		Binding{Diff, keys("right"), Expand, "Expand the table"},
-		Binding{Diff, keys("h"), Collapse, "Collapse the table"},
-		Binding{Diff, keys("left"), Collapse, "Collapse the table"},
+		Binding{Diff, keys("l"), Expand, "Expand the table · data: scroll columns right"},
+		Binding{Diff, keys("enter"), Expand, "Expand the table · data: scroll columns right"},
+		Binding{Diff, keys("right"), Expand, "Expand the table · data: scroll columns right"},
+		Binding{Diff, keys("h"), Collapse, "Collapse the table · data: scroll columns left"},
+		Binding{Diff, keys("left"), Collapse, "Collapse the table · data: scroll columns left"},
 		Binding{Diff, keys("x"), ToggleChange, "Include / skip in the script"},
 		Binding{Diff, keys("~"), SwapSides, "Swap source and target"},
 		Binding{Diff, keys("]", "c"), NextChange, "Next change"},
 		Binding{Diff, keys("[", "c"), PrevChange, "Previous change"},
 		Binding{Diff, keys(LeaderToken, "w"), WriteScript, "Write the sync script to a new console"},
+		Binding{Diff, keys("D"), DataDiff, "Compare the data / back to the structure"},
+		Binding{Diff, keys("F"), FilterPrompt, "Filter the compared rows (WHERE on both sides)"},
 	)
 
 	b = append(b,

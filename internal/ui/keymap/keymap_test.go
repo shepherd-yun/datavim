@@ -322,3 +322,21 @@ func TestStructureEditBindings(t *testing.T) {
 		t.Errorf("<space>w = %v %v", a, res)
 	}
 }
+
+func TestDataDiffBindings(t *testing.T) {
+	k := Default()
+	for _, c := range []struct {
+		keys []string
+		want Action
+	}{
+		{[]string{"D"}, DataDiff},
+		{[]string{"F"}, FilterPrompt},
+	} {
+		if a, res := k.Resolve(Diff, c.keys); a != c.want || res != Matched {
+			t.Errorf("diff %v = %q %v, want %q", c.keys, a, res, c.want)
+		}
+	}
+	if KnownActions()[DataDiff] == "" {
+		t.Error("diff.data cannot be bound in keymap.toml")
+	}
+}
