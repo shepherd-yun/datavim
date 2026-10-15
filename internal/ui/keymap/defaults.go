@@ -103,6 +103,7 @@ func DefaultBindings() []Binding {
 	b = append(b,
 		Binding{Console, keys("enter"), RunStatement, "Run statement under cursor / selection"},
 		Binding{Console, keys("R"), RunAll, "Run all statements"},
+		Binding{Console, keys(LeaderToken, "R"), RunFromCursor, "Run from the statement under the cursor to the end"},
 		Binding{Console, keys("ctrl+j"), FocusResults, "Focus results"},
 		Binding{Console, keys("ctrl+k"), FocusResults, "Focus results (wraps)"},
 		Binding{Console, keys("M"), ToggleMessages, "Toggle messages"},

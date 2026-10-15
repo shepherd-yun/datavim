@@ -84,3 +84,14 @@ func At(stmts []Statement, offset int) (Statement, bool) {
 	}
 	return best, true
 }
+
+// From returns the statements from the one under offset to the end; an
+// offset between two statements starts at the next one.
+func From(stmts []Statement, offset int) []Statement {
+	for i, s := range stmts {
+		if offset <= s.End {
+			return stmts[i:]
+		}
+	}
+	return nil
+}

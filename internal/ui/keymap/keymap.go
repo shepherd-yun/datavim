@@ -84,6 +84,7 @@ const (
 	ExternalEdit      Action = "editor.external"
 	RunStatement      Action = "sql.run"
 	RunAll            Action = "sql.runall"
+	RunFromCursor     Action = "sql.runfrom"
 	FocusResults      Action = "console.results"
 	FocusEditor       Action = "console.editor"
 	ToggleMessages    Action = "console.messages"

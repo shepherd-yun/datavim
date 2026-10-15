@@ -105,3 +105,25 @@ func TestDialectOf(t *testing.T) {
 		t.Fatal("DialectOf")
 	}
 }
+
+func TestFrom(t *testing.T) {
+	src := "select 1;\nselect 2;\nselect 3;" // statements end at 8, 18, 28
+	stmts := Split(src, MySQL)
+	for _, c := range []struct {
+		offset int
+		first  string
+		n      int
+	}{
+		{0, "select 1", 3},
+		{8, "select 1", 3},  // on the delimiter
+		{9, "select 2", 2},  // between statements: the next one
+		{15, "select 2", 2}, // inside
+		{28, "select 3", 1},
+		{29, "", 0}, // after the last
+	} {
+		got := From(stmts, c.offset)
+		if len(got) != c.n || (c.n > 0 && got[0].Text != c.first) {
+			t.Errorf("From(%d) = %+v; want %d from %q", c.offset, got, c.n, c.first)
+		}
+	}
+}

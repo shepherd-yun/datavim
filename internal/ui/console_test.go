@@ -749,3 +749,41 @@ func TestConsoleFramesFollowFocus(t *testing.T) {
 		t.Fatalf("results hint:\n%s", v)
 	}
 }
+
+const threeInserts = "insert into a values (1);\ninsert into b values (2);\ninsert into c values (3);"
+
+func TestRunFromCursor(t *testing.T) {
+	m, b := newTestModel(t)
+	c := openLocalConsole(t, m)
+	c.editor.SetValue(threeInserts)
+	c.editor.SetCursor(1, 3)
+	press(t, m, "space", "R")
+	execs := b.conn.execList()
+	want := []string{"insert into b values (2)", "insert into c values (3)"}
+	if len(execs) < 2 || !slices.Equal(execs[len(execs)-2:], want) || slices.Contains(execs, "insert into a values (1)") {
+		t.Fatalf("execs = %v", execs)
+	}
+}
+
+func TestRunAllNamesTheFailedStatement(t *testing.T) {
+	m, b := newTestModel(t)
+	c := openLocalConsole(t, m)
+	b.conn.setFail("insert into b values (2)", errors.New("boom"))
+	c.editor.SetValue(threeInserts)
+	press(t, m, "R")
+	if !strings.Contains(c.status, "statement 2/3 failed") || !strings.Contains(c.status, "boom") {
+		t.Fatalf("status = %q", c.status)
+	}
+	if got, want := c.editor.Offset(), strings.Index(threeInserts, "insert into b"); got != want {
+		t.Fatalf("cursor at %d, want %d (the failed statement)", got, want)
+	}
+}
+
+func TestConsoleHintsRunFromCursor(t *testing.T) {
+	m, _ := newTestModel(t)
+	c := openLocalConsole(t, m)
+	c.SetSize(200, 20)
+	if !strings.Contains(c.statusLine(), "run from here") {
+		t.Fatalf("hints: %s", c.statusLine())
+	}
+}

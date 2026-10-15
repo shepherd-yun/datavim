@@ -80,6 +80,7 @@ type runDoneMsg struct {
 	text        string        // the editor text the statements came from; "" if they did not
 	filter      *resultFilter // the run reads the shown result again, narrowed by this
 	note        string        // the status once the run succeeds
+	total       int           // statements asked for, without an injected BEGIN
 }
 
 type runTickMsg struct{ tabID, gen int }
@@ -358,6 +359,8 @@ func (t *consoleTab) editorAction(a keymap.Action) tea.Cmd {
 		return t.runAtCursor()
 	case keymap.RunAll:
 		return t.run(sqlx.Split(t.editor.Value(), t.dialect))
+	case keymap.RunFromCursor:
+		return t.run(sqlx.From(sqlx.Split(t.editor.Value(), t.dialect), t.editor.Offset()))
 	}
 	return nil
 }
@@ -522,7 +525,7 @@ func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.C
 	filter, note := t.runFilter, t.runNote
 	t.runFilter, t.runNote = nil, ""
 	t.attempt = &runAttempt{stmts: stmts, limit: limit, more: more, text: t.runText, filter: filter, note: note}
-	began := false
+	began, total := false, len(stmts)
 	if t.manualTx && !t.inTx && sqlx.TransactionEffect(stmts[0].Text, t.dialect) == sqlx.TxNone {
 		stmts = append([]sqlx.Statement{{Text: sqlx.BeginSQL(t.dialect), Start: -1, End: -1}}, stmts...)
 		began = true
@@ -539,7 +542,7 @@ func (t *consoleTab) execute(stmts []sqlx.Statement, limit int, more bool) tea.C
 	t.session = nil // owned by the command until runDoneMsg hands it back
 	run := func() tea.Msg {
 		defer cancel()
-		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit, readOnly: ro, began: began, text: text, filter: filter, note: note}
+		msg := runDoneMsg{tabID: id, conn: conn, gen: gen, more: more, limit: limit, readOnly: ro, began: began, text: text, filter: filter, note: note, total: total}
 		if s != nil && sessRO != ro {
 			// :set [no]readonly changed the connection: the session's
 			// server-side read-only setting no longer matches.
@@ -732,7 +735,15 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 	}
 	switch {
 	case last.Err != nil:
-		t.setStatus(t.locateError(m.text, last), true)
+		status := t.locateError(m.text, last)
+		n := len(m.results)
+		if m.began {
+			n--
+		}
+		if m.total > 1 && n > 0 {
+			status = fmt.Sprintf("statement %d/%d failed: %s", n, m.total, status)
+		}
+		t.setStatus(status, true)
 		// A failed re-read of the shown result (filter, load more) keeps
 		// its rows on screen.
 		t.showMessages = t.showMessages || m.filter == nil
@@ -1076,6 +1087,7 @@ func (t *consoleTab) statusLine() string {
 		keyHint(t.keys, keymap.Console, keymap.RunAll, "run all"),
 		keyHint(t.keys, keymap.Console, keymap.FocusResults, "results"),
 		keyHint(t.keys, keymap.Console, keymap.ExternalEdit, "$EDITOR"),
+		keyHint(t.keys, keymap.Console, keymap.RunFromCursor, "run from here"),
 		"i insert · v select · u undo", // vim basics last: cut first when narrow
 	)
 	if t.onResults {
@@ -1094,18 +1106,22 @@ func (t *consoleTab) statusLine() string {
 	return theme.Muted.Render(textutil.Fit(hint, t.width))
 }
 
-// locateError moves the editor cursor to where the server says r failed,
-// when the editor still holds the text that ran, and returns the status
-// line for the error.
+// locateError moves the editor cursor to where the server says r failed, or
+// to the start of r when it does not say, when the editor still holds the
+// text that ran, and returns the status line for the error.
 func (t *consoleTab) locateError(text string, r runner.Result) string {
 	msg := errorText(r.Err)
+	if r.Start < 0 || text == "" || text != t.editor.Value() {
+		return msg
+	}
+	t.onResults = false
 	off, ok := db.ErrorOffset(r.Err)
-	if !ok || r.Start < 0 || text == "" || text != t.editor.Value() {
+	if !ok {
+		t.editor.SetCursorOffset(r.Start)
 		return msg
 	}
 	pos := min(r.Start+off, len(text))
 	t.editor.SetCursorOffset(pos)
-	t.onResults = false
 	before := text[:pos]
 	line := strings.Count(before, "\n") + 1
 	col := utf8.RuneCountInString(before[strings.LastIndexByte(before, '\n')+1:]) + 1
