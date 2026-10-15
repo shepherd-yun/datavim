@@ -66,6 +66,63 @@ func TestSearchSchemasOfPostgres(t *testing.T) {
 	}
 }
 
+func TestSearchQualifiedBySegments(t *testing.T) {
+	mysql := []*Snapshot{snap(Key{Conn: "local"}, catalog())}
+	pub := db.Namespace{Database: "shop", Schema: "public"}
+	orders := db.TableRef{Namespace: pub, Name: "orders"}
+	pg := []*Snapshot{snap(Key{Conn: "pg", Database: "shop"}, db.Catalog{
+		Databases:  []string{"shop"},
+		Namespaces: []db.Namespace{pub},
+		Tables:     []db.CatalogTable{{Namespace: pub, Name: "orders"}},
+		Columns:    []db.CatalogColumn{{Table: orders, Name: "total", Type: "numeric"}},
+	})}
+	for _, tc := range []struct {
+		name  string
+		snaps []*Snapshot
+		query string
+		kind  ItemKind
+		path  string
+	}{
+		{"database.table.column", mysql, "app.users.email", ItemColumn, "users.email"},
+		{"fuzzy segments", mysql, "ap.usr.eml", ItemColumn, "users.email"},
+		{"database.table", mysql, "app.users", ItemTable, "users"},
+		{"database.routine", mysql, "app.add", ItemRoutine, "add_one"},
+		{"database.schema.table.column", pg, "shop.public.orders.total", ItemColumn, "orders.total"},
+		{"schema skipped", pg, "shop.orders.total", ItemColumn, "orders.total"},
+		{"schema.table", pg, "pub.ord", ItemTable, "orders"},
+		{"database.schema", pg, "shop.pub", ItemSchema, "public"},
+	} {
+		hits := Search(tc.snaps, tc.query, 10)
+		if len(hits) == 0 {
+			t.Errorf("%s: %q found nothing", tc.name, tc.query)
+			continue
+		}
+		if h := hits[0]; h.Kind != tc.kind || h.Path != tc.path {
+			t.Errorf("%s: %q first hit %v %q", tc.name, tc.query, h.Kind, h.Path)
+		}
+	}
+	for _, h := range Search(mysql, "app.users", 10) {
+		if h.Kind == ItemColumn {
+			t.Errorf("the last segment matches the name, not a parent: %+v", h.Item)
+		}
+	}
+	if hits := Search(mysql, "logs.users", 10); len(hits) != 0 {
+		t.Errorf("users is not in Logs: %+v", hits)
+	}
+	hits := Search(mysql, "users.", 10)
+	if len(hits) != 2 {
+		t.Fatalf("a trailing dot lists the children: %+v", hits)
+	}
+	for _, h := range hits {
+		if h.Kind != ItemColumn || h.Table != "users" {
+			t.Errorf("users. hit %+v", h.Item)
+		}
+	}
+	if hits := Search(mysql, "email", 10); len(hits) == 0 || hits[0].Path != "users.email" {
+		t.Errorf("a bare column name still finds the column: %+v", hits)
+	}
+}
+
 func bigCatalog(tables, cols int) db.Catalog {
 	ns := db.Namespace{Database: "app", Schema: "public"}
 	c := db.Catalog{Databases: []string{"app", "other"}, Namespaces: []db.Namespace{ns}}
@@ -105,3 +162,10 @@ func BenchmarkSearch(b *testing.B) {
 }
 
 const searchBenchLimit = 200
+
+func BenchmarkSearchQualified(b *testing.B) {
+	snaps := []*Snapshot{snap(Key{Conn: "pg", Database: "app"}, bigCatalog(5000, 40))}
+	for b.Loop() {
+		Search(snaps, "app.t12.c3", searchBenchLimit)
+	}
+}

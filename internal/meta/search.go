@@ -36,6 +36,27 @@ type Item struct {
 	Detail  string     // column type; routine kind and arguments
 	Routine db.Routine // ItemRoutine only
 	Path    string     // what queries match: "users", "users.email", "add_one", "public", "app"
+	qpath   string     // what dotted queries match: "app.users.email", "shop.public.orders"
+}
+
+// parts are the names from the database down to the item.
+func (it *Item) parts() []string {
+	p := []string{it.NS.Database}
+	if it.Kind == ItemDatabase {
+		return p
+	}
+	if it.NS.Schema != "" {
+		p = append(p, it.NS.Schema)
+	}
+	switch it.Kind {
+	case ItemTable, ItemView:
+		p = append(p, it.Table)
+	case ItemColumn:
+		p = append(p, it.Table, it.Name)
+	case ItemRoutine:
+		p = append(p, it.Name)
+	}
+	return p
 }
 
 // Hit is an item that matches a query.
@@ -73,6 +94,9 @@ func buildItems(k Key, c db.Catalog) []Item {
 			Detail: routineDetail(r), Routine: r, Path: r.Name,
 		})
 	}
+	for i := range out {
+		out[i].qpath = strings.Join(out[i].parts(), ".")
+	}
 	return out
 }
 
@@ -90,13 +114,14 @@ func routineDetail(r db.Routine) string {
 // source presents the items of several snapshots as one fuzzy.Source
 // without copying them.
 type source struct {
-	snaps  []*Snapshot
-	starts []int
-	n      int
+	snaps     []*Snapshot
+	starts    []int
+	n         int
+	qualified bool // match the qualified paths
 }
 
-func newSource(snaps []*Snapshot) source {
-	s := source{snaps: snaps, starts: make([]int, len(snaps))}
+func newSource(snaps []*Snapshot, qualified bool) source {
+	s := source{snaps: snaps, starts: make([]int, len(snaps)), qualified: qualified}
 	for i, sn := range snaps {
 		s.starts[i] = s.n
 		s.n += len(sn.items)
@@ -109,19 +134,42 @@ func (s source) item(i int) *Item {
 	return &s.snaps[k].items[i-s.starts[k]]
 }
 
-func (s source) String(i int) string { return s.item(i).Path }
-func (s source) Len() int            { return s.n }
+func (s source) String(i int) string {
+	if s.qualified {
+		return s.item(i).qpath
+	}
+	return s.item(i).Path
+}
+func (s source) Len() int { return s.n }
 
 // Search matches query (fuzzy, ignoring case) against the items of snaps
 // and returns at most limit hits, best first. Every PostgreSQL catalog of
 // a connection lists all of its databases, so each database appears once.
+//
+// A dotted query is matched by segment: the last one against the item's
+// name, the others, in order, against its database, schema and table
+// (any of which may be left out), so "app.users.email" and "us.em" find
+// the column email of app.users and "users." lists its columns.
 func Search(snaps []*Snapshot, query string, limit int) []Hit {
 	query = strings.TrimSpace(query)
 	if query == "" || limit <= 0 {
 		return nil
 	}
-	src := newSource(snaps)
+	var segs []string
+	if strings.Contains(query, ".") {
+		segs = strings.Split(strings.ToLower(query), ".")
+	}
+	src := newSource(snaps, segs != nil)
 	ms := fuzzy.FindFromNoSort(query, src)
+	if segs != nil {
+		kept := ms[:0]
+		for _, m := range ms {
+			if matchSegments(segs, src.item(m.Index).parts()) {
+				kept = append(kept, m)
+			}
+		}
+		ms = kept
+	}
 	sort.SliceStable(ms, func(i, j int) bool {
 		a, b := ms[i], ms[j]
 		if a.Score != b.Score {
@@ -149,4 +197,39 @@ func Search(snaps []*Snapshot, query string, limit int) []Hit {
 		}
 	}
 	return out
+}
+
+// matchSegments reports whether the last segment fuzzily matches the last
+// part and the others match earlier parts in order; an empty segment
+// matches any one part.
+func matchSegments(segs, parts []string) bool {
+	last := len(segs) - 1
+	if !subsequence(segs[last], parts[len(parts)-1]) {
+		return false
+	}
+	j := len(parts) - 2
+	for i := last - 1; i >= 0; i-- {
+		for j >= 0 && !subsequence(segs[i], parts[j]) {
+			j--
+		}
+		if j < 0 {
+			return false
+		}
+		j--
+	}
+	return true
+}
+
+// subsequence reports whether the runes of seg (lower case) appear in s in
+// order, ignoring case.
+func subsequence(seg, s string) bool {
+	s = strings.ToLower(s)
+	for _, r := range seg {
+		i := strings.IndexRune(s, r)
+		if i < 0 {
+			return false
+		}
+		s = s[i+len(string(r)):]
+	}
+	return true
 }

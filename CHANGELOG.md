@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- The search takes dotted queries matched by segment: `app.users.email`, `ap.usr.eml`,
+  `shop.orders.total` (the schema left out) or `users.` (the columns of users). The last
+  segment matches the name, the others its database, schema and table.
 - `<Space>yd` copies the DDL of the table under the cursor in the tree, a data tab or a
   structure tab, without opening anything.
 - `<Space>S` opens the full structure of the table under the cursor, skipping the columns popup.
