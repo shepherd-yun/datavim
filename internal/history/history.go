@@ -22,6 +22,7 @@ const (
 	RecentData      = "data"
 	RecentStructure = "structure"
 	RecentConsole   = "console"
+	RecentFile      = "file" // Name holds the file's absolute path
 )
 
 // Recent is a table, structure view or console the user opened.

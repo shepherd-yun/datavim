@@ -232,6 +232,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.hostTrusted(msg)
 	case overlay.CommandMsg:
 		return m, m.runCommand(msg.Text)
+	case fileReadMsg:
+		return m, m.fileRead(msg)
 	case quitConfirmedMsg:
 		return m, m.quit()
 	case closeTabConfirmedMsg:
@@ -659,6 +661,11 @@ func (m *Model) runCommand(text string) tea.Cmd {
 	if opt, ok := strings.CutPrefix(cmd, "set "); ok {
 		return m.setOption(strings.TrimSpace(opt))
 	}
+	verb, arg, _ := strings.Cut(cmd, " ")
+	arg = strings.TrimSpace(arg)
+	if verb == "e" || verb == "edit" {
+		return m.editFile(arg)
+	}
 	switch cmd {
 	case "":
 	case "q", "close":
@@ -1049,6 +1056,54 @@ func (m *Model) openScriptConsole(conn string, ns db.Namespace, text string) tea
 	return tea.Batch(open, c.insertText(text), m.ensureMeta(conn, ns.Database))
 }
 
+// editFile carries out :e path on the connection in context.
+func (m *Model) editFile(arg string) tea.Cmd {
+	if arg == "" {
+		m.setStatus(":e needs a file name", true)
+		return nil
+	}
+	path, err := absPath(arg)
+	if err != nil {
+		m.setStatus(err.Error(), true)
+		return nil
+	}
+	conn, ns := m.contextNamespace()
+	if conn == "" {
+		m.setStatus("open a console or select a connection first", true)
+		return nil
+	}
+	return m.openFile(conn, ns, path)
+}
+
+// openFile switches to path's console on conn, or reads path for a new one.
+func (m *Model) openFile(conn string, ns db.Namespace, path string) tea.Cmd {
+	key := fileTabKey(path, conn, ns)
+	for i, t := range m.tabs {
+		if t.Key() == key {
+			m.gotoTab(i)
+			return nil
+		}
+	}
+	return readSQLFile(conn, ns, path)
+}
+
+// fileRead opens the console for a file openFile read.
+func (m *Model) fileRead(msg fileReadMsg) tea.Cmd {
+	if msg.err != nil {
+		m.setStatus(msg.err.Error(), true)
+		return nil
+	}
+	f := msg.file
+	rec := history.Recent{Kind: history.RecentFile, Conn: msg.conn, Database: msg.ns.Database, Schema: msg.ns.Schema, Name: f.path}
+	return tea.Batch(m.openTab(fileTabKey(f.path, msg.conn, msg.ns), rec, func(id int) tab {
+		c := newConsoleTab(id, m.backend, m.store, m.catalogs, msg.conn, msg.ns, m.settings, m.timings)
+		c.keys, c.res.keys = m.keys, m.keys
+		c.file = &f
+		c.editor.SetValue(f.saved)
+		return c
+	}), m.ensureMeta(msg.conn, msg.ns.Database))
+}
+
 func shutdownCmd(t tab) tea.Cmd {
 	s, ok := t.(shutdowner)
 	if !ok {
@@ -1392,5 +1447,9 @@ func (m *Model) location() string {
 			parts = append(parts, p)
 		}
 	}
-	return strings.Join(parts, "/")
+	loc := strings.Join(parts, "/")
+	if c, ok := m.activeTab().(*consoleTab); ok && m.focus == focusTabs && c.file != nil {
+		loc += "  " + shortPath(c.file.path, 40)
+	}
+	return loc
 }

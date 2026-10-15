@@ -97,7 +97,8 @@ func consoleTabKey(conn string, ns db.Namespace) string {
 
 type consoleTab struct {
 	id         int
-	scratchKey string // a script console's own tab key; such a console keeps no draft
+	scratchKey string       // a script console's own tab key; such a console keeps no draft
+	file       *consoleFile // the .sql file this console edits; nil for a plain console
 	keys       *keymap.Keymap
 	backend    Backend
 	store      Store
@@ -169,6 +170,9 @@ func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn strin
 
 func (t *consoleTab) ID() int { return t.id }
 func (t *consoleTab) Key() string {
+	if t.file != nil {
+		return fileTabKey(t.file.path, t.conn, t.ns)
+	}
 	if t.scratchKey != "" {
 		return t.scratchKey
 	}
@@ -176,6 +180,15 @@ func (t *consoleTab) Key() string {
 }
 
 func (t *consoleTab) Title() string {
+	if t.file != nil {
+		switch {
+		case t.file.isNew:
+			return t.file.name() + " [new]"
+		case t.dirty():
+			return t.file.name() + " [+]"
+		}
+		return t.file.name()
+	}
 	prefix := "console:"
 	if t.scratchKey != "" {
 		prefix = "sync:"
@@ -185,6 +198,9 @@ func (t *consoleTab) Title() string {
 	}
 	return prefix + t.conn
 }
+
+// dirty reports a file console whose text differs from the file's.
+func (t *consoleTab) dirty() bool { return t.file != nil && t.editor.Value() != t.file.saved }
 
 func (t *consoleTab) Context() keymap.Context {
 	if t.onResults {
@@ -960,7 +976,7 @@ func (m editTextMsg) TabID() int      { return m.tabID }
 func (m clipboardTextMsg) TabID() int { return m.tabID }
 
 func (t *consoleTab) Init() tea.Cmd {
-	if t.scratchKey != "" {
+	if t.scratchKey != "" || t.file != nil {
 		return nil
 	}
 	id, st, key := t.id, t.store, t.Key()
@@ -980,7 +996,7 @@ func (t *consoleTab) scheduleDraft() tea.Cmd {
 }
 
 func (t *consoleTab) saveDraft() func() {
-	if t.scratchKey != "" {
+	if t.scratchKey != "" || t.file != nil {
 		return func() {}
 	}
 	st, key, text := t.store, t.Key(), t.editor.Value()
