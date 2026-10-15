@@ -33,6 +33,9 @@ type fakeConn struct {
 	affected   map[string]int64               // statement text -> RowsAffected (default 1)
 	tables     []db.Table                     // returned by Tables when set
 	schemas    map[db.TableRef]db.TableSchema // returned by TableSchema
+	data       map[string]*db.ResultSet       // table name -> what a query FROM `app`.`name` returns
+	blockData  bool                           // data queries wait until their context ends
+	dropAt     int                            // the next Stream fails with ErrConnLost after this many rows
 }
 
 func (c *fakeConn) setNoKey(v bool) {
@@ -58,6 +61,38 @@ func (c *fakeConn) setSchemas(ss ...db.TableSchema) {
 	}
 }
 
+func (c *fakeConn) setData(table string, cols []db.ColumnInfo, rows ...[]db.Value) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.data == nil {
+		c.data = map[string]*db.ResultSet{}
+	}
+	c.data[table] = &db.ResultSet{Columns: cols, Rows: rows}
+}
+
+func (c *fakeConn) setBlockData(v bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.blockData = v
+}
+
+func (c *fakeConn) setStreamDrop(n int) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.dropAt = n
+}
+
+// tableData is what setData stored for the table q reads from; the caller
+// holds mu.
+func (c *fakeConn) tableData(q string) *db.ResultSet {
+	for name, rs := range c.data {
+		if strings.Contains(q, " FROM `app`.`"+name+"`") {
+			return rs
+		}
+	}
+	return nil
+}
+
 func (c *fakeConn) keyless() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -71,6 +106,7 @@ func (c *fakeConn) Query(ctx context.Context, q string, _ ...any) (*db.ResultSet
 	c.mu.Lock()
 	c.queries = append(c.queries, q)
 	err, rows := c.fail[q], c.rows
+	data, block := c.tableData(q), c.blockData
 	c.mu.Unlock()
 	if q == slowQuery {
 		<-ctx.Done()
@@ -78,6 +114,15 @@ func (c *fakeConn) Query(ctx context.Context, q string, _ ...any) (*db.ResultSet
 	}
 	if err != nil {
 		return nil, err
+	}
+	if data != nil {
+		if block {
+			<-ctx.Done()
+		}
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		return data, nil
 	}
 	rs := &db.ResultSet{Columns: []db.ColumnInfo{{Name: "id"}, {Name: "name"}}}
 	for i := range rows {
@@ -98,8 +143,15 @@ func (c *fakeConn) Stream(ctx context.Context, q string, onColumns func([]db.Col
 	if err != nil {
 		return err
 	}
+	c.mu.Lock()
+	drop := c.dropAt
+	c.dropAt = 0
+	c.mu.Unlock()
 	onColumns(rs.Columns)
-	for _, r := range rs.Rows {
+	for i, r := range rs.Rows {
+		if drop > 0 && i == drop {
+			return fmt.Errorf("%w: connection reset by peer", db.ErrConnLost)
+		}
 		if err := onRow(r); err != nil {
 			if errors.Is(err, db.ErrStop) {
 				return nil

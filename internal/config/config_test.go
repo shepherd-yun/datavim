@@ -391,3 +391,22 @@ func TestRemoveConnection(t *testing.T) {
 		t.Fatalf("mode = %v", info.Mode().Perm())
 	}
 }
+
+func TestCompareMaxRows(t *testing.T) {
+	if got := DefaultSettings().CompareMaxRows; got != 100000 {
+		t.Fatalf("CompareMaxRows default = %d", got)
+	}
+	dir := t.TempDir()
+	writeFile(t, dir, "config.toml", "compare_max_rows = 5000\n")
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Settings.CompareMaxRows != 5000 {
+		t.Fatalf("settings = %+v", cfg.Settings)
+	}
+	writeFile(t, dir, "config.toml", "compare_max_rows = 0\n")
+	if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), "compare_max_rows") {
+		t.Fatalf("err = %v", err)
+	}
+}

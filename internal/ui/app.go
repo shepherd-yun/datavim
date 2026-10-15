@@ -872,6 +872,9 @@ func (m *Model) openDiff(src, tgt compareSide) tea.Cmd {
 	return m.showTab(diffTabKey(src, tgt), func(id int) tab {
 		t := newDiffTab(id, m.backend, src, tgt)
 		t.keys = m.keys
+		if m.settings.CompareMaxRows > 0 {
+			t.maxRows = m.settings.CompareMaxRows
+		}
 		return t
 	})
 }

@@ -49,13 +49,14 @@ type Settings struct {
 	PageSize       int    `toml:"page_size"`
 	MaxColumnWidth int    `toml:"max_column_width"`
 	MaxRows        int    `toml:"max_rows"`
+	CompareMaxRows int    `toml:"compare_max_rows"`
 	Editor         string `toml:"editor"`
 	ExportDir      string `toml:"export_dir"`
 }
 
 // DefaultSettings returns the settings used when config.toml omits a key.
 func DefaultSettings() Settings {
-	return Settings{PageSize: 200, MaxColumnWidth: 40, MaxRows: 1000}
+	return Settings{PageSize: 200, MaxColumnWidth: 40, MaxRows: 1000, CompareMaxRows: 100000}
 }
 
 // EditorCommand is the command line <space>v runs: the editor setting, then
@@ -132,6 +133,9 @@ func Load(dir string) (*Config, error) {
 	}
 	if cfg.Settings.MaxRows <= 0 {
 		return nil, fmt.Errorf("%s: max_rows must be positive", settingsPath)
+	}
+	if cfg.Settings.CompareMaxRows <= 0 {
+		return nil, fmt.Errorf("%s: compare_max_rows must be positive", settingsPath)
 	}
 	if err := decodeFile(filepath.Join(dir, "keymap.toml"), &cfg.Keymap); err != nil {
 		return nil, err

@@ -2,6 +2,7 @@
 page_size        = 200            # rows per page in table data tabs
 max_column_width = 40             # widest a grid column gets
 max_rows         = 1000           # rows a console query fetches (] loads more)
+compare_max_rows = 100000         # rows a data compare (D in a diff tab) reads per side
 editor           = "nvim"         # <space>v; default: $VISUAL, then $EDITOR, then nvim
 export_dir       = "~/Downloads"  # default directory for <space>x exports
 

@@ -123,6 +123,8 @@ type diffTab struct {
 	src     compareSide
 	tgt     compareSide
 	now     func() time.Time
+	maxRows int       // compare_max_rows: rows the data view reads per side
+	data    *dataView // the data view, while it is shown
 
 	loading   bool
 	cancel    context.CancelFunc
@@ -148,7 +150,7 @@ type diffTab struct {
 func newDiffTab(id int, b Backend, src, tgt compareSide) *diffTab {
 	return &diffTab{
 		id: id, key: diffTabKey(src, tgt), backend: b, src: src, tgt: tgt,
-		now: time.Now, keys: keymap.Default(),
+		now: time.Now, keys: keymap.Default(), maxRows: config.DefaultSettings().CompareMaxRows,
 	}
 }
 
@@ -162,7 +164,12 @@ func (t *diffTab) SetSize(w, h int)              { t.width, t.height = max(w, 0)
 
 func (t *diffTab) usesConn(conn string) bool { return conn == t.src.conn || conn == t.tgt.conn }
 
-func (t *diffTab) retryAfterPassword() tea.Cmd { return t.load() }
+func (t *diffTab) retryAfterPassword() tea.Cmd {
+	if t.data != nil {
+		return t.loadData()
+	}
+	return t.load()
+}
 
 func (t *diffTab) setStatus(s string, isErr bool) { t.status, t.statusErr = s, isErr }
 
@@ -186,11 +193,14 @@ func (t *diffTab) load() tea.Cmd {
 }
 
 func (t *diffTab) cancelRun() tea.Cmd {
-	if t.loading && t.cancel != nil {
+	switch {
+	case t.data != nil && t.data.loading && t.data.cancel != nil:
+		t.data.cancel()
+	case t.data == nil && t.loading && t.cancel != nil:
 		t.cancel()
-		return nil
+	default:
+		t.setStatus("nothing is loading", false)
 	}
-	t.setStatus("nothing is loading", false)
 	return nil
 }
 
@@ -205,19 +215,27 @@ func sideError(err error) string {
 }
 
 func (t *diffTab) Update(msg tea.Msg) tea.Cmd {
-	m, ok := msg.(diffLoadedMsg)
-	if !ok || m.gen != t.gen {
-		return nil
+	switch m := msg.(type) {
+	case diffLoadedMsg:
+		t.structureLoaded(m)
+	case dataLoadedMsg:
+		t.dataLoaded(m)
+	}
+	return nil
+}
+
+func (t *diffTab) structureLoaded(m diffLoadedMsg) {
+	if m.gen != t.gen {
+		return
 	}
 	t.loading, t.cancel = false, nil
 	t.srcErr, t.tgtErr = sideError(m.srcErr), sideError(m.tgtErr)
 	if t.srcErr != "" || t.tgtErr != "" {
 		t.objects = nil
-		return nil
+		return
 	}
 	t.srcTables, t.tgtTables, t.writer = m.src, m.tgt, m.writer
 	t.compute()
-	return nil
 }
 
 // compute diffs the loaded sides and resets the choices to their defaults:
@@ -279,6 +297,9 @@ func (t *diffTab) move(delta int) {
 
 func (t *diffTab) Handle(a keymap.Action) tea.Cmd {
 	t.setStatus("", false)
+	if t.data != nil {
+		return t.handleData(a)
+	}
 	switch a {
 	case keymap.Down:
 		t.move(1)
@@ -308,6 +329,10 @@ func (t *diffTab) Handle(a keymap.Action) tea.Cmd {
 		return t.load()
 	case keymap.WriteScript:
 		return t.writeScript()
+	case keymap.DataDiff:
+		return t.openData()
+	case keymap.FilterPrompt:
+		t.setStatus(joinHints("the filter narrows a data compare", keyHint(t.keys, keymap.Diff, keymap.DataDiff, "compares the data")), false)
 	}
 	return nil
 }
@@ -551,17 +576,26 @@ func (t *diffTab) statusLine() string {
 		}
 		return t.status
 	}
+	if t.data != nil {
+		return t.dataHints()
+	}
 	return theme.Muted.Render(joinHints(
 		keyHint(t.keys, keymap.Diff, keymap.ToggleChange, "include/skip"),
 		keyHint(t.keys, keymap.Diff, keymap.NextChange, "next change"),
 		keyHint(t.keys, keymap.Diff, keymap.SwapSides, "swap"),
 		keyHint(t.keys, keymap.Diff, keymap.WriteScript, "script to console"),
+		keyHint(t.keys, keymap.Diff, keymap.DataDiff, "data"),
 		keyHint(t.keys, keymap.Global, keymap.Refresh, "reload"),
 	))
 }
 
 func (t *diffTab) View(bool) string {
-	lines := append([]string{textutil.Fit(t.header(), t.width)}, t.body()...)
+	var lines []string
+	if t.data != nil {
+		lines = t.dataLines()
+	} else {
+		lines = append([]string{textutil.Fit(t.header(), t.width)}, t.body()...)
+	}
 	for len(lines) < t.height-1 {
 		lines = append(lines, "")
 	}
