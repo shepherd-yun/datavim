@@ -426,3 +426,26 @@ func TestIcons(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestLoadInReadsConnectionsFromWorkspace(t *testing.T) {
+	root := t.TempDir()
+	connDir := filepath.Join(root, "workspaces", "personal")
+	if err := os.MkdirAll(connDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, root, "connections.toml", "[[connection]]\nname = \"work-db\"\ndriver = \"mysql\"\n")
+	writeFile(t, connDir, "connections.toml", "[[connection]]\nname = \"home-db\"\ndriver = \"postgres\"\n")
+	writeFile(t, root, "config.toml", "page_size = 7\n")
+	writeFile(t, root, "keymap.toml", "leader = \",\"\n")
+
+	cfg, err := LoadIn(root, connDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Connections) != 1 || cfg.Connections[0].Name != "home-db" {
+		t.Fatalf("connections = %+v, want only home-db", cfg.Connections)
+	}
+	if cfg.Settings.PageSize != 7 || cfg.Keymap.Leader != "," {
+		t.Fatalf("settings/keymap come from the root: %+v, %+v", cfg.Settings, cfg.Keymap)
+	}
+}

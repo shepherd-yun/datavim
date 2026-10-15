@@ -113,10 +113,14 @@ type connectionsFile struct {
 }
 
 // Load reads connections.toml, config.toml and keymap.toml from dir. Missing files are not an error.
-func Load(dir string) (*Config, error) {
+func Load(dir string) (*Config, error) { return LoadIn(dir, dir) }
+
+// LoadIn reads config.toml and keymap.toml from root and connections.toml
+// from connDir, a workspace's directory. Missing files are not an error.
+func LoadIn(root, connDir string) (*Config, error) {
 	cfg := &Config{Settings: DefaultSettings()}
 
-	connPath := filepath.Join(dir, "connections.toml")
+	connPath := filepath.Join(connDir, "connections.toml")
 	var cf connectionsFile
 	if err := decodeFile(connPath, &cf); err != nil {
 		return nil, err
@@ -127,7 +131,7 @@ func Load(dir string) (*Config, error) {
 	}
 	cfg.Connections = conns
 
-	settingsPath := filepath.Join(dir, "config.toml")
+	settingsPath := filepath.Join(root, "config.toml")
 	sf := settingsFile{Settings: cfg.Settings}
 	if err := decodeFile(settingsPath, &sf); err != nil {
 		return nil, err
@@ -148,7 +152,7 @@ func Load(dir string) (*Config, error) {
 	if i := cfg.Settings.Icons; i != IconsNerd && i != IconsPlain {
 		return nil, fmt.Errorf("%s: icons must be %q or %q, got %q", settingsPath, IconsNerd, IconsPlain, i)
 	}
-	if err := decodeFile(filepath.Join(dir, "keymap.toml"), &cfg.Keymap); err != nil {
+	if err := decodeFile(filepath.Join(root, "keymap.toml"), &cfg.Keymap); err != nil {
 		return nil, err
 	}
 	return cfg, nil
