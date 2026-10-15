@@ -827,7 +827,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 		add := "ALTER TABLE " + tbl + " ADD COLUMN extra int"
 		err = edit.ApplyDDL(ctx, s, sqlx.DialectOf(f.Driver), []string{add, add})
 		var de *edit.DDLError
@@ -934,7 +934,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		s, err := conn.Session(ctx)
 		must(err)
-		defer s.Close()
+		defer func() { _ = s.Close() }()
 		if err := edit.ApplyDDL(ctx, s, dialect, alter); err != nil {
 			t.Fatalf("%s: %v", strings.Join(alter, ";\n"), err)
 		}
