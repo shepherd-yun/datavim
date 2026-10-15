@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -20,14 +21,14 @@ type childrenLoadedMsg struct {
 // loadChildren copies what it needs from n so the goroutine never reads
 // fields the UI goroutine may be writing.
 func loadChildren(b Backend, n *tree.Node) tea.Cmd {
-	kind, connName, ns := n.Kind, n.Conn, n.NS
+	kind, connName, ns, name := n.Kind, n.Conn, n.NS, n.Name
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 		defer cancel()
 		var children []*tree.Node
 		err := withConn(ctx, b, connName, ns.Database, func(c db.Conn) error {
 			var err error
-			children, err = fetchChildren(ctx, c, kind, connName, ns)
+			children, err = fetchChildren(ctx, c, kind, connName, ns, name)
 			return err
 		})
 		if err != nil {
@@ -37,7 +38,7 @@ func loadChildren(b Backend, n *tree.Node) tea.Cmd {
 	}
 }
 
-func fetchChildren(ctx context.Context, c db.Conn, kind tree.Kind, connName string, ns db.Namespace) ([]*tree.Node, error) {
+func fetchChildren(ctx context.Context, c db.Conn, kind tree.Kind, connName string, ns db.Namespace, name string) ([]*tree.Node, error) {
 	meta := c.Meta()
 	switch kind {
 	case tree.KindConn:
@@ -65,6 +66,23 @@ func fetchChildren(ctx context.Context, c db.Conn, kind tree.Kind, connName stri
 		return nodes, nil
 	case tree.KindSchema:
 		return tableNodes(ctx, meta, connName, ns)
+	case tree.KindTable:
+		ref := db.TableRef{Namespace: ns, Name: name}
+		s, err := meta.TableSchema(ctx, ref)
+		if errors.Is(err, db.ErrNotFound) {
+			return nil, fmt.Errorf("table %s not found", name)
+		}
+		if err != nil {
+			return nil, err
+		}
+		return tableChildren(connName, s), nil
+	case tree.KindView:
+		ref := db.TableRef{Namespace: ns, Name: name}
+		cols, err := meta.Columns(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		return tableChildren(connName, db.TableSchema{Ref: ref, Columns: cols}), nil
 	}
 	return nil, fmt.Errorf("tree node kind %d has no children", kind)
 }
