@@ -136,39 +136,46 @@ func diffIndexes(target, source db.TableSchema) (drops, adds []db.SchemaChange) 
 	take(func(t, s *db.Index) bool { return t.Name == s.Name })
 	take(func(t, s *db.Index) bool { return sameIndex(*t, *s) })
 
-	drop := func(old, replacement *db.Index) {
-		ch := db.SchemaChange{Kind: db.DropIndex, OldIndex: old}
-		if old.Unique && (replacement == nil || !replacement.Unique) {
-			ch.Risk = db.Destructive
-		}
-		drops = append(drops, ch)
-	}
-	add := func(ix *db.Index, name string) {
-		cp := *ix
-		cp.Name = name
-		ch := db.SchemaChange{Kind: db.AddIndex, NewIndex: &cp}
-		if cp.Unique {
-			ch.Risk = db.Lossy
-		}
-		adds = append(adds, ch)
-	}
 	for _, p := range pairs {
 		if !sameIndex(*p[0], *p[1]) {
-			drop(p[0], p[1])
-			add(p[1], p[0].Name)
+			drops = append(drops, dropIndex(p[0], p[1]))
+			adds = append(adds, addIndex(p[1], p[0].Name))
 		}
 	}
 	for _, t := range tgt {
 		if t != nil {
-			drop(t, nil)
+			drops = append(drops, dropIndex(t, nil))
 		}
 	}
 	for _, s := range src {
 		if s != nil {
-			add(s, indexName(s.Name, source.Ref.Name, target.Ref.Name))
+			adds = append(adds, addIndex(s, indexName(s.Name, source.Ref.Name, target.Ref.Name)))
 		}
 	}
 	return drops, adds
+}
+
+// dropIndex is the change that drops old; replacement is the index that
+// takes its place, if any. Dropping the only unique index on its columns
+// is destructive.
+func dropIndex(old, replacement *db.Index) db.SchemaChange {
+	ch := db.SchemaChange{Kind: db.DropIndex, OldIndex: old}
+	if old.Unique && (replacement == nil || !replacement.Unique) {
+		ch.Risk = db.Destructive
+	}
+	return ch
+}
+
+// addIndex is the change that adds a copy of ix named name. A unique index
+// fails on duplicate rows, so it is lossy.
+func addIndex(ix *db.Index, name string) db.SchemaChange {
+	cp := *ix
+	cp.Name = name
+	ch := db.SchemaChange{Kind: db.AddIndex, NewIndex: &cp}
+	if cp.Unique {
+		ch.Risk = db.Lossy
+	}
+	return ch
 }
 
 // indexName is the name source's index gets on target's table. Names that
