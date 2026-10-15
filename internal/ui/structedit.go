@@ -104,6 +104,7 @@ func (t *structureTab) schemaLoaded(m schemaLoadedMsg) {
 	if m.err != nil {
 		t.retryEdit = errors.Is(m.err, session.ErrPasswordRequired)
 		t.setStatus(errorText(m.err), true)
+		t.focus = nil
 		return
 	}
 	t.ed, t.ddl = schemaedit.New(m.schema, t.dialect), m.ddl
@@ -112,6 +113,7 @@ func (t *structureTab) schemaLoaded(m schemaLoadedMsg) {
 		t.view.SetCursor(structure.Columns, 0)
 	}
 	t.setStatus("", false)
+	t.applyFocus()
 }
 
 // stopEdit goes back to the table as read, dropping any staged edits.

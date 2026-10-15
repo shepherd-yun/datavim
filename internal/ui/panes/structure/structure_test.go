@@ -194,3 +194,20 @@ func TestCursorKeepsItsRowVisible(t *testing.T) {
 		t.Fatalf("the top shows the header:\n%s", v)
 	}
 }
+
+func TestFind(t *testing.T) {
+	m := New(sqlx.MySQL)
+	m.SetData(data())
+	for _, c := range data().Columns {
+		if row, ok := m.Find(Columns, c.Name); !ok || data().Columns[row].Name != c.Name {
+			t.Fatalf("Find(Columns, %s) = %d %v", c.Name, row, ok)
+		}
+	}
+	if _, ok := m.Find(Columns, "nope"); ok {
+		t.Fatal("unknown name")
+	}
+	ix := data().Indexes[0].Name
+	if row, ok := m.Find(Indexes, ix); !ok || row != 0 {
+		t.Fatalf("Find(Indexes, %s) = %d %v", ix, row, ok)
+	}
+}

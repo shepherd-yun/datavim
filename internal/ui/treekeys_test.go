@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/structure"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
 )
 
 // expandUsers selects local/app/users and expands it with l.
@@ -101,5 +103,147 @@ func TestRefreshOnAnUnloadedTableDoesNotExpandIt(t *testing.T) {
 	press(t, m, "space", "r")
 	if n := m.tree.Selected(); n.Expanded || n.Loaded {
 		t.Fatalf("users = %+v", n)
+	}
+}
+
+func structTab(t *testing.T, m *Model) *structureTab {
+	t.Helper()
+	st, ok := m.activeTab().(*structureTab)
+	if !ok {
+		t.Fatalf("active tab %T:\n%s", m.activeTab(), screen(m))
+	}
+	return st
+}
+
+func TestEnterOnColumnOpensItsStructureRow(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	selectNode(t, m, "local", "app", "users", "Columns", "name")
+	press(t, m, "enter")
+	st := structTab(t, m)
+	if st.view.Section() != structure.Columns || st.view.CursorName() != "name" || st.ed != nil {
+		t.Fatalf("section %v cursor %q editing %v", st.view.Section(), st.view.CursorName(), st.ed != nil)
+	}
+}
+
+func TestEnterOnIndexOpensTheIndexesSection(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	selectNode(t, m, "local", "app", "users", "Indexes", "PRIMARY")
+	press(t, m, "enter")
+	st := structTab(t, m)
+	if st.view.Section() != structure.Indexes || st.view.CursorName() != "PRIMARY" {
+		t.Fatalf("section %v cursor %q", st.view.Section(), st.view.CursorName())
+	}
+}
+
+func TestEOnColumnModifiesAtIt(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	selectNode(t, m, "local", "app", "users", "Columns", "name")
+	press(t, m, "e")
+	st := structTab(t, m)
+	if st.ed == nil || st.view.CursorName() != "name" || st.changes() != 0 {
+		t.Fatalf("editing %v cursor %q changes %d", st.ed != nil, st.view.CursorName(), st.changes())
+	}
+}
+
+func TestDDOnColumnStagesItsDrop(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	selectNode(t, m, "local", "app", "users", "Columns", "name")
+	press(t, m, "d", "d")
+	st := structTab(t, m)
+	if st.ed == nil || st.changes() != 1 {
+		t.Fatalf("editing %v changes %d", st.ed != nil, st.changes())
+	}
+	if execs := b.conn.execList(); len(execs) != 0 {
+		t.Fatalf("dd only stages; ran %q", execs)
+	}
+	if !strings.Contains(screen(m), "drop name staged") {
+		t.Fatalf("status:\n%s", screen(m))
+	}
+}
+
+func TestDDOnColumnOfReadOnlyConnection(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	if err := b.SetReadOnly("local", true); err != nil {
+		t.Fatal(err)
+	}
+	selectNode(t, m, "local", "app", "users", "Columns", "name")
+	press(t, m, "d", "d")
+	if !strings.Contains(screen(m), "read-only") {
+		t.Fatalf("status:\n%s", screen(m))
+	}
+	if err := b.SetReadOnly("local", false); err != nil {
+		t.Fatal(err)
+	}
+	if st, ok := m.activeTab().(*structureTab); ok {
+		press(t, m, "e") // modifying later must not apply the refused drop
+		if st.changes() != 0 {
+			t.Fatal("a refused dd left a pending drop")
+		}
+	}
+}
+
+func TestStaleLeafDropsNothing(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	selectNode(t, m, "local", "app", "users", "Columns", "name")
+	s := usersSchema()
+	s.Columns = s.Columns[:1] // name was dropped elsewhere; the tree is stale
+	b.conn.setSchemas(s)
+	press(t, m, "d", "d")
+	st := structTab(t, m)
+	if st.changes() != 0 {
+		t.Fatal("a stale leaf staged a drop of another row")
+	}
+	if !strings.Contains(screen(m), "name is not in users any more") {
+		t.Fatalf("status:\n%s", screen(m))
+	}
+}
+
+func TestForeignKeyLeaf(t *testing.T) {
+	m, b := newTestModel(t)
+	app := db.Namespace{Database: "app"}
+	b.conn.setTables([]db.Table{{Name: "orgs"}, {Name: "users"}})
+	s := usersSchema()
+	s.ForeignKeys = []db.ForeignKey{{Name: "fk_org", Columns: []string{"name"}, RefTable: db.TableRef{Namespace: app, Name: "orgs"}, RefColumns: []string{"id"}}}
+	b.conn.setSchemas(s)
+	selectNode(t, m, "local", "app", "users")
+	press(t, m, "l")
+	selectNode(t, m, "local", "app", "users", "Foreign Keys", "fk_org")
+	press(t, m, "e")
+	if !strings.Contains(screen(m), "foreign keys cannot be modified yet") {
+		t.Fatalf("e on a foreign key:\n%s", screen(m))
+	}
+	press(t, m, "enter")
+	if n := m.tree.Selected(); n.Name != "orgs" || n.Kind != tree.KindTable {
+		t.Fatalf("Enter on a foreign key selects the referenced table, got %+v", n)
+	}
+}
+
+func TestViewColumnsCannotBeModified(t *testing.T) {
+	m, _ := newTestModel(t)
+	selectNode(t, m, "local", "app", "active")
+	press(t, m, "l")
+	selectNode(t, m, "local", "app", "active", "Columns", "id")
+	press(t, m, "d", "d")
+	if !strings.Contains(screen(m), "views cannot be modified") {
+		t.Fatalf("dd on a view's column:\n%s", screen(m))
+	}
+	if len(m.tabs) != 0 {
+		t.Fatal("no tab opened")
+	}
+}
+
+func TestDDOnGroupExplains(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	selectNode(t, m, "local", "app", "users", "Columns")
+	press(t, m, "d", "d")
+	if !strings.Contains(screen(m), "select a column or index to drop it") {
+		t.Fatalf("dd on a group:\n%s", screen(m))
 	}
 }

@@ -490,19 +490,7 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 			m.overlay = overlay.NewPassword(n.Conn)
 		}
 	case keymap.EditNode:
-		n := t.Selected()
-		switch {
-		case n == nil:
-		case n.Kind == tree.KindTable:
-			return m.modifyTable(n.Conn, n.TableRef())
-		case n.Kind == tree.KindView:
-			m.setStatus(errViewNotModifiable.Error(), true)
-		case m.canChange(n.Conn):
-			if cfg, ok := m.backend.Connection(n.Conn); ok {
-				m.overlay = overlay.NewEditConnForm(m.keys, cfg)
-			}
-		}
-
+		return m.editNode()
 	case keymap.MarkCompare:
 		m.markCompare()
 	case keymap.Compare:
@@ -525,19 +513,7 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 			m.setStatus("select a table or view to rename", true)
 		}
 	case keymap.DeleteNode:
-		n := t.Selected()
-		switch {
-		case n == nil:
-		case n.IsTable():
-			return m.startTableOp(tableOp{kind: opDrop, conn: n.Conn, ref: n.TableRef(), view: n.Kind == tree.KindView})
-		case n.Kind != tree.KindConn:
-			m.setStatus("only connections, tables and views can be deleted", true)
-		case m.canChange(n.Conn):
-			m.overlay = overlay.NewConfirm("Delete connection", []string{
-				"Delete " + n.Conn + " from connections.toml and its saved password?",
-				"Its open tabs are closed. Type the connection name to confirm.",
-			}, n.Conn, deleteConnMsg{name: n.Conn})
-		}
+		return m.deleteNode()
 	}
 	return nil
 }

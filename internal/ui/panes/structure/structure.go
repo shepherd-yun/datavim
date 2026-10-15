@@ -2,6 +2,7 @@
 package structure
 
 import (
+	"slices"
 	"strings"
 
 	"charm.land/lipgloss/v2"
@@ -117,6 +118,32 @@ func (m *Model) CursorName() string {
 		return m.data.DDL
 	}
 	return ""
+}
+
+// Find returns the row of the column (Columns) or index (Indexes) called
+// name: among the staged rows while editing, else among the rows read.
+func (m *Model) Find(s Section, name string) (int, bool) {
+	var names []string
+	switch {
+	case s == Columns && m.edit != nil:
+		for _, r := range m.edit.Columns() {
+			names = append(names, r.Col.Name)
+		}
+	case s == Columns:
+		for _, c := range m.data.Columns {
+			names = append(names, c.Name)
+		}
+	case s == Indexes && m.edit != nil:
+		for _, r := range m.edit.Indexes() {
+			names = append(names, r.Index.Name)
+		}
+	case s == Indexes:
+		for _, ix := range m.data.Indexes {
+			names = append(names, ix.Name)
+		}
+	}
+	i := slices.Index(names, name)
+	return i, i >= 0
 }
 
 func (m *Model) fieldCount() int {

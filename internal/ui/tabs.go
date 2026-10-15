@@ -536,6 +536,7 @@ type structureTab struct {
 
 	status    string // what the last key did; cleared by the next one
 	statusErr bool
+	focus     *structFocus // where the tree asked for the cursor, until the rows are there
 
 	// Modify Table (structedit.go)
 	ed          *schemaedit.Table // nil unless the table is being modified
@@ -608,10 +609,12 @@ func (t *structureTab) Update(msg tea.Msg) tea.Cmd {
 		t.loading = false
 		if m.err != nil {
 			t.err = m.err.Error()
+			t.focus = nil
 			return nil
 		}
 		t.err = ""
 		t.view.SetData(m.data)
+		t.applyFocus()
 	case schemaLoadedMsg:
 		t.schemaLoaded(m)
 	case structEditedMsg:
