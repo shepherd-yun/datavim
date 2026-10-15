@@ -149,6 +149,8 @@ func DefaultBindings() []Binding {
 	b = append(b,
 		Binding{Popup, keys("ctrl+o"), OpenFullStructure, "Open structure"},
 		Binding{Popup, keys("ctrl+s"), SaveForm, "Save the form"},
+		Binding{Popup, keys("tab"), NextSearchScope, "Search: next scope (objects, consoles, history)"},
+		Binding{Popup, keys("shift+tab"), PrevSearchScope, "Search: previous scope"},
 	)
 	return b
 }

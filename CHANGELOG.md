@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `Tab` / `Shift-Tab` in the search switch its scope between objects, the lines of the open
+  consoles (`Enter` jumps to the line) and the SQL history (an empty query lists the recent
+  statements, `Enter` inserts one like `<Space>h`). A leading `@` narrows every scope to the
+  connection in context. Rebind them as `search.scope.next` / `search.scope.prev` in `[popup]`.
 - The search takes dotted queries matched by segment: `app.users.email`, `ap.usr.eml`,
   `shop.orders.total` (the schema left out) or `users.` (the columns of users). The last
   segment matches the name, the others its database, schema and table.
@@ -45,6 +49,9 @@ All notable changes to this project are documented here. The format follows
   `compare_max_rows` rows (`config.toml`, default 100000); `D` goes back to the structure.
 
 ### Changed
+- `<Space><Space>` searches every connection by default and starts loading the metadata of
+  those not loaded yet when it opens; a leading `@` now narrows the search to the connection
+  in context (it used to be the other way round).
 - The columns popup and the search open the structure with `Ctrl-o` instead of `Ctrl-s`,
   which is a common tmux prefix (and terminal XOFF) and never reached sqlvim there. Their
   footers name the key you bound.

@@ -98,7 +98,7 @@ func TestSearchNoteOmitsAnUnboundRetry(t *testing.T) {
 	b.conn.mu.Unlock()
 	press(t, m, "l")
 	search(t, m, "")
-	if got := m.searchNote(); got != "metadata of local failed: permission denied" {
+	if got := m.searchNote(); got != "metadata of local failed: permission denied · metadata of 1 connection failed" {
 		t.Fatalf("searchNote = %q, want no dangling separator", got)
 	}
 }

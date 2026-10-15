@@ -2,11 +2,14 @@ package ui
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/meta"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
@@ -17,9 +20,22 @@ import (
 const searchLimit = 200
 
 type searchResultsMsg struct {
-	gen  int
-	hits []meta.Hit
-	all  bool // the results span every connection
+	gen     int
+	scope   overlay.SearchScope
+	hits    []meta.Hit // ScopeObjects
+	all     bool       // the results span every connection
+	lines   []consoleLine
+	entries []history.Entry // ScopeHistory
+	err     error
+}
+
+// consoleLine is a line of an open console that matches the search.
+type consoleLine struct {
+	tab       int // the console's tab ID
+	conn      string
+	title     string
+	line, col int
+	text      string
 }
 
 type routineLoadedMsg struct {
@@ -37,24 +53,40 @@ type revealTarget struct {
 	path []string
 }
 
-// openSearch shows the <space><space> popup for the connection in context.
+// openSearch shows the <space><space> popup. It searches every
+// connection, so it starts loading the catalogs that were never loaded;
+// the connection in context is the one a leading @ narrows to.
 func (m *Model) openSearch() tea.Cmd {
 	conn, ns := m.contextNamespace()
-	m.searchConn, m.searchHits, m.searchAll = conn, nil, false
+	m.searchConn, m.searchHits, m.searchPicks, m.searchAll = conn, nil, nil, true
 	m.searchKey, _ = metaKeyFor(m.backend, conn, ns.Database)
-	var cmd tea.Cmd
+	var cmds []tea.Cmd
 	if conn != "" {
-		cmd = m.ensureMeta(conn, ns.Database)
+		cmds = append(cmds, m.ensureMeta(conn, ns.Database))
 	}
-	m.overlay = overlay.NewSearch(m.keys, m.searchNote())
-	return cmd
+	for _, c := range m.backend.Connections() {
+		cmds = append(cmds, m.ensureMeta(c.Name, ""))
+	}
+	m.overlay = overlay.NewSearch(m.keys, m.searchNote(), conn)
+	return tea.Batch(cmds...)
 }
 
-// searchNote explains missing results: metadata loading or failed.
+// searchNote explains missing results: metadata loading or failed, of the
+// connection in context in detail and of the others as counts.
 func (m *Model) searchNote() string {
-	if m.searchAll {
-		return m.searchAllNote()
+	var notes []string
+	if n := m.searchConnNote(); n != "" {
+		notes = append(notes, n)
 	}
+	if m.searchAll {
+		if n := m.searchAllNote(); n != "" {
+			notes = append(notes, n)
+		}
+	}
+	return strings.Join(notes, " · ")
+}
+
+func (m *Model) searchConnNote() string {
 	if m.searchConn == "" {
 		return ""
 	}
@@ -67,11 +99,14 @@ func (m *Model) searchNote() string {
 	return ""
 }
 
-// searchAllNote counts the connections whose catalog is still loading or
-// failed while the search spans every connection.
+// searchAllNote counts the other connections whose catalog is still
+// loading or failed while the search spans every connection.
 func (m *Model) searchAllNote() string {
 	var loading, failed int
 	for _, c := range m.backend.Connections() {
+		if c.Name == m.searchConn {
+			continue
+		}
 		k, _ := metaKeyFor(m.backend, c.Name, "")
 		switch _, st := m.catalogs.Get(k); st {
 		case meta.Loading:
@@ -90,31 +125,96 @@ func (m *Model) searchAllNote() string {
 	return strings.Join(notes, " · ")
 }
 
-// runSearch matches text in a command. A leading @, or no connection in
-// context, searches the catalogs of every connection; the first such
-// search loads the catalogs that were never loaded (a PostgreSQL
-// connection's default database).
-func (m *Model) runSearch(text string, gen int) tea.Cmd {
-	all := m.searchConn == "" || strings.HasPrefix(text, "@")
-	conn := m.searchConn
+// runSearch answers a query of the search popup in a command. A leading @
+// narrows any scope to the connection in context.
+func (m *Model) runSearch(q overlay.SearchQueryMsg) tea.Cmd {
+	scoped := m.searchConn != "" && strings.HasPrefix(q.Text, "@")
+	text := strings.TrimPrefix(q.Text, "@")
+	conn := ""
+	if scoped {
+		conn = m.searchConn
+	}
+	if q.Scope == overlay.ScopeObjects {
+		return m.searchObjects(q.Gen, conn, text)
+	}
+	if s, ok := m.overlay.(*overlay.Search); ok {
+		s.SetNote("") // the metadata notes are about the catalogs
+	}
+	if q.Scope == overlay.ScopeHistory {
+		return searchHistory(m.store, q, conn, text)
+	}
+	lines := m.searchConsoles(conn, text)
+	return func() tea.Msg { return searchResultsMsg{gen: q.Gen, scope: q.Scope, lines: lines} }
+}
+
+// searchObjects matches text against the catalogs. With no connection
+// given it searches every connection, loading the catalogs that were never
+// loaded (a PostgreSQL connection's default database).
+func (m *Model) searchObjects(gen int, conn, text string) tea.Cmd {
+	all := conn == ""
 	var loads []tea.Cmd
 	if all {
-		conn = ""
 		for _, c := range m.backend.Connections() {
 			loads = append(loads, m.ensureMeta(c.Name, ""))
 		}
 	}
-	if all != m.searchAll {
-		m.searchAll = all
-		if s, ok := m.overlay.(*overlay.Search); ok {
-			s.SetNote(m.searchNote())
-		}
+	m.searchAll = all
+	if s, ok := m.overlay.(*overlay.Search); ok {
+		s.SetNote(m.searchNote())
 	}
 	snaps := m.catalogs.Snapshots(conn)
-	q := strings.TrimPrefix(text, "@")
 	return tea.Batch(append(loads, func() tea.Msg {
-		return searchResultsMsg{gen: gen, hits: meta.Search(snaps, q, searchLimit), all: all}
+		return searchResultsMsg{gen: gen, hits: meta.Search(snaps, text, searchLimit), all: all}
 	})...)
+}
+
+// searchConsoles finds the lines of the open consoles (of conn, unless
+// empty) that contain text, ignoring case.
+func (m *Model) searchConsoles(conn, text string) []consoleLine {
+	q := strings.ToLower(strings.TrimSpace(text))
+	if q == "" {
+		return nil
+	}
+	var out []consoleLine
+	for _, t := range m.tabs {
+		c, ok := t.(*consoleTab)
+		if !ok || conn != "" && c.conn != conn {
+			continue
+		}
+		for i, line := range strings.Split(c.editor.Value(), "\n") {
+			lower := strings.ToLower(line)
+			at := strings.Index(lower, q)
+			if at < 0 {
+				continue
+			}
+			out = append(out, consoleLine{
+				tab: c.ID(), conn: c.conn, title: c.Title(), line: i,
+				col: utf8.RuneCountInString(lower[:at]), text: line,
+			})
+			if len(out) == searchLimit {
+				return out
+			}
+		}
+	}
+	return out
+}
+
+// searchHistory finds the statements (of conn, unless empty) that contain
+// text; an empty text lists the recent ones.
+func searchHistory(st Store, q overlay.SearchQueryMsg, conn, text string) tea.Cmd {
+	return func() tea.Msg {
+		entries, err := st.History(strings.TrimSpace(text), searchLimit)
+		if conn != "" {
+			kept := entries[:0]
+			for _, e := range entries {
+				if e.Conn == conn {
+					kept = append(kept, e)
+				}
+			}
+			entries = kept
+		}
+		return searchResultsMsg{gen: q.Gen, scope: q.Scope, entries: entries, err: err}
+	}
 }
 
 func (m *Model) searchResults(msg searchResultsMsg) {
@@ -122,13 +222,60 @@ func (m *Model) searchResults(msg searchResultsMsg) {
 	if !ok {
 		return
 	}
-	items := make([]overlay.SearchItem, len(msg.hits))
-	for i, h := range msg.hits {
-		items[i] = searchItem(h, msg.all)
+	if msg.err != nil {
+		s.SetNote("history: " + msg.err.Error())
+	}
+	var items []overlay.SearchItem
+	var picks []func(bool) tea.Cmd
+	switch msg.scope {
+	case overlay.ScopeObjects:
+		for _, h := range msg.hits {
+			items = append(items, searchItem(h, msg.all))
+			picks = append(picks, func(structure bool) tea.Cmd { return m.openHit(h, structure) })
+		}
+	case overlay.ScopeConsoles:
+		for _, l := range msg.lines {
+			items = append(items, overlay.SearchItem{
+				Kind: "console", Label: strings.TrimSpace(l.text),
+				Where: fmt.Sprintf("%s · %s · line %d", l.conn, l.title, l.line+1),
+			})
+			picks = append(picks, func(bool) tea.Cmd { return m.gotoConsoleLine(l) })
+		}
+	case overlay.ScopeHistory:
+		for _, e := range msg.entries {
+			items = append(items, historyItem(e))
+			picks = append(picks, func(bool) tea.Cmd { return m.useHistory(e) })
+		}
 	}
 	if s.SetResults(msg.gen, items) {
-		m.searchHits = msg.hits
+		m.searchHits, m.searchPicks = msg.hits, picks
 	}
+}
+
+func historyItem(e history.Entry) overlay.SearchItem {
+	where := e.Conn
+	if e.Database != "" {
+		where += "/" + e.Database
+	}
+	where += " · " + e.Time.Local().Format("01-02 15:04")
+	if e.Err != "" {
+		where += " · failed"
+	}
+	return overlay.SearchItem{Kind: "history", Label: strings.Join(strings.Fields(e.SQL), " "), Where: where}
+}
+
+// gotoConsoleLine switches to the console of l with the cursor on the match.
+func (m *Model) gotoConsoleLine(l consoleLine) tea.Cmd {
+	for i, t := range m.tabs {
+		if c, ok := t.(*consoleTab); ok && c.ID() == l.tab {
+			m.gotoTab(i)
+			c.onResults = false
+			c.editor.SetCursor(l.line, l.col)
+			return nil
+		}
+	}
+	m.setStatus("that console was closed", true)
+	return nil
 }
 
 func searchItem(h meta.Hit, all bool) overlay.SearchItem {
@@ -157,18 +304,21 @@ func searchItem(h meta.Hit, all bool) overlay.SearchItem {
 	return overlay.SearchItem{Kind: h.Kind.String(), Label: h.Path, Where: w}
 }
 
-// searchPicked opens a result: a table's data (or its structure),
-// a column's table with the cursor on the column, a routine's definition,
-// or a database or schema in the tree.
 func (m *Model) searchPicked(msg overlay.SearchPickMsg) tea.Cmd {
-	if msg.Index < 0 || msg.Index >= len(m.searchHits) {
+	if msg.Index < 0 || msg.Index >= len(m.searchPicks) {
 		return nil
 	}
-	h := m.searchHits[msg.Index]
+	return m.searchPicks[msg.Index](msg.Structure)
+}
+
+// openHit opens a catalog result: a table's data (or its structure),
+// a column's table with the cursor on the column, a routine's definition,
+// or a database or schema in the tree.
+func (m *Model) openHit(h meta.Hit, structure bool) tea.Cmd {
 	switch h.Kind {
 	case meta.ItemTable, meta.ItemView, meta.ItemColumn:
 		ref := db.TableRef{Namespace: h.NS, Name: h.Table}
-		if msg.Structure {
+		if structure {
 			return m.openStructure(h.Conn, ref)
 		}
 		cmd := m.openData(h.Conn, ref)

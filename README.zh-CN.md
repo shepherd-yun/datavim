@@ -131,7 +131,7 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 | `:commit` / `:rollback` | 控制台：结束事务 |
 | `:set noreadonly` / `:set readonly` | 本次会话解锁 / 锁定连接 |
 | `:q!` / `:qa!` | 关闭 / 退出，不询问未结束的事务 |
-| `<Space><Space>` | 搜索表、视图、列、函数、schema 和数据库（`@` 搜索所有连接，并加载尚未打开的连接的元数据；`Enter` 打开，`Ctrl-o` 打开结构） |
+| `<Space><Space>` | 搜索表、视图、列、函数、schema 和数据库，范围是所有连接，并加载尚未打开的连接的元数据（可以用 `db.table.column`、`table.column` 或其中一段按上级模糊限定，打开列时光标直接落在该列；`@` 开头只搜当前上下文的连接；`Enter` 打开，`Ctrl-o` 打开结构）。`Tab` / `Shift-Tab` 切换到搜索已打开 console 的内容（`Enter` 跳到那一行）或 SQL 历史（查询为空时列出最近的语句，`Enter` 像 `<Space>h` 一样插入语句） |
 | `<Space>e` | 最近打开的表、结构和控制台 |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |

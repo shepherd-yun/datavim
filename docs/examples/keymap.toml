@@ -8,7 +8,8 @@
 # Contexts: global, tree, grid (table data), structure, console (keys the vim
 # editor leaves alone: enter, R, ctrl+j, M, <leader>…), results (console grid),
 # popup (one-key bindings read by popups: the structure key of the columns
-# popup and the search, the save key of the connection form).
+# popup and the search, the search's scope keys, the save key of the
+# connection form).
 
 # leader = ","          # default: space
 
@@ -93,6 +94,8 @@
 #   search.global          Search everything
 #   search.next            Next match
 #   search.prev            Previous match
+#   search.scope.next      Search: next scope (objects, consoles, history)
+#   search.scope.prev      Search: previous scope
 #   search.start           Search
 #   section.next           Next section
 #   section.prev           Previous section

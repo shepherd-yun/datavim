@@ -41,6 +41,8 @@ const (
 	OpenFullStructure Action = "structure.full"
 	CopyDDL           Action = "ddl.copy"
 	SaveForm          Action = "form.save"
+	NextSearchScope   Action = "search.scope.next"
+	PrevSearchScope   Action = "search.scope.prev"
 	Refresh           Action = "refresh"
 	Down              Action = "move.down"
 	Up                Action = "move.up"

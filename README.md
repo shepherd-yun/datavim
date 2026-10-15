@@ -136,7 +136,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `:commit` / `:rollback` | Console: end the transaction |
 | `:set noreadonly` / `:set readonly` | Unlock / lock the connection for this session |
 | `:q!` / `:qa!` | Close / quit without asking about open transactions |
-| `<Space><Space>` | Search tables, views, columns, routines, schemas and databases (`@` searches every connection and loads the metadata of those not opened yet; `Enter` opens, `Ctrl-o` opens the structure) |
+| `<Space><Space>` | Search tables, views, columns, routines, schemas and databases in every connection, loading the metadata of those not opened yet (`db.table.column`, `table.column` or any part of it narrows by parent, fuzzily, and opening a column puts the cursor on it; `@` searches only the connection in context; `Enter` opens, `Ctrl-o` opens the structure). `Tab` / `Shift-Tab` switch to the lines of the open consoles (`Enter` jumps to the line) or the SQL history (an empty query lists the recent statements, `Enter` inserts one as `<Space>h` does) |
 | `<Space>e` | Recently opened tables, structures and consoles |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (`Ctrl-n` / `Ctrl-p` open the popup when closed) |
 | `Enter` / `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes the popup, a second `Esc` leaves insert mode) |

@@ -114,6 +114,8 @@ func build(c map[string]color.Color) {
 		"routine":  lipgloss.NewStyle().Foreground(c["inserted"]),
 		"schema":   lipgloss.NewStyle().Foreground(ColorFocus),
 		"database": lipgloss.NewStyle().Foreground(ColorFocus).Bold(true),
+		"console":  lipgloss.NewStyle().Foreground(c["inserted"]),
+		"history":  lipgloss.NewStyle().Foreground(c["view"]),
 	}
 }
 

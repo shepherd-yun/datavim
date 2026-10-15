@@ -18,10 +18,23 @@ type SearchItem struct {
 	Where string
 }
 
-// SearchQueryMsg asks for the results of Text; the reply carries Gen.
+// SearchScope is what the search looks through.
+type SearchScope int
+
+const (
+	ScopeObjects  SearchScope = iota // the catalogs: tables, columns, …
+	ScopeConsoles                    // the text of the open consoles
+	ScopeHistory                     // the SQL history
+	scopeCount
+)
+
+func (s SearchScope) String() string { return [...]string{"objects", "consoles", "history"}[s] }
+
+// SearchQueryMsg asks for the results of Text in Scope; the reply carries Gen.
 type SearchQueryMsg struct {
-	Text string
-	Gen  int
+	Text  string
+	Gen   int
+	Scope SearchScope
 }
 
 // SearchPickMsg reports the chosen row; Structure is set for the
@@ -32,7 +45,8 @@ type SearchPickMsg struct {
 }
 
 // Search is the <space><space> popup. The root model computes the results
-// (asynchronously) and hands them back with SetResults.
+// (asynchronously) and hands them back with SetResults. The scope keys
+// switch between the catalogs, the open consoles and the SQL history.
 type Search struct {
 	keys     *keymap.Keymap
 	query    field
@@ -42,14 +56,31 @@ type Search struct {
 	cur      int
 	offset   int
 	note     string
+	conn     string // the connection a leading @ narrows the search to
+	scope    SearchScope
 }
 
-// NewSearch opens an empty search; note explains missing results.
-func NewSearch(keys *keymap.Keymap, note string) *Search { return &Search{keys: keys, note: note} }
+// NewSearch opens an empty search of the catalogs; note explains missing
+// results and conn names the connection a leading @ narrows to ("" for
+// none).
+func NewSearch(keys *keymap.Keymap, note, conn string) *Search {
+	return &Search{keys: keys, note: note, conn: conn}
+}
+
+// Scope is what the search looks through.
+func (s *Search) Scope() SearchScope { return s.scope }
 
 func (s *Search) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
-	structure := s.keys.Triggers(keymap.Popup, keymap.OpenFullStructure, msg.String())
-	if msg.String() == "enter" || structure {
+	key := msg.String()
+	if step := s.scopeStep(key); step != 0 {
+		s.scope = (s.scope + step + scopeCount) % scopeCount
+		return s, emit(s.Requery())
+	}
+	structure := s.keys.Triggers(keymap.Popup, keymap.OpenFullStructure, key)
+	if structure && s.scope != ScopeObjects {
+		return s, nil
+	}
+	if key == "enter" || structure {
 		if len(s.items) == 0 {
 			return s, nil
 		}
@@ -66,17 +97,26 @@ func (s *Search) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 		before := s.query.String()
 		s.query.handle(msg)
 		if s.query.String() != before {
-			text, gen := s.Requery()
-			return s, emit(SearchQueryMsg{Text: text, Gen: gen})
+			return s, emit(s.Requery())
 		}
 	}
 	return s, nil
 }
 
-// Requery starts a new generation for the current text and returns both.
-func (s *Search) Requery() (string, int) {
+func (s *Search) scopeStep(key string) SearchScope {
+	switch {
+	case s.keys.Triggers(keymap.Popup, keymap.NextSearchScope, key):
+		return 1
+	case s.keys.Triggers(keymap.Popup, keymap.PrevSearchScope, key):
+		return -1
+	}
+	return 0
+}
+
+// Requery starts a new generation for the current text and scope.
+func (s *Search) Requery() SearchQueryMsg {
 	s.gen++
-	return s.query.String(), s.gen
+	return SearchQueryMsg{Text: s.query.String(), Gen: s.gen, Scope: s.scope}
 }
 
 // SetResults shows the results of generation gen; it reports false (and
@@ -98,27 +138,24 @@ func (s *Search) Paste(text string) { s.query.paste(text) }
 func (s *Search) View(width, height int) string {
 	w := max(min(width-4, 110), 30)
 	h := max(min(height-2, 24), 7)
-	listH := h - 5 // border, query, status, footer
+	listH := h - 6 // border, scopes, query, status, footer
 	if s.cur < s.offset {
 		s.offset = s.cur
 	}
 	if s.cur >= s.offset+listH {
 		s.offset = s.cur - listH + 1
 	}
-	var status string
-	switch {
-	case s.query.Len() == 0:
-		status = "tables, views, columns, routines, schemas, databases · start with @ to search every connection"
-	case s.answered != s.gen:
-		status = "searching…"
-	case len(s.items) == 0:
-		status = "(no matches)"
-	default:
-		status = fmt.Sprintf("%d matches", len(s.items))
+	scopes := make([]string, scopeCount)
+	for sc := range scopeCount {
+		scopes[sc] = theme.Muted.Render(sc.String())
+		if sc == s.scope {
+			scopes[sc] = theme.Selected.Render(sc.String())
+		}
 	}
 	lines := []string{
+		textutil.Fit(strings.Join(scopes, "  "), w-2),
 		"> " + textutil.Sanitize(s.query.String()) + "█",
-		theme.Muted.Render(textutil.Fit(status, w-2)),
+		theme.Muted.Render(textutil.Fit(s.status(), w-2)),
 	}
 	for i := s.offset; i < len(s.items) && i < s.offset+listH; i++ {
 		it := s.items[i]
@@ -130,8 +167,34 @@ func (s *Search) View(width, height int) string {
 		}
 		lines = append(lines, textutil.Fit(theme.KindTag(it.Kind).Render(tag)+label+"  "+theme.Muted.Render(where), w-2))
 	}
-	foot := footer(s.note, "enter open", popupHint(s.keys, keymap.OpenFullStructure, "structure"), "↑/↓ move · esc close")
+	structure := ""
+	if s.scope == ScopeObjects {
+		structure = popupHint(s.keys, keymap.OpenFullStructure, "structure")
+	}
+	foot := footer(s.note, "enter open", structure, popupHint(s.keys, keymap.NextSearchScope, "next scope"), "↑/↓ move · esc close")
 	body := textutil.PadLines(strings.Join(lines, "\n"), h-3) + "\n" +
 		theme.Muted.Render(textutil.Fit(textutil.Sanitize(foot), w-2))
 	return theme.Box("Search", body, w, h, true)
+}
+
+func (s *Search) status() string {
+	empty := s.query.Len() == 0
+	switch {
+	case empty && s.scope != ScopeHistory:
+		hint := "tables, views, columns, routines, schemas, databases"
+		if s.scope == ScopeConsoles {
+			hint = "lines of the open consoles"
+		}
+		if s.conn != "" {
+			hint += " · start with @ to search only " + s.conn
+		}
+		return hint
+	case s.answered != s.gen:
+		return "searching…"
+	case len(s.items) == 0:
+		return "(no matches)"
+	case empty:
+		return fmt.Sprintf("%d recent statements", len(s.items))
+	}
+	return fmt.Sprintf("%d matches", len(s.items))
 }

@@ -523,12 +523,14 @@ func (s *fakeStore) AddHistory(e history.Entry) error {
 	return nil
 }
 
-func (s *fakeStore) History(_ string, limit int) ([]history.Entry, error) {
+func (s *fakeStore) History(filter string, limit int) ([]history.Entry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	var out []history.Entry
 	for i := len(s.entries) - 1; i >= 0 && len(out) < limit; i-- {
-		out = append(out, s.entries[i])
+		if strings.Contains(strings.ToLower(s.entries[i].SQL), strings.ToLower(filter)) {
+			out = append(out, s.entries[i])
+		}
 	}
 	return out, nil
 }

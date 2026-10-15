@@ -98,13 +98,14 @@ type Model struct {
 	status    string
 	statusErr bool
 
-	timings    timings
-	lastSearch string
-	searchConn string // connection the global search is scoped to
-	searchKey  meta.Key
-	searchAll  bool       // the current query searches every connection
-	searchHits []meta.Hit // the rows the search popup shows
-	revealing  *revealTarget
+	timings     timings
+	lastSearch  string
+	searchConn  string // connection the global search is scoped to
+	searchKey   meta.Key
+	searchAll   bool                 // the current query searches every connection
+	searchHits  []meta.Hit           // the catalog rows the search popup shows
+	searchPicks []func(bool) tea.Cmd // opens each row; the flag asks for the structure
+	revealing   *revealTarget
 }
 
 // New builds the root model with one tree root per configured connection.
@@ -167,7 +168,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case metaStaleMsg:
 		return m, m.metaStale(msg)
 	case overlay.SearchQueryMsg:
-		return m, m.runSearch(msg.Text, msg.Gen)
+		return m, m.runSearch(msg)
 	case searchResultsMsg:
 		m.searchResults(msg)
 	case overlay.SearchPickMsg:

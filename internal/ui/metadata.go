@@ -92,7 +92,7 @@ func (m *Model) metaLoaded(msg metaLoadedMsg) tea.Cmd {
 		return nil
 	}
 	s, ok := m.overlay.(*overlay.Search)
-	if !ok {
+	if !ok || s.Scope() != overlay.ScopeObjects {
 		return nil
 	}
 	s.SetNote(m.searchNote())
