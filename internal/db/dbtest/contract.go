@@ -14,6 +14,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/edit"
 	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
+	"github.com/shepherd-yun/sqlvim/internal/schemaedit"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
@@ -844,6 +845,139 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		if _, err := s.Query(ctx, "SELECT 1"); err != nil {
 			t.Fatalf("the session is unusable after the failure: %v", err)
+		}
+	})
+
+	t.Run("Modify Table edits round-trip through schemaedit and AlterTable", func(t *testing.T) {
+		w := d.DDL()
+		dialect := sqlx.DialectOf(f.Driver)
+		tbl := ref("mod_t")
+		if _, err := conn.Exec(ctx, "DROP TABLE IF EXISTS "+d.QualifiedName(tbl)); err != nil {
+			t.Fatal(err)
+		}
+		create, _ := w.CreateTable(db.TableSchema{
+			Ref: tbl,
+			Columns: []db.Column{
+				{Name: "id", Type: "bigint"},
+				{Name: "name", Type: "varchar(50)", Nullable: true},
+				{Name: "qty", Type: "int", Nullable: true},
+				{Name: "legacy", Type: "int", Nullable: true},
+			},
+			Indexes: []db.Index{
+				{Name: "mod_t_pkey", Columns: []string{"id"}, Unique: true, Primary: true},
+				{Name: "mod_t_name", Columns: []string{"name"}},
+				{Name: "mod_t_qty", Columns: []string{"qty"}},
+			},
+		})
+		for _, q := range create {
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		schema := func() db.TableSchema {
+			t.Helper()
+			s, err := conn.Meta().TableSchema(ctx, tbl)
+			if err != nil {
+				t.Fatal(err)
+			}
+			return s
+		}
+		must := func(err error) {
+			t.Helper()
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		ed := schemaedit.New(schema(), dialect)
+		col := func(name string) int {
+			t.Helper()
+			for i, r := range ed.Columns() {
+				if r.Col.Name == name {
+					return i
+				}
+			}
+			t.Fatalf("no column %s", name)
+			return -1
+		}
+		ix := func(name string) int {
+			t.Helper()
+			for i, r := range ed.Indexes() {
+				if r.Index.Name == name {
+					return i
+				}
+			}
+			t.Fatalf("no index %s", name)
+			return -1
+		}
+		must(ed.SetColumn(col("name"), schemaedit.ColName, "full_name"))
+		must(ed.SetColumn(col("full_name"), schemaedit.ColType, "VARCHAR(100)"))
+		at := ed.AddColumn(col("full_name")) // AFTER the renamed column, in the same ALTER
+		must(ed.SetColumn(at, schemaedit.ColName, "email"))
+		must(ed.SetColumn(at, schemaedit.ColType, "varchar(80)"))
+		at = ed.AddColumn(at) // AFTER a column added by the same ALTER
+		must(ed.SetColumn(at, schemaedit.ColName, "phone"))
+		must(ed.SetColumn(at, schemaedit.ColType, "varchar(20)"))
+		must(ed.DeleteColumn(col("legacy")))
+		must(ed.ToggleNullable(col("qty")))
+		must(ed.SetColumn(col("qty"), schemaedit.ColDefault, "0"))
+		must(ed.SetColumn(col("qty"), schemaedit.ColComment, "how many"))
+		must(ed.SetIndexName(ix("mod_t_qty"), "mod_t_quantity"))
+		at = ed.AddIndex(len(ed.Indexes()) - 1)
+		must(ed.SetIndexColumns(at, "email"))
+		must(ed.CycleIndexKind(at)) // UNIQUE: mod_t_email_key
+
+		changes, err := ed.Plan(w.NormalizeType)
+		must(err)
+		alter, manual := w.AlterTable(tbl, changes)
+		if len(manual) != 0 {
+			t.Fatalf("manual: %+v", manual)
+		}
+		s, err := conn.Session(ctx)
+		must(err)
+		defer s.Close()
+		if err := edit.ApplyDDL(ctx, s, dialect, alter); err != nil {
+			t.Fatalf("%s: %v", strings.Join(alter, ";\n"), err)
+		}
+
+		after := schema()
+		var names []string
+		for _, c := range after.Columns {
+			names = append(names, c.Name)
+		}
+		want := []string{"id", "full_name", "email", "phone", "qty"}
+		if f.Driver == "postgres" {
+			want = []string{"id", "full_name", "qty", "email", "phone"} // PostgreSQL adds columns at the end
+		}
+		if !slices.Equal(names, want) {
+			t.Fatalf("columns = %q, want %q", names, want)
+		}
+		for _, c := range after.Columns {
+			switch c.Name {
+			case "full_name":
+				if c.Type != "varchar(100)" {
+					t.Errorf("full_name: %+v", c)
+				}
+			case "qty":
+				if c.Nullable || c.Default == nil || *c.Default != "0" || c.Comment != "how many" {
+					t.Errorf("qty: %+v", c)
+				}
+			}
+		}
+		indexes := map[string]db.Index{}
+		for _, x := range after.Indexes {
+			indexes[x.Name] = x
+		}
+		if x := indexes["mod_t_name"]; !slices.Equal(x.Columns, []string{"full_name"}) {
+			t.Errorf("mod_t_name follows the renamed column: %+v", after.Indexes)
+		}
+		if x, ok := indexes["mod_t_quantity"]; !ok || !slices.Equal(x.Columns, []string{"qty"}) {
+			t.Errorf("mod_t_qty is renamed: %+v", after.Indexes)
+		}
+		if x := indexes["mod_t_email_key"]; !x.Unique || !slices.Equal(x.Columns, []string{"email"}) {
+			t.Errorf("unique index on email: %+v", after.Indexes)
+		}
+		if _, ok := indexes["mod_t_qty"]; ok {
+			t.Errorf("the old name is gone: %+v", after.Indexes)
 		}
 	})
 }
