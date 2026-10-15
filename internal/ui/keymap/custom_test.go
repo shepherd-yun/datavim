@@ -1,6 +1,7 @@
 package keymap
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -123,5 +124,18 @@ func TestTruncateIsBindable(t *testing.T) {
 	}
 	if a, _ := k.Resolve(Tree, []string{"T"}); a != TruncateTable {
 		t.Fatalf("T = %v", a)
+	}
+}
+
+func TestCustomDiffTable(t *testing.T) {
+	if !slices.Contains(Contexts(), Diff) {
+		t.Fatalf("Contexts() = %v, want it to contain diff", Contexts())
+	}
+	k, err := Custom("space", map[Context]map[string]string{Diff: {"t": string(ToggleChange)}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := k.Resolve(Diff, []string{"t"}); a != ToggleChange {
+		t.Errorf("t = %q", a)
 	}
 }

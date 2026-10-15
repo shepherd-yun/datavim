@@ -19,6 +19,7 @@ const (
 	Structure Context = "structure"
 	Console   Context = "console"
 	Results   Context = "results"
+	Diff      Context = "diff"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
 	// only one-key bindings count there.
 	Popup Context = "popup"
@@ -106,6 +107,13 @@ const (
 	SubmitEdits       Action = "edit.submit"
 	NextTab           Action = "tab.next"
 	PrevTab           Action = "tab.prev"
+	MarkCompare       Action = "compare.mark"
+	Compare           Action = "compare.run"
+	ToggleChange      Action = "diff.toggle"
+	SwapSides         Action = "diff.swap"
+	NextChange        Action = "diff.next"
+	PrevChange        Action = "diff.prev"
+	WriteScript       Action = "diff.script"
 )
 
 const (

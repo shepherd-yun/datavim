@@ -7,7 +7,9 @@ import (
 )
 
 // Contexts lists the tables keymap.toml may contain.
-func Contexts() []Context { return []Context{Global, Tree, Grid, Structure, Console, Results, Popup} }
+func Contexts() []Context {
+	return []Context{Global, Tree, Grid, Structure, Console, Results, Diff, Popup}
+}
 
 // KnownActions maps every bindable action to its description.
 func KnownActions() map[Action]string {

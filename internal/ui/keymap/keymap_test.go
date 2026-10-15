@@ -274,3 +274,33 @@ func TestPopupKeys(t *testing.T) {
 		t.Fatalf("OwnKey ignores globals: %q", got)
 	}
 }
+
+func TestCompareBindings(t *testing.T) {
+	k := Default()
+	for _, c := range []struct {
+		ctx  Context
+		keys []string
+		want Action
+	}{
+		{Tree, []string{"m"}, MarkCompare},
+		{Tree, []string{"C"}, Compare},
+		{Diff, []string{"x"}, ToggleChange},
+		{Diff, []string{"~"}, SwapSides},
+		{Diff, []string{"]", "c"}, NextChange},
+		{Diff, []string{"[", "c"}, PrevChange},
+		{Diff, []string{"l"}, Expand},
+		{Diff, []string{"enter"}, Expand},
+		{Diff, []string{"h"}, Collapse},
+		{Diff, []string{"j"}, Down},
+		{Diff, []string{"g", "g"}, Top},
+		{Diff, []string{"space", "w"}, WriteScript},
+		{Diff, []string{"space", "r"}, Refresh},
+	} {
+		if a, res := k.Resolve(c.ctx, c.keys); a != c.want || res != Matched {
+			t.Errorf("%s %v = %q %v, want %q", c.ctx, c.keys, a, res, c.want)
+		}
+	}
+	if keys := k.KeysFor(Diff, WriteScript); keys == "" {
+		t.Error("WriteScript has no keys in Diff")
+	}
+}

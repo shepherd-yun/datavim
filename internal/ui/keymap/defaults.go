@@ -66,6 +66,8 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("d", "d"), DeleteNode, "Delete connection / drop table or view"},
 		Binding{Tree, keys("r"), RenameTable, "Rename table or view"},
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
+		Binding{Tree, keys("m"), MarkCompare, "Mark as the compare source"},
+		Binding{Tree, keys("C"), Compare, "Compare with the marked node"},
 	)
 
 	b = append(b, gridBindings(Grid)...)
@@ -114,6 +116,20 @@ func DefaultBindings() []Binding {
 	b = append(b,
 		Binding{Structure, keys("["), PrevSection, "Previous section"},
 		Binding{Structure, keys("]"), NextSection, "Next section"},
+	)
+
+	b = append(b, vertical(Diff)...)
+	b = append(b,
+		Binding{Diff, keys("l"), Expand, "Expand the table"},
+		Binding{Diff, keys("enter"), Expand, "Expand the table"},
+		Binding{Diff, keys("right"), Expand, "Expand the table"},
+		Binding{Diff, keys("h"), Collapse, "Collapse the table"},
+		Binding{Diff, keys("left"), Collapse, "Collapse the table"},
+		Binding{Diff, keys("x"), ToggleChange, "Include / skip in the script"},
+		Binding{Diff, keys("~"), SwapSides, "Swap source and target"},
+		Binding{Diff, keys("]", "c"), NextChange, "Next change"},
+		Binding{Diff, keys("[", "c"), PrevChange, "Previous change"},
+		Binding{Diff, keys(LeaderToken, "w"), WriteScript, "Write the sync script to a new console"},
 	)
 
 	b = append(b,
