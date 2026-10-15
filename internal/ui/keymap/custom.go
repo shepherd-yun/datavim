@@ -24,7 +24,7 @@ func KnownActions() map[Action]string {
 
 // renamedActions maps action IDs of earlier versions to their current
 // names, so old keymap.toml files keep loading.
-var renamedActions = map[Action]Action{"conn.delete": DeleteNode}
+var renamedActions = map[Action]Action{"conn.delete": DeleteNode, "conn.edit": EditNode}
 
 // Custom is the default keymap with another leader and keymap.toml's
 // overrides: per context, key sequence -> action, "" unbinds the keys.
@@ -46,7 +46,7 @@ func Custom(leader string, overrides map[Context]map[string]string) (*Keymap, er
 	bindings := DefaultBindings()
 	for _, ctx := range slices.Sorted(maps.Keys(overrides)) {
 		if !slices.Contains(Contexts(), ctx) {
-			return nil, fmt.Errorf("[%s]: unknown context (want one of global, tree, grid, structure, console, results, popup)", ctx)
+			return nil, fmt.Errorf("[%s]: unknown context (want one of global, tree, grid, structure, console, results, diff, popup)", ctx)
 		}
 		for _, ks := range slices.Sorted(maps.Keys(overrides[ctx])) {
 			keys, err := ParseKeys(ks)

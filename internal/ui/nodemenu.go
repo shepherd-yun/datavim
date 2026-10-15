@@ -31,7 +31,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 	case tree.KindConn:
 		entries = []entry{
 			{keymap.OpenConsole, "Open console"},
-			{keymap.EditConnection, "Edit connection"},
+			{keymap.EditNode, "Edit connection"},
 			{keymap.Password, "Enter password"},
 			{keymap.Refresh, "Refresh"},
 			{keymap.DeleteNode, "Delete connection"},

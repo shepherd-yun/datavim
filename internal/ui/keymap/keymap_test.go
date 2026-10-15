@@ -189,7 +189,7 @@ func TestToggleTxBinding(t *testing.T) {
 
 func TestConnectionEditBindings(t *testing.T) {
 	k := Default()
-	if a, res := k.Resolve(Tree, []string{"e"}); a != EditConnection || res != Matched {
+	if a, res := k.Resolve(Tree, []string{"e"}); a != EditNode || res != Matched {
 		t.Errorf("e: %q %v", a, res)
 	}
 	if a, res := k.Resolve(Tree, []string{"d", "d"}); a != DeleteNode || res != Matched {
@@ -302,5 +302,23 @@ func TestCompareBindings(t *testing.T) {
 	}
 	if keys := k.KeysFor(Diff, WriteScript); keys == "" {
 		t.Error("WriteScript has no keys in Diff")
+	}
+}
+
+func TestStructureEditBindings(t *testing.T) {
+	k := Default()
+	for keys, want := range map[string]Action{
+		"e": ModifyTable, "i": EditCell, "enter": EditCell, "o": InsertRow, "u": UndoEdit, "U": UndoAllEdits,
+		"h": Left, "l": Right, "[": PrevSection, "]": NextSection,
+	} {
+		if a, res := k.Resolve(Structure, []string{keys}); a != want || res != Matched {
+			t.Errorf("%s = %v %v, want %v", keys, a, res, want)
+		}
+	}
+	if a, res := k.Resolve(Structure, []string{"d", "d"}); a != DeleteRow || res != Matched {
+		t.Errorf("dd = %v %v", a, res)
+	}
+	if a, res := k.Resolve(Structure, []string{"space", "w"}); a != SubmitEdits || res != Matched {
+		t.Errorf("<space>w = %v %v", a, res)
 	}
 }

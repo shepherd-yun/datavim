@@ -484,7 +484,7 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 			m.retryNode = nil
 			m.overlay = overlay.NewPassword(n.Conn)
 		}
-	case keymap.EditConnection:
+	case keymap.EditNode:
 		if n := t.Selected(); n != nil && m.canChange(n.Conn) {
 			if cfg, ok := m.backend.Connection(n.Conn); ok {
 				m.overlay = overlay.NewEditConnForm(m.keys, cfg)

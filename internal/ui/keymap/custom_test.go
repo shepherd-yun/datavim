@@ -139,3 +139,13 @@ func TestCustomDiffTable(t *testing.T) {
 		t.Errorf("t = %q", a)
 	}
 }
+
+func TestCustomAcceptsConnEdit(t *testing.T) {
+	k, err := Custom("", map[Context]map[string]string{Tree: {"E": "conn.edit"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a, _ := k.Resolve(Tree, []string{"E"}); a != EditNode {
+		t.Fatalf("E = %v", a)
+	}
+}

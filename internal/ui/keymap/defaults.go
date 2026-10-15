@@ -62,7 +62,7 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("h"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("left"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("p"), Password, "Enter password"},
-		Binding{Tree, keys("e"), EditConnection, "Edit connection"},
+		Binding{Tree, keys("e"), EditNode, "Edit connection / modify table"},
 		Binding{Tree, keys("d", "d"), DeleteNode, "Delete connection / drop table or view"},
 		Binding{Tree, keys("r"), RenameTable, "Rename table or view"},
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
@@ -116,6 +116,18 @@ func DefaultBindings() []Binding {
 	b = append(b,
 		Binding{Structure, keys("["), PrevSection, "Previous section"},
 		Binding{Structure, keys("]"), NextSection, "Next section"},
+		Binding{Structure, keys("h"), Left, "Previous field"},
+		Binding{Structure, keys("left"), Left, "Previous field"},
+		Binding{Structure, keys("l"), Right, "Next field"},
+		Binding{Structure, keys("right"), Right, "Next field"},
+		Binding{Structure, keys("e"), ModifyTable, "Modify the table / stop modifying"},
+		Binding{Structure, keys("i"), EditCell, "Edit the field"},
+		Binding{Structure, keys("enter"), EditCell, "Edit the field"},
+		Binding{Structure, keys("o"), InsertRow, "Add a column or index below"},
+		Binding{Structure, keys("d", "d"), DeleteRow, "Delete the column or index"},
+		Binding{Structure, keys("u"), UndoEdit, "Undo the last change"},
+		Binding{Structure, keys("U"), UndoAllEdits, "Discard every change"},
+		Binding{Structure, keys(LeaderToken, "w"), SubmitEdits, "Submit changes (:w)"},
 	)
 
 	b = append(b, vertical(Diff)...)
