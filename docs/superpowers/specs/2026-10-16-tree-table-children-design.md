@@ -44,7 +44,8 @@
 
 - 展开表或视图沿用 `loadChildren` → `fetchChildren`，新增 `KindTable` / `KindView` 分支：调用一次 `MetaReader.TableSchema`，一次拿到列、索引和外键，同时生成分组节点和全部叶子节点。分组节点创建时就是 `Loaded=true`，展开分组不再查询。
 - `TableSchema` 返回 `ErrNotFound`（表已被删除）时，节点显示错误，与现有加载失败一致。
-- 空分组不显示。视图通常只有 Columns 一组。
+- 视图只调用 `MetaReader.Columns`（不依赖驱动的 `TableSchema` 是否支持视图），因此只有 Columns 一组。
+- 空分组不显示。首次加载时 Columns 展开，其余分组折叠；刷新时按名字保留各分组原来的展开状态。
 - 分组内容：
   - **Columns**：按 `Position` 排序。
   - **Keys**：`Primary` 或 `Unique` 的索引（PostgreSQL 上包括 `Constraint` 为真的唯一约束），主键排在最前。
