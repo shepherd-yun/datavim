@@ -663,6 +663,48 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 	})
 
+	t.Run("ApplyInTx rolls back to its savepoint and keeps the transaction", func(t *testing.T) {
+		table := ref("edit_tx")
+		name := d.QualifiedName(table)
+		for _, q := range []string{
+			"CREATE TABLE " + name + " (id int PRIMARY KEY, name varchar(50))",
+			"INSERT INTO " + name + " VALUES (1, 'a'), (2, 'b')",
+		} {
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Fatal(err)
+			}
+		}
+		s, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = s.Close() }()
+		exec := func(q string) {
+			t.Helper()
+			if _, err := s.Exec(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		exec(sqlx.BeginSQL(sd))
+		exec("UPDATE " + name + " SET name = 'before' WHERE id = 1")
+		bad := []string{
+			"UPDATE " + name + " SET name = 'x' WHERE id = 2",
+			"UPDATE " + name + " SET name = 'y' WHERE id = 99",
+		}
+		var se *edit.StatementError
+		if err := edit.ApplyInTx(ctx, s, bad); !errors.As(err, &se) || se.Index != 1 {
+			t.Fatalf("err = %v", err)
+		}
+		if err := edit.ApplyInTx(ctx, s, []string{"UPDATE " + name + " SET name = 'after' WHERE id = 2"}); err != nil {
+			t.Fatalf("the transaction is usable after the rollback: %v", err)
+		}
+		exec("COMMIT")
+		want := [][]db.Value{{{Text: "1"}, {Text: "before"}}, {{Text: "2"}, {Text: "after"}}}
+		if diff := cmp.Diff(want, read(t, "SELECT * FROM "+name+" ORDER BY id").Rows); diff != "" {
+			t.Fatalf("rows (-want +got):\n%s", diff)
+		}
+	})
+
 	t.Run("rows without a key are located by their values or ctid", func(t *testing.T) {
 		table := ref("edit_bare")
 		name := d.QualifiedName(table)

@@ -134,3 +134,30 @@ func TestApplyDDLOnMySQLStopsAtTheFirstFailure(t *testing.T) {
 		t.Fatalf("message: %v", err)
 	}
 }
+
+func TestApplyInTxReleasesItsSavepoint(t *testing.T) {
+	f := &fakeQuerier{}
+	if err := ApplyInTx(context.Background(), f, []string{"a", "b"}); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"SAVEPOINT sqlvim_edit", "a", "b", "RELEASE SAVEPOINT sqlvim_edit"}
+	if diff := cmp.Diff(want, f.execs); diff != "" {
+		t.Fatalf("execs (-want +got):\n%s", diff)
+	}
+}
+
+func TestApplyInTxRollsBackToItsSavepoint(t *testing.T) {
+	f := &fakeQuerier{affected: map[string]int64{"b": 2}}
+	err := ApplyInTx(context.Background(), f, []string{"a", "b", "c"})
+	want := []string{"SAVEPOINT sqlvim_edit", "a", "b", "ROLLBACK TO SAVEPOINT sqlvim_edit"}
+	if diff := cmp.Diff(want, f.execs); diff != "" {
+		t.Fatalf("execs (-want +got):\n%s", diff)
+	}
+	var se *StatementError
+	if !errors.As(err, &se) || se.Index != 1 || !se.InTx {
+		t.Fatalf("err = %v", err)
+	}
+	if !strings.Contains(err.Error(), "the transaction is still open") {
+		t.Fatalf("message: %v", err)
+	}
+}

@@ -142,3 +142,26 @@ func TestPlanNeedsKeyColumnsInTheResult(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestPlanMapsResultColumnsToTableColumns(t *testing.T) {
+	cols := []db.ColumnInfo{{Name: "uid", DatabaseType: "INT"}, {Name: "n", DatabaseType: "VARCHAR"}}
+	tb := New(cols, [][]db.Value{{{Text: "1"}, {Text: "a"}}}, nil)
+	_ = tb.SetCell(0, 1, db.Value{Text: "b"})
+	at := tb.InsertAfter(0)
+	_ = tb.SetCell(at, 1, db.Value{Text: "c"})
+	tg := Target{
+		Dialect: sqlx.MySQL, Table: db.TableRef{Name: "users"},
+		Key: Key{Kind: PrimaryKey, Columns: []string{"id"}}, Columns: []string{"id", "name"},
+	}
+	stmts, _, err := Plan(tb, tg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		"UPDATE `users` SET `name` = 'b' WHERE `id` = 1",
+		"INSERT INTO `users` (`name`) VALUES ('c')",
+	}
+	if diff := cmp.Diff(want, stmts); diff != "" {
+		t.Fatalf("stmts (-want +got):\n%s", diff)
+	}
+}

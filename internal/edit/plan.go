@@ -15,6 +15,18 @@ type Target struct {
 	Dialect sqlx.Dialect
 	Table   db.TableRef
 	Key     Key
+	// Columns names the table column behind each result column (a console
+	// result may rename them); nil when they are the same.
+	Columns []string
+}
+
+// column is result column i under its table column's name.
+func (tg Target) column(cols []db.ColumnInfo, i int) db.ColumnInfo {
+	c := cols[i]
+	if tg.Columns != nil {
+		c.Name = tg.Columns[i]
+	}
+	return c
 }
 
 // ErrNoKey means a changed or deleted row cannot be located.
@@ -45,8 +57,9 @@ func Plan(t *Table, tg Target) (stmts, warnings []string, err error) {
 				return nil, nil, err
 			}
 			var sets []string
-			for i, c := range t.cols {
+			for i := range t.cols {
 				if r.Set[i] {
+					c := tg.column(t.cols, i)
 					sets = append(sets, sqlx.QuoteIdent(d, c.Name)+" = "+sqlx.Literal(d, c.DatabaseType, r.Values[i]))
 				}
 			}
@@ -76,13 +89,17 @@ func (tg Target) where(cols []db.ColumnInfo, r *Row) (string, error) {
 	case PrimaryKey, UniqueKey:
 		for _, name := range tg.Key.Columns {
 			i := slices.IndexFunc(cols, func(c db.ColumnInfo) bool { return c.Name == name })
+			if tg.Columns != nil {
+				i = slices.Index(tg.Columns, name)
+			}
 			if i < 0 {
 				return "", fmt.Errorf("key column %s is not in the result", name)
 			}
-			parts = append(parts, match(d, cols[i], r.Orig[i]))
+			parts = append(parts, match(d, tg.column(cols, i), r.Orig[i]))
 		}
 	case AllColumns:
-		for i, c := range cols {
+		for i := range cols {
+			c := tg.column(cols, i)
 			if !incomparable[sqlx.NormType(c.DatabaseType)] {
 				parts = append(parts, match(d, c, r.Orig[i]))
 			}
@@ -123,8 +140,9 @@ func (tg Target) warning() string {
 func (tg Target) insert(name string, cols []db.ColumnInfo, r *Row) string {
 	d := tg.Dialect
 	var names, vals []string
-	for i, c := range cols {
+	for i := range cols {
 		if r.Set[i] {
+			c := tg.column(cols, i)
 			names = append(names, sqlx.QuoteIdent(d, c.Name))
 			vals = append(vals, sqlx.Literal(d, c.DatabaseType, r.Values[i]))
 		}

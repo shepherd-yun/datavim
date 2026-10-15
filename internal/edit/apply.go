@@ -12,14 +12,18 @@ import (
 const rollbackTimeout = 5 * time.Second
 
 // StatementError is a statement that failed or did not change exactly one
-// row; the transaction was rolled back.
+// row; the changes were rolled back.
 type StatementError struct {
 	Index int // 0-based
 	SQL   string
 	Err   error
+	InTx  bool // rolled back to the savepoint: the transaction is still open
 }
 
 func (e *StatementError) Error() string {
+	if e.InTx {
+		return fmt.Sprintf("statement %d: %v · these changes were rolled back, the transaction is still open", e.Index+1, e.Err)
+	}
 	return fmt.Sprintf("statement %d: %v · rolled back, nothing was changed", e.Index+1, e.Err)
 }
 
@@ -110,4 +114,41 @@ func ApplyDDL(ctx context.Context, s db.Querier, d sqlx.Dialect, stmts []string)
 		return fmt.Errorf("commit: %w", err)
 	}
 	return nil
+}
+
+// Savepoint is where ApplyInTx rolls back to.
+const Savepoint = "sqlvim_edit"
+
+// ApplyInTx runs stmts in the transaction already open on s (a db.Session)
+// and leaves it open. Like Apply, every statement must change exactly one
+// row; otherwise the transaction is rolled back to a savepoint taken
+// first, keeping what ran in it before, and a *StatementError names the
+// statement.
+func ApplyInTx(ctx context.Context, s db.Querier, stmts []string) error {
+	if _, err := s.Exec(ctx, "SAVEPOINT "+Savepoint); err != nil {
+		return fmt.Errorf("savepoint: %w", err)
+	}
+	for i, q := range stmts {
+		res, err := s.Exec(ctx, q)
+		if err == nil && res.RowsAffected != 1 {
+			err = &CountError{Affected: res.RowsAffected}
+		}
+		if err != nil {
+			rollbackTo(s)
+			return &StatementError{Index: i, SQL: q, Err: err, InTx: true}
+		}
+	}
+	if _, err := s.Exec(ctx, "RELEASE SAVEPOINT "+Savepoint); err != nil {
+		rollbackTo(s)
+		return fmt.Errorf("release savepoint: %w", err)
+	}
+	return nil
+}
+
+// rollbackTo undoes ApplyInTx's statements even when ctx was cancelled.
+// On PostgreSQL it also clears the failed state the error left.
+func rollbackTo(s db.Querier) {
+	ctx, cancel := context.WithTimeout(context.Background(), rollbackTimeout)
+	defer cancel()
+	_, _ = s.Exec(ctx, "ROLLBACK TO SAVEPOINT "+Savepoint)
 }
