@@ -18,6 +18,13 @@ All notable changes to this project are documented here. The format follows
   an open transaction and unsaved edits of the table block both.
 - `a` in the tree opens a menu of what you can do with the selected node and runs the entry
   you pick. Truncating a table lives there (bind `table.truncate` in `keymap.toml` for a key).
+- Schema compare: `m` in the tree marks a table, a MySQL database or a PostgreSQL schema as the
+  source and `C` compares it with the selected node of the same kind, on the same connection or
+  another one of the same engine. The diff tab lists the differing columns, indexes, comments
+  and options (foreign keys are shown, not synced); `x` picks what to sync (deletions start
+  unpicked), `~` swaps the sides and `<Space>w` writes the script into a new console on the
+  target, where the usual read-only and prod checks apply. Changes sqlvim cannot script stay in
+  it as comments.
 
 ### Changed
 - The columns popup and the search open the structure with `Ctrl-o` instead of `Ctrl-s`,

@@ -271,6 +271,20 @@ Modify Table 与结构同步共用这一套：Modify Table 是 `DiffTable(编辑
 
 每个阶段开始时再写 plan（`docs/superpowers/plans/`），写之前回顾上一阶段的实际结果，必要时修订本文档的对应章节。
 
+## 8.1 第 2 阶段的实现调整
+
+第 2 阶段（v1.3）实现时对上文做了这些调整，后续阶段以此为准：
+
+- `DDLWriter.CreateTable` 返回 `(stmts []string, manual []SchemaChange)`：PG 的索引与注释是单独的语句；MySQL 写不出的表达式索引退回 `manual`。
+- `DiffNamespace` 另外返回两边相同的表的数量（`identical`），供标题行使用。
+- `Index` 新增 `Constraint bool`（PG：索引背后是 PRIMARY KEY / UNIQUE 约束），决定用 `DROP CONSTRAINT` / `ADD CONSTRAINT` 还是 `DROP INDEX` / `CREATE INDEX`；不参与比较。
+- 归一化只在 `TableSchema` 里做，`Columns()` 等方法照旧返回服务端原文。`Default` 归一化为能直接跟在 `DEFAULT` 后面的 SQL 文本；自增与生成列的 `Default` 为空。`Position` 取列的顺序号。
+- 索引配对：主键与主键配对，其余先按名字、再按定义；只是名字不同不算差异。新增索引的名字若以源表名开头，换成目标表名开头，避免同一个 PG schema 里重名。
+- `Lossy` 还包括：新增 NOT NULL、无默认值的列；新增唯一索引。
+- 写不出、标为 `manual` 的：两边的生成列变更；PG 的自增变更与需要 `USING` 的改类型；MySQL 的表达式索引；PG 的表选项。生成列一律写成 `STORED`。
+- `C` 没有标记时，picker 的候选来自已加载的元数据（同引擎连接上的同类对象）。PG 的库节点不是命名空间，要选 schema。
+- §5.3 的 `D`（切到数据视图）随第 4 阶段实现。
+
 ## 9. 待定
 
 - 第 4 阶段：表很大时是否按键分段做校验和、只展开不一致的段，以突破 `compare_max_rows`。等第 4 阶段实际使用后再决定。
