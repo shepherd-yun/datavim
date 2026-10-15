@@ -82,3 +82,40 @@ func TestSwitchingTabsUpdatesRecent(t *testing.T) {
 		t.Fatalf("newest = %+v", got)
 	}
 }
+
+func TestRecentReopensAFile(t *testing.T) {
+	m, _ := newTestModel(t)
+	p := writeSQL(t, "a.sql", "select 1;")
+	ex(t, m, "e "+p)
+	ex(t, m, "q")
+	press(t, m, "space", "f")
+	if s := screen(m); !strings.Contains(s, "file") || !strings.Contains(s, "a.sql") || !strings.Contains(s, "local") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	press(t, m, "enter")
+	if c := fileConsole(t, m); c.editor.Value() != "select 1;" || c.conn != "local" {
+		t.Fatalf("conn %s text %q", c.conn, c.editor.Value())
+	}
+}
+
+func TestRecentFileLabel(t *testing.T) {
+	r := history.Recent{Kind: history.RecentFile, Conn: "local", Database: "app", Name: "/tmp/x/a.sql"}
+	if got := recentLabel(r); !strings.HasPrefix(got, "file     /tmp/x/a.sql  local/app") {
+		t.Fatalf("label %q", got)
+	}
+}
+
+func TestSwitchingToAFileConsoleRecordsTheFile(t *testing.T) {
+	m, _ := newTestModel(t)
+	p := writeSQL(t, "a.sql", "")
+	ex(t, m, "e "+p)
+	openLocalConsole(t, m)
+	press(t, m, "H") // back to the file console
+	st := m.store.(*fakeStore)
+	st.mu.Lock()
+	last := st.recents[len(st.recents)-1]
+	st.mu.Unlock()
+	if last.Kind != history.RecentFile || last.Name != p {
+		t.Fatalf("last recent %+v", last)
+	}
+}

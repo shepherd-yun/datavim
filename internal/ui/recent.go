@@ -45,14 +45,22 @@ var recentKinds = map[string]string{
 	history.RecentData:      "data",
 	history.RecentStructure: "struct",
 	history.RecentConsole:   "console",
+	history.RecentFile:      "file",
 }
 
 func recentLabel(r history.Recent) string {
+	parts := []string{r.Database, r.Schema, r.Name}
+	if r.Kind == history.RecentFile {
+		parts = parts[:2] // Name is the file, shown first
+	}
 	path := r.Conn
-	for _, p := range []string{r.Database, r.Schema, r.Name} {
+	for _, p := range parts {
 		if p != "" {
 			path += "/" + p
 		}
+	}
+	if r.Kind == history.RecentFile {
+		path = shortPath(r.Name, 50) + "  " + path
 	}
 	return fmt.Sprintf("%-8s %s  %s", recentKinds[r.Kind], path, r.Time.Local().Format("01-02 15:04"))
 }
@@ -87,6 +95,8 @@ func (m *Model) openRecent(r history.Recent) tea.Cmd {
 		return m.openStructure(r.Conn, db.TableRef{Namespace: ns, Name: r.Name})
 	case history.RecentConsole:
 		return m.openConsole(r.Conn, ns)
+	case history.RecentFile:
+		return m.openFile(r.Conn, ns, r.Name)
 	}
 	return nil
 }
@@ -99,13 +109,16 @@ func (m *Model) touchActive() tea.Cmd {
 	}
 	conn, ref := t.Target()
 	r := history.Recent{Conn: conn, Database: ref.Database, Schema: ref.Schema, Name: ref.Name}
-	switch t.(type) {
+	switch x := t.(type) {
 	case *dataTab:
 		r.Kind = history.RecentData
 	case *structureTab:
 		r.Kind = history.RecentStructure
 	case *consoleTab:
 		r.Kind, r.Name = history.RecentConsole, ""
+		if x.file != nil {
+			r.Kind, r.Name = history.RecentFile, x.file.path
+		}
 	default:
 		return nil
 	}
