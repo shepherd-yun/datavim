@@ -118,7 +118,16 @@
 #   table.rename           Rename table or view
 #   table.truncate         Truncate table
 #   tree.collapse          Collapse / parent
-#   tree.expand            Expand / open
+#   tree.expand            Expand
+#   tree.fold.close        Collapse (on a leaf, its parent)
+#   tree.fold.close_all    Collapse everything under the cursor
+#   tree.fold.close_tree   Collapse everything
+#   tree.fold.focus        Collapse all but the path to the cursor
+#   tree.fold.open         Expand
+#   tree.fold.open_all     Expand everything loaded under the cursor
+#   tree.fold.open_tree    Expand everything loaded
+#   tree.fold.toggle       Toggle expanded
+#   tree.open              Open: table data, a column or index in the structure, a foreign key's table
 #   tree.toggle            Toggle tree
 #   tx.toggle              Toggle manual commit
 #   yank.cell              Copy cell

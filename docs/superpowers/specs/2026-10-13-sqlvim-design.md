@@ -147,7 +147,7 @@ lazygit 风格的多面板布局：
  NORMAL  prod-pg/app  <space> leader  ? help
 ```
 
-- 左侧：树面板（连接 → 库/schema → 表/视图），懒加载；`<Space>b` 显示或隐藏。
+- 左侧：树面板（连接 → 库/schema → 表/视图 → 列、键、外键、索引），懒加载；`<Space>e` 显示或隐藏。
 - 右侧：tab 区。每个 tab 可以是：
   - 控制台：上方编辑器，下方结果
   - 表数据：表格
@@ -269,12 +269,14 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 ### 5.10 全局搜索与最近打开
 
 - `<Space><Space>`：模糊搜索当前连接（加 `@` 前缀可搜所有已连接的连接）的库、schema、表、视图、列、函数。结果按类型着色，回车跳转（打开表数据或结构），列结果跳转到所属表并定位到该列。
-- `<Space>e`：最近打开的表、结构和控制台，按时间排序，跨会话保存在 `history` 中。
+- `<Space>f`：最近打开的表、结构和控制台，按时间排序，跨会话保存在 `history` 中。
 - 搜索使用 sahilm/fuzzy 一类的库在 `meta` 缓存上做匹配，不查询数据库。
 
 ### 5.11 结构视图
 
 `<Space>s` 打开树中光标所在对象或控制台光标下的表名的结构 tab，分为几个子页：列（名称、类型、可空、默认值、注释）、索引、外键、DDL（带语法高亮，可复制）。
+
+树中展开表也能查看列、键、外键和索引，在其上按 Enter 打开结构页并定位（见 2026-10-16-tree-table-children-design.md）。
 
 ## 6. 按键体系
 
@@ -291,6 +293,7 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 
 - `Tab` / `Shift-Tab` 切换面板，`1`–`9` 跳到对应 tab，`Ctrl-h/j/k/l` 在面板间移动
 - 列表和表格通用：`h j k l`、`gg`、`G`、`Ctrl-d/u`、`/` 搜索、`n/N`
+- 树：`l` / `→` 展开（表展开为列、键、外键、索引），`Enter` 打开表数据或定位到结构页；vim 折叠键 `zo` `zc` `za` `zO` `zC` `zR` `zM` `zx`
 - `?` 显示当前上下文的按键帮助
 - `:q` 关闭当前 tab；`:qa` 退出（有未提交修改或事务时询问）
 
@@ -301,12 +304,12 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 | 按键 | 功能 | 对应 DataGrip |
 |---|---|---|
 | `<Space><Space>` | 全局搜索 | 双 Shift |
-| `<Space>e` | 最近打开 | Cmd+E |
+| `<Space>f` | 最近打开 | Cmd+E |
 | `<Space>s` | 查看结构 | Cmd+F12 |
 | `<Space>c` | 打开控制台 | Cmd+Shift+F10 |
 | `<Space>n` | 新建连接 | — |
 | `<Space>o` | 切换连接或数据库 | — |
-| `<Space>b` | 显示或隐藏树 | — |
+| `<Space>e` | 显示或隐藏树 | — |
 | `<Space>h` | SQL 历史 | — |
 | `<Space>v` | 在 nvim 中编辑 | — |
 | `<Space>w` | 提交数据修改 | Submit |

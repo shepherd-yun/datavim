@@ -7,7 +7,8 @@ A terminal SQL client for MySQL and PostgreSQL with vim keys and DataGrip-style 
 ![sqlvim demo](docs/demo.gif)
 
 - Browse databases, filter and sort table data, and **edit it in place**: changes are staged,
-  shown as SQL and submitted in one transaction.
+  shown as SQL and submitted in one transaction. Expand a table in the tree to see its columns,
+  keys, foreign keys and indexes.
 - A highlighted SQL console with a **built-in vim editor**, completion and `$EDITOR` hand-off.
 - `<Space><Space>` searches every table, view, column and routine; `<Space>f` reopens recent tabs.
 - Copy and export results (TSV, CSV, JSON, Markdown, INSERT, xlsx), SQL history.
@@ -83,7 +84,11 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | Key | Action |
 |---|---|
 | `j` `k` `h` `l`, `gg` `G`, `Ctrl-d` `Ctrl-u` | Move |
-| `l` / `Enter` | Expand node / open table (retry a disconnected connection) |
+| `l` / `→` | Expand a node; a table or view shows its Columns, Keys, Foreign Keys and Indexes (retry a disconnected connection) |
+| `Enter` | Open a table's data; on a column, key or index open the structure at it, on a foreign key go to the referenced table |
+| `zo` `zc` `za` | Expand / collapse (on a column, its group) / toggle |
+| `zO` `zC` | Expand everything loaded / collapse everything under the cursor |
+| `zR` `zM` `zx` | Expand everything loaded / collapse everything / collapse all but the path to the cursor |
 | `h` | Collapse / go to parent |
 | `Tab`, `Ctrl-h` `Ctrl-l` | Switch pane |
 | `1`–`9` | Go to tab (in the console editor digits are counts: use `gt` / `gT` / `{n}gt`) |
@@ -119,9 +124,9 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `<Space>yd` | Copy the DDL of the table under the cursor (tree, data or structure tab); `y` in a routine's definition copies it |
 | `<Space>x c/j/s/x` | Export result as CSV / JSON / SQL / xlsx |
 | `<Space>n` | New connection |
-| `e` | Tree: edit the selected connection (saved to `connections.toml`), or modify the selected table |
+| `e` | Tree: edit the selected connection (saved to `connections.toml`), or modify the selected table — on a column or index, with the cursor on it |
 | `e` | Structure: modify the table — `i` edits a field (`h` / `l` pick it), `o` adds a column or index, `dd` deletes, `u` / `U` undo, `<Space>w` previews and runs the ALTER |
-| `dd` | Tree: delete the selected connection, or drop the selected table or view (type its name to confirm) |
+| `dd` | Tree: delete the selected connection, or drop the selected table or view (type its name to confirm); on a column or index, stage its drop in Modify Table |
 | `r` | Tree: rename the selected table or view |
 | `a` | Tree: actions on the selected node, including truncating a table |
 | `m` / `C` | Tree: mark a table, MySQL database or PostgreSQL schema as the compare source / compare it with the selected one (without a mark, pick the source from the loaded metadata) |

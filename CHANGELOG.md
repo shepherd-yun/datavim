@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Tables and views expand in the tree into Columns, Keys, Foreign Keys and Indexes, each
+  with its type or columns. `Enter` on a column, key or index opens the structure at it, `e`
+  modifies the table there and `dd` stages the drop in Modify Table (still submitted with
+  `<Space>w`); `Enter` on a foreign key goes to the referenced table.
+- Vim fold keys in the tree: `zo` `zc` `za`, `zO` / `zC` for the subtree under the cursor,
+  `zR` / `zM` for the whole tree and `zx` to keep only the path to the cursor. `zO` and `zR`
+  open what is loaded already and never query the server.
 - Console results can be filtered and edited like table data. `f` and `F` narrow any SELECT
   result by running it again on the server: a single-table query gets the condition in its
   WHERE, any other query is wrapped in a subquery. A single-table SELECT of plain columns
@@ -70,6 +77,8 @@ All notable changes to this project are documented here. The format follows
   `compare_max_rows` rows (`config.toml`, default 100000); `D` goes back to the structure.
 
 ### Changed
+- In the tree, `l` and `→` on a table or view expand it; `Enter` opens its data. Rebind
+  `tree.open` in `keymap.toml` to change it.
 - `<Space>e` toggles the tree (was `<Space>b`) and `<Space>f` opens the recent tabs (was
   `<Space>e`). Remap them in `keymap.toml` as `tree.toggle` / `recent.open` to keep the old keys.
 - `Ctrl-H` / `Ctrl-L` wrap: `Ctrl-H` on the tree moves to the tabs and `Ctrl-L` on the tabs
