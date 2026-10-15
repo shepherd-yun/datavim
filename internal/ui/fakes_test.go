@@ -31,12 +31,19 @@ type fakeConn struct {
 	catalogErr error            // returned by Catalog
 	noKey      bool             // Columns reports no primary key and Indexes none
 	affected   map[string]int64 // statement text -> RowsAffected (default 1)
+	tables     []db.Table       // returned by Tables when set
 }
 
 func (c *fakeConn) setNoKey(v bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.noKey = v
+}
+
+func (c *fakeConn) setTables(ts []db.Table) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.tables = ts
 }
 
 func (c *fakeConn) keyless() bool {
@@ -164,7 +171,12 @@ type fakeMeta struct{ c *fakeConn }
 
 func (fakeMeta) Databases(context.Context) ([]string, error)       { return []string{"app"}, nil }
 func (fakeMeta) Schemas(context.Context, string) ([]string, error) { return nil, nil }
-func (fakeMeta) Tables(context.Context, db.Namespace) ([]db.Table, error) {
+func (m fakeMeta) Tables(context.Context, db.Namespace) ([]db.Table, error) {
+	m.c.mu.Lock()
+	defer m.c.mu.Unlock()
+	if m.c.tables != nil {
+		return slices.Clone(m.c.tables), nil
+	}
 	return []db.Table{{Name: "users"}, {Name: "active", Kind: db.TableKindView}}, nil
 }
 

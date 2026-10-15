@@ -245,6 +245,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.connAdded(msg)
 	case connUpdatedMsg:
 		return m, m.connUpdated(msg)
+	case tableOpPreparedMsg:
+		m.tableOpPrepared(msg)
+	case tableOpConfirmedMsg:
+		return m, runTableOp(m.backend, m.store, msg.op, msg.sql)
+	case tableOpDoneMsg:
+		return m, m.tableOpDone(msg)
 	case deleteConnMsg:
 		return m, removeConnection(m.backend, msg.name)
 	case connRemovedMsg:
@@ -475,7 +481,14 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 			}
 		}
 	case keymap.DeleteNode:
-		if n := t.Selected(); n != nil && m.canChange(n.Conn) {
+		n := t.Selected()
+		switch {
+		case n == nil:
+		case n.IsTable():
+			return m.startTableOp(tableOp{kind: opDrop, conn: n.Conn, ref: n.TableRef(), view: n.Kind == tree.KindView})
+		case n.Kind != tree.KindConn:
+			m.setStatus("only connections, tables and views can be deleted", true)
+		case m.canChange(n.Conn):
 			m.overlay = overlay.NewConfirm("Delete connection", []string{
 				"Delete " + n.Conn + " from connections.toml and its saved password?",
 				"Its open tabs are closed. Type the connection name to confirm.",

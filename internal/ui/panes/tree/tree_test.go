@@ -240,3 +240,30 @@ func TestReveal(t *testing.T) {
 		t.Fatal("unknown connection")
 	}
 }
+
+func TestNamespaceFindsTheNodeListingTables(t *testing.T) {
+	m := New([]*Node{
+		{Kind: KindConn, Name: "my", Conn: "my"},
+		{Kind: KindConn, Name: "pg", Conn: "pg"},
+	})
+	my, pg := m.Roots()[0], m.Roots()[1]
+	m.SetChildren(my, []*Node{{Kind: KindDatabase, Name: "app", Conn: "my", NS: db.Namespace{Database: "app"}}}, nil)
+	m.SetChildren(my.Children[0], []*Node{{Kind: KindTable, Name: "users", Conn: "my", NS: db.Namespace{Database: "app"}}}, nil)
+	m.SetChildren(pg, []*Node{{Kind: KindDatabase, Name: "app", Conn: "pg", NS: db.Namespace{Database: "app"}}}, nil)
+	pub := &Node{Kind: KindSchema, Name: "public", Conn: "pg", NS: db.Namespace{Database: "app", Schema: "public"}}
+	m.SetChildren(pg.Children[0], []*Node{pub}, nil)
+
+	if n := m.Namespace("my", db.Namespace{Database: "app"}); n != my.Children[0] {
+		t.Fatalf("mysql: %+v", n)
+	}
+	if n := m.Namespace("pg", db.Namespace{Database: "app", Schema: "public"}); n != nil {
+		t.Fatalf("schema not loaded yet, got %+v", n)
+	}
+	m.SetChildren(pub, nil, nil)
+	if n := m.Namespace("pg", db.Namespace{Database: "app", Schema: "public"}); n != pub {
+		t.Fatalf("postgres: %+v", n)
+	}
+	if n := m.Namespace("my", db.Namespace{Database: "other"}); n != nil {
+		t.Fatalf("missing: %+v", n)
+	}
+}

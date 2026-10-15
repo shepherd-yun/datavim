@@ -338,6 +338,28 @@ const (
 	NotFound                      // the connection or a name on the path does not exist
 )
 
+// Namespace returns the loaded node whose children are the tables of ns on
+// conn: a database node for MySQL, a schema node for PostgreSQL. It
+// returns nil when no such node is loaded.
+func (m *Model) Namespace(conn string, ns db.Namespace) *Node {
+	var walk func(nodes []*Node) *Node
+	walk = func(nodes []*Node) *Node {
+		for _, n := range nodes {
+			if n.Conn != conn {
+				continue
+			}
+			if (n.Kind == KindDatabase || n.Kind == KindSchema) && n.NS == ns && n.Loaded {
+				return n
+			}
+			if found := walk(n.Children); found != nil {
+				return found
+			}
+		}
+		return nil
+	}
+	return walk(m.roots)
+}
+
 // Reveal expands the tree of conn along path (database, then schema) and
 // selects the deepest node it reaches.
 func (m *Model) Reveal(conn string, path []string) (*Node, RevealResult) {
