@@ -265,6 +265,40 @@ func (w fakeDDL) RenameTable(t db.TableRef, newName string, _ bool) string {
 
 func (w fakeDDL) TruncateTable(t db.TableRef) string { return "TRUNCATE TABLE " + w.d.QualifiedName(t) }
 
+func (w fakeDDL) CreateTable(s db.TableSchema) ([]string, []db.SchemaChange) {
+	return []string{"CREATE TABLE " + w.d.QualifiedName(s.Ref)}, nil
+}
+
+// AlterTable writes one line per change. Like the real writers it leaves
+// generated-column changes and foreign keys to the user.
+func (w fakeDDL) AlterTable(t db.TableRef, changes []db.SchemaChange) ([]string, []db.SchemaChange) {
+	var stmts []string
+	var manual []db.SchemaChange
+	for _, c := range changes {
+		if c.Kind == db.ForeignKeyDiff || c.Kind == db.AlterColumn && c.Attrs&db.AttrGenerated != 0 {
+			manual = append(manual, c)
+			continue
+		}
+		stmts = append(stmts, "ALTER TABLE "+w.d.QualifiedName(t)+" "+c.Kind.String()+" "+fakeChangeName(c))
+	}
+	return stmts, manual
+}
+
+// fakeChangeName is the column, index or option a change is about.
+func fakeChangeName(c db.SchemaChange) string {
+	switch {
+	case c.New != nil:
+		return c.New.Name
+	case c.Old != nil:
+		return c.Old.Name
+	case c.NewIndex != nil:
+		return c.NewIndex.Name
+	case c.OldIndex != nil:
+		return c.OldIndex.Name
+	}
+	return c.Option
+}
+
 type fakeBackend struct {
 	mu           sync.Mutex
 	conns        []config.Connection

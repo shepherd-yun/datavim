@@ -109,4 +109,13 @@ type DDLWriter interface {
 	// RenameTable renames t within its namespace.
 	RenameTable(t TableRef, newName string, view bool) string
 	TruncateTable(t TableRef) string
+	// CreateTable writes the statements that create s, named by s.Ref,
+	// without its foreign keys. Indexes the engine cannot spell out come
+	// back as AddIndex changes in manual.
+	CreateTable(s TableSchema) (stmts []string, manual []SchemaChange)
+	// AlterTable writes changes, in the order given (package schemadiff
+	// orders them), to table t: MySQL as one ALTER TABLE, PostgreSQL as one
+	// statement per change plus COMMENT ON. Changes it cannot write, and
+	// foreign key differences, come back in manual.
+	AlterTable(t TableRef, changes []SchemaChange) (stmts []string, manual []SchemaChange)
 }

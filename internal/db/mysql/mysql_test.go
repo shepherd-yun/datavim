@@ -215,3 +215,93 @@ func TestNormDefault(t *testing.T) {
 		}
 	}
 }
+
+func TestCreateTable(t *testing.T) {
+	w := dialect{}.DDL()
+	zero := "0"
+	s := db.TableSchema{
+		Ref: db.TableRef{Namespace: db.Namespace{Database: "app"}, Name: "audit log"},
+		Columns: []db.Column{
+			{Name: "id", Type: "bigint", AutoIncrement: true},
+			{Name: "n", Type: "int", Default: &zero, Comment: `it's \ here`},
+			{Name: "code", Type: "varchar(10)", Nullable: true, Collation: "utf8mb4_bin"},
+			{Name: "total", Type: "int", Nullable: true, Generated: "`n` * 2"},
+		},
+		Indexes: []db.Index{
+			{Name: "PRIMARY", Columns: []string{"id"}, Unique: true, Primary: true, Method: "btree"},
+			{Name: "code_u", Columns: []string{"code"}, Unique: true, Method: "btree"},
+			{Name: "n_idx", Columns: []string{"n", "code"}, Method: "btree"},
+			{Name: "fx", Columns: []string{"(expression)"}, Method: "btree"},
+		},
+		Comment: "who did what",
+		Options: map[string]string{"engine": "InnoDB", "collation": "utf8mb4_0900_ai_ci"},
+	}
+	stmts, manual := w.CreateTable(s)
+	want := "CREATE TABLE `app`.`audit log` (\n" +
+		"  `id` bigint NOT NULL AUTO_INCREMENT,\n" +
+		"  `n` int NOT NULL DEFAULT 0 COMMENT 'it''s \\\\ here',\n" +
+		"  `code` varchar(10) COLLATE utf8mb4_bin NULL,\n" +
+		"  `total` int GENERATED ALWAYS AS (`n` * 2) STORED NULL,\n" +
+		"  PRIMARY KEY (`id`),\n" +
+		"  UNIQUE INDEX `code_u` (`code`),\n" +
+		"  INDEX `n_idx` (`n`, `code`)\n" +
+		") ENGINE=InnoDB COLLATE=utf8mb4_0900_ai_ci COMMENT='who did what'"
+	if len(stmts) != 1 || stmts[0] != want {
+		t.Errorf("got\n%s\nwant\n%s", strings.Join(stmts, ";\n"), want)
+	}
+	if len(manual) != 1 || manual[0].Kind != db.AddIndex || manual[0].NewIndex.Name != "fx" {
+		t.Errorf("manual = %+v", manual)
+	}
+}
+
+func TestAlterTable(t *testing.T) {
+	w := dialect{}.DDL()
+	users := db.TableRef{Namespace: db.Namespace{Database: "app"}, Name: "users"}
+	changes := []db.SchemaChange{
+		{Kind: db.DropIndex, OldIndex: &db.Index{Name: "idx_old", Columns: []string{"x"}}},
+		{Kind: db.DropIndex, OldIndex: &db.Index{Name: "PRIMARY", Columns: []string{"id"}, Unique: true, Primary: true}},
+		{Kind: db.RenameColumn, Old: &db.Column{Name: "nm"}, New: &db.Column{Name: "nick"}},
+		{Kind: db.RenameColumn, Old: &db.Column{Name: "a"}, New: &db.Column{Name: "b", Type: "bigint"}},
+		{Kind: db.DropColumn, Old: &db.Column{Name: "legacy"}},
+		{Kind: db.AddColumn, New: &db.Column{Name: "email", Type: "varchar(255)", Nullable: true}, After: "name"},
+		{Kind: db.AddColumn, New: &db.Column{Name: "first", Type: "int", Nullable: true}},
+		{
+			Kind: db.AlterColumn, Old: &db.Column{Name: "name", Type: "varchar(50)"},
+			New: &db.Column{Name: "name", Type: "varchar(100)", Comment: "who"}, Attrs: db.AttrType | db.AttrComment,
+		},
+		{Kind: db.AlterColumn, Old: &db.Column{Name: "a", Type: "int"}, New: &db.Column{Name: "b", Type: "bigint"}, Attrs: db.AttrType},
+		{Kind: db.AlterColumn, Old: &db.Column{Name: "g", Type: "int"}, New: &db.Column{Name: "g", Type: "int", Generated: "1"}, Attrs: db.AttrGenerated},
+		{Kind: db.AddIndex, NewIndex: &db.Index{Name: "PRIMARY", Columns: []string{"id", "tenant"}, Unique: true, Primary: true}},
+		{Kind: db.AddIndex, NewIndex: &db.Index{Name: "email_u", Columns: []string{"email"}, Unique: true}},
+		{Kind: db.AddIndex, NewIndex: &db.Index{Name: "body_ft", Columns: []string{"body"}, Method: "fulltext"}},
+		{Kind: db.AlterTableComment, NewValue: "people"},
+		{Kind: db.AlterTableOption, Option: "engine", NewValue: "InnoDB"},
+		{Kind: db.AlterTableOption, Option: "collation", NewValue: "utf8mb4_bin"},
+		{Kind: db.ForeignKeyDiff, NewFK: &db.ForeignKey{Name: "fk"}},
+	}
+	stmts, manual := w.AlterTable(users, changes)
+	want := "ALTER TABLE `app`.`users`\n" +
+		"  DROP INDEX `idx_old`,\n" +
+		"  DROP PRIMARY KEY,\n" +
+		"  RENAME COLUMN `nm` TO `nick`,\n" +
+		"  DROP COLUMN `legacy`,\n" +
+		"  ADD COLUMN `email` varchar(255) NULL AFTER `name`,\n" +
+		"  ADD COLUMN `first` int NULL FIRST,\n" +
+		"  MODIFY COLUMN `name` varchar(100) NOT NULL COMMENT 'who',\n" +
+		"  CHANGE COLUMN `a` `b` bigint NOT NULL,\n" +
+		"  ADD PRIMARY KEY (`id`, `tenant`),\n" +
+		"  ADD UNIQUE INDEX `email_u` (`email`),\n" +
+		"  ADD FULLTEXT INDEX `body_ft` (`body`),\n" +
+		"  COMMENT = 'people',\n" +
+		"  ENGINE = InnoDB,\n" +
+		"  COLLATE = utf8mb4_bin"
+	if len(stmts) != 1 || stmts[0] != want {
+		t.Errorf("got\n%s\nwant\n%s", strings.Join(stmts, ";\n"), want)
+	}
+	if len(manual) != 2 || manual[0].Kind != db.AlterColumn || manual[1].Kind != db.ForeignKeyDiff {
+		t.Errorf("manual = %+v", manual)
+	}
+	if stmts, manual := w.AlterTable(users, nil); stmts != nil || manual != nil {
+		t.Errorf("no changes: %v %v", stmts, manual)
+	}
+}
