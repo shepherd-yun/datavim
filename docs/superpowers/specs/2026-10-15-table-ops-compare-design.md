@@ -78,7 +78,7 @@ Modify Table 与结构同步共用这一套：Modify Table 是 `DiffTable(编辑
   ```go
   type DDLWriter interface {
       DropTable(t TableRef, view bool) string
-      RenameTable(t TableRef, newName string) string
+      RenameTable(t TableRef, newName string, view bool) string // PG 的视图要用 ALTER VIEW
       TruncateTable(t TableRef) string
       CreateTable(s TableSchema) string
       // AlterTable 把同一张表的变更写成语句。MySQL 尽量合并成一条

@@ -13,11 +13,18 @@ All notable changes to this project are documented here. The format follows
 - `y` in a popup that shows a value in full (a cell, a routine's definition) copies the text.
 - A `[popup]` table in `keymap.toml` rebinds the keys popups read themselves: `structure.full`
   in the columns popup and the search, `form.save` in the connection form.
+- `dd` on a table or view in the tree drops it once you type its name, and `r` renames it;
+  open tabs of the table close or follow the new name. Read-only connections, a console with
+  an open transaction and unsaved edits of the table block both.
+- `a` in the tree opens a menu of what you can do with the selected node and runs the entry
+  you pick. Truncating a table lives there (bind `table.truncate` in `keymap.toml` for a key).
 
 ### Changed
 - The columns popup and the search open the structure with `Ctrl-o` instead of `Ctrl-s`,
   which is a common tmux prefix (and terminal XOFF) and never reached sqlvim there. Their
   footers name the key you bound.
+- The action ID `conn.delete` is now `node.delete`; `keymap.toml` files that use the old ID
+  keep working.
 
 ## [1.1.0] - 2026-10-14
 
