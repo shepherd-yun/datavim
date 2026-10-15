@@ -77,28 +77,12 @@ func DefaultBindings() []Binding {
 	b = append(b,
 		Binding{Grid, keys("["), PrevPage, "Previous page"},
 		Binding{Grid, keys("]"), NextPage, "Next page"},
-		Binding{Grid, keys("f", "f"), FilterEqual, "Filter: equals this value"},
-		Binding{Grid, keys("f", "!"), FilterNotEqual, "Filter: not this value"},
-		Binding{Grid, keys("f", "s"), FilterContains, "Filter: contains… (LIKE %…%)"},
-		Binding{Grid, keys("f", "~"), FilterContains, "Filter: contains… (LIKE %…%)"},
-		Binding{Grid, keys("f", "l"), FilterLike, "Filter: LIKE pattern… (% any, _ one char)"},
-		Binding{Grid, keys("f", ">"), FilterGreater, "Filter: greater than…"},
-		Binding{Grid, keys("f", "<"), FilterLess, "Filter: less than…"},
-		Binding{Grid, keys("f", "n"), FilterNull, "Filter: is NULL"},
-		Binding{Grid, keys("f", "N"), FilterNotNull, "Filter: is not NULL"},
-		Binding{Grid, keys("f", "x"), FilterClear, "Clear the filter"},
-		Binding{Grid, keys("F"), FilterPrompt, "Edit the filter (WHERE)"},
 		Binding{Grid, keys("s"), SortColumn, "Sort by column: asc, desc, off"},
-		Binding{Grid, keys("i"), EditCell, "Edit cell"},
-		Binding{Grid, keys("enter"), EditCell, "Edit cell"},
-		Binding{Grid, keys("o"), InsertRow, "Add a row below"},
-		Binding{Grid, keys("d", "d"), DeleteRow, "Delete row"},
-		Binding{Grid, keys("u"), UndoEdit, "Undo the last change"},
-		Binding{Grid, keys("U"), UndoAllEdits, "Discard every change"},
-		Binding{Grid, keys(LeaderToken, "w"), SubmitEdits, "Submit changes (:w)"},
 	)
+	b = append(b, filterEditBindings(Grid)...)
 
 	b = append(b, gridBindings(Results)...)
+	b = append(b, filterEditBindings(Results)...)
 	b = append(b,
 		Binding{Results, keys("]"), LoadMore, "Load more rows"},
 		Binding{Results, keys("M"), ToggleMessages, "Toggle messages"},
@@ -201,4 +185,29 @@ func gridBindings(ctx Context) []Binding {
 		Binding{ctx, keys("y", "y"), YankRow, "Copy row"},
 		Binding{ctx, keys("K"), CellDetail, "Show cell value"},
 	)
+}
+
+// filterEditBindings are the filter and edit keys shared by table data and
+// console results.
+func filterEditBindings(ctx Context) []Binding {
+	return []Binding{
+		{ctx, keys("f", "f"), FilterEqual, "Filter: equals this value"},
+		{ctx, keys("f", "!"), FilterNotEqual, "Filter: not this value"},
+		{ctx, keys("f", "s"), FilterContains, "Filter: contains… (LIKE %…%)"},
+		{ctx, keys("f", "~"), FilterContains, "Filter: contains… (LIKE %…%)"},
+		{ctx, keys("f", "l"), FilterLike, "Filter: LIKE pattern… (% any, _ one char)"},
+		{ctx, keys("f", ">"), FilterGreater, "Filter: greater than…"},
+		{ctx, keys("f", "<"), FilterLess, "Filter: less than…"},
+		{ctx, keys("f", "n"), FilterNull, "Filter: is NULL"},
+		{ctx, keys("f", "N"), FilterNotNull, "Filter: is not NULL"},
+		{ctx, keys("f", "x"), FilterClear, "Clear the filter"},
+		{ctx, keys("F"), FilterPrompt, "Edit the filter (WHERE)"},
+		{ctx, keys("i"), EditCell, "Edit cell"},
+		{ctx, keys("enter"), EditCell, "Edit cell"},
+		{ctx, keys("o"), InsertRow, "Add a row below"},
+		{ctx, keys("d", "d"), DeleteRow, "Delete row"},
+		{ctx, keys("u"), UndoEdit, "Undo the last change"},
+		{ctx, keys("U"), UndoAllEdits, "Discard every change"},
+		{ctx, keys(LeaderToken, "w"), SubmitEdits, "Submit changes (:w)"},
+	}
 }

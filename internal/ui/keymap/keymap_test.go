@@ -213,8 +213,12 @@ func TestFilterAndSortBindings(t *testing.T) {
 		if a, res := k.Resolve(Grid, seq); a != want || res != Matched {
 			t.Errorf("grid %s: %q %v", keys, a, res)
 		}
-		if _, res := k.Resolve(Results, seq); res == Matched {
-			t.Errorf("console results are not filtered: %s", keys)
+		a, res := k.Resolve(Results, seq)
+		switch {
+		case want == SortColumn && res == Matched && a == want:
+			t.Errorf("console results do not sort: %s", keys)
+		case want != SortColumn && (res != Matched || a != want):
+			t.Errorf("results %s: %q %v", keys, a, res)
 		}
 	}
 	if _, res := k.Resolve(Grid, []string{"f"}); res != Pending {
@@ -232,8 +236,8 @@ func TestEditBindings(t *testing.T) {
 		if a, res := k.Resolve(Grid, seq); a != want || res != Matched {
 			t.Errorf("grid %s: %q %v", keys, a, res)
 		}
-		if a, res := k.Resolve(Results, seq); res == Matched && a == want {
-			t.Errorf("console results are read-only: %s", keys)
+		if a, res := k.Resolve(Results, seq); a != want || res != Matched {
+			t.Errorf("results %s: %q %v", keys, a, res)
 		}
 	}
 }
@@ -338,5 +342,32 @@ func TestDataDiffBindings(t *testing.T) {
 	}
 	if KnownActions()[DataDiff] == "" {
 		t.Error("diff.data cannot be bound in keymap.toml")
+	}
+}
+
+func TestResultsShareFilterAndEditKeys(t *testing.T) {
+	k := Default()
+	for _, tc := range []struct {
+		keys []string
+		want Action
+	}{
+		{[]string{"f", "f"}, FilterEqual},
+		{[]string{"F"}, FilterPrompt},
+		{[]string{"i"}, EditCell},
+		{[]string{"o"}, InsertRow},
+		{[]string{"d", "d"}, DeleteRow},
+		{[]string{"U"}, UndoAllEdits},
+	} {
+		for _, ctx := range []Context{Grid, Results} {
+			if a, r := k.Resolve(ctx, tc.keys); r != Matched || a != tc.want {
+				t.Errorf("%s %v = %v %v, want %v", ctx, tc.keys, a, r, tc.want)
+			}
+		}
+	}
+	if a, r := k.Resolve(Results, []string{"s"}); r == Matched && a == SortColumn {
+		t.Error("results do not sort")
+	}
+	if a, _ := k.Resolve(Results, []string{"]"}); a != LoadMore {
+		t.Errorf("] in results = %v", a)
 	}
 }
