@@ -1,12 +1,15 @@
 package structure
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
+	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/schemaedit"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
@@ -98,5 +101,96 @@ func TestDDLIsHighlightedAndSanitized(t *testing.T) {
 	}
 	if !strings.Contains(ansi.Strip(v), "CREATE TABLE users (") {
 		t.Fatalf("DDL text:\n%s", ansi.Strip(v))
+	}
+}
+
+func editable() db.TableSchema {
+	d := data()
+	return db.TableSchema{
+		Ref:     db.TableRef{Namespace: db.Namespace{Database: "app"}, Name: "users"},
+		Columns: d.Columns,
+		Indexes: d.Indexes,
+	}
+}
+
+func TestCursorMovesOverRows(t *testing.T) {
+	m := New(sqlx.MySQL)
+	m.SetSize(80, 20)
+	m.SetData(data())
+	m.Scroll(1)
+	if row, _ := m.Cursor(); row != 1 {
+		t.Fatalf("row = %d", row)
+	}
+	m.Scroll(5)
+	if row, _ := m.Cursor(); row != 1 {
+		t.Fatal("the cursor stops at the last row")
+	}
+	m.MoveField(1)
+	if _, f := m.Cursor(); f != 0 {
+		t.Fatal("fields move only while editing")
+	}
+	m.NextSection()
+	if row, f := m.Cursor(); row != 0 || f != 0 || m.Section() != Indexes {
+		t.Fatalf("a new section starts at the top: %d %d", row, f)
+	}
+}
+
+func TestEditModeMarksFields(t *testing.T) {
+	m := New(sqlx.MySQL)
+	m.SetSize(80, 20)
+	m.SetData(data())
+	e := schemaedit.New(editable(), sqlx.MySQL)
+	if err := e.SetColumn(1, schemaedit.ColName, "memo"); err != nil {
+		t.Fatal(err)
+	}
+	at := e.AddColumn(1)
+	if err := e.SetColumn(at, schemaedit.ColName, "neww"); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.DeleteColumn(0); err != nil {
+		t.Fatal(err)
+	}
+	m.SetEdit(e)
+	if !m.Editing() {
+		t.Fatal("editing")
+	}
+	m.SetCursor(Columns, 2)
+	m.MoveField(1) // the new column's type: the cursor is not on the cells checked below
+	v := m.View()
+	for name, style := range map[string]lipgloss.Style{
+		"memo": theme.Changed, "neww": theme.Inserted, "id  ": theme.Deleted,
+	} {
+		if !strings.Contains(v, style.Render(name)) {
+			t.Errorf("%q is not marked:\n%q", name, v)
+		}
+	}
+	if _, f := m.Cursor(); f != 1 {
+		t.Fatalf("field = %d", f)
+	}
+	m.MoveField(10)
+	if _, f := m.Cursor(); f != int(schemaedit.ColumnFields)-1 {
+		t.Fatalf("the field cursor stops at the last field: %d", f)
+	}
+	m.SetEdit(nil)
+	if m.Editing() || strings.Contains(m.View(), "neww") {
+		t.Fatal("SetEdit(nil) shows the table as read")
+	}
+}
+
+func TestCursorKeepsItsRowVisible(t *testing.T) {
+	m := New(sqlx.MySQL)
+	m.SetSize(40, 5) // header line, blank, 3 body lines: table header, rule, one row
+	d := data()
+	for i := range 10 {
+		d.Columns = append(d.Columns, db.Column{Name: fmt.Sprintf("c%d", i), Type: "int"})
+	}
+	m.SetData(d)
+	m.Scroll(6)
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "c4") {
+		t.Fatalf("row 6 (c4) is visible:\n%s", v)
+	}
+	m.Top()
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "Name") {
+		t.Fatalf("the top shows the header:\n%s", v)
 	}
 }
