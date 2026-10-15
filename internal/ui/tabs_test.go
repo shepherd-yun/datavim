@@ -85,7 +85,7 @@ func TestDataTabKeepsDataOnError(t *testing.T) {
 
 func TestStructureTab(t *testing.T) {
 	b := newFakeBackend()
-	tab := newStructureTab(2, b, "local", usersRef)
+	tab := newStructureTab(2, b, newFakeStore(), "local", usersRef)
 	tab.SetSize(80, 20)
 	tab.Update(run(tab.Init()))
 	if v := ansi.Strip(tab.View(true)); !strings.Contains(v, "[Columns]") || !strings.Contains(v, "bigint") {
@@ -96,7 +96,7 @@ func TestStructureTab(t *testing.T) {
 		t.Fatalf("indexes:\n%s", v)
 	}
 
-	missing := newStructureTab(3, b, "local", db.TableRef{Namespace: usersRef.Namespace, Name: "missing"})
+	missing := newStructureTab(3, b, newFakeStore(), "local", db.TableRef{Namespace: usersRef.Namespace, Name: "missing"})
 	missing.SetSize(80, 20)
 	missing.Update(run(missing.Init()))
 	if v := ansi.Strip(missing.View(true)); !strings.Contains(v, "not found") {

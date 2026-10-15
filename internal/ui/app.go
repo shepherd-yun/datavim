@@ -485,11 +485,19 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 			m.overlay = overlay.NewPassword(n.Conn)
 		}
 	case keymap.EditNode:
-		if n := t.Selected(); n != nil && m.canChange(n.Conn) {
+		n := t.Selected()
+		switch {
+		case n == nil:
+		case n.Kind == tree.KindTable:
+			return m.modifyTable(n.Conn, n.TableRef())
+		case n.Kind == tree.KindView:
+			m.setStatus(errViewNotModifiable.Error(), true)
+		case m.canChange(n.Conn):
 			if cfg, ok := m.backend.Connection(n.Conn); ok {
 				m.overlay = overlay.NewEditConnForm(m.keys, cfg)
 			}
 		}
+
 	case keymap.MarkCompare:
 		m.markCompare()
 	case keymap.Compare:
@@ -536,8 +544,8 @@ func (m *Model) canChange(conn string) bool {
 				m.setStatus("a console on "+conn+" has an open transaction · :commit or :rollback first", true)
 				return false
 			}
-		case *dataTab:
-			if t.conn == conn && t.changes() > 0 {
+		case stager:
+			if c, _ := t.Target(); c == conn && t.changes() > 0 {
 				m.setStatus(joinHints(t.Title()+" on "+conn+" has unsaved changes", t.unsavedHint("submits", "discards")), true)
 				return false
 			}
@@ -668,7 +676,7 @@ func (m *Model) requestClose(force bool) tea.Cmd {
 		}, "", closeTabConfirmedMsg{tabID: t.ID()})
 		return nil
 	}
-	if d, ok := t.(*dataTab); ok && d.changes() > 0 && !force {
+	if d, ok := t.(stager); ok && d.changes() > 0 && !force {
 		m.overlay = overlay.NewConfirm("Unsaved changes", []string{
 			d.Title() + " has " + plural(d.changes(), "unsaved change") + ".",
 			"Closing the tab discards them.",
@@ -704,7 +712,7 @@ func (m *Model) requestQuit(force bool) tea.Cmd {
 func (m *Model) unsavedTables() []string {
 	var out []string
 	for _, t := range m.tabs {
-		if d, ok := t.(*dataTab); ok && d.changes() > 0 {
+		if d, ok := t.(stager); ok && d.changes() > 0 {
 			out = append(out, fmt.Sprintf("%s (%d)", d.Title(), d.changes()))
 		}
 	}
@@ -872,7 +880,9 @@ func (m *Model) openData(conn string, ref db.TableRef) tea.Cmd {
 
 func (m *Model) openStructure(conn string, ref db.TableRef) tea.Cmd {
 	return tea.Batch(m.openTab(structureTabKey(conn, ref), history.Recent{Kind: history.RecentStructure, Conn: conn, Database: ref.Database, Schema: ref.Schema, Name: ref.Name}, func(id int) tab {
-		return newStructureTab(id, m.backend, conn, ref)
+		t := newStructureTab(id, m.backend, m.store, conn, ref)
+		t.keys = m.keys
+		return t
 	}), m.ensureMeta(conn, ref.Database))
 }
 

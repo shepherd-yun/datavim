@@ -53,10 +53,16 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			{keymap.Expand, "Open data"},
 			{keymap.OpenStructure, "Columns"},
 			{keymap.OpenFullStructure, "Open structure"},
-			{keymap.CopyDDL, "Copy DDL"},
-			{keymap.OpenConsole, "Open console"},
-			{keymap.RenameTable, "Rename " + obj},
 		}
+		if n.Kind == tree.KindTable {
+			entries = append(entries, entry{keymap.EditNode, "Modify table"})
+		}
+		entries = append(entries,
+			entry{keymap.CopyDDL, "Copy DDL"},
+			entry{keymap.OpenConsole, "Open console"},
+			entry{keymap.RenameTable, "Rename " + obj},
+		)
+
 		if n.Kind == tree.KindTable {
 			entries = append(entries,
 				entry{keymap.MarkCompare, "Mark for compare"},

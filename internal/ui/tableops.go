@@ -109,24 +109,7 @@ type (
 func (m tableOpPreparedMsg) failure() (string, error) { return m.op.conn, m.err }
 
 // tableOpBlocked says why op cannot run now ("" when it can).
-func (m *Model) tableOpBlocked(op tableOp) string {
-	if cfg, _ := m.backend.Connection(op.conn); cfg.IsReadOnly() {
-		return "read-only connection · :set noreadonly allows changes for this session"
-	}
-	for _, t := range m.tabs {
-		switch t := t.(type) {
-		case *consoleTab:
-			if t.conn == op.conn && t.openTx() {
-				return "a console on " + op.conn + " has an open transaction · :commit or :rollback first"
-			}
-		case *dataTab:
-			if t.conn == op.conn && t.ref == op.ref && t.changes() > 0 {
-				return joinHints(t.Title()+" has "+plural(t.changes(), "unsaved change"), t.unsavedHint("submits", "discards"))
-			}
-		}
-	}
-	return ""
-}
+func (m *Model) tableOpBlocked(op tableOp) string { return m.tableBlocked(op.conn, op.ref, nil) }
 
 // startTableOp checks op, then has the connection's dialect write its SQL.
 func (m *Model) startTableOp(op tableOp) tea.Cmd {

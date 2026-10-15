@@ -14,6 +14,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/edit"
+	"github.com/shepherd-yun/sqlvim/internal/schemaedit"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
@@ -650,16 +651,31 @@ func (m structureLoadedMsg) TabID() int { return m.tabID }
 type structureTab struct {
 	id      int
 	backend Backend
+	store   Store
+	keys    *keymap.Keymap
 	conn    string
 	ref     db.TableRef
+	dialect sqlx.Dialect
 	view    *structure.Model
 	loading bool
 	err     string
+	height  int
+
+	status    string // what the last key did; cleared by the next one
+	statusErr bool
+
+	// Modify Table (structedit.go)
+	ed          *schemaedit.Table // nil unless the table is being modified
+	ddl         db.DDLWriter      // the connection's, read with ed
+	editLoading bool
+	retryEdit   bool // reading the table for editing wanted a password
+	submitting  bool // the staged edits are being submitted
 }
 
-func newStructureTab(id int, b Backend, conn string, ref db.TableRef) *structureTab {
+func newStructureTab(id int, b Backend, st Store, conn string, ref db.TableRef) *structureTab {
 	cfg, _ := b.Connection(conn)
-	return &structureTab{id: id, backend: b, conn: conn, ref: ref, view: structure.New(sqlx.DialectOf(cfg.Driver))}
+	d := sqlx.DialectOf(cfg.Driver)
+	return &structureTab{id: id, backend: b, store: st, keys: keymap.Default(), conn: conn, ref: ref, dialect: d, view: structure.New(d)}
 }
 
 func (t *structureTab) ID() int                       { return t.id }
@@ -668,7 +684,11 @@ func (t *structureTab) Key() string                   { return structureTabKey(t
 func (t *structureTab) Context() keymap.Context       { return keymap.Structure }
 func (t *structureTab) Target() (string, db.TableRef) { return t.conn, t.ref }
 func (t *structureTab) Init() tea.Cmd                 { return t.load() }
-func (t *structureTab) SetSize(w, h int)              { t.view.SetSize(w, h) }
+
+func (t *structureTab) SetSize(w, h int) {
+	t.height = max(h, 0)
+	t.view.SetSize(w, max(h-1, 0))
+}
 
 func (t *structureTab) load() tea.Cmd {
 	t.loading = true
@@ -706,27 +726,35 @@ func fetchStructure(ctx context.Context, m db.MetaReader, ref db.TableRef) (stru
 }
 
 func (t *structureTab) Update(msg tea.Msg) tea.Cmd {
-	m, ok := msg.(structureLoadedMsg)
-	if !ok {
-		return nil
+	switch m := msg.(type) {
+	case structureLoadedMsg:
+		t.loading = false
+		if m.err != nil {
+			t.err = m.err.Error()
+			return nil
+		}
+		t.err = ""
+		t.view.SetData(m.data)
+	case schemaLoadedMsg:
+		t.schemaLoaded(m)
+	case structEditedMsg:
+		return t.structEdited(m)
 	}
-	t.loading = false
-	if m.err != nil {
-		t.err = m.err.Error()
-		return nil
-	}
-	t.err = ""
-	t.view.SetData(m.data)
 	return nil
 }
 
 func (t *structureTab) Handle(a keymap.Action) tea.Cmd {
+	t.status = ""
 	v := t.view
 	switch a {
 	case keymap.Down:
 		v.Scroll(1)
 	case keymap.Up:
 		v.Scroll(-1)
+	case keymap.Left:
+		v.MoveField(-1)
+	case keymap.Right:
+		v.MoveField(1)
 	case keymap.Top:
 		v.Top()
 	case keymap.Bottom:
@@ -740,9 +768,11 @@ func (t *structureTab) Handle(a keymap.Action) tea.Cmd {
 	case keymap.PrevSection:
 		v.PrevSection()
 	case keymap.Refresh:
-		if !t.loading {
-			return t.load()
-		}
+		return t.refresh()
+	case keymap.ModifyTable:
+		return t.toggleEdit()
+	case keymap.EditCell, keymap.InsertRow, keymap.DeleteRow, keymap.UndoEdit, keymap.UndoAllEdits:
+		return t.editAction(a)
 	}
 	return nil
 }
@@ -754,7 +784,28 @@ func (t *structureTab) View(bool) string {
 	case t.loading:
 		return theme.Muted.Render("loading…")
 	}
-	return t.view.View()
+	return textutil.PadLines(t.view.View(), max(t.height-1, 0)) + "\n" + t.statusLine()
+}
+
+func (t *structureTab) statusLine() string {
+	switch {
+	case t.status != "":
+		style := theme.Muted
+		if t.statusErr {
+			style = theme.Error
+		}
+		return style.Render(textutil.Sanitize(t.status))
+	case t.editLoading:
+		return theme.Muted.Render("reading " + t.ref.Name + " to modify it…")
+	case t.ed == nil:
+		return theme.Muted.Render(keyHint(t.keys, keymap.Structure, keymap.ModifyTable, "modify table"))
+	}
+	k := func(a keymap.Action, label string) string { return keyHint(t.keys, keymap.Structure, a, label) }
+	hints := joinHints(k(keymap.EditCell, "edit"), k(keymap.InsertRow, "add"), k(keymap.DeleteRow, "delete"), k(keymap.ModifyTable, "done"))
+	if n := t.changes(); n > 0 {
+		return theme.Accent.Render("● "+plural(n, "change")) + theme.Muted.Render(" · "+joinHints(t.unsavedHint("submit", "discard"), hints))
+	}
+	return theme.Muted.Render(joinHints("modifying "+textutil.Sanitize(t.ref.Name), hints))
 }
 
 // passwordRetrier is a tab that failed for want of a password and can try
@@ -771,7 +822,13 @@ func (t *dataTab) retryAfterPassword() tea.Cmd {
 	return t.Handle(keymap.Refresh)
 }
 
-func (t *structureTab) retryAfterPassword() tea.Cmd { return t.Handle(keymap.Refresh) }
+func (t *structureTab) retryAfterPassword() tea.Cmd {
+	if t.retryEdit {
+		t.retryEdit = false
+		return t.startEdit()
+	}
+	return t.refresh()
+}
 
 // retargeter is a tab on one table that can follow a rename.
 type retargeter interface {
@@ -786,5 +843,5 @@ func (t *dataTab) retarget(ref db.TableRef) tea.Cmd {
 
 func (t *structureTab) retarget(ref db.TableRef) tea.Cmd {
 	t.ref = ref
-	return t.Handle(keymap.Refresh)
+	return t.refresh()
 }
