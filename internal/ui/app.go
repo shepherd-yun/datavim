@@ -482,6 +482,11 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 				m.overlay = overlay.NewEditConnForm(m.keys, cfg)
 			}
 		}
+	case keymap.TruncateTable:
+		if n := t.Selected(); n != nil && n.Kind == tree.KindTable {
+			return m.startTableOp(tableOp{kind: opTruncate, conn: n.Conn, ref: n.TableRef()})
+		}
+		m.setStatus("only tables can be truncated", true)
 	case keymap.RenameTable:
 		if n := t.Selected(); n != nil && n.IsTable() {
 			m.askRename(tableOp{kind: opRename, conn: n.Conn, ref: n.TableRef(), view: n.Kind == tree.KindView})

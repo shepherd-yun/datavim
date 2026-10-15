@@ -14,6 +14,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/runner"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 )
 
@@ -220,6 +221,8 @@ func (m *Model) tableOpDone(msg tableOpDoneMsg) tea.Cmd {
 		cmds = append(cmds, m.closeTabsOfTable(op.conn, op.ref), m.reloadTables(op.conn, op.ref.Namespace, ""))
 	case opRename:
 		cmds = append(cmds, m.retargetTabs(op.conn, op.ref, op.renamed()), m.reloadTables(op.conn, op.ref.Namespace, op.newName))
+	case opTruncate:
+		cmds = append(cmds, m.refreshTabsOfTable(op.conn, op.ref))
 	}
 	return tea.Batch(cmds...)
 }
@@ -292,6 +295,17 @@ func (m *Model) retargetTabs(conn string, from, to db.TableRef) tea.Cmd {
 		}
 		if c, ref := t.Target(); c == conn && ref == from {
 			cmds = append(cmds, r.retarget(to))
+		}
+	}
+	return tea.Batch(cmds...)
+}
+
+// refreshTabsOfTable reloads the data tabs of ref.
+func (m *Model) refreshTabsOfTable(conn string, ref db.TableRef) tea.Cmd {
+	var cmds []tea.Cmd
+	for _, t := range m.tabs {
+		if d, ok := t.(*dataTab); ok && d.conn == conn && d.ref == ref {
+			cmds = append(cmds, d.Handle(keymap.Refresh))
 		}
 	}
 	return tea.Batch(cmds...)

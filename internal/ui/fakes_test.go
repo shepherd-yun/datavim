@@ -107,6 +107,12 @@ func (c *fakeConn) lastQuery() string {
 	return c.queries[len(c.queries)-1]
 }
 
+func (c *fakeConn) queryCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return len(c.queries)
+}
+
 func (c *fakeConn) Exec(_ context.Context, q string, _ ...any) (db.ExecResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

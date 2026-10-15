@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 )
 
 // selectNode focuses the tree and selects conn/path..., loading on the way.
@@ -311,5 +312,38 @@ func TestRenameBlockedByUnsavedChanges(t *testing.T) {
 	press(t, m, "ctrl+h", "r")
 	if strings.Contains(screen(m), "Rename table") || !strings.Contains(statusLine(m), "unsaved change") {
 		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+const truncateUsers = "TRUNCATE TABLE `app`.`users`"
+
+func TestTruncateTableNeedsItsNameAndReloadsData(t *testing.T) {
+	m, b := newTestModel(t)
+	openUsers(t, m)
+	press(t, m, "ctrl+h")
+	drain(t, m, m.dispatch(keymap.TruncateTable))
+	if s := screen(m); !strings.Contains(s, "Truncate table users") || !strings.Contains(s, "Every row") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	queries := b.conn.queryCount()
+	typeText(t, m, "users")
+	press(t, m, "enter")
+	if !slices.Contains(b.conn.execList(), truncateUsers) {
+		t.Fatalf("execs = %v", b.conn.execList())
+	}
+	if len(m.tabs) != 1 || b.conn.queryCount() == queries {
+		t.Fatal("the data tab was not reloaded")
+	}
+	if !strings.Contains(statusLine(m), "truncated table users") {
+		t.Fatalf("status: %s", statusLine(m))
+	}
+}
+
+func TestTruncateRefusesViews(t *testing.T) {
+	m, b := newTestModel(t)
+	selectNode(t, m, "local", "app", "active")
+	drain(t, m, m.dispatch(keymap.TruncateTable))
+	if !strings.Contains(statusLine(m), "only tables can be truncated") || len(b.conn.execList()) != 0 {
+		t.Fatalf("status %s, execs %v", statusLine(m), b.conn.execList())
 	}
 }
