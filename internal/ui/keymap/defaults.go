@@ -14,7 +14,7 @@ func DefaultBindings() []Binding {
 		{Global, keys("?"), Help, "Help"},
 		{Global, keys(":"), CommandLine, "Command line"},
 		{Global, keys("ctrl+c"), Cancel, "Cancel query"},
-		{Global, keys(LeaderToken, "b"), ToggleTree, "Toggle tree"},
+		{Global, keys(LeaderToken, "e"), ToggleTree, "Toggle tree"},
 		{Global, keys(LeaderToken, "s"), OpenStructure, "Columns / structure"},
 		{Global, keys(LeaderToken, "S"), OpenFullStructure, "Open structure"},
 		{Global, keys(LeaderToken, "y", "d"), CopyDDL, "Copy DDL"},
@@ -24,7 +24,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(LeaderToken, "h"), History, "SQL history"},
 		{Global, keys(LeaderToken, "t"), ToggleTx, "Toggle manual commit"},
 		{Global, keys(LeaderToken, LeaderToken), GlobalSearch, "Search everything"},
-		{Global, keys(LeaderToken, "e"), Recent, "Recent tabs"},
+		{Global, keys(LeaderToken, "f"), Recent, "Recent tabs"},
 		{Global, keys(LeaderToken, "l"), Locate, "Locate the current tab in the tree"},
 	}
 	for _, c := range []struct{ key, format, desc string }{

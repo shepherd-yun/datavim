@@ -12,7 +12,7 @@ func TestRecentListsWhatWasOpened(t *testing.T) {
 	m, _ := newTestModel(t)
 	openUsers(t, m)
 	press(t, m, "space", "s", "ctrl+o")
-	press(t, m, "space", "e")
+	press(t, m, "space", "f")
 	s := screen(m)
 	data, structure := strings.Index(s, "data     local/app/users"), strings.Index(s, "struct   local/app/users")
 	if data < 0 || structure < 0 || structure > data {
@@ -27,7 +27,7 @@ func TestRecentListsWhatWasOpened(t *testing.T) {
 func TestRecentConsoleAndMissingConnection(t *testing.T) {
 	m, b := newTestModel(t)
 	press(t, m, "l", "j", "space", "c", "ctrl+h")
-	press(t, m, "space", "e")
+	press(t, m, "space", "f")
 	if s := screen(m); !strings.Contains(s, "console  local/app") {
 		t.Fatalf("screen:\n%s", s)
 	}
@@ -38,7 +38,7 @@ func TestRecentConsoleAndMissingConnection(t *testing.T) {
 	if err := b.RemoveConnection("local"); err != nil {
 		t.Fatal(err)
 	}
-	press(t, m, "space", "e", "enter")
+	press(t, m, "space", "f", "enter")
 	if !strings.Contains(m.status, "no longer exists") {
 		t.Fatalf("status = %q", m.status)
 	}
@@ -46,7 +46,7 @@ func TestRecentConsoleAndMissingConnection(t *testing.T) {
 
 func TestRecentEmpty(t *testing.T) {
 	m, _ := newTestModel(t)
-	press(t, m, "space", "e")
+	press(t, m, "space", "f")
 	if m.overlay != nil || !strings.Contains(m.status, "nothing opened yet") {
 		t.Fatalf("overlay %T, status %q", m.overlay, m.status)
 	}
@@ -58,7 +58,7 @@ func TestRecentAsksForThePassword(t *testing.T) {
 		t.Fatal(err)
 	}
 	b.needPassword = true
-	press(t, m, "space", "e", "enter")
+	press(t, m, "space", "f", "enter")
 	if !strings.Contains(screen(m), "Password for local") {
 		t.Fatalf("prompt not shown:\n%s", screen(m))
 	}

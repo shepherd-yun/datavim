@@ -299,12 +299,12 @@ func TestFocusAndTabs(t *testing.T) {
 
 func TestToggleTree(t *testing.T) {
 	m, _ := newTestModel(t)
-	press(t, m, "space", "b")
+	press(t, m, "space", "e")
 	if !strings.Contains(screen(m), "Connections") {
 		t.Fatal("the tree stays visible while there are no tabs")
 	}
 	openUsers(t, m)
-	press(t, m, "space", "b")
+	press(t, m, "space", "e")
 	if strings.Contains(screen(m), "Connections") {
 		t.Fatal("tree hidden")
 	}
@@ -888,7 +888,7 @@ func TestLocateLoadsTheTreeOnTheWay(t *testing.T) {
 func TestLocateShowsAHiddenTree(t *testing.T) {
 	m, _ := newTestModel(t)
 	openUsers(t, m)
-	press(t, m, "space", "b")
+	press(t, m, "space", "e")
 	if m.showTree {
 		t.Fatal("tree still shown")
 	}

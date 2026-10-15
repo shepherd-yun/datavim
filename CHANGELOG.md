@@ -70,6 +70,8 @@ All notable changes to this project are documented here. The format follows
   `compare_max_rows` rows (`config.toml`, default 100000); `D` goes back to the structure.
 
 ### Changed
+- `<Space>e` toggles the tree (was `<Space>b`) and `<Space>f` opens the recent tabs (was
+  `<Space>e`). Remap them in `keymap.toml` as `tree.toggle` / `recent.open` to keep the old keys.
 - `Ctrl-H` / `Ctrl-L` wrap: `Ctrl-H` on the tree moves to the tabs and `Ctrl-L` on the tabs
   moves back to the tree, like `Tab` / `Shift-Tab`.
 - In a console, `Ctrl-J` / `Ctrl-K` wrap too: `Ctrl-K` on the editor moves to the results and

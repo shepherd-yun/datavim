@@ -18,7 +18,7 @@
 # "s" = ""              # … and free s
 
 [global]
-# "<leader>f" = "search.global"
+# "<leader>/" = "search.global"
 
 [popup]
 # "<ctrl+o>" = ""                # free ctrl+o …

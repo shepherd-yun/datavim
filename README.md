@@ -9,7 +9,7 @@ A terminal SQL client for MySQL and PostgreSQL with vim keys and DataGrip-style 
 - Browse databases, filter and sort table data, and **edit it in place**: changes are staged,
   shown as SQL and submitted in one transaction.
 - A highlighted SQL console with a **built-in vim editor**, completion and `$EDITOR` hand-off.
-- `<Space><Space>` searches every table, view, column and routine; `<Space>e` reopens recent tabs.
+- `<Space><Space>` searches every table, view, column and routine; `<Space>f` reopens recent tabs.
 - Copy and export results (TSV, CSV, JSON, Markdown, INSERT, xlsx), SQL history.
 - SSH tunnels (agent, keys, ProxyJump), production safeguards, manual transactions.
 - Your own keys (`keymap.toml`) and colors (`[theme]`).
@@ -130,7 +130,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `D` / `F` | Diff tab: compare the rows of the tables by their key, or go back to the structure / in the data view, a WHERE both sides are read with |
 | `<Space>s` | Columns popup: type to filter, `Enter` puts the data tab's cursor on the column (opening the tab if need be), `Ctrl-o` opens the full structure (indexes, foreign keys, DDL) |
 | `<Space>S` | Full structure of the table under the cursor, without the popup |
-| `<Space>b` | Toggle tree |
+| `<Space>e` | Toggle tree |
 | `<Space>l` | Locate the current tab in the tree: the table, or the database / schema of a console (also `:locate`) |
 | `<Space>r` | Refresh the tree node or tab and reload the connection's metadata |
 | `?` | Help for the focused pane |
@@ -140,7 +140,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `:set noreadonly` / `:set readonly` | Unlock / lock the connection for this session |
 | `:q!` / `:qa!` | Close / quit without asking about open transactions |
 | `<Space><Space>` | Search tables, views, columns, routines, schemas and databases in every connection, loading the metadata of those not opened yet (`db.table.column`, `table.column` or any part of it narrows by parent, fuzzily, and opening a column puts the cursor on it; `@` searches only the connection in context; `Enter` opens, `Ctrl-o` opens the structure). `Tab` / `Shift-Tab` switch to the lines of the open consoles (`Enter` jumps to the line) or the SQL history (an empty query lists the recent statements, `Enter` inserts one as `<Space>h` does) |
-| `<Space>e` | Recently opened tables, structures and consoles |
+| `<Space>f` | Recently opened tables, structures and consoles |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (`Ctrl-n` / `Ctrl-p` open the popup when closed) |
 | `Enter` / `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes the popup, a second `Esc` leaves insert mode) |
 

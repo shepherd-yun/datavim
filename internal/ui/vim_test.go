@@ -34,9 +34,9 @@ func TestConsoleEditsWithVimKeys(t *testing.T) {
 	if got := b.conn.lastQuery(); got != "select 2" {
 		t.Fatalf("enter still runs the statement: %q", got)
 	}
-	press(t, m, "space", "b") // the leader still works
+	press(t, m, "space", "e") // the leader still works
 	if m.showTree {
-		t.Fatal("<space>b hides the tree")
+		t.Fatal("<space>e hides the tree")
 	}
 }
 

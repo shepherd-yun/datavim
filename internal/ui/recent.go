@@ -12,7 +12,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 )
 
-// recentLimit bounds the <space>e list.
+// recentLimit bounds the <space>f list.
 const recentLimit = 100
 
 type (

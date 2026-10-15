@@ -8,7 +8,7 @@
 
 - 浏览数据库，过滤、排序表数据，并**直接编辑**：改动先暂存，以 SQL 预览后在一个事务里提交。
 - 带语法高亮的 SQL 控制台，**内置 vim 编辑器**、自动补全，可交给 `$EDITOR` 编辑。
-- `<Space><Space>` 搜索所有表、视图、列和函数；`<Space>e` 重新打开最近的 tab。
+- `<Space><Space>` 搜索所有表、视图、列和函数；`<Space>f` 重新打开最近的 tab。
 - 复制与导出结果（TSV、CSV、JSON、Markdown、INSERT、xlsx），SQL 历史。
 - SSH 隧道（agent、密钥、ProxyJump），生产环境保护，手动事务。
 - 自定义按键（`keymap.toml`）与颜色（`[theme]`）。
@@ -125,7 +125,7 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 | `D` / `F` | Diff 标签页：按键列对比两张表的数据，或回到结构 / 数据视图里设置两边共用的 WHERE |
 | `<Space>s` | 列弹窗：输入即过滤，`Enter` 让数据 tab 的光标跳到该列（必要时先打开 tab），`Ctrl-o` 打开完整结构（索引、外键、DDL） |
 | `<Space>S` | 直接打开光标所在表的完整结构，不经过列弹窗 |
-| `<Space>b` | 显示 / 隐藏树 |
+| `<Space>e` | 显示 / 隐藏树 |
 | `<Space>l` | 在树中定位当前 tab：表，或 console 所在的数据库 / schema（也可用 `:locate`） |
 | `<Space>r` | 刷新树节点或 tab，并重新加载该连接的元数据 |
 | `?` | 当前面板的帮助 |
@@ -135,7 +135,7 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 | `:set noreadonly` / `:set readonly` | 本次会话解锁 / 锁定连接 |
 | `:q!` / `:qa!` | 关闭 / 退出，不询问未结束的事务 |
 | `<Space><Space>` | 搜索表、视图、列、函数、schema 和数据库，范围是所有连接，并加载尚未打开的连接的元数据（可以用 `db.table.column`、`table.column` 或其中一段按上级模糊限定，打开列时光标直接落在该列；`@` 开头只搜当前上下文的连接；`Enter` 打开，`Ctrl-o` 打开结构）。`Tab` / `Shift-Tab` 切换到搜索已打开 console 的内容（`Enter` 跳到那一行）或 SQL 历史（查询为空时列出最近的语句，`Enter` 像 `<Space>h` 一样插入语句） |
-| `<Space>e` | 最近打开的表、结构和控制台 |
+| `<Space>f` | 最近打开的表、结构和控制台 |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |
 
