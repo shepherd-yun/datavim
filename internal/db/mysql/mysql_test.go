@@ -169,3 +169,49 @@ func TestDDLWriter(t *testing.T) {
 		}
 	}
 }
+
+func TestNormType(t *testing.T) {
+	for in, want := range map[string]string{
+		"int(11)":             "int",
+		"INT":                 "int",
+		"bigint(20) unsigned": "bigint unsigned",
+		"tinyint(1)":          "tinyint(1)",
+		"tinyint(4)":          "tinyint",
+		"varchar(100)":        "varchar(100)",
+		"decimal(10,2)":       "decimal(10,2)",
+	} {
+		if got := normType(in); got != want {
+			t.Errorf("normType(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestNormDefault(t *testing.T) {
+	s := func(v string) *string { return &v }
+	show := func(p *string) string {
+		if p == nil {
+			return "<nil>"
+		}
+		return *p
+	}
+	for _, c := range []struct {
+		def        *string
+		typ, extra string
+		want       *string
+	}{
+		{nil, "int", "", nil},
+		{s("0"), "int", "", s("0")},
+		{s("1.5"), "decimal(10,2)", "", s("1.5")},
+		{s("hi"), "varchar(10)", "", s("'hi'")},
+		{s(`it's \`), "varchar(10)", "", s(`'it''s \\'`)},
+		{s("1"), "varchar(10)", "", s("'1'")},
+		{s("CURRENT_TIMESTAMP"), "timestamp", "default_generated", s("CURRENT_TIMESTAMP")},
+		{s("CURRENT_TIMESTAMP(3)"), "datetime(3)", "default_generated on update current_timestamp(3)", s("CURRENT_TIMESTAMP(3)")},
+		{s("uuid()"), "varchar(36)", "default_generated", s("(uuid())")},
+		{s("b'1'"), "bit(1)", "", s("b'1'")},
+	} {
+		if got := normDefault(c.def, c.typ, c.extra); show(got) != show(c.want) {
+			t.Errorf("normDefault(%s, %q, %q) = %s, want %s", show(c.def), c.typ, c.extra, show(got), show(c.want))
+		}
+	}
+}

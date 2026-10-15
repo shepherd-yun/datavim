@@ -155,3 +155,54 @@ func TestDDLWriter(t *testing.T) {
 		}
 	}
 }
+
+func TestNormType(t *testing.T) {
+	for in, want := range map[string]string{
+		"character varying(100)":         "varchar(100)",
+		"character varying":              "varchar",
+		"character varying(10)[]":        "varchar(10)[]",
+		"character(1)":                   "char(1)",
+		"integer":                        "int",
+		"integer[]":                      "int[]",
+		"boolean":                        "bool",
+		"timestamp without time zone":    "timestamp",
+		"timestamp(3) without time zone": "timestamp(3)",
+		"timestamp with time zone":       "timestamptz",
+		"time with time zone":            "timetz",
+		"bigint":                         "bigint",
+		"numeric(10,2)":                  "numeric(10,2)",
+		"double precision":               "double precision",
+		"text":                           "text",
+	} {
+		if got := normType(in); got != want {
+			t.Errorf("normType(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestNormDefault(t *testing.T) {
+	s := func(v string) *string { return &v }
+	show := func(p *string) string {
+		if p == nil {
+			return "<nil>"
+		}
+		return *p
+	}
+	for _, c := range []struct{ in, want *string }{
+		{nil, nil},
+		{s("0"), s("0")},
+		{s("'x'::character varying"), s("'x'")},
+		{s("'it''s'::text"), s("'it''s'")},
+		{s("'{}'::integer[]"), s("'{}'")},
+		{s("'2024-01-01'::date"), s("'2024-01-01'")},
+		{s("1.5::numeric(10,2)"), s("1.5")},
+		{s("NULL::character varying"), nil},
+		{s("CURRENT_TIMESTAMP"), s("CURRENT_TIMESTAMP")},
+		{s("nextval('users_id_seq'::regclass)"), s("nextval('users_id_seq'::regclass)")},
+		{s("(now() + '1 day'::interval)"), s("(now() + '1 day'::interval)")},
+	} {
+		if got := normDefault(c.in); show(got) != show(c.want) {
+			t.Errorf("normDefault(%s) = %s, want %s", show(c.in), show(got), show(c.want))
+		}
+	}
+}

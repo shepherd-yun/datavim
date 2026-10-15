@@ -83,6 +83,9 @@ type MetaReader interface {
 	Indexes(ctx context.Context, t TableRef) ([]Index, error)
 	ForeignKeys(ctx context.Context, t TableRef) ([]ForeignKey, error)
 	DDL(ctx context.Context, t TableRef) (string, error)
+	// TableSchema reads t for schema comparison (see TableSchema), or
+	// returns ErrNotFound.
+	TableSchema(ctx context.Context, t TableRef) (TableSchema, error)
 	// Catalog reads every user namespace, table, column and routine at once:
 	// PostgreSQL those of the Conn's database, MySQL those of every database.
 	Catalog(ctx context.Context) (Catalog, error)

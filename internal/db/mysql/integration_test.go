@@ -69,5 +69,17 @@ func TestContract(t *testing.T) {
 				Host: host, Port: port, User: "root", Password: password, Database: "app", ReadOnly: true,
 			})
 		},
+		NormTypesSQL: []string{
+			"CREATE TABLE norm_types (id INT AUTO_INCREMENT PRIMARY KEY, n INT(11) NOT NULL DEFAULT 0, " +
+				"flag TINYINT(1), name VARCHAR(20) DEFAULT 'x', created_at TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP, " +
+				"big BIGINT UNSIGNED, price DECIMAL(10,2), body TEXT, ci VARCHAR(10) COLLATE utf8mb4_bin) " +
+				"COMMENT 'normalized'",
+		},
+		NormTypes: map[string]string{
+			"id": "int", "n": "int", "flag": "tinyint(1)", "name": "varchar(20)", "created_at": "timestamp",
+			"big": "bigint unsigned", "price": "decimal(10,2)", "body": "text", "ci": "varchar(10)",
+		},
+		AutoIncrement: []string{"id"},
+		CICollation:   "utf8mb4_bin",
 	})
 }

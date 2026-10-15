@@ -25,6 +25,17 @@ type Fixture struct {
 	OpenReadOnly func(ctx context.Context) (db.Conn, error)
 	// Driver is the driver's name, "mysql" or "postgres".
 	Driver string
+	// NormTypesSQL creates the table norm_types: columns id (auto-increment
+	// primary key), n (DEFAULT 0), flag, name (DEFAULT 'x'), created_at
+	// (DEFAULT CURRENT_TIMESTAMP), big, price, body, ci (its own collation),
+	// and the table comment "normalized".
+	NormTypesSQL []string
+	// NormTypes is the type TableSchema must report for each column of norm_types.
+	NormTypes map[string]string
+	// AutoIncrement lists the auto-incrementing columns of norm_types.
+	AutoIncrement []string
+	// CICollation is the collation of norm_types.ci.
+	CICollation string
 }
 
 // RunContract checks conn against the standard fixture created in f.NS.
@@ -241,6 +252,89 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		if _, err := conn.Meta().DDL(ctx, ref("no_such_table_xyz")); !errors.Is(err, db.ErrNotFound) {
 			t.Errorf("missing DDL err = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("TableSchema reads the table with normalized types and defaults", func(t *testing.T) {
+		s, err := conn.Meta().TableSchema(ctx, ref("users"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if s.Ref != ref("users") {
+			t.Errorf("Ref = %+v", s.Ref)
+		}
+		var names []string
+		for i, c := range s.Columns {
+			names = append(names, c.Name)
+			if c.Position != i+1 {
+				t.Errorf("%s: Position = %d, want %d", c.Name, c.Position, i+1)
+			}
+		}
+		if diff := cmp.Diff([]string{"id", "name", "email", "note"}, names); diff != "" {
+			t.Fatalf("columns (-want +got):\n%s", diff)
+		}
+		if c := s.Columns[1]; c.Comment != "display name" || c.Nullable {
+			t.Errorf("name = %+v", c)
+		}
+		if d := s.Columns[3].Default; d == nil || *d != "'hi'" {
+			t.Errorf("note default = %v, want 'hi' quoted", d)
+		}
+		var email *db.Index
+		for i := range s.Indexes {
+			if s.Indexes[i].Name == "users_email_key" {
+				email = &s.Indexes[i]
+			}
+		}
+		if email == nil || !email.Unique || email.Primary || email.Method != "btree" {
+			t.Errorf("users_email_key = %+v", email)
+		}
+		orders, err := conn.Meta().TableSchema(ctx, ref("orders"))
+		if err != nil || len(orders.ForeignKeys) != 1 {
+			t.Errorf("orders foreign keys = %+v, %v", orders.ForeignKeys, err)
+		}
+		if _, err := conn.Meta().TableSchema(ctx, ref("no_such_table_xyz")); !errors.Is(err, db.ErrNotFound) {
+			t.Errorf("missing table err = %v, want ErrNotFound", err)
+		}
+
+		for _, q := range f.NormTypesSQL {
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		t.Cleanup(func() { _, _ = conn.Exec(ctx, "DROP TABLE "+d.QualifiedName(ref("norm_types"))) })
+		n, err := conn.Meta().TableSchema(ctx, ref("norm_types"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		types := map[string]string{}
+		cols := map[string]db.Column{}
+		for _, c := range n.Columns {
+			types[c.Name], cols[c.Name] = c.Type, c
+		}
+		if diff := cmp.Diff(f.NormTypes, types); diff != "" {
+			t.Errorf("types (-want +got):\n%s", diff)
+		}
+		for name, want := range map[string]string{"n": "0", "name": "'x'", "created_at": "CURRENT_TIMESTAMP"} {
+			if d := cols[name].Default; d == nil || *d != want {
+				t.Errorf("%s default = %v, want %s", name, d, want)
+			}
+		}
+		for _, name := range f.AutoIncrement {
+			if c := cols[name]; !c.AutoIncrement || c.Default != nil {
+				t.Errorf("%s: AutoIncrement = %v, Default = %v; want true, nil", name, c.AutoIncrement, c.Default)
+			}
+		}
+		for name, c := range cols {
+			want := ""
+			if name == "ci" {
+				want = f.CICollation
+			}
+			if c.Collation != want {
+				t.Errorf("%s collation = %q, want %q", name, c.Collation, want)
+			}
+		}
+		if n.Comment != "normalized" {
+			t.Errorf("table comment = %q", n.Comment)
 		}
 	})
 

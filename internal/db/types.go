@@ -27,7 +27,8 @@ type Table struct {
 	Comment string
 }
 
-// Column describes one table column.
+// Column describes one table column. The fields after PrimaryKey are only
+// filled by MetaReader.TableSchema.
 type Column struct {
 	Name       string
 	Type       string
@@ -35,14 +36,24 @@ type Column struct {
 	Default    *string
 	Comment    string
 	PrimaryKey bool
+
+	AutoIncrement bool   // MySQL auto_increment; PostgreSQL identity or serial
+	Collation     string // only when it is not the default (the table's on MySQL, the type's on PostgreSQL)
+	Generated     string // the expression of a generated column
+	Position      int    // 1-based; shown, never compared
 }
 
-// Index describes one index; Primary implies Unique.
+// Index describes one index; Primary implies Unique. The fields after
+// Primary are only filled by MetaReader.TableSchema.
 type Index struct {
 	Name    string
 	Columns []string
 	Unique  bool
 	Primary bool
+
+	Method     string // btree, hash, gin, fulltext, … in lower case
+	Where      string // the predicate of a PostgreSQL partial index
+	Constraint bool   // PostgreSQL: the index backs a PRIMARY KEY or UNIQUE constraint
 }
 
 // ForeignKey describes one foreign-key constraint.
@@ -51,6 +62,19 @@ type ForeignKey struct {
 	Columns    []string
 	RefTable   TableRef
 	RefColumns []string
+}
+
+// TableSchema is a table as schema comparison sees it. MetaReader.TableSchema
+// normalizes it so that equal definitions compare equal: Type is lower case
+// with the engine's short names, Default is SQL text that can follow
+// DEFAULT, and auto-increment and generated columns have no Default.
+type TableSchema struct {
+	Ref         TableRef
+	Columns     []Column
+	Indexes     []Index
+	ForeignKeys []ForeignKey
+	Comment     string
+	Options     map[string]string // MySQL: "engine" and "collation"; PostgreSQL: none
 }
 
 // ColumnInfo describes a result-set column.

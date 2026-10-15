@@ -27,11 +27,12 @@ type fakeConn struct {
 	fail       map[string]error // statement text -> error
 	pingErr    error            // returned by every session Ping
 	sessions   []*fakeSession
-	catalogs   int              // Catalog calls
-	catalogErr error            // returned by Catalog
-	noKey      bool             // Columns reports no primary key and Indexes none
-	affected   map[string]int64 // statement text -> RowsAffected (default 1)
-	tables     []db.Table       // returned by Tables when set
+	catalogs   int                            // Catalog calls
+	catalogErr error                          // returned by Catalog
+	noKey      bool                           // Columns reports no primary key and Indexes none
+	affected   map[string]int64               // statement text -> RowsAffected (default 1)
+	tables     []db.Table                     // returned by Tables when set
+	schemas    map[db.TableRef]db.TableSchema // returned by TableSchema
 }
 
 func (c *fakeConn) setNoKey(v bool) {
@@ -44,6 +45,17 @@ func (c *fakeConn) setTables(ts []db.Table) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.tables = ts
+}
+
+func (c *fakeConn) setSchemas(ss ...db.TableSchema) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.schemas == nil {
+		c.schemas = map[db.TableRef]db.TableSchema{}
+	}
+	for _, s := range ss {
+		c.schemas[s.Ref] = s
+	}
 }
 
 func (c *fakeConn) keyless() bool {
@@ -207,6 +219,20 @@ func (fakeMeta) DDL(_ context.Context, t db.TableRef) (string, error) {
 		return "", fmt.Errorf("%s: %w", t.Name, db.ErrNotFound)
 	}
 	return "CREATE TABLE `users` (\n  `id` bigint\n)", nil
+}
+
+// TableSchema returns what setSchemas stored; it fails once ctx is done,
+// like a real query would.
+func (m fakeMeta) TableSchema(ctx context.Context, t db.TableRef) (db.TableSchema, error) {
+	if err := ctx.Err(); err != nil {
+		return db.TableSchema{}, err
+	}
+	m.c.mu.Lock()
+	defer m.c.mu.Unlock()
+	if s, ok := m.c.schemas[t]; ok {
+		return s, nil
+	}
+	return db.TableSchema{}, fmt.Errorf("%s: %w", t.Name, db.ErrNotFound)
 }
 
 type fakeDialect struct{}
