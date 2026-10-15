@@ -368,3 +368,67 @@ func TestEditsDuringASaveStayMarked(t *testing.T) {
 		t.Fatalf("title %q", c.Title())
 	}
 }
+
+func openDirtyFile(t *testing.T, m *Model) *consoleTab {
+	t.Helper()
+	ex(t, m, "e "+writeSQL(t, "a.sql", ""))
+	c := fileConsole(t, m)
+	c.editor.SetValue("unsaved")
+	return c
+}
+
+func TestClosingAnUnsavedFileAsks(t *testing.T) {
+	m, _ := newTestModel(t)
+	openDirtyFile(t, m)
+	ex(t, m, "q")
+	if len(m.tabs) != 1 || !strings.Contains(screen(m), "a.sql has unsaved changes") {
+		t.Fatalf("tabs %d\n%s", len(m.tabs), screen(m))
+	}
+	press(t, m, "y")
+	if len(m.tabs) != 0 {
+		t.Fatal("y closes")
+	}
+	openDirtyFile(t, m)
+	ex(t, m, "q!")
+	if len(m.tabs) != 0 {
+		t.Fatal(":q! closes without asking")
+	}
+	ex(t, m, "e "+writeSQL(t, "clean.sql", ""))
+	ex(t, m, "q")
+	if len(m.tabs) != 0 {
+		t.Fatal("a saved file closes without asking")
+	}
+}
+
+func TestQuittingWithAnUnsavedFileAsks(t *testing.T) {
+	m, _ := newTestModel(t)
+	openDirtyFile(t, m)
+	ex(t, m, "qa")
+	if !strings.Contains(screen(m), "Unsaved changes in: a.sql") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	forced, _ := newTestModel(t)
+	openDirtyFile(t, forced)
+	if !drainQuit(t, forced, "qa!") {
+		t.Fatal(":qa! quits")
+	}
+}
+
+func TestRemovingTheConnectionKeepsAnUnsavedFile(t *testing.T) {
+	m, _ := newTestModel(t)
+	c := openDirtyFile(t, m)
+	ex(t, m, "e "+writeSQL(t, "clean.sql", ""))
+	drain(t, m, func() tea.Msg { return connRemovedMsg{name: "local"} })
+	if len(m.tabs) != 1 || m.tabs[0] != c || c.editor.Value() != "unsaved" {
+		t.Fatalf("tabs %d", len(m.tabs))
+	}
+	if !strings.Contains(c.status, "the file stays open") {
+		t.Fatalf("status %q", c.status)
+	}
+}
+
+// drainQuit runs an ex command and reports whether it quit.
+func drainQuit(t *testing.T, m *Model, text string) bool {
+	t.Helper()
+	return drain(t, m, func() tea.Msg { return overlay.CommandMsg{Text: text} })
+}

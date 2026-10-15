@@ -712,6 +712,14 @@ func (m *Model) requestClose(force bool) tea.Cmd {
 	if t == nil {
 		return m.requestQuit(force)
 	}
+	if c, ok := t.(*consoleTab); ok && c.dirty() && !force {
+		lines := []string{c.file.name() + " has unsaved changes."}
+		if c.openTx() {
+			lines = append(lines, "It also has an open transaction ("+c.TxStatus()+"), which closing rolls back.")
+		}
+		m.overlay = overlay.NewConfirm("Unsaved changes", append(lines, "Closing the tab discards them."), "", closeTabConfirmedMsg{tabID: t.ID()})
+		return nil
+	}
 	if c, ok := t.(*consoleTab); ok && c.openTx() && !force {
 		m.overlay = overlay.NewConfirm("Open transaction", []string{
 			c.Title() + " has an open transaction (" + c.TxStatus() + ").",
@@ -751,12 +759,16 @@ func (m *Model) requestQuit(force bool) tea.Cmd {
 	return nil
 }
 
-// unsavedTables names the data tabs with staged changes: "users (3)".
+// unsavedTables names the tabs with staged changes ("users (3)") and the
+// unsaved files.
 func (m *Model) unsavedTables() []string {
 	var out []string
 	for _, t := range m.tabs {
 		if d, ok := t.(stager); ok && d.changes() > 0 {
 			out = append(out, fmt.Sprintf("%s (%d)", d.Title(), d.changes()))
+		}
+		if c, ok := t.(*consoleTab); ok && c.dirty() {
+			out = append(out, c.file.name())
 		}
 	}
 	return out
@@ -1322,13 +1334,21 @@ func (m *Model) connRemoved(msg connRemovedMsg) tea.Cmd {
 	return cmd
 }
 
-// closeTabsOf closes every tab on conn.
+// closeTabsOf closes every tab on conn, except file consoles with unsaved
+// changes: those only lose their session, so the text is not lost.
 func (m *Model) closeTabsOf(conn string) tea.Cmd {
 	var cmds []tea.Cmd
 	for i := len(m.tabs) - 1; i >= 0; i-- {
-		if c, _ := m.tabs[i].Target(); c == conn {
-			cmds = append(cmds, m.closeTab(i))
+		if c, _ := m.tabs[i].Target(); c != conn {
+			continue
 		}
+		if fc, ok := m.tabs[i].(*consoleTab); ok && fc.dirty() {
+			cmds = append(cmds, shutdownCmd(fc))
+			fc.clearTx()
+			fc.setStatus("connection "+conn+" changed: its session is closed, the file stays open · :w to save", true)
+			continue
+		}
+		cmds = append(cmds, m.closeTab(i))
 	}
 	return tea.Batch(cmds...)
 }
