@@ -395,16 +395,13 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 			entries = withEditorHelp(entries)
 		}
 		m.overlay = overlay.NewHelp(entries)
-	case keymap.FocusNext, keymap.FocusPrev:
+	case keymap.FocusNext, keymap.FocusPrev, keymap.FocusLeft, keymap.FocusRight:
+		// Two panes, so moving either way past the edge wraps to the other one.
 		if m.focus == focusTree {
 			m.setFocus(focusTabs)
 		} else {
 			m.setFocus(focusTree)
 		}
-	case keymap.FocusLeft:
-		m.setFocus(focusTree)
-	case keymap.FocusRight:
-		m.setFocus(focusTabs)
 	case keymap.NextTab:
 		return m.jumpTab(vimedit.TabJump{By: 1})
 	case keymap.PrevTab:

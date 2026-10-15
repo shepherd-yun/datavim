@@ -9,8 +9,8 @@ func DefaultBindings() []Binding {
 	b := []Binding{
 		{Global, keys("tab"), FocusNext, "Next pane"},
 		{Global, keys("shift+tab"), FocusPrev, "Previous pane"},
-		{Global, keys("ctrl+h"), FocusLeft, "Focus tree"},
-		{Global, keys("ctrl+l"), FocusRight, "Focus tabs"},
+		{Global, keys("ctrl+h"), FocusLeft, "Focus left pane (wraps)"},
+		{Global, keys("ctrl+l"), FocusRight, "Focus right pane (wraps)"},
 		{Global, keys("?"), Help, "Help"},
 		{Global, keys(":"), CommandLine, "Command line"},
 		{Global, keys("ctrl+c"), Cancel, "Cancel query"},
@@ -100,6 +100,7 @@ func DefaultBindings() []Binding {
 		Binding{Results, keys("]"), LoadMore, "Load more rows"},
 		Binding{Results, keys("M"), ToggleMessages, "Toggle messages"},
 		Binding{Results, keys("ctrl+k"), FocusEditor, "Focus editor"},
+		Binding{Results, keys("ctrl+j"), FocusEditor, "Focus editor (wraps)"},
 	)
 
 	// The console's editing keys belong to its vim editor (vimedit), which
@@ -108,6 +109,7 @@ func DefaultBindings() []Binding {
 		Binding{Console, keys("enter"), RunStatement, "Run statement under cursor / selection"},
 		Binding{Console, keys("R"), RunAll, "Run all statements"},
 		Binding{Console, keys("ctrl+j"), FocusResults, "Focus results"},
+		Binding{Console, keys("ctrl+k"), FocusResults, "Focus results (wraps)"},
 		Binding{Console, keys("M"), ToggleMessages, "Toggle messages"},
 		Binding{Console, keys(LeaderToken, "v"), ExternalEdit, "Edit in $EDITOR"},
 	)

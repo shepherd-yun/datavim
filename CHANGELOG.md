@@ -49,6 +49,10 @@ All notable changes to this project are documented here. The format follows
   `compare_max_rows` rows (`config.toml`, default 100000); `D` goes back to the structure.
 
 ### Changed
+- `Ctrl-H` / `Ctrl-L` wrap: `Ctrl-H` on the tree moves to the tabs and `Ctrl-L` on the tabs
+  moves back to the tree, like `Tab` / `Shift-Tab`.
+- In a console, `Ctrl-J` / `Ctrl-K` wrap too: `Ctrl-K` on the editor moves to the results and
+  `Ctrl-J` on the results moves back to the editor.
 - `<Space><Space>` searches every connection by default and starts loading the metadata of
   those not loaded yet when it opens; a leading `@` now narrows the search to the connection
   in context (it used to be the other way round).

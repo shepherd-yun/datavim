@@ -271,6 +271,18 @@ func TestFocusAndTabs(t *testing.T) {
 	if m.focus != focusTabs {
 		t.Fatal("tab toggles focus")
 	}
+	press(t, m, "ctrl+h", "ctrl+h")
+	if m.focus != focusTabs {
+		t.Fatal("ctrl+h on the tree wraps to the tabs")
+	}
+	press(t, m, "ctrl+l")
+	if m.focus != focusTree {
+		t.Fatal("ctrl+l on the tabs wraps to the tree")
+	}
+	press(t, m, "ctrl+l")
+	if m.focus != focusTabs {
+		t.Fatal("ctrl+l focuses the tabs")
+	}
 	press(t, m, "ctrl+h", "j", "l") // open view "active"
 	if len(m.tabs) != 2 || m.active != 1 {
 		t.Fatalf("tabs=%d active=%d", len(m.tabs), m.active)
@@ -316,6 +328,28 @@ func typeKeys(t *testing.T, m *Model, s string) {
 	t.Helper()
 	for _, r := range s {
 		press(t, m, string(r))
+	}
+}
+
+func TestConsoleFocusWraps(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "l", "j", "space", "c")
+	c := m.activeTab().(*consoleTab)
+	press(t, m, "ctrl+k")
+	if !c.onResults {
+		t.Fatal("ctrl+k on the editor wraps to the results")
+	}
+	press(t, m, "ctrl+j")
+	if c.onResults {
+		t.Fatal("ctrl+j on the results wraps to the editor")
+	}
+	press(t, m, "ctrl+j")
+	if !c.onResults {
+		t.Fatal("ctrl+j focuses the results")
+	}
+	press(t, m, "ctrl+k")
+	if c.onResults {
+		t.Fatal("ctrl+k focuses the editor")
 	}
 }
 
