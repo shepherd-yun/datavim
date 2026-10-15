@@ -13,6 +13,9 @@ import (
 // copyNodeName copies a tree node's name: as shown, or qualified and
 // quoted as SQL writes it (db.table on MySQL, schema.table on PostgreSQL).
 func (m *Model) copyNodeName(n *tree.Node, qualified bool) tea.Cmd {
+	if n.Kind == tree.KindGroup {
+		n = n.Table() // a group has no name of its own worth copying
+	}
 	text := n.Name
 	if qualified {
 		text = m.qualifiedName(n)
@@ -31,6 +34,8 @@ func (m *Model) qualifiedName(n *tree.Node) string {
 		parts = []string{n.NS.Database}
 	case tree.KindSchema:
 		parts = []string{n.NS.Database, n.NS.Schema}
+	case tree.KindColumn, tree.KindKey, tree.KindForeignKey, tree.KindIndex:
+		parts = []string{n.Table().Name, n.Name}
 	default:
 		ns := n.NS.Schema
 		if ns == "" {

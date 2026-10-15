@@ -8,7 +8,8 @@ import (
 )
 
 func TestTreeCopiesNames(t *testing.T) {
-	m, _ := newTestModel(t)
+	m, b := newTestModel(t)
+	b.conn.setSchemas(usersSchema())
 	clip := captureClipboard(t)
 	cases := []struct {
 		conn string
@@ -21,6 +22,10 @@ func TestTreeCopiesNames(t *testing.T) {
 		{"local", []string{"app", "users"}, []string{"y", "y"}, "users"},
 		{"local", []string{"app", "users"}, []string{"y", "q"}, "app.users"},
 		{"local", []string{"app"}, []string{"y", "q"}, "app"},
+		{"local", []string{"app", "users", "Columns", "name"}, []string{"y", "y"}, "name"},
+		{"local", []string{"app", "users", "Columns", "name"}, []string{"y", "q"}, "users.name"},
+		{"local", []string{"app", "users", "Columns"}, []string{"y", "y"}, "users"},
+		{"local", []string{"app", "users", "Columns"}, []string{"y", "q"}, "app.users"},
 	}
 	for _, c := range cases {
 		*clip = ""

@@ -175,3 +175,18 @@ func (m *Model) deleteNode() tea.Cmd {
 	}
 	return nil
 }
+
+// reloadTreeTable brings the columns, keys and indexes the tree shows
+// under ref up to date: reloaded when open, forgotten when closed.
+func (m *Model) reloadTreeTable(conn string, ref db.TableRef) tea.Cmd {
+	n := m.tree.FindTable(conn, ref)
+	if n == nil || !n.Loaded || n.Loading {
+		return nil
+	}
+	if !n.Expanded {
+		m.tree.Forget(n)
+		return nil
+	}
+	m.tree.StartLoad(n)
+	return loadChildren(m.backend, n)
+}

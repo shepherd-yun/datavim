@@ -89,3 +89,19 @@ func TestActionMenuOffersCompare(t *testing.T) {
 		t.Fatalf("screen:\n%s", screen(m))
 	}
 }
+
+func TestActionMenuOnColumn(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	selectNode(t, m, "local", "app", "users", "Columns", "name")
+	press(t, m, "a")
+	s := screen(m)
+	for _, want := range []string{"Show in structure", "Modify column", "Drop column", "Copy name"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "Drop table") {
+		t.Fatalf("a column's menu must not offer to drop the table:\n%s", s)
+	}
+}

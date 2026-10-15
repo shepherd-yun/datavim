@@ -113,7 +113,8 @@ func (m *Model) modifyApplied(msg modifyAppliedMsg) tea.Cmd {
 	if msg.err == nil {
 		cmds = append(cmds,
 			m.metaStale(metaStaleMsg{conn: msg.conn, database: msg.ref.Database}),
-			m.refreshTabsOfTable(msg.conn, msg.ref))
+			m.refreshTabsOfTable(msg.conn, msg.ref),
+			m.reloadTreeTable(msg.conn, msg.ref))
 	}
 	if t := m.tabByID(msg.tabID); t != nil {
 		cmds = append(cmds, t.Update(msg))

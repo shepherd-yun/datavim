@@ -71,6 +71,20 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			)
 		}
 		entries = append(entries, entry{keymap.DeleteNode, "Drop " + obj})
+	case tree.KindGroup:
+		entries = []entry{{keymap.Open, "Expand / collapse"}, {keymap.Refresh, "Refresh"}}
+		if n.Table().Kind == tree.KindTable {
+			entries = append(entries, entry{keymap.EditNode, "Modify table"})
+		}
+	case tree.KindColumn, tree.KindKey, tree.KindIndex:
+		obj := map[tree.Kind]string{tree.KindColumn: "column", tree.KindKey: "key", tree.KindIndex: "index"}[n.Kind]
+		entries = []entry{{keymap.Open, "Show in structure"}}
+		if n.Table().Kind == tree.KindTable {
+			entries = append(entries, entry{keymap.EditNode, "Modify " + obj}, entry{keymap.DeleteNode, "Drop " + obj})
+		}
+		entries = append(entries, entry{keymap.Refresh, "Refresh"})
+	case tree.KindForeignKey:
+		entries = []entry{{keymap.Open, "Go to " + n.Ref.Name}, {keymap.Refresh, "Refresh"}}
 	}
 	entries = append(entries, entry{keymap.YankName, "Copy name"})
 	if n.Kind != tree.KindConn {

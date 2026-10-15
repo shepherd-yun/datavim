@@ -247,3 +247,27 @@ func TestDDOnGroupExplains(t *testing.T) {
 		t.Fatalf("dd on a group:\n%s", screen(m))
 	}
 }
+
+func TestStructureKeysWorkOnALeaf(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	selectNode(t, m, "local", "app", "users", "Columns", "name")
+	press(t, m, "space", "S")
+	if st := structTab(t, m); st.ref.Name != "users" {
+		t.Fatalf("<space>S on a column opens its table, got %s", st.ref.Name)
+	}
+}
+
+func TestModifyTableReloadsTheTreeTable(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	renameNameColumn(t, m, b, "local")
+	s := usersSchema()
+	s.Columns[1].Name = "name_x"
+	b.conn.setSchemas(s)
+	press(t, m, "space", "w", "y")
+	users := m.tree.FindTable("local", db.TableRef{Namespace: db.Namespace{Database: "app"}, Name: "users"})
+	if got := users.Children[0].Children[1].Name; got != "name_x" {
+		t.Fatalf("tree column = %s, want name_x after the submit", got)
+	}
+}

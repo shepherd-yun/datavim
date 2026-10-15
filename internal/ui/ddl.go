@@ -24,8 +24,10 @@ func (m ddlLoadedMsg) failure() (string, error) { return m.conn, m.err }
 // tab when the tabs have focus.
 func (m *Model) contextTable() (string, db.TableRef, bool) {
 	if m.focus == focusTree {
-		if n := m.tree.Selected(); n != nil && n.IsTable() {
-			return n.Conn, n.TableRef(), true
+		if n := m.tree.Selected(); n != nil {
+			if tbl := n.Table(); tbl != nil {
+				return tbl.Conn, tbl.TableRef(), true
+			}
 		}
 	} else if t := m.activeTab(); t != nil {
 		if conn, ref := t.Target(); ref.Name != "" {

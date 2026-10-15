@@ -507,8 +507,9 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 		}
 		m.setStatus("only tables can be truncated", true)
 	case keymap.RenameTable:
-		if n := t.Selected(); n != nil && n.IsTable() {
-			m.askRename(tableOp{kind: opRename, conn: n.Conn, ref: n.TableRef(), view: n.Kind == tree.KindView})
+		if n := t.Selected(); n != nil && n.Table() != nil {
+			tbl := n.Table()
+			m.askRename(tableOp{kind: opRename, conn: tbl.Conn, ref: tbl.TableRef(), view: tbl.Kind == tree.KindView})
 		} else {
 			m.setStatus("select a table or view to rename", true)
 		}
