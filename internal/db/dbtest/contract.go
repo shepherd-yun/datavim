@@ -799,4 +799,51 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			t.Fatalf("after\n%s\nstill differ: %+v", strings.Join(stmts, ";\n"), left)
 		}
 	})
+
+	t.Run("NormalizeType agrees with TableSchema", func(t *testing.T) {
+		w := d.DDL()
+		for col, want := range f.NormTypes {
+			if got := w.NormalizeType(want); got != want {
+				t.Errorf("%s: NormalizeType(%q) = %q", col, want, got)
+			}
+			if strings.ContainsAny(want, "'\"") {
+				continue // enum values keep their case
+			}
+			if got := w.NormalizeType(strings.ToUpper(want)); got != want {
+				t.Errorf("%s: NormalizeType(%q) = %q, want %q", col, strings.ToUpper(want), got, want)
+			}
+		}
+	})
+
+	t.Run("ApplyDDL rolls back PostgreSQL DDL and stops at the first failure", func(t *testing.T) {
+		tbl := d.QualifiedName(ref("mod_tx"))
+		for _, q := range []string{"DROP TABLE IF EXISTS " + tbl, "CREATE TABLE " + tbl + " (id int)"} {
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		s, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer s.Close()
+		add := "ALTER TABLE " + tbl + " ADD COLUMN extra int"
+		err = edit.ApplyDDL(ctx, s, sqlx.DialectOf(f.Driver), []string{add, add})
+		var de *edit.DDLError
+		if !errors.As(err, &de) || de.Index != 1 {
+			t.Fatalf("err = %v", err)
+		}
+		cols, err := conn.Meta().Columns(ctx, ref("mod_tx"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		kept := slices.ContainsFunc(cols, func(c db.Column) bool { return c.Name == "extra" })
+		mysql := f.Driver == "mysql"
+		if kept != mysql || de.RolledBack == mysql {
+			t.Fatalf("extra kept = %v, rolled back = %v on %s", kept, de.RolledBack, f.Driver)
+		}
+		if _, err := s.Query(ctx, "SELECT 1"); err != nil {
+			t.Fatalf("the session is unusable after the failure: %v", err)
+		}
+	})
 }

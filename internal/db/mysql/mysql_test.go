@@ -327,3 +327,12 @@ func TestOnUpdate(t *testing.T) {
 		t.Errorf("got\n%s\nwant\n%s", strings.Join(stmts, ";\n"), want)
 	}
 }
+
+func TestNormalizeTypeIsTableSchemas(t *testing.T) {
+	w := dialect{}.DDL()
+	for in, want := range map[string]string{"INT(11)": "int", "VARCHAR(255)": "varchar(255)", "tinyint(1)": "tinyint(1)"} {
+		if got := w.NormalizeType(in); got != want {
+			t.Errorf("NormalizeType(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

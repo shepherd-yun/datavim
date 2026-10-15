@@ -15,6 +15,7 @@ type fakeWriter struct{}
 func (fakeWriter) DropTable(t db.TableRef, _ bool) string       { return "DROP " + t.Name }
 func (fakeWriter) RenameTable(db.TableRef, string, bool) string { return "" }
 func (fakeWriter) TruncateTable(db.TableRef) string             { return "" }
+func (fakeWriter) NormalizeType(t string) string                { return t }
 
 func (fakeWriter) CreateTable(s db.TableSchema) ([]string, []db.SchemaChange) {
 	return []string{"CREATE " + s.Ref.Database + "." + s.Ref.Name}, nil

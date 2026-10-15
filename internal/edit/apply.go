@@ -60,3 +60,54 @@ func rollback(s db.Querier) {
 	defer cancel()
 	_, _ = s.Exec(ctx, "ROLLBACK")
 }
+
+// DDLError is a DDL statement that failed. RolledBack says whether the
+// statements before it were undone (PostgreSQL) or stay applied (MySQL,
+// whose DDL commits implicitly).
+type DDLError struct {
+	Index      int // 0-based
+	SQL        string
+	Err        error
+	RolledBack bool
+}
+
+func (e *DDLError) Error() string {
+	switch {
+	case e.RolledBack:
+		return fmt.Sprintf("statement %d: %v · rolled back, nothing was changed", e.Index+1, e.Err)
+	case e.Index == 0:
+		return fmt.Sprintf("statement 1: %v · nothing was changed", e.Err)
+	}
+	return fmt.Sprintf("statement %d: %v · the %d before it were applied", e.Index+1, e.Err, e.Index)
+}
+
+func (e *DDLError) Unwrap() error { return e.Err }
+
+// ApplyDDL runs DDL statements on s (a db.Session). PostgreSQL runs them in
+// one transaction; MySQL commits each DDL statement implicitly, so they run
+// one by one and stop at the first failure. Unlike Apply it does not count
+// rows: DDL reports none.
+func ApplyDDL(ctx context.Context, s db.Querier, d sqlx.Dialect, stmts []string) error {
+	tx := d == sqlx.Postgres
+	if tx {
+		if _, err := s.Exec(ctx, sqlx.BeginSQL(d)); err != nil {
+			return fmt.Errorf("begin transaction: %w", err)
+		}
+	}
+	for i, q := range stmts {
+		if _, err := s.Exec(ctx, q); err != nil {
+			if tx {
+				rollback(s)
+			}
+			return &DDLError{Index: i, SQL: q, Err: err, RolledBack: tx}
+		}
+	}
+	if !tx {
+		return nil
+	}
+	if _, err := s.Exec(ctx, "COMMIT"); err != nil {
+		rollback(s)
+		return fmt.Errorf("commit: %w", err)
+	}
+	return nil
+}

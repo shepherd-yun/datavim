@@ -3,6 +3,7 @@ package edit
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -84,5 +85,52 @@ func TestApplyBeginAndCommitFailures(t *testing.T) {
 	err := Apply(context.Background(), f, sqlx.Postgres, []string{"a"})
 	if err == nil || f.execs[len(f.execs)-1] != "ROLLBACK" {
 		t.Fatalf("a failed COMMIT is rolled back: %v %v", err, f.execs)
+	}
+}
+
+func TestApplyDDLOnPostgresIsOneTransaction(t *testing.T) {
+	q := &fakeQuerier{affected: map[string]int64{"ALTER a": 0, "ALTER b": 0}}
+	if err := ApplyDDL(context.Background(), q, sqlx.Postgres, []string{"ALTER a", "ALTER b"}); err != nil {
+		t.Fatal(err)
+	}
+	if diff := cmp.Diff([]string{"BEGIN", "ALTER a", "ALTER b", "COMMIT"}, q.execs); diff != "" {
+		t.Fatal(diff) // DDL reports no rows: ApplyDDL must not count them
+	}
+}
+
+func TestApplyDDLOnPostgresRollsBack(t *testing.T) {
+	boom := errors.New("boom")
+	q := &fakeQuerier{fail: map[string]error{"ALTER b": boom}}
+	err := ApplyDDL(context.Background(), q, sqlx.Postgres, []string{"ALTER a", "ALTER b", "ALTER c"})
+	var de *DDLError
+	if !errors.As(err, &de) || de.Index != 1 || !de.RolledBack || !errors.Is(err, boom) {
+		t.Fatalf("err = %#v", err)
+	}
+	if diff := cmp.Diff([]string{"BEGIN", "ALTER a", "ALTER b", "ROLLBACK"}, q.execs); diff != "" {
+		t.Fatal(diff)
+	}
+	if !strings.Contains(err.Error(), "rolled back") {
+		t.Fatalf("message: %v", err)
+	}
+}
+
+func TestApplyDDLOnMySQLStopsAtTheFirstFailure(t *testing.T) {
+	boom := errors.New("boom")
+	q := &fakeQuerier{fail: map[string]error{"ALTER b": boom}}
+	err := ApplyDDL(context.Background(), q, sqlx.MySQL, []string{"ALTER a", "ALTER b", "ALTER c"})
+	var de *DDLError
+	if !errors.As(err, &de) || de.Index != 1 || de.RolledBack {
+		t.Fatalf("err = %#v", err)
+	}
+	// MySQL commits each DDL statement: no transaction to begin or roll back.
+	if diff := cmp.Diff([]string{"ALTER a", "ALTER b"}, q.execs); diff != "" {
+		t.Fatal(diff)
+	}
+	if !strings.Contains(err.Error(), "the 1 before it were applied") {
+		t.Fatalf("message: %v", err)
+	}
+	q = &fakeQuerier{fail: map[string]error{"ALTER a": boom}}
+	if err := ApplyDDL(context.Background(), q, sqlx.MySQL, []string{"ALTER a"}); !strings.Contains(err.Error(), "nothing was changed") {
+		t.Fatalf("message: %v", err)
 	}
 }

@@ -269,6 +269,8 @@ func (w fakeDDL) CreateTable(s db.TableSchema) ([]string, []db.SchemaChange) {
 	return []string{"CREATE TABLE " + w.d.QualifiedName(s.Ref)}, nil
 }
 
+func (fakeDDL) NormalizeType(t string) string { return strings.ToLower(strings.TrimSpace(t)) }
+
 // AlterTable writes one line per change. Like the real writers it leaves
 // generated-column changes and foreign keys to the user.
 func (w fakeDDL) AlterTable(t db.TableRef, changes []db.SchemaChange) ([]string, []db.SchemaChange) {

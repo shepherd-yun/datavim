@@ -118,4 +118,8 @@ type DDLWriter interface {
 	// statement per change plus COMMENT ON. Changes it cannot write, and
 	// foreign key differences, come back in manual.
 	AlterTable(t TableRef, changes []SchemaChange) (stmts []string, manual []SchemaChange)
+	// NormalizeType spells a column type the way TableSchema reports it
+	// (INTEGER → int on PostgreSQL, INT(11) → int on MySQL), so that a
+	// typed type compares equal to the one read.
+	NormalizeType(t string) string
 }

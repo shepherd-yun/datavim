@@ -29,6 +29,8 @@ func (w ddlWriter) TruncateTable(t db.TableRef) string {
 	return "TRUNCATE TABLE " + w.d.QualifiedName(t)
 }
 
+func (ddlWriter) NormalizeType(t string) string { return normType(t) }
+
 // columnDef is a column as CREATE TABLE and ALTER TABLE write it. NULL is
 // spelled out: a TIMESTAMP column is NOT NULL unless told otherwise.
 func (w ddlWriter) columnDef(c db.Column) string {

@@ -31,6 +31,8 @@ func (w ddlWriter) TruncateTable(t db.TableRef) string {
 	return "TRUNCATE TABLE " + w.d.QualifiedName(t)
 }
 
+func (ddlWriter) NormalizeType(t string) string { return normType(t) }
+
 // columnDef is a column as CREATE TABLE and ADD COLUMN write it.
 func (w ddlWriter) columnDef(c db.Column) string {
 	s := w.d.QuoteIdent(c.Name) + " " + c.Type

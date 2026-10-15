@@ -328,3 +328,17 @@ func TestCastable(t *testing.T) {
 		}
 	}
 }
+
+func TestNormalizeTypeIsTableSchemas(t *testing.T) {
+	w := dialect{}.DDL()
+	for in, want := range map[string]string{
+		"INTEGER":                  "int",
+		"character varying(20)":    "varchar(20)",
+		"TIMESTAMP WITH TIME ZONE": "timestamptz",
+		"text[]":                   "text[]",
+	} {
+		if got := w.NormalizeType(in); got != want {
+			t.Errorf("NormalizeType(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
