@@ -1,7 +1,7 @@
 # 工作空间 设计文档
 
 - 日期：2026-10-16
-- 状态：已确认，待实现
+- 状态：已实现
 - 范围：启动时选择工作空间，每个空间有独立的连接、密码和本地状态；修订主设计 §5.1、§7
 
 ## 1. 背景
@@ -129,20 +129,20 @@ func (w Workspace) Create() error
 func (w Workspace) IsDefault() bool
 ```
 
-`Load(dir)` 改为 `Load(root, connDir string)`：`connections.toml` 从 `connDir` 读，`config.toml`、`keymap.toml` 从 `root` 读。默认空间的 `connDir == root`。`AppendConnection`、`UpdateConnection`、`RemoveConnection` 本来就接收 dir 参数，调用方改传 `ws.ConfigDir` 即可。
+新增 `LoadIn(root, connDir string)`，`Load(dir)` 保留为 `LoadIn(dir, dir)`：`connections.toml` 从 `connDir` 读，`config.toml`、`keymap.toml` 从 `root` 读。默认空间的 `connDir == root`。`AppendConnection`、`UpdateConnection`、`RemoveConnection` 本来就接收 dir 参数，调用方改传 `ws.ConfigDir` 即可。
 
 ### 5.2 `internal/secret`
 
 `Keyring` 新增字段 `Prefix string`。`Get`、`Set`、`Delete` 访问 keychain 时使用 account `Prefix + name`。环境变量仍然用 `EnvVar(name)`，不受前缀影响。非默认空间的前缀是 `"<ws>/"`，默认空间为空。`session.Manager` 不用改。
 
-为了能测试前缀，把对 `go-keyring` 的调用收进一个包内的小接口（默认实现用 `go-keyring`），这样测试可以注入一个 fake 后端。
+测试用 `keyring.MockInit()` 检查前缀。
 
 ### 5.3 `cmd/sqlvim/main.go`
 
 1. 解析 `-w/--workspace`、`--create` 和 `--list-workspaces`。
 2. `--list-workspaces`：输出后返回。
 3. 解析名字，调用 `ResolveWorkspace`；不存在时，带 `--create` 就创建，否则按 §3.2 报错。
-4. `config.Load(root, ws.ConfigDir)`，`openStore(ws.StateDir)`，`newManager(cfg, ws.ConfigDir, tunnels, prefix)`。
+4. `config.LoadIn(root, ws.ConfigDir)`，`openStore(ws.StateDir)`，`newManager(cfg, ws, tunnels)`（由 `ws` 得出连接文件目录和 keychain 前缀）。
 5. `slog.Info("starting", ..., "workspace", ws.Name)`。
 6. `ui.New(...)` 传入空间名（非默认空间才非空）。
 
@@ -152,7 +152,7 @@ func (w Workspace) IsDefault() bool
 
 - `Model` 增加 `workspace string`（为空表示默认空间）。
 - `renderStatus`：非默认空间时，在模式块后面加上 `theme.Accent.Render("[personal]")`。位置在 `[PROD]` 前面，这样空间和生产标记能同时看到。
-- 欢迎页：非默认空间时，标题下加一行 `Workspace: personal`。
+- 欢迎页：非默认空间时，欢迎页框的标题为 `sqlvim — personal`。
 - 窗口标题：非默认空间时为 `sqlvim — personal`，默认空间保持现状。
 
 ## 6. 安全
@@ -180,9 +180,9 @@ README 还要给一个 direnv 示例：在工作项目目录的 `.envrc` 里写 
   - `ValidWorkspaceName`：合法、空、超长、大写、`../x`、`a/b`、`default`。
   - `ResolveWorkspace`：default 的路径等于根目录；`personal` 的路径；`--config` 自定义根目录。
   - `ListWorkspaces`：没有 workspaces 目录；忽略文件和不合法名字的目录；排序后 default 排在第一个。
-  - `Load(root, connDir)`：连接从 connDir 读，设置和 keymap 从 root 读。
+  - `LoadIn(root, connDir)`：连接从 connDir 读，设置和 keymap 从 root 读。
   - `Create`：目录权限为 0700；重复调用不报错。
-- `secret`：通过 fake 后端检查 Prefix 拼接；环境变量覆盖时忽略前缀。
+- `secret`：用 `keyring.MockInit()` 检查 Prefix 拼接；环境变量覆盖时忽略前缀。
 - `cmd/sqlvim/main_test.go`：
   - 空间不存在时报错，错误信息包含现有空间列表和 `--create` 提示。
   - 带 `--create` 时创建两个目录。

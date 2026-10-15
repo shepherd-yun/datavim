@@ -84,6 +84,34 @@ for a key's passphrase only when nothing else works (passphrases are kept in mem
 Unknown hosts show their fingerprint and are added to `known_hosts` once you type `yes`;
 a changed host key is an error. `ProxyCommand` is not supported.
 
+## Workspaces
+
+A workspace is its own set of connections, say one for work and one for personal databases.
+Each has its own `connections.toml`, keychain passwords, history and console drafts; settings,
+theme and keys are shared.
+
+```sh
+sqlvim -w personal --create   # create it once
+sqlvim -w personal            # or: SQLVIM_WORKSPACE=personal sqlvim
+sqlvim --list-workspaces
+```
+
+Without `-w` sqlvim opens the `default` workspace, which is the files it has always used.
+The workspace name shows in the status bar and the window title.
+
+| | default | `personal` |
+|---|---|---|
+| connections | `~/.config/sqlvim/connections.toml` | `~/.config/sqlvim/workspaces/personal/connections.toml` |
+| history, drafts | `~/.local/state/sqlvim/state.db` | `~/.local/state/sqlvim/workspaces/personal/state.db` |
+| keychain account | `<connection>` | `personal/<connection>` |
+
+To move connections into a workspace, create it, cut their `[[connection]]` blocks into its
+`connections.toml`, and enter each password once more on first connect. Their history stays
+in the default workspace.
+
+With [direnv](https://direnv.net), `export SQLVIM_WORKSPACE=work` in a project's `.envrc`
+picks the workspace by directory.
+
 ## Keys
 
 | Key | Action |

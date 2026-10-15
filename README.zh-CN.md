@@ -77,6 +77,30 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 先尝试 ssh-agent，再尝试你的密钥文件，都不行时才询问密钥口令（口令只保存在内存里）。
 未知主机会显示指纹，输入 `yes` 后加入 `known_hosts`；主机密钥变化视为错误。不支持 `ProxyCommand`。
 
+## 工作空间
+
+工作空间是一组独立的连接，比如一个放工作数据库，一个放个人数据库。每个空间有自己的
+`connections.toml`、钥匙串密码、历史和控制台草稿；设置、主题和按键在所有空间共享。
+
+```sh
+sqlvim -w personal --create   # 第一次先创建
+sqlvim -w personal            # 或：SQLVIM_WORKSPACE=personal sqlvim
+sqlvim --list-workspaces
+```
+
+不加 `-w` 时进入 `default` 空间，也就是一直以来用的那些文件。当前空间名会显示在状态栏和窗口标题里。
+
+| | default | `personal` |
+|---|---|---|
+| 连接 | `~/.config/sqlvim/connections.toml` | `~/.config/sqlvim/workspaces/personal/connections.toml` |
+| 历史、草稿 | `~/.local/state/sqlvim/state.db` | `~/.local/state/sqlvim/workspaces/personal/state.db` |
+| 钥匙串账户 | `<连接名>` | `personal/<连接名>` |
+
+要把连接挪到某个空间：先创建空间，把对应的 `[[connection]]` 段落剪切到它的
+`connections.toml`，首次连接时重新输入一次密码。这些连接的历史留在默认空间。
+
+配合 [direnv](https://direnv.net)，在项目的 `.envrc` 里写 `export SQLVIM_WORKSPACE=work`，就能按目录自动选空间。
+
 ## 按键
 
 | 按键 | 动作 |

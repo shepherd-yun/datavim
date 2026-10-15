@@ -182,6 +182,7 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 
 - `<Space>n` 打开新建连接表单，保存时把密码写入 Keychain。
 - 首次连接缺少密码时弹框输入，并询问是否保存。
+- 连接可以按工作空间分组，见 2026-10-16-workspaces-design.md。
 
 ### 5.2 SSH 隧道
 
@@ -333,6 +334,8 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 | `~/.config/sqlvim/keymap.toml` | 自定义按键 |
 | `~/.local/state/sqlvim/state.db` | SQL 历史、最近打开、各连接的控制台草稿 |
 | `~/.local/state/sqlvim/sqlvim.log` | 日志（slog，默认 info 级别，`--debug` 时为 debug 级别） |
+
+非默认工作空间的 connections.toml 和 state.db 位于 workspaces/<name>/ 下，见 2026-10-16-workspaces-design.md。
 
 遵循 XDG 规范，相应环境变量存在时以环境变量为准。控制台草稿会自动保存，重启后恢复。
 

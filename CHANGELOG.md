@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Workspaces keep sets of connections apart, like DataGrip's: `sqlvim -w personal` (or
+  `SQLVIM_WORKSPACE=personal`) opens a workspace with its own connections, keychain
+  passwords, history and drafts, while `config.toml` and `keymap.toml` stay shared. Create
+  one with `--create`, list them with `--list-workspaces`. Without `-w` nothing changes.
 - The tree draws Nerd Font icons like DataGrip: the MySQL or PostgreSQL logo before each
   connection, and icons for databases, schemas, tables, views, folders, columns, keys and
   indexes. Groups show how many entries they hold (`Columns 15`). Set `icons = "plain"` in
