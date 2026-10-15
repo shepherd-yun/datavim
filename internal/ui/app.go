@@ -245,6 +245,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.connAdded(msg)
 	case connUpdatedMsg:
 		return m, m.connUpdated(msg)
+	case menuPickedMsg:
+		return m, m.dispatch(msg.action)
 	case renameEnteredMsg:
 		return m, m.startTableOp(msg.op)
 	case tableOpPreparedMsg:
@@ -482,6 +484,8 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 				m.overlay = overlay.NewEditConnForm(m.keys, cfg)
 			}
 		}
+	case keymap.NodeActions:
+		m.openNodeMenu()
 	case keymap.TruncateTable:
 		if n := t.Selected(); n != nil && n.Kind == tree.KindTable {
 			return m.startTableOp(tableOp{kind: opTruncate, conn: n.Conn, ref: n.TableRef()})
