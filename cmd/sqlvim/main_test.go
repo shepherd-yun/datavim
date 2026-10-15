@@ -38,7 +38,7 @@ func TestRunReportsConfigErrors(t *testing.T) {
 
 func TestNewManagerPersistsAddedConnections(t *testing.T) {
 	dir := t.TempDir()
-	mgr := newManager(&config.Config{}, dir, nil)
+	mgr := newManager(&config.Config{}, config.Workspace{Name: config.DefaultWorkspace, ConfigDir: dir}, nil)
 	if err := mgr.AddConnection(config.Connection{Name: "local", Driver: "mysql"}, "", false); err != nil {
 		t.Fatal(err)
 	}
@@ -54,11 +54,11 @@ func TestNewManagerPersistsAddedConnections(t *testing.T) {
 func TestNewManagerUsesTunnels(t *testing.T) {
 	p := tunnel.NewPool(tunnel.Options{})
 	defer p.Close()
-	mgr := newManager(&config.Config{}, t.TempDir(), p)
+	mgr := newManager(&config.Config{}, config.Workspace{Name: config.DefaultWorkspace, ConfigDir: t.TempDir()}, p)
 	if mgr.Tunnels != p {
 		t.Fatal("the manager opens ssh connections through the pool")
 	}
-	if mgr := newManager(&config.Config{}, t.TempDir(), nil); mgr.Tunnels != nil {
+	if mgr := newManager(&config.Config{}, config.Workspace{Name: config.DefaultWorkspace, ConfigDir: t.TempDir()}, nil); mgr.Tunnels != nil {
 		t.Fatal("nil stays nil")
 	}
 }
@@ -72,7 +72,7 @@ func TestLocalUser(t *testing.T) {
 func TestNewManagerPersistsEditsAndRemovals(t *testing.T) {
 	keyring.MockInit() // never touch the real keychain
 	dir := t.TempDir()
-	mgr := newManager(&config.Config{}, dir, nil)
+	mgr := newManager(&config.Config{}, config.Workspace{Name: config.DefaultWorkspace, ConfigDir: dir}, nil)
 	if err := mgr.AddConnection(config.Connection{Name: "sqlvim-test-a", Driver: "mysql"}, "", false); err != nil {
 		t.Fatal(err)
 	}
@@ -146,5 +146,66 @@ func TestExamplesLoad(t *testing.T) {
 	t.Cleanup(func() { _ = theme.Apply(nil) })
 	if err := theme.Apply(cfg.Theme); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRunRejectsMissingWorkspace(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("SQLVIM_WORKSPACE", "")
+	dir := t.TempDir()
+	err := run([]string{"--config", dir, "-w", "personal"}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), `workspace "personal" does not exist (have: default)`) ||
+		!strings.Contains(err.Error(), "sqlvim -w personal --create") {
+		t.Fatalf("err = %v", err)
+	}
+	err = run([]string{"--config", dir, "--workspace", "Work"}, &bytes.Buffer{})
+	if err == nil || !strings.Contains(err.Error(), `invalid workspace name "Work"`) {
+		t.Fatalf("long flag: err = %v", err)
+	}
+}
+
+func TestRunListsWorkspaces(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	dir := t.TempDir()
+	for _, n := range []string{"work", "personal"} {
+		if err := os.MkdirAll(filepath.Join(dir, "workspaces", n), 0o700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out bytes.Buffer
+	if err := run([]string{"--config", dir, "--list-workspaces"}, &out); err != nil {
+		t.Fatal(err)
+	}
+	if got := out.String(); got != "default\npersonal\nwork\n" {
+		t.Fatalf("output = %q", got)
+	}
+}
+
+func TestNewManagerPersistsToWorkspace(t *testing.T) {
+	keyring.MockInit()
+	root := t.TempDir()
+	ws, err := config.ResolveWorkspace(root, t.TempDir(), "personal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ws.Create(); err != nil {
+		t.Fatal(err)
+	}
+	mgr := newManager(&config.Config{}, ws, nil)
+	if err := mgr.AddConnection(config.Connection{Name: "home", Driver: "mysql"}, "pw", true); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.LoadIn(root, ws.ConfigDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Connections) != 1 || cfg.Connections[0].Name != "home" {
+		t.Fatalf("workspace connections = %+v", cfg.Connections)
+	}
+	if rootCfg, _ := config.Load(root); len(rootCfg.Connections) != 0 {
+		t.Fatalf("the default workspace got %+v", rootCfg.Connections)
+	}
+	if got, err := keyring.Get("sqlvim", "personal/home"); err != nil || got != "pw" {
+		t.Fatalf("keychain personal/home = %q, %v", got, err)
 	}
 }

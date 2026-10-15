@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/user"
 	"path/filepath"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -39,6 +40,11 @@ func run(args []string, stdout io.Writer) error {
 	showVersion := fs.Bool("version", false, "print version and exit")
 	debug := fs.Bool("debug", false, "write debug-level logs")
 	configDir := fs.String("config", "", "config directory (default $XDG_CONFIG_HOME/sqlvim or ~/.config/sqlvim)")
+	var wsName string
+	fs.StringVar(&wsName, "workspace", "", "workspace to open (default $SQLVIM_WORKSPACE, else default)")
+	fs.StringVar(&wsName, "w", "", "shorthand for --workspace")
+	create := fs.Bool("create", false, "create the workspace if it does not exist")
+	listWorkspaces := fs.Bool("list-workspaces", false, "print the workspaces and exit")
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -55,7 +61,25 @@ func run(args []string, stdout io.Writer) error {
 		}
 		dir = d
 	}
-	cfg, err := config.Load(dir)
+	if *listWorkspaces {
+		names, err := config.ListWorkspaces(dir)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintln(stdout, strings.Join(names, "\n"))
+		return err
+	}
+	stateRoot, err := config.StateDir()
+	if err != nil {
+		return err
+	}
+	ws, err := selectWorkspace(dir, stateRoot, workspaceOptions{
+		name: wsName, env: os.Getenv("SQLVIM_WORKSPACE"), create: *create,
+	})
+	if err != nil {
+		return err
+	}
+	cfg, err := config.LoadIn(dir, ws.ConfigDir)
 	if err != nil {
 		return err
 	}
@@ -73,7 +97,10 @@ func run(args []string, stdout io.Writer) error {
 	}
 	defer closeLog()
 
-	st, err := openStore(filepath.Dir(logPath))
+	if err := os.MkdirAll(ws.StateDir, 0o700); err != nil {
+		return err
+	}
+	st, err := openStore(ws.StateDir)
 	if err != nil {
 		return err
 	}
@@ -90,12 +117,13 @@ func run(args []string, stdout io.Writer) error {
 	})
 	defer tunnels.Close()
 
-	mgr := newManager(cfg, dir, tunnels)
+	mgr := newManager(cfg, ws, tunnels)
 	defer mgr.CloseAll()
 
-	slog.Info("starting", "version", version, "connections", len(cfg.Connections))
+	slog.Info("starting", "version", version, "workspace", ws.Name, "connections", len(cfg.Connections))
 	model := ui.New(mgr, st, cfg.Settings)
 	model.SetKeymap(keys)
+	model.SetWorkspace(ws.Name)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		slog.Error("program exited", "err", err)
 		return fmt.Errorf("%w (log: %s)", err, logPath)
@@ -135,11 +163,12 @@ func openStore(stateDir string) (*history.Store, error) {
 	return history.Open(":memory:")
 }
 
-// newManager builds the session manager; connections added, edited or
-// deleted in the UI are saved to dir/connections.toml, and ssh connections
-// use tunnels.
-func newManager(cfg *config.Config, dir string, tunnels session.Tunneler) *session.Manager {
-	mgr := session.NewManager(cfg.Connections, secret.Keyring{}, mysql.Driver{}, postgres.Driver{})
+// newManager builds the session manager for workspace ws; connections added,
+// edited or deleted in the UI are saved to its connections.toml, passwords
+// go to its keychain accounts, and ssh connections use tunnels.
+func newManager(cfg *config.Config, ws config.Workspace, tunnels session.Tunneler) *session.Manager {
+	dir := ws.ConfigDir
+	mgr := session.NewManager(cfg.Connections, secret.Keyring{Prefix: keychainPrefix(ws)}, mysql.Driver{}, postgres.Driver{})
 	mgr.Persist = func(c config.Connection) error {
 		_, err := config.AppendConnection(dir, c)
 		return err
