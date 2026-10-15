@@ -81,5 +81,13 @@ func TestContract(t *testing.T) {
 		},
 		AutoIncrement: []string{"id"},
 		CICollation:   "utf8mb4_bin",
+		CompareSQL: []string{
+			"CREATE TABLE cmp_src (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL COMMENT 'who', " +
+				"email VARCHAR(255), qty BIGINT NOT NULL DEFAULT 1, `Odd Col` VARCHAR(10), " +
+				"created TIMESTAMP NULL DEFAULT CURRENT_TIMESTAMP, KEY cmp_src_name (name), " +
+				"UNIQUE KEY cmp_src_email (email)) COMMENT 'it''s the source'",
+			"CREATE TABLE cmp_dst (id BIGINT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(50) NULL, " +
+				"qty INT NOT NULL DEFAULT 0, legacy INT, KEY cmp_legacy (legacy), KEY cmp_dst_name (name, qty))",
+		},
 	})
 }

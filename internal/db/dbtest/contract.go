@@ -13,6 +13,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/edit"
+	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
@@ -36,6 +37,13 @@ type Fixture struct {
 	AutoIncrement []string
 	// CICollation is the collation of norm_types.ci.
 	CICollation string
+	// CompareSQL creates cmp_src and cmp_dst, two tables whose differences
+	// the round-trip test syncs: cmp_dst lacks columns email, "Odd Col" and
+	// created, has a narrower name (nullable, no comment), a narrower qty with
+	// another default, an extra column legacy with an index, an index
+	// cmp_dst_name on (name, qty) where cmp_src has cmp_src_name on (name),
+	// no unique index cmp_src_email and no table comment.
+	CompareSQL []string
 }
 
 // RunContract checks conn against the standard fixture created in f.NS.
@@ -738,6 +746,57 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		if _, ok := got["ops_view2"]; ok {
 			t.Fatalf("view still there: %v", got)
+		}
+	})
+
+	t.Run("schema sync round-trips through DiffTable, AlterTable and CreateTable", func(t *testing.T) {
+		exec := func(stmts []string) {
+			t.Helper()
+			for _, q := range stmts {
+				if _, err := conn.Exec(ctx, q); err != nil {
+					t.Fatalf("%s: %v", q, err)
+				}
+			}
+		}
+		schema := func(name string) db.TableSchema {
+			t.Helper()
+			s, err := conn.Meta().TableSchema(ctx, ref(name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			return s
+		}
+		w := d.DDL()
+		exec(f.CompareSQL)
+		src := schema("cmp_src")
+
+		changes := schemadiff.DiffTable(schema("cmp_dst"), src, nil)
+		if len(changes) < 10 {
+			t.Fatalf("the fixture yields only %d changes: %+v", len(changes), changes)
+		}
+		stmts, manual := w.AlterTable(ref("cmp_dst"), changes)
+		if len(manual) != 0 {
+			t.Fatalf("manual: %+v", manual)
+		}
+		exec(stmts)
+		if left := schemadiff.DiffTable(schema("cmp_dst"), src, nil); len(left) != 0 {
+			t.Fatalf("after\n%s\nstill differ: %+v", strings.Join(stmts, ";\n"), left)
+		}
+
+		created := src
+		created.Ref = ref("cmp_new")
+		created.Indexes = slices.Clone(src.Indexes)
+		for i := range created.Indexes {
+			// PostgreSQL index names are unique per schema: cmp_src has these.
+			created.Indexes[i].Name = strings.Replace(created.Indexes[i].Name, "cmp_src", "cmp_new", 1)
+		}
+		stmts, manual = w.CreateTable(created)
+		if len(manual) != 0 {
+			t.Fatalf("manual: %+v", manual)
+		}
+		exec(stmts)
+		if left := schemadiff.DiffTable(schema("cmp_new"), src, nil); len(left) != 0 {
+			t.Fatalf("after\n%s\nstill differ: %+v", strings.Join(stmts, ";\n"), left)
 		}
 	})
 }
