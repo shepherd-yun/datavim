@@ -24,6 +24,8 @@ type Fixture struct {
 	NS db.Namespace
 	// SleepSQL is a query that runs for at least 30 seconds.
 	SleepSQL string
+	// ManyRowsSQL returns more rows than a client reads in a few seconds.
+	ManyRowsSQL string
 	// OpenReadOnly opens another connection to the same database with ReadOnly set.
 	OpenReadOnly func(ctx context.Context) (db.Conn, error)
 	// Driver is the driver's name, "mysql" or "postgres".
@@ -985,6 +987,29 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		if _, ok := indexes["mod_t_qty"]; ok {
 			t.Errorf("the old name is gone: %+v", after.Indexes)
+		}
+	})
+
+	t.Run("a row callback's error abandons the rest of the result", func(t *testing.T) {
+		cctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+		defer cancel()
+		stop := errors.New("enough")
+		start := time.Now()
+		n := 0
+		err := conn.Stream(cctx, f.ManyRowsSQL, func([]db.ColumnInfo) {}, func([]db.Value) error {
+			if n++; n == 10 {
+				return stop
+			}
+			return nil
+		})
+		if !errors.Is(err, stop) {
+			t.Fatalf("err = %v, want the callback's error", err)
+		}
+		if took := time.Since(start); took > 2*time.Second {
+			t.Fatalf("returned after %v: the rest of the result was read", took)
+		}
+		if _, err := conn.Query(ctx, "SELECT 1"); err != nil {
+			t.Fatalf("conn unusable after an abandoned stream: %v", err)
 		}
 	})
 

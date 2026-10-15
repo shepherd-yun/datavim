@@ -52,6 +52,11 @@ All notable changes to this project are documented here. The format follows
 - The structure tab has a cursor: `j` / `k` move over the rows of columns, indexes and foreign
   keys, and a hint line at the bottom.
 
+### Fixed
+- A MySQL query that stops early (a console reaching `max_rows`, a data compare over
+  `compare_max_rows`) no longer reads the rest of the result before returning; on PostgreSQL
+  the data compare stops at once too.
+
 ## [1.1.0] - 2026-10-14
 
 ### Changed

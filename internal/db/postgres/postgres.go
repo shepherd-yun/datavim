@@ -159,8 +159,8 @@ func stream(ctx context.Context, q pgxQuerier, sql string, args []any,
 			}
 		}
 		if err := onRow(row); err != nil {
+			cancel() // abandon the rest instead of reading it
 			if errors.Is(err, db.ErrStop) {
-				cancel() // abandon the rest instead of reading it
 				return nil
 			}
 			return err

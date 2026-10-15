@@ -64,6 +64,9 @@ func TestContract(t *testing.T) {
 		Driver:   "mysql",
 		NS:       db.Namespace{Database: "app"},
 		SleepSQL: "SELECT SLEEP(30)",
+		ManyRowsSQL: "WITH d AS (SELECT 0 n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 " +
+			"UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) " +
+			"SELECT a.n FROM d a, d b, d c, d e, d f, d g, d h, d i",
 		OpenReadOnly: func(ctx context.Context) (db.Conn, error) {
 			return mysql.Driver{}.Open(ctx, db.ConnConfig{
 				Host: host, Port: port, User: "root", Password: password, Database: "app", ReadOnly: true,

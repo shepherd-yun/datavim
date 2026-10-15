@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/url"
 	"strconv"
@@ -116,9 +117,24 @@ func (c *conn) Query(ctx context.Context, query string, args ...any) (*db.Result
 }
 
 func (c *conn) Stream(ctx context.Context, query string, onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-	return wrap(stream(ctx, c.db, query, nil, onColumns, onRow, cancel))
+	sc, err := c.db.Conn(ctx)
+	if err != nil {
+		return wrap(err)
+	}
+	defer func() { _ = sc.Close() }()
+	return wrap(stream(ctx, sc, query, nil, onColumns, onRow, func() { drop(sc) }))
+}
+
+// drop closes the server connection under an abandoned stream. Cancelling
+// the context is not enough: Rows.Close reads the rest of the result unless
+// the driver saw the cancel first. The pool discards the closed connection.
+func drop(sc *sql.Conn) {
+	_ = sc.Raw(func(dc any) error {
+		if c, ok := dc.(io.Closer); ok {
+			return c.Close()
+		}
+		return nil
+	})
 }
 
 // displayText shows non-UTF-8 (binary) values as hex.
@@ -139,8 +155,9 @@ type queryer interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 }
 
-// stream reads rows as text. When onRow returns db.ErrStop, abandon is called
-// before the rows are closed so the rest of the result is not read.
+// stream reads rows as text. When onRow returns an error (db.ErrStop to just
+// stop), abandon is called before the rows are closed so the rest of the
+// result is not read.
 func stream(ctx context.Context, q queryer, query string, args []any,
 	onColumns func([]db.ColumnInfo), onRow func([]db.Value) error, abandon func(),
 ) error {
@@ -176,8 +193,8 @@ func stream(ctx context.Context, q queryer, query string, args []any,
 			}
 		}
 		if err := onRow(row); err != nil {
+			abandon()
 			if errors.Is(err, db.ErrStop) {
-				abandon()
 				return nil
 			}
 			return err

@@ -74,6 +74,7 @@ func TestContract(t *testing.T) {
 		Driver:       "postgres",
 		NS:           db.Namespace{Database: "app", Schema: "app"},
 		SleepSQL:     "SELECT pg_sleep(30)",
+		ManyRowsSQL:  "SELECT generate_series(1, 30000000)",
 		OpenReadOnly: func(ctx context.Context) (db.Conn, error) { return open(ctx, true) },
 		NormTypesSQL: []string{
 			`CREATE TABLE app.norm_types (id serial PRIMARY KEY, n integer NOT NULL DEFAULT 0, flag boolean,
