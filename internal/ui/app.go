@@ -261,6 +261,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, runTableOp(m.backend, m.store, msg.op, msg.sql)
 	case tableOpDoneMsg:
 		return m, m.tableOpDone(msg)
+	case modifySubmitMsg:
+		m.modifySubmit(msg)
+	case modifyAppliedMsg:
+		return m, m.modifyApplied(msg)
+
 	case deleteConnMsg:
 		return m, removeConnection(m.backend, msg.name)
 	case connRemovedMsg:
@@ -647,10 +652,11 @@ func (m *Model) runCommand(text string) tea.Cmd {
 	case "qa!":
 		return m.requestQuit(true)
 	case "w", "write":
-		if d, ok := m.activeTab().(*dataTab); ok {
-			return d.submit()
+		if s, ok := m.activeTab().(stager); ok {
+			return s.submit()
 		}
-		m.setStatus("nothing to write: the active tab is not table data", true)
+		m.setStatus("nothing to write: the active tab is not table data or a table being modified", true)
+
 	case "commit", "rollback":
 		if c, ok := m.activeTab().(*consoleTab); ok {
 			return c.endTx(cmd == "commit")

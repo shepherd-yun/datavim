@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
@@ -218,5 +219,21 @@ func TestChoice(t *testing.T) {
 	}
 	if o, msg := send(t, NewChoice("x", []string{"a", "b"}, pick), "2"); o != nil || msg != (okMsg{1}) {
 		t.Fatalf("digits pick directly: %v", msg)
+	}
+}
+
+func TestPreviewAndConfirmMarkDangerLines(t *testing.T) {
+	lines := []string{"⚠ destructive  - column legacy", "", "ALTER TABLE t DROP COLUMN legacy;"}
+	p := NewPreview("Modify", lines, nil, WithDanger(0))
+	v := p.View(100, 20)
+	if !strings.Contains(v, theme.Error.Render(lines[0])) {
+		t.Fatalf("the warning is red:\n%q", v)
+	}
+	if strings.Contains(v, theme.Error.Render(lines[2])) {
+		t.Fatal("the statement is not")
+	}
+	c := NewConfirm("Modify", lines, "t", nil, WithDanger(0))
+	if v := c.View(100, 20); !strings.Contains(v, theme.Error.Render(lines[0])) {
+		t.Fatalf("confirm:\n%q", v)
 	}
 }

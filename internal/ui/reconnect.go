@@ -43,4 +43,5 @@ func (m runDoneMsg) failure() (string, error) {
 	}
 	return m.conn, m.results[len(m.results)-1].Err
 }
-func (m schemaLoadedMsg) failure() (string, error) { return m.conn, m.err }
+func (m schemaLoadedMsg) failure() (string, error)  { return m.conn, m.err }
+func (m modifyAppliedMsg) failure() (string, error) { return m.conn, m.err }

@@ -1,11 +1,7 @@
 package overlay
 
 import (
-	"strings"
-
 	tea "charm.land/bubbletea/v2"
-
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 )
 
 // Preview shows statements before they run: y runs them, n or esc
@@ -15,11 +11,12 @@ type Preview struct {
 	lines  []string
 	ok     tea.Msg
 	offset int
+	opts   boxOptions
 }
 
 // NewPreview builds the preview; y emits ok.
-func NewPreview(title string, lines []string, ok tea.Msg) *Preview {
-	return &Preview{title: title, lines: lines, ok: ok}
+func NewPreview(title string, lines []string, ok tea.Msg, opts ...BoxOption) *Preview {
+	return &Preview{title: title, lines: lines, ok: ok, opts: applyBoxOptions(opts)}
 }
 
 func (p *Preview) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
@@ -42,11 +39,5 @@ func (p *Preview) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 
 func (p *Preview) View(width, height int) string {
 	inner := max(min(width-4, 120), 10) - 2
-	var lines []string
-	for _, l := range p.lines {
-		for _, part := range strings.Split(l, "\n") {
-			lines = append(lines, textutil.Wrap(textutil.Sanitize(part), inner)...)
-		}
-	}
-	return scrollBox(p.title+" · y submit · n cancel", lines, &p.offset, width, height, 120)
+	return scrollBox(p.title+" · y submit · n cancel", p.opts.wrapLines(p.lines, inner), &p.offset, width, height, 120)
 }

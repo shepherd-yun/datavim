@@ -668,8 +668,12 @@ type structureTab struct {
 	ed          *schemaedit.Table // nil unless the table is being modified
 	ddl         db.DDLWriter      // the connection's, read with ed
 	editLoading bool
-	retryEdit   bool // reading the table for editing wanted a password
-	submitting  bool // the staged edits are being submitted
+	retryEdit   bool               // reading the table for editing wanted a password
+	submitting  bool               // the staged edits are being submitted
+	retrySubmit bool               // the last submit wanted a password
+	gen         int                // tells the current preview from stale ones
+	pendingSQL  []string           // the previewed statements, until confirmed
+	cancel      context.CancelFunc // stops a running submit
 }
 
 func newStructureTab(id int, b Backend, st Store, conn string, ref db.TableRef) *structureTab {
@@ -739,6 +743,15 @@ func (t *structureTab) Update(msg tea.Msg) tea.Cmd {
 		t.schemaLoaded(m)
 	case structEditedMsg:
 		return t.structEdited(m)
+	case modifyConfirmedMsg:
+		if m.gen == t.gen && t.pendingSQL != nil && !t.submitting {
+			stmts := t.pendingSQL
+			t.pendingSQL = nil
+			return t.apply(stmts)
+		}
+	case modifyAppliedMsg:
+		return t.applied(m)
+
 	}
 	return nil
 }
@@ -773,6 +786,9 @@ func (t *structureTab) Handle(a keymap.Action) tea.Cmd {
 		return t.toggleEdit()
 	case keymap.EditCell, keymap.InsertRow, keymap.DeleteRow, keymap.UndoEdit, keymap.UndoAllEdits:
 		return t.editAction(a)
+	case keymap.SubmitEdits:
+		return t.submit()
+
 	}
 	return nil
 }
@@ -823,6 +839,11 @@ func (t *dataTab) retryAfterPassword() tea.Cmd {
 }
 
 func (t *structureTab) retryAfterPassword() tea.Cmd {
+	if t.retrySubmit {
+		t.retrySubmit = false
+		return t.submit()
+	}
+
 	if t.retryEdit {
 		t.retryEdit = false
 		return t.startEdit()

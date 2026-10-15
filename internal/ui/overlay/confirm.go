@@ -18,11 +18,12 @@ type Confirm struct {
 	ok     tea.Msg
 	input  field
 	wrong  bool
+	opts   boxOptions
 }
 
 // NewConfirm builds a confirmation box.
-func NewConfirm(title string, lines []string, expect string, ok tea.Msg) *Confirm {
-	return &Confirm{title: title, lines: lines, expect: expect, ok: ok}
+func NewConfirm(title string, lines []string, expect string, ok tea.Msg, opts ...BoxOption) *Confirm {
+	return &Confirm{title: title, lines: lines, expect: expect, ok: ok, opts: applyBoxOptions(opts)}
 }
 
 func (c *Confirm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
@@ -53,12 +54,7 @@ func (c *Confirm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 
 func (c *Confirm) View(width, height int) string {
 	w := max(min(width-4, 80), 20)
-	var body []string
-	for _, l := range c.lines {
-		for _, part := range strings.Split(l, "\n") {
-			body = append(body, textutil.Wrap(textutil.Sanitize(part), w-2)...)
-		}
-	}
+	body := c.opts.wrapLines(c.lines, w-2)
 	body = append(body, "")
 	if c.expect == "" {
 		body = append(body, theme.Muted.Render("y confirm · n/esc cancel"))

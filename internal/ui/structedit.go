@@ -4,10 +4,16 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/edit"
+	"github.com/shepherd-yun/sqlvim/internal/history"
+	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
 	"github.com/shepherd-yun/sqlvim/internal/schemaedit"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
@@ -345,4 +351,143 @@ func (t *structureTab) discard() {
 	t.ed.Reset()
 	t.view.SetCursor(t.view.Section(), 0)
 	t.setStatus("discarded "+plural(n, "change"), false)
+}
+
+type (
+	// modifySubmitMsg asks the root model to check a Modify Table submit
+	// and preview it.
+	modifySubmitMsg struct {
+		tabID, gen int
+		conn       string
+		ref        db.TableRef
+		stmts      []string
+		warnings   []string // the destructive and lossy changes, one line each
+		changes    int
+	}
+	// modifyConfirmedMsg is the go-ahead for the previewed statements.
+	modifyConfirmedMsg struct{ tabID, gen int }
+	// modifyAppliedMsg is the outcome of a Modify Table submit.
+	modifyAppliedMsg struct {
+		tabID int
+		conn  string
+		ref   db.TableRef
+		n     int // statements
+		err   error
+	}
+)
+
+func (m modifyConfirmedMsg) TabID() int { return m.tabID }
+func (m modifyAppliedMsg) TabID() int   { return m.tabID }
+
+// submit plans the staged edits, has the connection's dialect write them
+// and asks the root model to preview them. Edits the dialect cannot write
+// stop it before anything runs.
+func (t *structureTab) submit() tea.Cmd {
+	switch {
+	case t.ed == nil:
+		t.setStatus("nothing to submit: the table is not being modified", true)
+		return nil
+	case t.submitting:
+		t.setStatus("submitting changes…", true)
+		return nil
+	case t.changes() == 0:
+		t.setStatus("no changes to submit", false)
+		return nil
+	}
+	changes, err := t.ed.Plan(t.ddl.NormalizeType)
+	if err != nil {
+		t.setStatus(err.Error(), true)
+		return nil
+	}
+	if len(changes) == 0 {
+		t.setStatus("no changes to submit", false)
+		return nil
+	}
+	stmts, manual := t.ddl.AlterTable(t.ref, changes)
+	if len(manual) > 0 {
+		t.setStatus("sqlvim cannot write "+schemadiff.Describe(manual[0])+" · undo it, or make that change in a console", true)
+		return nil
+	}
+	var warnings []string
+	for _, c := range changes {
+		switch {
+		case c.Risk&db.Destructive != 0:
+			warnings = append(warnings, "⚠ destructive  "+schemadiff.Describe(c))
+		case c.Risk&db.Lossy != 0:
+			warnings = append(warnings, "⚠ lossy  "+schemadiff.Describe(c))
+		}
+	}
+	t.gen++
+	t.pendingSQL = stmts
+	msg := modifySubmitMsg{tabID: t.id, gen: t.gen, conn: t.conn, ref: t.ref, stmts: stmts, warnings: warnings, changes: t.changes()}
+	return func() tea.Msg { return msg }
+}
+
+// apply runs the confirmed statements on a session of their own (never a
+// console's): PostgreSQL in one transaction, MySQL one by one. DDL on a
+// big table can run for minutes, so there is no timeout; Ctrl-c cancels.
+// It never retries: a dropped connection may or may not have run them.
+func (t *structureTab) apply(stmts []string) tea.Cmd {
+	t.submitting = true
+	t.setStatus(joinHints("modifying "+t.ref.Name+"…", keyHint(t.keys, keymap.Global, keymap.Cancel, "cancels")), false)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.cancel = cancel
+	id, b, st, conn, ref, d := t.id, t.backend, t.store, t.conn, t.ref, t.dialect
+	return func() tea.Msg {
+		defer cancel()
+		msg := modifyAppliedMsg{tabID: id, conn: conn, ref: ref, n: len(stmts)}
+		c, err := b.Conn(ctx, conn, ref.Database)
+		if err == nil {
+			var s db.Session
+			if s, err = c.Session(ctx); err == nil {
+				start := time.Now()
+				err = edit.ApplyDDL(ctx, s, d, stmts)
+				_ = s.Close()
+				entry := history.Entry{
+					Time: start, Conn: conn, Database: ref.Database,
+					SQL: strings.Join(stmts, ";\n") + ";", Duration: time.Since(start),
+				}
+				if err != nil {
+					entry.Err = errorText(err)
+				}
+				if herr := st.AddHistory(entry); herr != nil {
+					slog.Warn("save history", "err", herr)
+				}
+			}
+		}
+		if db.IsConnLost(err) {
+			b.Reset(conn)
+		}
+		msg.err = err
+		return msg
+	}
+}
+
+// cancelRun is Ctrl-c: it stops a running submit.
+func (t *structureTab) cancelRun() tea.Cmd {
+	if t.submitting && t.cancel != nil {
+		t.cancel()
+		return nil
+	}
+	t.setStatus("nothing is running", false)
+	return nil
+}
+
+// applied stops modifying and reloads after a submit, or keeps the edits
+// staged when it failed.
+func (t *structureTab) applied(m modifyAppliedMsg) tea.Cmd {
+	t.submitting, t.cancel = false, nil
+	switch {
+	case errors.Is(m.err, context.Canceled):
+		t.setStatus("cancelled · changes kept", true)
+		return nil
+	case m.err != nil:
+		t.retrySubmit = errors.Is(m.err, session.ErrPasswordRequired)
+		// "changes kept" first: the tab's status line is narrow.
+		t.setStatus("✗ changes kept · "+errorText(m.err), true)
+		return nil
+	}
+	t.stopEdit()
+	t.setStatus("modified "+t.ref.Name+" · "+plural(m.n, "statement"), false)
+	return t.load()
 }

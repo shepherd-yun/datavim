@@ -125,10 +125,13 @@ func (c *fakeConn) queryCount() int {
 	return len(c.queries)
 }
 
-func (c *fakeConn) Exec(_ context.Context, q string, _ ...any) (db.ExecResult, error) {
+func (c *fakeConn) Exec(ctx context.Context, q string, _ ...any) (db.ExecResult, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.execs = append(c.execs, q)
+	if err := ctx.Err(); err != nil {
+		return db.ExecResult{}, err
+	}
 	if err := c.fail[q]; err != nil {
 		return db.ExecResult{}, err
 	}
@@ -272,12 +275,15 @@ func (w fakeDDL) CreateTable(s db.TableSchema) ([]string, []db.SchemaChange) {
 func (fakeDDL) NormalizeType(t string) string { return strings.ToLower(strings.TrimSpace(t)) }
 
 // AlterTable writes one line per change. Like the real writers it leaves
-// generated-column changes and foreign keys to the user.
+// generated-column changes and foreign keys to the user; a new type
+// starting with "manual" stands for a change it cannot write (PostgreSQL's
+// USING).
 func (w fakeDDL) AlterTable(t db.TableRef, changes []db.SchemaChange) ([]string, []db.SchemaChange) {
 	var stmts []string
 	var manual []db.SchemaChange
 	for _, c := range changes {
-		if c.Kind == db.ForeignKeyDiff || c.Kind == db.AlterColumn && c.Attrs&db.AttrGenerated != 0 {
+		if c.Kind == db.ForeignKeyDiff || c.Kind == db.AlterColumn && c.Attrs&db.AttrGenerated != 0 ||
+			c.Kind == db.AlterColumn && c.Attrs&db.AttrType != 0 && strings.HasPrefix(c.New.Type, "manual") {
 			manual = append(manual, c)
 			continue
 		}
