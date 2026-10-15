@@ -27,6 +27,9 @@ type Store interface {
 type Keyring struct {
 	// Getenv defaults to os.Getenv.
 	Getenv func(string) string
+	// Prefix goes before the connection name in the keychain account, so
+	// workspaces keep same-named connections apart ("personal/").
+	Prefix string
 }
 
 // Get returns the password for the named connection.
@@ -38,7 +41,7 @@ func (k Keyring) Get(name string) (string, error) {
 	if v := getenv(EnvVar(name)); v != "" {
 		return v, nil
 	}
-	pw, err := keyring.Get(service, name)
+	pw, err := keyring.Get(service, k.Prefix+name)
 	if errors.Is(err, keyring.ErrNotFound) {
 		return "", ErrNotFound
 	}
@@ -46,13 +49,13 @@ func (k Keyring) Get(name string) (string, error) {
 }
 
 // Set stores the password for the named connection.
-func (Keyring) Set(name, password string) error {
-	return keyring.Set(service, name, password)
+func (k Keyring) Set(name, password string) error {
+	return keyring.Set(service, k.Prefix+name, password)
 }
 
 // Delete removes the stored password for the named connection.
-func (Keyring) Delete(name string) error {
-	if err := keyring.Delete(service, name); err != nil && !errors.Is(err, keyring.ErrNotFound) {
+func (k Keyring) Delete(name string) error {
+	if err := keyring.Delete(service, k.Prefix+name); err != nil && !errors.Is(err, keyring.ErrNotFound) {
 		return err
 	}
 	return nil
