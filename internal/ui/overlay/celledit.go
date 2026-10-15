@@ -48,7 +48,11 @@ func (c *CellEditor) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 			return nil, nil
 		}
 	}
-	c.ed.Update(msg) // the "+ register and gt / gT mean nothing here
+	// gt / gT mean nothing here, and neither does "+p: the terminal's
+	// paste covers it.
+	if res := c.ed.Update(msg); res.Clipboard != nil {
+		return c, emit(CopyMsg{Text: *res.Clipboard, What: "the yanked text"})
+	}
 	return c, nil
 }
 

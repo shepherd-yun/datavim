@@ -14,7 +14,7 @@ func Help() []HelpLine {
 		{"d c y > <", "Operators, with a motion, iw aw i\" a\" i' a' i( a( or doubled"},
 		{"x D C p P", "Delete rune / to line end, change to line end, put"},
 		{"u <ctrl+r> .", "Undo, redo, repeat the last change"},
-		{"\"a-\"z \"+", "Registers; \"+ is the system clipboard"},
+		{"\"a-\"z \"+", "Registers; y also copies to the system clipboard, \"+p pastes from it"},
 		{"gt gT {n}gt", "Next / previous / nth tab"},
 	}
 }

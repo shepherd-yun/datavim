@@ -509,6 +509,10 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 		return m.compare()
 	case keymap.NodeActions:
 		m.openNodeMenu()
+	case keymap.YankName, keymap.YankQualified:
+		if n := t.Selected(); n != nil {
+			return m.copyNodeName(n, a == keymap.YankQualified)
+		}
 	case keymap.TruncateTable:
 		if n := t.Selected(); n != nil && n.Kind == tree.KindTable {
 			return m.startTableOp(tableOp{kind: opTruncate, conn: n.Conn, ref: n.TableRef()})

@@ -89,6 +89,36 @@ func (m *Model) SetField(f int) { m.field = textutil.Clamp(f, 0, m.fieldCount()-
 // MoveField moves the cursor between a row's fields while editing.
 func (m *Model) MoveField(delta int) { m.SetField(m.field + delta) }
 
+// CursorName is the name of the column, index or foreign key under the
+// cursor, or the whole DDL on the DDL page; "" when there is none.
+func (m *Model) CursorName() string {
+	switch m.section {
+	case Columns:
+		if m.edit != nil {
+			if rows := m.edit.Columns(); m.row < len(rows) {
+				return rows[m.row].Col.Name
+			}
+		} else if m.row < len(m.data.Columns) {
+			return m.data.Columns[m.row].Name
+		}
+	case Indexes:
+		if m.edit != nil {
+			if rows := m.edit.Indexes(); m.row < len(rows) {
+				return rows[m.row].Index.Name
+			}
+		} else if m.row < len(m.data.Indexes) {
+			return m.data.Indexes[m.row].Name
+		}
+	case ForeignKeys:
+		if m.row < len(m.data.ForeignKeys) {
+			return m.data.ForeignKeys[m.row].Name
+		}
+	case DDL:
+		return m.data.DDL
+	}
+	return ""
+}
+
 func (m *Model) fieldCount() int {
 	switch {
 	case m.edit == nil:

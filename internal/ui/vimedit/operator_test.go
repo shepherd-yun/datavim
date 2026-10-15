@@ -105,9 +105,16 @@ func TestClipboardRegister(t *testing.T) {
 	if r := feed(e, `"+dw`); r.Clipboard == nil || *r.Clipboard != "select " {
 		t.Fatalf("\"+dw: %+v", r.Clipboard)
 	}
-	if r := feed(e, "yw"); r.Clipboard != nil {
-		t.Fatal("other registers stay inside the editor")
+	if r := feed(e, "yw"); r.Clipboard == nil || *r.Clipboard != "1" {
+		t.Fatalf("a plain yank goes to the clipboard too: %+v", r.Clipboard)
 	}
+	if r := feed(e, `"ayw`); r.Clipboard != nil {
+		t.Fatal("named registers stay inside the editor")
+	}
+	if r := feed(e, "x"); r.Clipboard != nil {
+		t.Fatal("a plain delete stays inside the editor")
+	}
+	feed(e, "u")
 	r = feed(e, `2"+p`)
 	if r.Paste == nil || r.Paste.Before || r.Paste.Count != 2 {
 		t.Fatalf("\"+p asks for the clipboard: %+v", r.Paste)
@@ -126,6 +133,16 @@ func TestClipboardRegister(t *testing.T) {
 	r = feed(e, `"+P`)
 	if !e.PasteClipboard(*r.Paste, "line\r\n") || e.Text() != "line\n1aba\nx" {
 		t.Fatalf("a clipboard ending in a line break pastes lines: %q", e.Text())
+	}
+}
+
+func TestVisualYankCopies(t *testing.T) {
+	e := newAt(t, "|select 1\nfrom t")
+	if r := feed(e, "vey"); r.Clipboard == nil || *r.Clipboard != "select" {
+		t.Fatalf("v…y: %+v", r.Clipboard)
+	}
+	if r := feed(e, "Vjy"); r.Clipboard == nil || *r.Clipboard != "select 1\nfrom t\n" {
+		t.Fatalf("V…y: %+v", r.Clipboard)
 	}
 }
 

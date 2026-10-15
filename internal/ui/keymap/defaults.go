@@ -69,6 +69,8 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
 		Binding{Tree, keys("m"), MarkCompare, "Mark as the compare source"},
 		Binding{Tree, keys("C"), Compare, "Compare with the marked node"},
+		Binding{Tree, keys("y", "y"), YankName, "Copy name"},
+		Binding{Tree, keys("y", "q"), YankQualified, "Copy qualified name (db.table)"},
 	)
 
 	b = append(b, gridBindings(Grid)...)
@@ -123,6 +125,7 @@ func DefaultBindings() []Binding {
 		Binding{Structure, keys("left"), Left, "Previous field"},
 		Binding{Structure, keys("l"), Right, "Next field"},
 		Binding{Structure, keys("right"), Right, "Next field"},
+		Binding{Structure, keys("y", "y"), YankName, "Copy the name under the cursor (DDL: all of it)"},
 		Binding{Structure, keys("e"), ModifyTable, "Modify the table / stop modifying"},
 		Binding{Structure, keys("i"), EditCell, "Edit the field"},
 		Binding{Structure, keys("enter"), EditCell, "Edit the field"},

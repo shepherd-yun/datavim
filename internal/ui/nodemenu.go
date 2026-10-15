@@ -72,6 +72,10 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 		}
 		entries = append(entries, entry{keymap.DeleteNode, "Drop " + obj})
 	}
+	entries = append(entries, entry{keymap.YankName, "Copy name"})
+	if n.Kind != tree.KindConn {
+		entries = append(entries, entry{keymap.YankQualified, "Copy qualified name"})
+	}
 	items := make([]menuItem, len(entries))
 	for i, e := range entries {
 		items[i] = menuItem{action: e.a, desc: e.desc, keys: m.keys.KeysFor(keymap.Tree, e.a)}

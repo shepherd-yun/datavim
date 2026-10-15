@@ -106,6 +106,8 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `u` / `U` | Table data: undo the last change / discard every change |
 | `<Space>w`, `:w` | Table data: preview the changes as SQL, `y` submits them in one transaction |
 | `yl` / `yy` | Copy cell / row |
+| `yy` / `yq` | Tree: copy the name of the connection, database, schema or table / its qualified name as SQL writes it (`app.users`) |
+| `yy` | Structure: copy the name of the column, index or foreign key under the cursor (on the DDL page, the DDL) |
 | `p` | Re-enter connection password (tree) |
 | `<Space>c` | SQL console for the selected connection / database |
 | `Enter` / `R` | Console: run statement under cursor, or the visual selection / run all (`Ctrl-Enter` or `Ctrl-j` in insert mode) |
@@ -184,7 +186,8 @@ motions `h j k l w b e W B E 0 ^ $ gg G f F t T % { }` and `Ctrl-d` `Ctrl-u`; op
 `d c y > <` with a motion, a text object (`iw aw i" a" i' a' i( a( i[ a[ i{ a{`) or doubled
 (`dd` `cc` `yy` `>>` `<<`); `x D C p P o O i a I A`; `u` / `Ctrl-r` undo and redo; `.`
 repeats the last change; counts (`3dd`, `2dw`); registers `"a`–`"z`, and `"+` for the
-system clipboard. In the editor the digits are counts, so `gt` / `gT` / `{n}gt` or `H` / `L`
+system clipboard. A plain `y` (no register) also copies to the system clipboard, while `x`,
+`d` and `c` leave it alone; `"+p` pastes from it. In the editor the digits are counts, so `gt` / `gT` / `{n}gt` or `H` / `L`
 switch tabs. `Enter` in VISUAL mode runs the selected statements. `>` and `<` indent by four
 spaces; `Tab` in INSERT mode types four spaces.
 

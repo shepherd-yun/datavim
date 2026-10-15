@@ -88,6 +88,8 @@ const (
 	ScrollHalfRight   Action = "scroll.halfright"
 	YankCell          Action = "yank.cell"
 	YankRow           Action = "yank.row"
+	YankName          Action = "yank.name"
+	YankQualified     Action = "yank.qualified"
 	ToggleTx          Action = "tx.toggle"
 	GlobalSearch      Action = "search.global"
 	Recent            Action = "recent.open"

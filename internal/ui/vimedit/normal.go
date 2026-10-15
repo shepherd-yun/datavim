@@ -209,7 +209,7 @@ func (e *Editor) apply(c cmd, from, to Pos, lines bool) {
 			e.store(c.reg, text, true)
 			e.deleteLines(a, z)
 		case "y":
-			e.store(c.reg, text, true)
+			e.yank(c.reg, text, true)
 			if a < e.cur.Line {
 				e.cur.Line = a
 			}
@@ -233,7 +233,7 @@ func (e *Editor) apply(c cmd, from, to Pos, lines bool) {
 			e.mode = Insert
 		}
 	case "y":
-		e.store(c.reg, text, false)
+		e.yank(c.reg, text, false)
 		e.cur = from
 	case ">", "<":
 		e.shift(from.Line, to.Line, c.op == ">")
@@ -293,6 +293,16 @@ func (e *Editor) store(reg rune, text string, linewise bool) {
 	case reg >= 'a' && reg <= 'z':
 		e.regs[reg] = r
 	case reg == '+':
+		e.res.Clipboard = &text
+	}
+}
+
+// yank is store for y: a yank into the unnamed register also goes to the
+// system clipboard (vim's clipboard=unnamedplus, for yanks only, so that x
+// and dd do not overwrite what was copied elsewhere).
+func (e *Editor) yank(reg rune, text string, linewise bool) {
+	e.store(reg, text, linewise)
+	if reg == 0 {
 		e.res.Clipboard = &text
 	}
 }

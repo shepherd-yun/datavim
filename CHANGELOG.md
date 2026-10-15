@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- A plain `y` in the console editor and the cell editor copies to the system clipboard as well
+  as the unnamed register (vim's `clipboard=unnamedplus`, for yanks only: `x`, `d` and `c` do
+  not overwrite the clipboard). `"+p` still pastes from it.
+- `yy` in the tree copies the name of the selected connection, database, schema, table or view,
+  and `yq` its qualified name as SQL writes it (`app.users` on MySQL, `public.users` on
+  PostgreSQL, quoted when needed). Both are in the `a` menu too. Rebind them as `yank.name` /
+  `yank.qualified`.
+- `yy` in a structure tab copies the name of the column, index or foreign key under the cursor,
+  or the whole DDL on the DDL page.
 - `<Space>l` (or `:locate`) selects what the current tab shows in the tree: its table, or the
   database / schema of a console. It expands and loads the tree on the way and shows a hidden
   tree. Rebind it as `tree.locate`.

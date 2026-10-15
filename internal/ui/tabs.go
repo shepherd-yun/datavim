@@ -464,7 +464,6 @@ func (t *dataTab) Handle(a keymap.Action) tea.Cmd {
 		t.undoAll()
 	case keymap.SubmitEdits:
 		return t.submit()
-
 	}
 	return nil
 }
@@ -794,7 +793,17 @@ func (t *structureTab) Handle(a keymap.Action) tea.Cmd {
 		return t.editAction(a)
 	case keymap.SubmitEdits:
 		return t.submit()
-
+	case keymap.YankName:
+		name := v.CursorName()
+		if name == "" {
+			t.setStatus("nothing to copy", true)
+			return nil
+		}
+		what := name
+		if v.Section() == structure.DDL {
+			what = "the DDL of " + t.ref.Name
+		}
+		return func() tea.Msg { return overlay.CopyMsg{Text: name, What: what} }
 	}
 	return nil
 }
