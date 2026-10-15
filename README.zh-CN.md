@@ -41,7 +41,11 @@ max_rows         = 1000          # rows fetched per console query
 compare_max_rows = 100000        # rows a data compare reads per side
 editor           = "nvim"        # <space>v; default $VISUAL, $EDITOR, nvim
 export_dir       = "~/Downloads"
+icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "plain"
 ```
+
+树使用 [Nerd Font](https://www.nerdfonts.com)（v3）图标：连接前显示 MySQL / PostgreSQL 的标志，
+下面的库、schema、表、文件夹、键也各有图标。终端没有 Nerd Font 时会显示成方框，设置 `icons = "plain"` 即可。
 
 还没有配置？启动 sqlvim 后按 `<space>n` 添加连接。
 

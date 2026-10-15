@@ -8,6 +8,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
 
 func fixture() *Model {
@@ -358,5 +359,58 @@ func TestForget(t *testing.T) {
 	m.selected = users
 	if !m.Expand() {
 		t.Fatal("expanding a forgotten table loads it again")
+	}
+}
+
+func TestNerdIcons(t *testing.T) {
+	m, users, cols, keys := tableFixture()
+	m.SetIcons(IconsNerd)
+	m.Roots()[0].Driver = "mysql"
+	m.Roots()[1].Driver = "postgres"
+	users.Parent().Expanded = true
+	keys.Children = append(keys.Children, &Node{Kind: KindForeignKey, Name: "fk"}, &Node{Kind: KindIndex, Name: "ix"})
+	keys.Expanded = true
+	view := ansi.Strip(m.View(80, true))
+	for _, want := range []string{
+		"▾ \ue704 local", "▸ \ue76e prod", // the driver's logo
+		"▾ \U000f01bc app", "▾ \U000f04eb users",
+		"▾ \U000f0770 Columns", "▾ \U000f0770 Keys", // an open folder
+		"\U000f0835 id  bigint PK", "\U000f0306 PRIMARY", "\U000f119f fk", "\U000f04bc ix",
+	} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("missing %q:\n%s", want, view)
+		}
+	}
+	cols.Expanded = false
+	users.Kind = KindView
+	view = ansi.Strip(m.View(80, true))
+	for _, want := range []string{"▸ \U000f024b Columns", "▾ \U000f1094 users"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("missing %q:\n%s", want, view)
+		}
+	}
+	schema := &Node{Kind: KindSchema, Name: "public"}
+	if got := icon(schema, IconsNerd); got != "▸ \uf0e8" {
+		t.Fatalf("schema icon %q", got)
+	}
+	if got := icon(&Node{Kind: KindConn}, IconsNerd); got != "▸ \U000f01bc" {
+		t.Fatalf("a connection of an unknown driver gets the database icon, got %q", got)
+	}
+}
+
+func TestPlainIconsAreTheDefault(t *testing.T) {
+	m, _, _, _ := tableFixture()
+	view := ansi.Strip(m.View(60, true))
+	if !strings.Contains(view, "▾ • users") || !strings.Contains(view, "· id") {
+		t.Fatalf("plain icons:\n%s", view)
+	}
+}
+
+func TestNerdConnectionIconIsAccented(t *testing.T) {
+	m := fixture()
+	m.SetIcons(IconsNerd)
+	m.Roots()[1].Driver = "postgres"
+	if view := m.View(60, true); !strings.Contains(view, theme.Accent.Render("")) {
+		t.Fatalf("an unselected connection's logo is drawn in the accent color:\n%q", view)
 	}
 }

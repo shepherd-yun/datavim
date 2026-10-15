@@ -4,6 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
+	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/structure"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
@@ -269,5 +272,15 @@ func TestModifyTableReloadsTheTreeTable(t *testing.T) {
 	users := m.tree.FindTable("local", db.TableRef{Namespace: db.Namespace{Database: "app"}, Name: "users"})
 	if got := users.Children[0].Children[1].Name; got != "name_x" {
 		t.Fatalf("tree column = %s, want name_x after the submit", got)
+	}
+}
+
+func TestNerdIconsFromSettings(t *testing.T) {
+	b := newFakeBackend()
+	m := New(b, newFakeStore(), config.Settings{PageSize: 2, MaxColumnWidth: 40, MaxRows: 10, Icons: config.IconsNerd})
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	s := screen(m)
+	if !strings.Contains(s, " local") || !strings.Contains(s, " prod") {
+		t.Fatalf("each connection shows its driver's logo:\n%s", s)
 	}
 }

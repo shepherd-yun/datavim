@@ -3,6 +3,7 @@ package ui
 import (
 	"cmp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
@@ -22,7 +23,10 @@ func tableChildren(conn string, s db.TableSchema) []*tree.Node {
 		if len(children) == 0 {
 			return
 		}
-		n := &tree.Node{Kind: tree.KindGroup, Group: g, Name: name, Conn: conn, NS: ns, Expanded: g == tree.GroupColumns}
+		n := &tree.Node{
+			Kind: tree.KindGroup, Group: g, Name: name, Detail: strconv.Itoa(len(children)),
+			Conn: conn, NS: ns, Expanded: g == tree.GroupColumns,
+		}
 		tree.Adopt(n, children)
 		groups = append(groups, n)
 	}

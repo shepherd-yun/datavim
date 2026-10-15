@@ -110,13 +110,27 @@ type Model struct {
 	revealing   *revealTarget
 }
 
+// connNode is the tree root of connection c.
+func connNode(c config.Connection) *tree.Node {
+	return &tree.Node{Kind: tree.KindConn, Name: c.Name, Conn: c.Name, Driver: c.Driver, Prod: c.Env == config.EnvProd}
+}
+
+// newTree builds the tree with the icon set the settings ask for.
+func newTree(roots []*tree.Node, settings config.Settings) *tree.Model {
+	t := tree.New(roots)
+	if settings.Icons == config.IconsNerd {
+		t.SetIcons(tree.IconsNerd)
+	}
+	return t
+}
+
 // New builds the root model with one tree root per configured connection.
 func New(b Backend, st Store, settings config.Settings) *Model {
 	home, _ := os.UserHomeDir()
 	conns := b.Connections()
 	roots := make([]*tree.Node, len(conns))
 	for i, c := range conns {
-		roots[i] = &tree.Node{Kind: tree.KindConn, Name: c.Name, Conn: c.Name, Prod: c.Env == config.EnvProd}
+		roots[i] = connNode(c)
 	}
 	return &Model{
 		backend:       b,
@@ -126,7 +140,7 @@ func New(b Backend, st Store, settings config.Settings) *Model {
 		settings:      settings,
 		keys:          keymap.Default(),
 		showTree:      true,
-		tree:          tree.New(roots),
+		tree:          newTree(roots, settings),
 		whichKeyDelay: defaultWhichKeyDelay,
 		timings:       defaultTimings,
 	}
@@ -1125,7 +1139,7 @@ func (m *Model) connAdded(msg connAddedMsg) {
 		return
 	}
 	c := msg.conn
-	m.tree.AddRoot(&tree.Node{Kind: tree.KindConn, Name: c.Name, Conn: c.Name, Prod: c.Env == config.EnvProd})
+	m.tree.AddRoot(connNode(c))
 	m.setFocus(focusTree)
 	m.setStatus("added connection "+c.Name+" to connections.toml", false)
 }
@@ -1164,7 +1178,7 @@ func (m *Model) connUpdated(msg connUpdatedMsg) tea.Cmd {
 	c := msg.conn
 	m.catalogs.Forget(msg.old)
 	cmd := m.closeTabsOf(msg.old)
-	m.tree.ReplaceRoot(msg.old, &tree.Node{Kind: tree.KindConn, Name: c.Name, Conn: c.Name, Prod: c.Env == config.EnvProd})
+	m.tree.ReplaceRoot(msg.old, connNode(c))
 	m.setFocus(focusTree)
 	if msg.err != nil { // saved, but the keychain could not follow
 		m.setStatus(msg.err.Error(), true)

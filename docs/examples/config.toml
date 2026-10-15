@@ -5,6 +5,7 @@ max_rows         = 1000           # rows a console query fetches (] loads more)
 compare_max_rows = 100000         # rows a data compare (D in a diff tab) reads per side
 editor           = "nvim"         # <space>v; default: $VISUAL, then $EDITOR, then nvim
 export_dir       = "~/Downloads"  # default directory for <space>x exports
+icons            = "nerd"         # tree icons: "nerd" needs a Nerd Font (v3); "plain" works in any font
 
 # Colors: ANSI indexes "0"–"255" (follow your terminal's palette) or "#rrggbb".
 # Slots: border focus error accent on_error visual_bg visual_fg changed

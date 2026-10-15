@@ -43,7 +43,12 @@ max_rows         = 1000          # rows fetched per console query
 compare_max_rows = 100000        # rows a data compare reads per side
 editor           = "nvim"        # <space>v; default $VISUAL, $EDITOR, nvim
 export_dir       = "~/Downloads"
+icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "plain"
 ```
+
+The tree draws [Nerd Font](https://www.nerdfonts.com) icons (v3): the MySQL / PostgreSQL logo
+before each connection, and database, schema, table, folder and key icons below it. Without a
+Nerd Font they show as boxes: set `icons = "plain"`.
 
 No config yet? Start sqlvim and press `<space>n` to add a connection.
 

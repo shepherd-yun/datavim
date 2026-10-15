@@ -40,6 +40,7 @@ type Node struct {
 	Kind     Kind
 	Name     string
 	Conn     string
+	Driver   string // a connection's driver, for its icon
 	NS       db.Namespace
 	Group    Group       // a KindGroup node's group
 	Detail   string      // shown muted after the name: a column's type, an index's columns
@@ -96,7 +97,16 @@ type MarkKey struct {
 
 func (n *Node) MarkKey() MarkKey { return MarkKey{Conn: n.Conn, Kind: n.Kind, NS: n.NS, Name: n.Name} }
 
+// IconStyle picks the glyphs drawn before the names.
+type IconStyle int
+
+const (
+	IconsPlain IconStyle = iota // arrows and dots, any font
+	IconsNerd                   // Nerd Font glyphs: driver logos, databases, tables, folders
+)
+
 type Model struct {
+	icons    IconStyle
 	roots    []*Node
 	selected *Node
 	mark     *MarkKey // the compare source, drawn with ◆
@@ -112,6 +122,9 @@ func New(roots []*Node) *Model {
 	}
 	return m
 }
+
+// SetIcons picks the icon set.
+func (m *Model) SetIcons(s IconStyle) { m.icons = s }
 
 // Roots returns the connection nodes.
 func (m *Model) Roots() []*Node { return m.roots }
@@ -386,7 +399,12 @@ func (m *Model) View(width int, focused bool) string {
 		if m.mark != nil && n.MarkKey() == *m.mark {
 			name = "◆ " + name
 		}
-		label := strings.Repeat("  ", rows[i].depth) + icon(n) + " " + name
+		ic := icon(n, m.icons)
+		if m.icons == IconsNerd && n.Kind == KindConn && i != cur {
+			g := nerdGlyph(n) // the selection style would end at an inner color
+			ic = strings.Replace(ic, g, theme.Accent.Render(g), 1)
+		}
+		label := strings.Repeat("  ", rows[i].depth) + ic + " " + name
 		if i == cur {
 			if focused {
 				label = theme.Selected.Render(label)
@@ -414,10 +432,16 @@ func (m *Model) View(width int, focused bool) string {
 	return strings.Join(lines, "\n")
 }
 
-func icon(n *Node) string {
+func icon(n *Node, style IconStyle) string {
 	arrow := "▸"
 	if n.Expanded {
 		arrow = "▾"
+	}
+	if style == IconsNerd {
+		if !n.Expandable() {
+			return nerdGlyph(n)
+		}
+		return arrow + " " + nerdGlyph(n)
 	}
 	switch n.Kind {
 	case KindTable:
@@ -428,6 +452,42 @@ func icon(n *Node) string {
 		return "·"
 	}
 	return arrow
+}
+
+// nerdGlyph is n's Nerd Font (v3) icon.
+func nerdGlyph(n *Node) string {
+	switch n.Kind {
+	case KindConn:
+		switch n.Driver {
+		case "mysql":
+			return "\ue704" // dev-mysql
+		case "postgres":
+			return "\ue76e" // dev-postgresql
+		}
+		return "\U000f01bc" // md-database
+	case KindDatabase:
+		return "\U000f01bc" // md-database
+	case KindSchema:
+		return "\uf0e8" // fa-sitemap
+	case KindTable:
+		return "\U000f04eb" // md-table
+	case KindView:
+		return "\U000f1094" // md-table_eye
+	case KindGroup:
+		if n.Expanded {
+			return "\U000f0770" // md-folder_open
+		}
+		return "\U000f024b" // md-folder
+	case KindColumn:
+		return "\U000f0835" // md-table_column
+	case KindKey:
+		return "\U000f0306" // md-key
+	case KindForeignKey:
+		return "\U000f119f" // md-key_link
+	case KindIndex:
+		return "\U000f04bc" // md-sort_ascending
+	}
+	return ""
 }
 
 // RevealResult says how far Reveal got.

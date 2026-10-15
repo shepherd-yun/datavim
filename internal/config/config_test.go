@@ -410,3 +410,19 @@ func TestCompareMaxRows(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestIcons(t *testing.T) {
+	if got := DefaultSettings().Icons; got != IconsNerd {
+		t.Fatalf("Icons default = %q", got)
+	}
+	dir := t.TempDir()
+	writeFile(t, dir, "config.toml", `icons = "plain"`+"\n")
+	cfg, err := Load(dir)
+	if err != nil || cfg.Settings.Icons != IconsPlain {
+		t.Fatalf("settings = %+v, err %v", cfg, err)
+	}
+	writeFile(t, dir, "config.toml", `icons = "emoji"`+"\n")
+	if _, err := Load(dir); err == nil || !strings.Contains(err.Error(), `icons must be "nerd" or "plain"`) {
+		t.Fatalf("err = %v", err)
+	}
+}

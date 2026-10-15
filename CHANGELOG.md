@@ -7,6 +7,10 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- The tree draws Nerd Font icons like DataGrip: the MySQL or PostgreSQL logo before each
+  connection, and icons for databases, schemas, tables, views, folders, columns, keys and
+  indexes. Groups show how many entries they hold (`Columns 15`). Set `icons = "plain"` in
+  `config.toml` for a terminal font without Nerd Font glyphs.
 - Tables and views expand in the tree into Columns, Keys, Foreign Keys and Indexes, each
   with its type or columns. `Enter` on a column, key or index opens the structure at it, `e`
   modifies the table there and `dd` stages the drop in Modify Table (still submitted with

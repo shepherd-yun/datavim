@@ -52,11 +52,19 @@ type Settings struct {
 	CompareMaxRows int    `toml:"compare_max_rows"`
 	Editor         string `toml:"editor"`
 	ExportDir      string `toml:"export_dir"`
+	Icons          string `toml:"icons"` // IconsNerd or IconsPlain
 }
+
+// The icon sets of the tree: Nerd Font glyphs, or plain Unicode for
+// terminals without a Nerd Font.
+const (
+	IconsNerd  = "nerd"
+	IconsPlain = "plain"
+)
 
 // DefaultSettings returns the settings used when config.toml omits a key.
 func DefaultSettings() Settings {
-	return Settings{PageSize: 200, MaxColumnWidth: 40, MaxRows: 1000, CompareMaxRows: 100000}
+	return Settings{PageSize: 200, MaxColumnWidth: 40, MaxRows: 1000, CompareMaxRows: 100000, Icons: IconsNerd}
 }
 
 // EditorCommand is the command line <space>v runs: the editor setting, then
@@ -136,6 +144,9 @@ func Load(dir string) (*Config, error) {
 	}
 	if cfg.Settings.CompareMaxRows <= 0 {
 		return nil, fmt.Errorf("%s: compare_max_rows must be positive", settingsPath)
+	}
+	if i := cfg.Settings.Icons; i != IconsNerd && i != IconsPlain {
+		return nil, fmt.Errorf("%s: icons must be %q or %q, got %q", settingsPath, IconsNerd, IconsPlain, i)
 	}
 	if err := decodeFile(filepath.Join(dir, "keymap.toml"), &cfg.Keymap); err != nil {
 		return nil, err

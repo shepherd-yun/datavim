@@ -54,6 +54,9 @@ func TestTableChildrenGroups(t *testing.T) {
 	if got := render(groups); got != want {
 		t.Fatalf("got\n%s\nwant\n%s", got, want)
 	}
+	if groups[0].Detail != "3" || groups[3].Detail != "4" {
+		t.Fatalf("a group shows how many it holds: %q %q", groups[0].Detail, groups[3].Detail)
+	}
 	if !groups[0].Expanded || groups[1].Expanded {
 		t.Fatal("Columns starts expanded, the other groups closed")
 	}
