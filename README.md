@@ -129,6 +129,7 @@ a changed host key is an error. `ProxyCommand` is not supported.
 | `<Space>s` | Columns popup: type to filter, `Enter` puts the data tab's cursor on the column (opening the tab if need be), `Ctrl-o` opens the full structure (indexes, foreign keys, DDL) |
 | `<Space>S` | Full structure of the table under the cursor, without the popup |
 | `<Space>b` | Toggle tree |
+| `<Space>l` | Locate the current tab in the tree: the table, or the database / schema of a console (also `:locate`) |
 | `<Space>r` | Refresh the tree node or tab and reload the connection's metadata |
 | `?` | Help for the focused pane |
 | `:q` / `:qa` | Close tab / quit |

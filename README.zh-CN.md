@@ -124,6 +124,7 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 | `<Space>s` | 列弹窗：输入即过滤，`Enter` 让数据 tab 的光标跳到该列（必要时先打开 tab），`Ctrl-o` 打开完整结构（索引、外键、DDL） |
 | `<Space>S` | 直接打开光标所在表的完整结构，不经过列弹窗 |
 | `<Space>b` | 显示 / 隐藏树 |
+| `<Space>l` | 在树中定位当前 tab：表，或 console 所在的数据库 / schema（也可用 `:locate`） |
 | `<Space>r` | 刷新树节点或 tab，并重新加载该连接的元数据 |
 | `?` | 当前面板的帮助 |
 | `:q` / `:qa` | 关闭 tab / 退出 |

@@ -7,6 +7,9 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `<Space>l` (or `:locate`) selects what the current tab shows in the tree: its table, or the
+  database / schema of a console. It expands and loads the tree on the way and shows a hidden
+  tree. Rebind it as `tree.locate`.
 - `Tab` / `Shift-Tab` in the search switch its scope between objects, the lines of the open
   consoles (`Enter` jumps to the line) and the SQL history (an empty query lists the recent
   statements, `Enter` inserts one like `<Space>h`). A leading `@` narrows every scope to the

@@ -414,6 +414,8 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		return m.openSearch()
 	case keymap.Recent:
 		return loadRecent(m.store)
+	case keymap.Locate:
+		return m.locate()
 	case keymap.NewConnection:
 		m.overlay = overlay.NewConnForm(m.keys)
 	case keymap.Refresh:
@@ -655,6 +657,8 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		}
 		m.setStatus("nothing to write: the active tab is not table data or a table being modified", true)
 
+	case "locate":
+		return m.locate()
 	case "commit", "rollback":
 		if c, ok := m.activeTab().(*consoleTab); ok {
 			return c.endTx(cmd == "commit")

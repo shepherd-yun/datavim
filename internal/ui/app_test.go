@@ -853,3 +853,66 @@ func TestEditConnectionSaveFailureKeepsEverything(t *testing.T) {
 		t.Fatal("tabs stay open when nothing was saved")
 	}
 }
+
+func TestLocateRevealsTheActiveTable(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	press(t, m, "ctrl+h", "g", "g", "ctrl+l") // move the tree away, back to the tab
+	press(t, m, "space", "l")
+	if n := m.tree.Selected(); m.focus != focusTree || n == nil || n.Name != "users" || n.Conn != "local" {
+		t.Fatalf("focus %v, selected %+v", m.focus, n)
+	}
+}
+
+func TestLocateLoadsTheTreeOnTheWay(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	m.tree.ResetConn("local")
+	m.setFocus(focusTabs)
+	press(t, m, "space", "l")
+	if n := m.tree.Selected(); n == nil || n.Name != "users" {
+		t.Fatalf("selected %+v", n)
+	}
+}
+
+func TestLocateShowsAHiddenTree(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	press(t, m, "space", "b")
+	if m.showTree {
+		t.Fatal("tree still shown")
+	}
+	press(t, m, "space", "l")
+	if n := m.tree.Selected(); !m.showTree || n == nil || n.Name != "users" {
+		t.Fatalf("shown %v, selected %+v", m.showTree, n)
+	}
+}
+
+func TestLocateRevealsTheConsoleNamespace(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	press(t, m, "ctrl+h", "k") // tree on app
+	c := openLocalConsole(t, m)
+	if c.ns.Database != "app" {
+		t.Fatalf("console ns %+v", c.ns)
+	}
+	press(t, m, "ctrl+h", "g", "g", "ctrl+l")
+	command(t, m, "locate")
+	if n := m.tree.Selected(); m.focus != focusTree || n == nil || n.Name != "app" {
+		t.Fatalf("focus %v, selected %+v", m.focus, n)
+	}
+}
+
+func TestLocateWithoutTabOrMissingNode(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "space", "l")
+	if s := statusLine(m); !strings.Contains(s, "no tab") {
+		t.Fatalf("status: %s", s)
+	}
+	openUsers(t, m)
+	m.tabs[m.active].(*dataTab).ref.Name = "gone"
+	press(t, m, "space", "l")
+	if s := statusLine(m); !strings.Contains(s, "not in the tree") {
+		t.Fatalf("status: %s", s)
+	}
+}

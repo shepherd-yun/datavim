@@ -376,6 +376,25 @@ func (m *Model) reveal(conn string, path []string) tea.Cmd {
 	return nil
 }
 
+// locate reveals what the active tab shows in the tree: its table, or the
+// namespace (else the connection) of a console.
+func (m *Model) locate() tea.Cmd {
+	t := m.activeTab()
+	if t == nil {
+		m.setStatus("no tab to locate", true)
+		return nil
+	}
+	conn, ref := t.Target()
+	var path []string
+	if ref.Database != "" {
+		path = tablePath(ref.Namespace, ref.Name)
+		if ref.Name == "" {
+			path = path[:len(path)-1]
+		}
+	}
+	return m.reveal(conn, path)
+}
+
 // continueReveal resumes a reveal once children of its connection loaded.
 func (m *Model) continueReveal(msg childrenLoadedMsg) tea.Cmd {
 	r := m.revealing

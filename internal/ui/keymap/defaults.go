@@ -25,6 +25,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(LeaderToken, "t"), ToggleTx, "Toggle manual commit"},
 		{Global, keys(LeaderToken, LeaderToken), GlobalSearch, "Search everything"},
 		{Global, keys(LeaderToken, "e"), Recent, "Recent tabs"},
+		{Global, keys(LeaderToken, "l"), Locate, "Locate the current tab in the tree"},
 	}
 	for _, c := range []struct{ key, format, desc string }{
 		{"t", "tsv", "Copy as TSV"},
