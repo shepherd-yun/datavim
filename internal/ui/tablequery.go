@@ -52,8 +52,13 @@ func (q tableQuery) sql(d sqlx.Dialect, ref db.TableRef) string {
 
 // check rejects a filter that turns the query into more than one SELECT.
 func (q tableQuery) check(d sqlx.Dialect, ref db.TableRef) error {
-	s := q.sql(d, ref)
-	if len(sqlx.Split(s, d)) != 1 || sqlx.Analyze(s, d).Kind != sqlx.Read {
+	return checkSelect(d, q.sql(d, ref))
+}
+
+// checkSelect rejects a query that a typed filter turned into more than
+// one statement, or into something other than a read.
+func checkSelect(d sqlx.Dialect, q string) error {
+	if len(sqlx.Split(q, d)) != 1 || sqlx.Analyze(q, d).Kind != sqlx.Read {
 		return errBadFilter
 	}
 	return nil

@@ -557,6 +557,12 @@ func isFilterWordRune(r rune) bool {
 // completeFilter offers the table's columns and condition keywords for the
 // word before the cursor in the F prompt.
 func (t *dataTab) completeFilter(text string, cursor int) (int, []complete.Candidate) {
+	return completeCondition(t.dialect, t.cols, text, cursor)
+}
+
+// completeCondition offers cols and condition keywords for the word before
+// the cursor in a WHERE prompt.
+func completeCondition(d sqlx.Dialect, cols []db.Column, text string, cursor int) (int, []complete.Candidate) {
 	rs := []rune(text)
 	cursor = min(max(cursor, 0), len(rs))
 	start := cursor
@@ -565,13 +571,13 @@ func (t *dataTab) completeFilter(text string, cursor int) (int, []complete.Candi
 	}
 	prefix := strings.Trim(string(rs[start:cursor]), "\"`")
 	var cands []complete.Candidate
-	for _, c := range t.cols {
+	for _, c := range cols {
 		cands = append(cands, complete.Candidate{
-			Text: sqlx.QuoteIfNeeded(c.Name, t.dialect), Label: c.Name, Kind: complete.Column, Detail: c.Type,
+			Text: sqlx.QuoteIfNeeded(c.Name, d), Label: c.Name, Kind: complete.Column, Detail: c.Type,
 		})
 	}
 	kws := filterKeywords
-	if t.dialect == sqlx.Postgres {
+	if d == sqlx.Postgres {
 		kws = append(slices.Clone(kws), "ILIKE")
 	}
 	lower := strings.ToUpper(prefix) != prefix

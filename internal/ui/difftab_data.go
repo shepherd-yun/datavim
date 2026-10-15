@@ -16,6 +16,8 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
@@ -286,6 +288,14 @@ func (t *diffTab) handleData(a keymap.Action) tea.Cmd {
 		v.scrollColumns(1)
 	case keymap.Collapse:
 		v.scrollColumns(-1)
+	case keymap.ToggleChange:
+		t.toggleData()
+	case keymap.SwapSides:
+		t.swapData()
+	case keymap.FilterPrompt:
+		return t.dataFilterPrompt()
+	case keymap.WriteScript:
+		return t.writeDataScript()
 	case keymap.DataDiff:
 		t.closeData()
 	case keymap.Refresh:
@@ -431,4 +441,103 @@ func (t *diffTab) dataHints() string {
 		keyHint(t.keys, keymap.Diff, keymap.WriteScript, "script to console"),
 		keyHint(t.keys, keymap.Diff, keymap.DataDiff, "structure"),
 	))
+}
+
+// dataFilterMsg is the condition typed at F in the data view.
+type dataFilterMsg struct {
+	tabID int
+	text  string
+}
+
+func (m dataFilterMsg) TabID() int { return m.tabID }
+
+// loaded reports rows to act on: the load finished without an error.
+func (v *dataView) loaded() bool { return !v.loading && v.srcErr == "" && v.tgtErr == "" }
+
+func (t *diffTab) toggleData() {
+	v := t.data
+	if !v.loaded() || len(v.rows) == 0 {
+		return
+	}
+	v.picked[v.cursor] = !v.picked[v.cursor]
+}
+
+// swapData makes the target the source; the rows read are reused.
+func (t *diffTab) swapData() {
+	v := t.data
+	if !v.loaded() {
+		t.setStatus("both sides have to be loaded first", true)
+		return
+	}
+	v.src, v.tgt = v.tgt, v.src
+	v.srcCols, v.tgtCols = v.tgtCols, v.srcCols
+	v.spec = v.spec.Swap()
+	v.rows = datadiff.SwapRows(v.rows)
+	v.reset()
+	t.setStatus("now "+v.src.label()+" ──▶ "+v.tgt.label(), false)
+}
+
+// dataFilterPrompt edits the condition both sides are read with, starting
+// from the current one, else the first key column.
+func (t *diffTab) dataFilterPrompt() tea.Cmd {
+	v := t.data
+	d := sqlx.DialectOf(v.src.driver)
+	initial := v.where
+	if initial == "" && len(v.spec.Key) > 0 {
+		initial = sqlx.QuoteIfNeeded(v.spec.Key[0], d) + " "
+	}
+	id, cols, spec, ref := t.id, v.columns, v.spec, v.src.ref
+	return openOverlay(overlay.NewPrompt("Filter both sides",
+		"WHERE …  read on the source and the target · empty compares every row", initial,
+		func(s string) tea.Msg { return dataFilterMsg{tabID: id, text: s} },
+		overlay.WithCompleter(func(text string, cursor int) (int, []complete.Candidate) {
+			return completeCondition(d, cols, text, cursor)
+		}),
+		overlay.WithValidate(func(s string) error { return checkSelect(d, spec.Query(d, ref, normFilter(s))) })))
+}
+
+// filterData reads both sides again with the typed condition.
+func (t *diffTab) filterData(text string) tea.Cmd {
+	if t.data == nil {
+		return nil
+	}
+	t.data.where = normFilter(text)
+	return t.loadData()
+}
+
+// writeDataScript asks for a console on the target holding the INSERT,
+// UPDATE and DELETE statements of the picked rows.
+func (t *diffTab) writeDataScript() tea.Cmd {
+	v := t.data
+	if !v.loaded() || len(v.rows) == 0 {
+		t.setStatus("nothing to sync", true)
+		return nil
+	}
+	stmts, err := v.spec.Script(sqlx.DialectOf(v.tgt.driver), v.tgt.ref, v.tgtCols, v.rows, func(i int) bool { return v.picked[i] })
+	if err != nil {
+		t.setStatus(err.Error(), true)
+		return nil
+	}
+	if len(stmts) == 0 {
+		t.setStatus(joinHints("nothing picked", keyHint(t.keys, keymap.Diff, keymap.ToggleChange, "picks a row")), true)
+		return nil
+	}
+	conn, ns, text := v.tgt.conn, v.tgt.ref.Namespace, t.dataScriptText(stmts)
+	return func() tea.Msg { return scriptConsoleMsg{conn: conn, ns: ns, text: text} }
+}
+
+func (t *diffTab) dataScriptText(stmts []string) string {
+	v := t.data
+	var b strings.Builder
+	b.WriteString("-- sqlvim data sync\n")
+	fmt.Fprintf(&b, "-- source: %s\n-- target: %s\n-- key: %s\n", v.src.label(), v.tgt.label(), strings.Join(v.spec.Key, ", "))
+	if v.where != "" {
+		fmt.Fprintf(&b, "-- where: %s\n", strings.ReplaceAll(v.where, "\n", " "))
+	}
+	fmt.Fprintf(&b, "-- generated: %s\n", t.now().Format("2006-01-02 15:04:05"))
+	b.WriteString("-- These statements change the target's rows to match the source. Review them before running.\n\n")
+	for _, s := range stmts {
+		b.WriteString(s + ";\n")
+	}
+	return b.String()
 }

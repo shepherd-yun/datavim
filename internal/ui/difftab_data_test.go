@@ -7,6 +7,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
@@ -202,4 +203,118 @@ func TestDataViewScrollsColumns(t *testing.T) {
 	wantScreen(t, m, "1   ho → hi") // the key stays
 	press(t, m, "l", "h")
 	wantScreen(t, m, "bob")
+}
+
+func TestDataViewToggle(t *testing.T) {
+	m, b := newTestModel(t)
+	d := openUsersData(t, m, b)
+	press(t, m, "x") // the ~ row
+	wantScreen(t, m, "[ ] ~ 2")
+	press(t, m, "j", "x") // the - row
+	wantScreen(t, m, "[x] - 3")
+	if strings.Contains(screen(m), "delete skipped") {
+		t.Fatalf("the delete is picked:\n%s", screen(m))
+	}
+	if d.data.picked[0] || !d.data.picked[1] || !d.data.picked[2] {
+		t.Fatalf("picked = %v", d.data.picked)
+	}
+}
+
+func TestDataViewJump(t *testing.T) {
+	m, b := newTestModel(t)
+	d := openUsersData(t, m, b)
+	press(t, m, "]", "c", "]", "c")
+	if d.data.cursor != 2 {
+		t.Fatalf("cursor = %d", d.data.cursor)
+	}
+	press(t, m, "]", "c")
+	wantScreen(t, m, "no more changes")
+	press(t, m, "[", "c")
+	if d.data.cursor != 1 {
+		t.Fatalf("cursor = %d", d.data.cursor)
+	}
+}
+
+func TestDataViewSwap(t *testing.T) {
+	m, b := newTestModel(t)
+	openUsersData(t, m, b)
+	press(t, m, "~")
+	wantScreen(t, m,
+		"local · app.users_bak ──▶ local · app.users",
+		"[x] ~ 2   bob → robert",
+		"[x] + 3   carol",
+		"[ ] - 4   dave",
+	)
+}
+
+func TestDataViewFilter(t *testing.T) {
+	m, b := newTestModel(t)
+	openUsersData(t, m, b)
+	press(t, m, "F")
+	if _, ok := m.overlay.(*overlay.Prompt); !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	typeText(t, m, "< 3") // after the key column the prompt starts with
+	press(t, m, "enter")
+	for _, q := range []string{
+		"SELECT `id`, `name` FROM `app`.`users` WHERE (id < 3\n)",
+		"SELECT `id`, `name` FROM `app`.`users_bak` WHERE (id < 3\n)",
+	} {
+		if !queried(b.conn, q) {
+			t.Errorf("no query %q", q)
+		}
+	}
+	wantScreen(t, m, "WHERE id < 3")
+}
+
+func TestDataViewFilterRejectsASecondStatement(t *testing.T) {
+	m, b := newTestModel(t)
+	openUsersData(t, m, b)
+	press(t, m, "F", "ctrl+u")
+	typeText(t, m, "1=1; DELETE FROM users")
+	press(t, m, "enter")
+	if _, ok := m.overlay.(*overlay.Prompt); !ok {
+		t.Fatalf("the prompt closed: overlay = %T", m.overlay)
+	}
+	wantScreen(t, m, "the filter must be a condition")
+	if queried(b.conn, "DELETE") {
+		t.Fatal("the bad filter reached the server")
+	}
+}
+
+func TestDataScriptOpensConsoleOnTarget(t *testing.T) {
+	m, b := newTestModel(t)
+	openUsersData(t, m, b)
+	press(t, m, "space", "w")
+	c := scriptConsole(t, m)
+	if c.conn != "local" || c.ns != appNS {
+		t.Fatalf("console on %s %+v", c.conn, c.ns)
+	}
+	text := c.editor.Value()
+	for _, want := range []string{
+		"-- sqlvim data sync\n",
+		"-- source: local · app.users\n",
+		"-- target: local · app.users_bak\n",
+		"-- key: id\n",
+		"UPDATE `app`.`users_bak` SET `name` = 'bob' WHERE `id` = 2;",
+		"INSERT INTO `app`.`users_bak` (`id`, `name`) VALUES (4, 'dave');",
+	} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("missing %q:\n%s", want, text)
+		}
+	}
+	if strings.Contains(text, "DELETE") {
+		t.Fatalf("the unpicked delete is in the script:\n%s", text)
+	}
+}
+
+func TestDataScriptNothingPicked(t *testing.T) {
+	m, b := newTestModel(t)
+	openUsersData(t, m, b)
+	press(t, m, "x", "j", "j", "x") // unpick the ~ and the + row
+	press(t, m, "space", "w")
+	if _, ok := m.activeTab().(*diffTab); !ok {
+		t.Fatalf("active tab = %T", m.activeTab())
+	}
+	wantScreen(t, m, "nothing picked")
 }

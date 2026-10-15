@@ -220,6 +220,8 @@ func (t *diffTab) Update(msg tea.Msg) tea.Cmd {
 		t.structureLoaded(m)
 	case dataLoadedMsg:
 		t.dataLoaded(m)
+	case dataFilterMsg:
+		return t.filterData(m.text)
 	}
 	return nil
 }
