@@ -70,12 +70,13 @@ type (
 
 // Model is the root Bubble Tea model.
 type Model struct {
-	backend  Backend
-	store    Store
-	catalogs *meta.Cache
-	home     string
-	settings config.Settings
-	keys     *keymap.Keymap
+	backend   Backend
+	store     Store
+	catalogs  *meta.Cache
+	home      string
+	settings  config.Settings
+	keys      *keymap.Keymap
+	workspace string // shown when not the default workspace
 
 	width, height int
 	focus         focus
@@ -150,11 +151,31 @@ func New(b Backend, st Store, settings config.Settings) *Model {
 // program starts: open tabs keep the keymap they were created with.
 func (m *Model) SetKeymap(k *keymap.Keymap) { m.keys = k }
 
+// SetWorkspace names the workspace sqlvim runs in; the default workspace
+// ("" or "default") is not shown.
+func (m *Model) SetWorkspace(name string) {
+	if name == config.DefaultWorkspace {
+		name = ""
+	}
+	m.workspace = name
+}
+
+// title is "sqlvim", followed by the workspace when it is not the default.
+func (m *Model) title() string {
+	if m.workspace == "" {
+		return "sqlvim"
+	}
+	return "sqlvim — " + m.workspace
+}
+
 func (m *Model) Init() tea.Cmd { return nil }
 
 func (m *Model) View() tea.View {
 	v := tea.NewView(m.render())
 	v.AltScreen = true
+	if m.workspace != "" {
+		v.WindowTitle = m.title()
+	}
 	return v
 }
 
@@ -1270,7 +1291,7 @@ func (m *Model) render() string {
 func (m *Model) renderTabs(width, height int) string {
 	t := m.activeTab()
 	if t == nil {
-		return theme.Box("sqlvim", welcomeText(m.keys), width, height, false)
+		return theme.Box(m.title(), welcomeText(m.keys), width, height, false)
 	}
 	focused := m.focus == focusTabs
 	conn, _ := t.Target()
@@ -1306,6 +1327,9 @@ func (m *Model) renderStatus() string {
 		mode = theme.ProdMode
 	}
 	parts := []string{mode.Render(" " + m.mode() + " ")}
+	if m.workspace != "" {
+		parts = append(parts, theme.Accent.Render("["+textutil.Sanitize(m.workspace)+"]"))
+	}
 	if prod {
 		parts = append(parts, theme.Prod.Render("[PROD]"))
 	}
