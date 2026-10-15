@@ -267,3 +267,96 @@ func TestNamespaceFindsTheNodeListingTables(t *testing.T) {
 		t.Fatalf("missing: %+v", n)
 	}
 }
+
+// tableFixture is local → app → users → Columns(id, name) + Keys(PRIMARY),
+// with prod unloaded. Columns is expanded, Keys collapsed.
+func tableFixture() (m *Model, users, cols, keys *Node) {
+	m = fixture()
+	root := m.Roots()[0]
+	ns := db.Namespace{Database: "app"}
+	m.SetChildren(root, []*Node{{Kind: KindDatabase, Name: "app", Conn: "local", NS: ns}}, nil)
+	app := root.Children[0]
+	users = &Node{Kind: KindTable, Name: "users", Conn: "local", NS: ns}
+	m.SetChildren(app, []*Node{users}, nil)
+	cols = &Node{Kind: KindGroup, Group: GroupColumns, Name: "Columns", Conn: "local", NS: ns, Expanded: true}
+	Adopt(cols, []*Node{
+		{Kind: KindColumn, Name: "id", Detail: "bigint PK", Conn: "local", NS: ns},
+		{Kind: KindColumn, Name: "name", Detail: "text", Conn: "local", NS: ns},
+	})
+	keys = &Node{Kind: KindGroup, Group: GroupKeys, Name: "Keys", Conn: "local", NS: ns}
+	Adopt(keys, []*Node{{Kind: KindKey, Name: "PRIMARY", Detail: "(id)", Conn: "local", NS: ns}})
+	m.SetChildren(users, []*Node{cols, keys}, nil)
+	m.SetHeight(20)
+	return m, users, cols, keys
+}
+
+func TestTableChildren(t *testing.T) {
+	m, users, cols, keys := tableFixture()
+	if got := strings.Join(names(m), ","); got != "local,app,users,Columns,id,name,Keys,prod" {
+		t.Fatalf("visible = %s", got)
+	}
+	id := cols.Children[0]
+	if !users.Expandable() || !cols.Expandable() || id.Expandable() {
+		t.Fatal("tables and groups expand, leaves do not")
+	}
+	if id.Table() != users || cols.Table() != users || users.Table() != users || users.Parent().Table() != nil {
+		t.Fatal("Table() finds the table ancestor")
+	}
+	if id.Parent() != cols || keys.Children[0].Parent() != keys {
+		t.Fatal("Adopt links parents")
+	}
+	view := ansi.Strip(m.View(60, true))
+	for _, want := range []string{"▾ • users", "▾ Columns", "· id  bigint PK", "▸ Keys"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("missing %q:\n%s", want, view)
+		}
+	}
+	if m.FindTable("local", users.TableRef()) != users || m.FindTable("prod", users.TableRef()) != nil {
+		t.Fatal("FindTable")
+	}
+	if m.Find("bigint", true) {
+		t.Fatal("search matches names only, not details")
+	}
+}
+
+func TestViewIconAndDetailSanitized(t *testing.T) {
+	m, users, cols, _ := tableFixture()
+	users.Kind = KindView
+	users.Expanded = false
+	cols.Children[0].Detail = "int\x07"
+	view := ansi.Strip(m.View(60, true))
+	if !strings.Contains(view, "▸ ◦ users") {
+		t.Fatalf("view icon:\n%s", view)
+	}
+	users.Expanded = true
+	if view = m.View(60, true); strings.Contains(view, "\x07") {
+		t.Fatal("details are sanitized")
+	}
+}
+
+func TestReloadKeepsGroupExpansion(t *testing.T) {
+	m, users, cols, keys := tableFixture()
+	cols.Expanded, keys.Expanded = false, true // the user flipped both
+	ns := users.NS
+	newCols := &Node{Kind: KindGroup, Group: GroupColumns, Name: "Columns", Conn: "local", NS: ns, Expanded: true}
+	Adopt(newCols, []*Node{{Kind: KindColumn, Name: "id", Conn: "local", NS: ns}})
+	newKeys := &Node{Kind: KindGroup, Group: GroupKeys, Name: "Keys", Conn: "local", NS: ns}
+	Adopt(newKeys, nil)
+	m.StartLoad(users)
+	m.SetChildren(users, []*Node{newCols, newKeys}, nil)
+	if newCols.Expanded || !newKeys.Expanded {
+		t.Fatalf("columns expanded=%v keys expanded=%v, want false true", newCols.Expanded, newKeys.Expanded)
+	}
+}
+
+func TestForget(t *testing.T) {
+	m, users, _, _ := tableFixture()
+	m.Forget(users)
+	if users.Loaded || users.Expanded || users.Children != nil {
+		t.Fatalf("users = %+v", users)
+	}
+	m.selected = users
+	if !m.Expand() {
+		t.Fatal("expanding a forgotten table loads it again")
+	}
+}

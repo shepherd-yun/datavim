@@ -18,6 +18,21 @@ const (
 	KindSchema
 	KindTable
 	KindView
+	KindGroup      // Columns, Keys, Foreign Keys or Indexes under a table
+	KindColumn     // the leaves under a group
+	KindKey        // a primary or unique key
+	KindForeignKey // Ref is the referenced table
+	KindIndex
+)
+
+// Group tells the groups under a table apart.
+type Group int
+
+const (
+	GroupColumns Group = iota
+	GroupKeys
+	GroupForeignKeys
+	GroupIndexes
 )
 
 // Node is one tree entry. Children are loaded lazily by the caller.
@@ -26,6 +41,9 @@ type Node struct {
 	Name     string
 	Conn     string
 	NS       db.Namespace
+	Group    Group       // a KindGroup node's group
+	Detail   string      // shown muted after the name: a column's type, an index's columns
+	Ref      db.TableRef // a foreign key's referenced table
 	Prod     bool
 	Expanded bool
 	Loaded   bool
@@ -38,9 +56,29 @@ type Node struct {
 }
 
 func (n *Node) Parent() *Node         { return n.parent }
-func (n *Node) Expandable() bool      { return n.Kind <= KindSchema }
+func (n *Node) Expandable() bool      { return n.Kind <= KindView || n.Kind == KindGroup }
 func (n *Node) IsTable() bool         { return n.Kind == KindTable || n.Kind == KindView }
 func (n *Node) TableRef() db.TableRef { return db.TableRef{Namespace: n.NS, Name: n.Name} }
+
+// Table returns n when it is a table or view, else its nearest table or
+// view ancestor, else nil.
+func (n *Node) Table() *Node {
+	for p := n; p != nil; p = p.parent {
+		if p.IsTable() {
+			return p
+		}
+	}
+	return nil
+}
+
+// Adopt makes children the loaded children of n, for nodes built before
+// they join the tree (the groups under a table).
+func Adopt(n *Node, children []*Node) {
+	for _, c := range children {
+		c.parent = n
+	}
+	n.Children, n.Loaded = children, true
+}
 
 type row struct {
 	node  *Node
@@ -177,15 +215,28 @@ func (m *Model) CancelLoad(n *Node) {
 	n.Expanded = n.Loaded
 }
 
-// SetChildren records the result of a load.
+// SetChildren records the result of a load. A loaded child (a group under
+// a table) keeps the expansion of the child it replaces.
 func (m *Model) SetChildren(n *Node, children []*Node, err error) {
 	n.Loading = false
 	if err != nil {
 		n.Err, n.Expanded, n.Loaded = err.Error(), false, false
 		return
 	}
+	type key struct {
+		kind  Kind
+		group Group
+		name  string
+	}
+	was := make(map[key]bool, len(n.Children))
+	for _, c := range n.Children {
+		was[key{c.Kind, c.Group, c.Name}] = c.Expanded
+	}
 	for _, c := range children {
 		c.parent = n
+		if exp, ok := was[key{c.Kind, c.Group, c.Name}]; ok && c.Loaded {
+			c.Expanded = exp
+		}
 	}
 	n.Children, n.Loaded, n.Expanded, n.Err = children, true, true, ""
 }
@@ -197,6 +248,33 @@ func (m *Model) ResetConn(conn string) {
 			r.Children, r.Loaded, r.Expanded, r.Loading, r.Err, r.Broken = nil, false, false, false, "", false
 		}
 	}
+}
+
+// Forget drops n's children, so that expanding it loads them again.
+func (m *Model) Forget(n *Node) {
+	n.Children, n.Loaded, n.Expanded, n.Err = nil, false, false, ""
+}
+
+// FindTable returns the loaded node of the table or view ref on conn, or nil.
+func (m *Model) FindTable(conn string, ref db.TableRef) *Node {
+	var walk func(nodes []*Node) *Node
+	walk = func(nodes []*Node) *Node {
+		for _, n := range nodes {
+			switch {
+			case n.Conn != conn:
+			case n.IsTable():
+				if n.TableRef() == ref {
+					return n
+				}
+			case n.Kind < KindTable:
+				if found := walk(n.Children); found != nil {
+					return found
+				}
+			}
+		}
+		return nil
+	}
+	return walk(m.roots)
 }
 
 // Empty reports whether there are no connections.
@@ -316,6 +394,9 @@ func (m *Model) View(width int, focused bool) string {
 				label = theme.SelectedDim.Render(label)
 			}
 		}
+		if n.Detail != "" {
+			label += "  " + theme.Muted.Render(textutil.Sanitize(n.Detail))
+		}
 		if n.Prod {
 			label += " " + theme.Prod.Render("[PROD]")
 		}
@@ -334,16 +415,19 @@ func (m *Model) View(width int, focused bool) string {
 }
 
 func icon(n *Node) string {
-	switch {
-	case n.Kind == KindTable:
-		return "•"
-	case n.Kind == KindView:
-		return "◦"
-	case n.Expanded:
-		return "▾"
-	default:
-		return "▸"
+	arrow := "▸"
+	if n.Expanded {
+		arrow = "▾"
 	}
+	switch n.Kind {
+	case KindTable:
+		return arrow + " •"
+	case KindView:
+		return arrow + " ◦"
+	case KindColumn, KindKey, KindForeignKey, KindIndex:
+		return "·"
+	}
+	return arrow
 }
 
 // RevealResult says how far Reveal got.
