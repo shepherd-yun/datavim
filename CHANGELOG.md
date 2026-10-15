@@ -53,6 +53,8 @@ All notable changes to this project are documented here. The format follows
   keys, and a hint line at the bottom.
 
 ### Fixed
+- The MySQL driver's own messages (such as `unexpected EOF` when a server cannot be reached)
+  go to the log file instead of being printed over the screen.
 - A MySQL query that stops early (a console reaching `max_rows`, a data compare over
   `compare_max_rows`) no longer reads the rest of the result before returning; on PostgreSQL
   the data compare stops at once too.

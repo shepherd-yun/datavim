@@ -336,3 +336,15 @@ func TestNormalizeTypeIsTableSchemas(t *testing.T) {
 		}
 	}
 }
+
+func TestDSNConfigLogsToSlogNotStderr(t *testing.T) {
+	for _, params := range []map[string]string{nil, {"charset": "utf8mb4"}} {
+		mc, err := dsnConfig(db.ConnConfig{Host: "h", Port: 3306, Params: params})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, ok := mc.Logger.(slogLogger); !ok {
+			t.Errorf("params %v: logger = %T; the driver's default writes over the TUI", params, mc.Logger)
+		}
+	}
+}

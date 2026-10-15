@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/url"
 	"strconv"
@@ -46,6 +47,13 @@ func (Driver) Open(ctx context.Context, cfg db.ConnConfig) (db.Conn, error) {
 	return &conn{db: sqldb}, nil
 }
 
+// slogLogger sends the driver's own messages (such as "unexpected EOF"
+// from a dropped connection) to the log file; its default logger writes to
+// stderr, over the TUI.
+type slogLogger struct{}
+
+func (slogLogger) Print(v ...any) { slog.Warn("mysql driver", "msg", fmt.Sprint(v...)) }
+
 func dsnConfig(cfg db.ConnConfig) (*gomysql.Config, error) {
 	mc := gomysql.NewConfig()
 	mc.User = cfg.User
@@ -72,6 +80,7 @@ func dsnConfig(cfg db.ConnConfig) (*gomysql.Config, error) {
 			return nil, err
 		}
 	}
+	mc.Logger = slogLogger{}
 	// Data edits check that every UPDATE found exactly one row; without
 	// this MySQL counts only rows whose values changed.
 	mc.ClientFoundRows = true
