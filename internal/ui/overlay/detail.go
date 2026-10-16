@@ -1,8 +1,6 @@
 package overlay
 
 import (
-	"bytes"
-	"encoding/json"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -28,19 +26,7 @@ type CopyMsg struct {
 
 // NewDetail builds the popup for a cell.
 func NewDetail(title, text string) *Detail {
-	return &Detail{title: title, raw: text, text: prettyJSON(text)}
-}
-
-func prettyJSON(s string) string {
-	t := strings.TrimSpace(s)
-	if !strings.HasPrefix(t, "{") && !strings.HasPrefix(t, "[") || !json.Valid([]byte(t)) {
-		return s
-	}
-	var b bytes.Buffer
-	if err := json.Indent(&b, []byte(t), "", "  "); err != nil {
-		return s
-	}
-	return b.String()
+	return &Detail{title: title, raw: text, text: textutil.PrettyJSON(text)}
 }
 
 func (d *Detail) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {

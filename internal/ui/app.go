@@ -718,6 +718,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case diffLoadedMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
+	case keyLoadedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
 	default:
 		return
 	}

@@ -21,6 +21,7 @@ const (
 	Results   Context = "results"
 	Diff      Context = "diff"
 	Import    Context = "import"
+	RedisKey  Context = "redis_key"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
 	// only one-key bindings count there.
 	Popup Context = "popup"
@@ -106,6 +107,7 @@ const (
 	Recent            Action = "recent.open"
 	Locate            Action = "tree.locate"
 	OpenKey           Action = "redis.openkey"
+	ValueFormat       Action = "redis.format"
 	FilterEqual       Action = "filter.eq"
 	FilterNotEqual    Action = "filter.ne"
 	FilterContains    Action = "filter.contains"

@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -407,6 +408,9 @@ func (m *Model) locate() tea.Cmd {
 		return nil
 	}
 	conn, ref := t.Target()
+	if k, ok := t.(*keyTab); ok {
+		return m.reveal(conn, []string{"db" + strconv.Itoa(k.db)})
+	}
 	path := nsPath(ref.Namespace)
 	if ref.Name != "" && len(path) > 0 {
 		path = append(path, ref.Name)

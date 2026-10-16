@@ -80,8 +80,13 @@ func (m *Model) filterKeys(k redisDBKey, text string) tea.Cmd {
 }
 
 // redisContext is the redis db the focused pane is on: the selected tree
-// node's db, or a connection's default db.
+// node's db (a connection's default db) or the active key tab's.
 func (m *Model) redisContext() (redisDBKey, bool) {
+	if m.focus == focusTabs {
+		if t, ok := m.activeTab().(*keyTab); ok {
+			return redisDBKey{conn: t.conn, db: t.db}, true
+		}
+	}
 	n := m.tree.Selected()
 	if n == nil {
 		return redisDBKey{}, false

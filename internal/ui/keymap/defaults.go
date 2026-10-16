@@ -150,6 +150,14 @@ func DefaultBindings() []Binding {
 		Binding{Diff, keys("F"), FilterPrompt, "Filter the compared rows (WHERE on both sides)"},
 	)
 
+	b = append(b, gridBindings(RedisKey)...)
+	b = append(b,
+		Binding{RedisKey, keys("]"), NextPage, "Load more"},
+		Binding{RedisKey, keys("v"), ValueFormat, "Value format: auto, text, JSON, hex"},
+		Binding{RedisKey, keys("F"), FilterPrompt, "Filter fields / members (pattern)"},
+		Binding{RedisKey, keys("f", "x"), FilterClear, "Clear the filter"},
+	)
+
 	b = append(b, vertical(Import)...)
 	b = append(b,
 		Binding{Import, keys("["), PrevSection, "Previous section"},

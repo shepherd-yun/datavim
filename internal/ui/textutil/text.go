@@ -2,6 +2,8 @@
 package textutil
 
 import (
+	"bytes"
+	"encoding/json"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -119,4 +121,18 @@ func Clamp(v, lo, hi int) int {
 		return hi
 	}
 	return v
+}
+
+// PrettyJSON indents a JSON object or array by two spaces; anything else
+// comes back as it is.
+func PrettyJSON(s string) string {
+	t := strings.TrimSpace(s)
+	if !strings.HasPrefix(t, "{") && !strings.HasPrefix(t, "[") || !json.Valid([]byte(t)) {
+		return s
+	}
+	var b bytes.Buffer
+	if err := json.Indent(&b, []byte(t), "", "  "); err != nil {
+		return s
+	}
+	return b.String()
 }

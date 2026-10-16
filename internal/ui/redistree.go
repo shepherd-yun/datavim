@@ -529,9 +529,3 @@ func (m *Model) dropScans(conn string) {
 		}
 	}
 }
-
-// openKey opens the detail tab of a key; Task 9 fills it in.
-func (m *Model) openKey(conn string, n int, key string) tea.Cmd {
-	m.setStatus("key "+rcmd.Escape(key)+" on "+conn+"/db"+strconv.Itoa(n), false)
-	return nil
-}

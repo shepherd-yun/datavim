@@ -5,6 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shepherd-yun/sqlvim/internal/rcmd"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
@@ -15,6 +16,10 @@ import (
 func (m *Model) copyNodeName(n *tree.Node, qualified bool) tea.Cmd {
 	if n.Kind == tree.KindGroup {
 		n = n.Table() // a group has no name of its own worth copying
+	}
+	if n.Kind == tree.KindRedisKey {
+		text := rcmd.Quote(n.Key) // as redis-cli takes it
+		return m.copyText(overlay.CopyMsg{Text: text, What: rcmd.Escape(n.Key)})
 	}
 	text := n.Name
 	if qualified {

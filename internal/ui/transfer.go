@@ -137,6 +137,10 @@ func (m *Model) copyAs(f export.Format) tea.Cmd {
 }
 
 func (m *Model) yank(a keymap.Action) tea.Cmd {
+	if k, ok := m.activeTab().(*keyTab); ok && k.isString() && a == keymap.YankCell {
+		m.setStatus("copied "+k.Title(), false)
+		return copyToClipboard(k.text) // what was read of it, unescaped
+	}
 	g, ok := m.activeTab().(gridder)
 	if !ok {
 		return nil
