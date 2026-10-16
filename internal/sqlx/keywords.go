@@ -1,6 +1,7 @@
 package sqlx
 
 import (
+	"slices"
 	"sort"
 	"strings"
 )
@@ -28,13 +29,21 @@ var (
 		"MATERIALIZED", "NEXT", "NOTHING", "NULLS", "ONLY", "RETURNING", "ROW", "ROWS", "SIMILAR",
 		"VACUUM",
 	}
+	sqlserverKeywords = []string{
+		"APPLY", "CATCH", "CONVERT", "DATEADD", "DATEDIFF", "DECLARE", "EXEC", "EXECUTE", "FETCH",
+		"GETDATE", "GO", "IDENTITY", "IF", "ISNULL", "MERGE", "NEXT", "NOLOCK", "NVARCHAR", "OFFSET",
+		"ONLY", "OUTPUT", "PIVOT", "PRINT", "RETURN", "ROWS", "SAVE", "TOP", "TRAN", "TRY",
+		"UNPIVOT", "USE", "WHILE",
+	}
 	keywordLists = map[Dialect][]string{
-		MySQL:    sortedUnique(commonKeywords, mysqlKeywords),
-		Postgres: sortedUnique(commonKeywords, postgresKeywords),
+		MySQL:     sortedUnique(commonKeywords, mysqlKeywords),
+		Postgres:  sortedUnique(commonKeywords, postgresKeywords),
+		SQLServer: without(sortedUnique(commonKeywords, sqlserverKeywords), "LIMIT"),
 	}
 	keywordSets = map[Dialect]map[string]bool{
-		MySQL:    wordSet(keywordLists[MySQL]...),
-		Postgres: wordSet(keywordLists[Postgres]...),
+		MySQL:     wordSet(keywordLists[MySQL]...),
+		Postgres:  wordSet(keywordLists[Postgres]...),
+		SQLServer: wordSet(keywordLists[SQLServer]...),
 	}
 	// reserved holds the words each dialect does not accept as bare
 	// identifiers: MySQL 8.0's reserved words and PostgreSQL's reserved ones
@@ -88,8 +97,39 @@ var (
 			"TO", "TRAILING", "TRUE", "UNION", "UNIQUE", "USER", "USING", "VARIADIC", "VERBOSE", "WHEN",
 			"WHERE", "WINDOW", "WITH",
 		),
+		// SQL Server's reserved keywords (Transact-SQL reference).
+		SQLServer: wordSet(
+			"ADD", "ALL", "ALTER", "AND", "ANY", "AS", "ASC", "AUTHORIZATION", "BACKUP", "BEGIN",
+			"BETWEEN", "BREAK", "BROWSE", "BULK", "BY", "CASCADE", "CASE", "CHECK", "CHECKPOINT", "CLOSE",
+			"CLUSTERED", "COALESCE", "COLLATE", "COLUMN", "COMMIT", "COMPUTE", "CONSTRAINT", "CONTAINS",
+			"CONTAINSTABLE", "CONTINUE", "CONVERT", "CREATE", "CROSS", "CURRENT", "CURRENT_DATE",
+			"CURRENT_TIME", "CURRENT_TIMESTAMP", "CURRENT_USER", "CURSOR", "DATABASE", "DBCC",
+			"DEALLOCATE", "DECLARE", "DEFAULT", "DELETE", "DENY", "DESC", "DISK", "DISTINCT",
+			"DISTRIBUTED", "DOUBLE", "DROP", "DUMP", "ELSE", "END", "ERRLVL", "ESCAPE", "EXCEPT", "EXEC",
+			"EXECUTE", "EXISTS", "EXIT", "EXTERNAL", "FETCH", "FILE", "FILLFACTOR", "FOR", "FOREIGN",
+			"FREETEXT", "FREETEXTTABLE", "FROM", "FULL", "FUNCTION", "GOTO", "GRANT", "GROUP", "HAVING",
+			"HOLDLOCK", "IDENTITY", "IDENTITY_INSERT", "IDENTITYCOL", "IF", "IN", "INDEX", "INNER",
+			"INSERT", "INTERSECT", "INTO", "IS", "JOIN", "KEY", "KILL", "LEFT", "LIKE", "LINENO", "LOAD",
+			"MERGE", "NATIONAL", "NOCHECK", "NONCLUSTERED", "NOT", "NULL", "NULLIF", "OF", "OFF",
+			"OFFSETS", "ON", "OPEN", "OPENDATASOURCE", "OPENQUERY", "OPENROWSET", "OPENXML", "OPTION",
+			"OR", "ORDER", "OUTER", "OVER", "PERCENT", "PIVOT", "PLAN", "PRECISION", "PRIMARY", "PRINT",
+			"PROC", "PROCEDURE", "PUBLIC", "RAISERROR", "READ", "READTEXT", "RECONFIGURE", "REFERENCES",
+			"REPLICATION", "RESTORE", "RESTRICT", "RETURN", "REVERT", "REVOKE", "RIGHT", "ROLLBACK",
+			"ROWCOUNT", "ROWGUIDCOL", "RULE", "SAVE", "SCHEMA", "SECURITYAUDIT", "SELECT",
+			"SEMANTICKEYPHRASETABLE", "SEMANTICSIMILARITYDETAILSTABLE", "SEMANTICSIMILARITYTABLE",
+			"SESSION_USER", "SET", "SETUSER", "SHUTDOWN", "SOME", "STATISTICS", "SYSTEM_USER", "TABLE",
+			"TABLESAMPLE", "TEXTSIZE", "THEN", "TO", "TOP", "TRAN", "TRANSACTION", "TRIGGER", "TRUNCATE",
+			"TRY_CONVERT", "TSEQUAL", "UNION", "UNIQUE", "UNPIVOT", "UPDATE", "UPDATETEXT", "USE", "USER",
+			"VALUES", "VARYING", "VIEW", "WAITFOR", "WHEN", "WHERE", "WHILE", "WITH", "WITHIN",
+			"WRITETEXT",
+		),
 	}
 )
+
+// without returns list less the words drop.
+func without(list []string, drop ...string) []string {
+	return slices.DeleteFunc(list, func(w string) bool { return slices.Contains(drop, w) })
+}
 
 func sortedUnique(lists ...[]string) []string {
 	seen := map[string]bool{}
@@ -113,16 +153,12 @@ func Keywords(d Dialect) []string { return keywordLists[d] }
 func isKeyword(w string, d Dialect) bool { return keywordSets[d][strings.ToUpper(w)] }
 
 // QuoteIfNeeded returns name as it must be written in SQL: bare when it is
-// a plain identifier, otherwise quoted (` for MySQL, " for PostgreSQL).
+// a plain identifier, otherwise quoted as QuoteIdent does.
 func QuoteIfNeeded(name string, d Dialect) string {
 	if plainIdent(name, d) && !reserved[d][strings.ToUpper(name)] {
 		return name
 	}
-	q := "`"
-	if d == Postgres {
-		q = `"`
-	}
-	return q + strings.ReplaceAll(name, q, q+q) + q
+	return QuoteIdent(d, name)
 }
 
 func plainIdent(s string, d Dialect) bool {

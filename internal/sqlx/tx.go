@@ -17,6 +17,9 @@ func TransactionEffect(stmt string, d Dialect) TxEffect {
 	if len(toks) == 0 || toks[0].kind != tokWord {
 		return TxNone
 	}
+	if d == SQLServer {
+		return tsqlTransactionEffect(toks)
+	}
 	switch upper(toks[0]) {
 	case "BEGIN":
 		return TxBegin
@@ -47,4 +50,24 @@ func endEffect(toks []token) TxEffect {
 		return TxBegin
 	}
 	return TxEnd
+}
+
+// tsqlTransactionEffect classifies T-SQL: BEGIN alone opens a block, END
+// closes one, and a named ROLLBACK TRAN goes back to a SAVE TRAN point.
+func tsqlTransactionEffect(toks []token) TxEffect {
+	tran := func(t token) bool { return isWord(t, "TRAN") || isWord(t, "TRANSACTION") }
+	switch upper(toks[0]) {
+	case "BEGIN":
+		if len(toks) > 1 && (tran(toks[1]) || isWord(toks[1], "DISTRIBUTED")) {
+			return TxBegin
+		}
+	case "COMMIT":
+		return TxEnd
+	case "ROLLBACK":
+		if len(toks) > 2 && tran(toks[1]) {
+			return TxResume
+		}
+		return TxEnd
+	}
+	return TxNone
 }

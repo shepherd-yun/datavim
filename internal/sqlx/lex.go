@@ -63,18 +63,36 @@ func isWordByte(c byte) bool {
 func lex(src string, i int, d Dialect) token {
 	c := src[i]
 	switch {
-	case c == '-' && strings.HasPrefix(src[i:], "--") && (d == Postgres || i+2 >= len(src) || isSpace(src[i+2])):
+	case c == '-' && strings.HasPrefix(src[i:], "--") && (d != MySQL || i+2 >= len(src) || isSpace(src[i+2])):
 		return lineComment(src, i)
 	case c == '#' && d == MySQL:
 		return lineComment(src, i)
 	case c == '/' && strings.HasPrefix(src[i:], "/*"):
-		return blockComment(src, i, d == Postgres)
+		return blockComment(src, i, d == Postgres || d == SQLServer)
 	case c == '\'':
 		return quoted(src, i, '\'', tokString, d == MySQL)
 	case (c == 'E' || c == 'e') && d == Postgres && i+1 < len(src) && src[i+1] == '\'':
 		t := quoted(src, i+1, '\'', tokString, true)
 		t.pos = i
 		return t
+	case (c == 'N' || c == 'n') && d == SQLServer && i+1 < len(src) && src[i+1] == '\'':
+		t := quoted(src, i+1, '\'', tokString, false)
+		t.pos, t.text = i, src[i:t.end]
+		return t
+	case c == '[' && d == SQLServer:
+		return quoted(src, i, ']', tokIdent, false)
+	case (c == '@' || c == '#') && d == SQLServer:
+		// @variables, #temp and ##global tables are names
+		j := i
+		for j < len(src) && src[j] == c {
+			j++
+		}
+		if j < len(src) && isWordByte(src[j]) {
+			for j < len(src) && isWordByte(src[j]) {
+				j++
+			}
+			return token{kind: tokWord, text: src[i:j], pos: i, end: j}
+		}
 	case c == '"' && d == MySQL:
 		return quoted(src, i, '"', tokString, true)
 	case c == '"':

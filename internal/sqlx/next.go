@@ -1,6 +1,9 @@
 package sqlx
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
 
 // Next is what usually follows once a word is finished and a space typed:
 // keywords, operators and "*" in the order they are offered, and whether
@@ -46,6 +49,9 @@ func Following(src string, cursor int, d Dialect) Next {
 		return Next{}
 	}
 	out := following(toks, d)
+	if d == SQLServer || d == Oracle {
+		out.Words = withoutLimit(out.Words, toks, d)
+	}
 	for i := len(toks) - 1; i >= 0; i-- {
 		// a function such as count( is no keyword here
 		if t := toks[i]; t.kind == tokWord && isKeyword(t.text, d) && (i+1 == len(toks) || !isPunct(toks[i+1], "(")) {
@@ -222,4 +228,22 @@ func tested(seg []token) bool {
 func aliased(seg []token) bool {
 	n := len(seg)
 	return n >= 2 && !isPunct(seg[n-2], ".")
+}
+
+// withoutLimit adapts words to an engine without LIMIT: OFFSET … FETCH
+// follows an ORDER BY instead, and T-SQL has SELECT TOP.
+func withoutLimit(words []string, toks []token, d Dialect) []string {
+	if d == SQLServer && isWord(toks[len(toks)-1], "SELECT") {
+		return append(slices.Clone(words), "TOP")
+	}
+	i := slices.Index(words, "LIMIT")
+	if i < 0 {
+		return words
+	}
+	words = slices.Clone(words)
+	if clause, at := clauseOf(toks); clause == "BY" && at > 0 && isWord(toks[at-1], "ORDER") {
+		words[i] = "OFFSET"
+		return words
+	}
+	return slices.Delete(words, i, i+1)
 }

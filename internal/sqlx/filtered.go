@@ -73,8 +73,8 @@ func clauseAt(toks []token, from int) int {
 func wrapWhere(toks []token, stmt, cond string, cols []string) (string, bool, error) {
 	wrap := func(inner string) string { return "SELECT * FROM (\n" + inner + "\n) q WHERE (" + cond + "\n)" }
 	order := lastOrderBy(toks)
-	if order < 0 {
-		return wrap(stmt), true, nil
+	if order < 0 || topped(toks) {
+		return wrap(stmt), true, nil // TOP keeps the ORDER BY inside meaningful
 	}
 	depth := 0
 	for j := order + 2; j < len(toks); j++ {
@@ -88,6 +88,19 @@ func wrapWhere(toks []token, stmt, cond string, cols []string) (string, bool, er
 	}
 	at := toks[order].pos
 	return wrap(strings.TrimSpace(stmt[:at])) + "\n" + stmt[at:], true, nil
+}
+
+// topped reports a SELECT TOP (T-SQL) at the top level.
+func topped(toks []token) bool {
+	depth := 0
+	for j := range toks {
+		depth += depthDelta(toks[j])
+		if depth == 0 && isWord(toks[j], "SELECT") && j+1 < len(toks) &&
+			(isWord(toks[j+1], "TOP") || isWord(toks[j+1], "DISTINCT") && j+2 < len(toks) && isWord(toks[j+2], "TOP")) {
+			return true
+		}
+	}
+	return false
 }
 
 // lastOrderBy is the index of the top-level ORDER of a trailing ORDER BY.

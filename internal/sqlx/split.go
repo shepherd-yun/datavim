@@ -1,6 +1,7 @@
 package sqlx
 
 import (
+	"strconv"
 	"strings"
 	"unicode"
 )
@@ -13,7 +14,7 @@ type Statement struct {
 
 // Split cuts src into statements. Delimiters inside strings, quoted
 // identifiers and comments are ignored; MySQL DELIMITER lines change the
-// delimiter. Statements that contain only comments are dropped.
+// delimiter, and a T-SQL GO line ends a statement too. Statements that contain only comments are dropped.
 func Split(src string, d Dialect) []Statement {
 	var out []Statement
 	delim := ";"
@@ -37,6 +38,13 @@ func Split(src string, d Dialect) []Statement {
 				continue
 			}
 		}
+		if d == SQLServer && lineStart(src, i) {
+			if next, ok := goLine(src, i); ok {
+				flush(i)
+				i = next
+				continue
+			}
+		}
 		if strings.HasPrefix(src[i:], delim) {
 			flush(i)
 			i += len(delim)
@@ -53,6 +61,37 @@ func Split(src string, d Dialect) []Statement {
 	}
 	flush(len(src))
 	return out
+}
+
+// lineStart reports that only blanks precede i on its line.
+func lineStart(src string, i int) bool {
+	for j := i - 1; j >= 0 && src[j] != '\n'; j-- {
+		if !isSpace(src[j]) {
+			return false
+		}
+	}
+	return true
+}
+
+// goLine parses a T-SQL batch separator line starting at i: GO, optionally
+// followed by a repeat count, which is ignored.
+func goLine(src string, i int) (next int, ok bool) {
+	end := strings.IndexByte(src[i:], '\n')
+	if end < 0 {
+		end = len(src)
+	} else {
+		end += i
+	}
+	f := strings.Fields(src[i:end])
+	if len(f) == 0 || len(f) > 2 || !strings.EqualFold(f[0], "GO") {
+		return 0, false
+	}
+	if len(f) == 2 {
+		if _, err := strconv.Atoi(f[1]); err != nil {
+			return 0, false
+		}
+	}
+	return end, true
 }
 
 // delimiterDirective parses a "DELIMITER x" line starting at i.
