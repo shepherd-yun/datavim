@@ -183,6 +183,7 @@ func DefaultBindings() []Binding {
 	b = append(b,
 		Binding{RedisServer, keys("["), PrevSection, "Previous section"},
 		Binding{RedisServer, keys("]"), NextSection, "Next section"},
+		Binding{RedisServer, keys("d", "d"), KillClient, "Kill the client (clients list)"},
 	)
 
 	b = append(b, vertical(Import)...)

@@ -145,6 +145,12 @@ func TestRedact(t *testing.T) {
 		{[]string{"hello", "3", "auth", "u", "p", "SETNAME", "x"}, "hello 3 auth u *** SETNAME x"},
 		{[]string{"SET", "a b", "1"}, `SET "a b" 1`},
 		{[]string{"AUTH"}, "AUTH"},
+		{[]string{"CONFIG", "SET", "requirepass", "s3cret"}, "CONFIG SET requirepass ***"},
+		{[]string{"config", "set", "maxmemory", "1gb", "masterauth", "s3cret"}, "config set maxmemory 1gb masterauth ***"},
+		{[]string{"CONFIG", "GET", "requirepass"}, "CONFIG GET requirepass"},
+		{[]string{"ACL", "SETUSER", "u", "on", ">s3cret", "#abc", "~*", "+@read"}, `ACL SETUSER u on *** *** "~*" +@read`},
+		{[]string{"MIGRATE", "h", "6379", "k", "0", "5000", "AUTH", "s3cret"}, "MIGRATE h 6379 k 0 5000 AUTH ***"},
+		{[]string{"MIGRATE", "h", "6379", "k", "0", "5000", "AUTH2", "u", "s3cret", "KEYS", "a"}, "MIGRATE h 6379 k 0 5000 AUTH2 u *** KEYS a"},
 		{nil, ""},
 	} {
 		if got := Redact(tc.in); got != tc.want {

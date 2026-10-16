@@ -800,6 +800,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case serverInfoMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
+	case serverLoadedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
 	default:
 		return
 	}

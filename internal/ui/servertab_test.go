@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -300,5 +302,223 @@ func TestServerStatusRefresh(t *testing.T) {
 	}
 	if n := len(m.activeTab().(*serverTab).samples); n != 1 {
 		t.Fatalf("samples after refresh = %d", n)
+	}
+}
+
+// column is the text of column name in every row of the server tab's grid.
+func column(t *testing.T, m *Model, name string) []string {
+	t.Helper()
+	rs := m.activeTab().(*serverTab).grid.Result()
+	if rs == nil {
+		t.Fatalf("no result\n%s", screen(m))
+	}
+	ci := -1
+	for i, c := range rs.Columns {
+		if c.Name == name {
+			ci = i
+		}
+	}
+	if ci < 0 {
+		t.Fatalf("no column %q in %v", name, rs.Columns)
+	}
+	var out []string
+	for _, r := range rs.Rows {
+		out = append(out, r[ci].Text)
+	}
+	return out
+}
+
+func slowEntries() []rdb.SlowEntry {
+	at := time.Date(2026, 10, 17, 9, 30, 0, 0, time.Local)
+	return []rdb.SlowEntry{
+		{ID: 2, Time: at, Duration: 850 * time.Microsecond, Args: []string{"GET", "user:1"}, Addr: "10.0.0.1:5000", Name: "web"},
+		{ID: 1, Time: at, Duration: 12300 * time.Microsecond, Args: []string{"KEYS", "*"}, Addr: "10.0.0.2:5001"},
+	}
+}
+
+func testClients() []rdb.ClientInfo {
+	return []rdb.ClientInfo{
+		{"id": "7", "addr": "10.0.0.1:5000", "name": "", "age": "30", "idle": "125", "db": "0", "cmd": "client|list", "flags": "N"},
+		{"id": "8", "addr": "10.0.0.2:5001", "name": "probe", "age": "3", "idle": "0", "db": "1", "cmd": "get", "flags": "N"},
+	}
+}
+
+func TestSlowLogSection(t *testing.T) {
+	m, r, _ := openServerTab(t, config.Connection{})
+	r.slow = slowEntries()
+	pressHold(t, m, "]")
+	if got := column(t, m, "duration"); !slices.Equal(got, []string{"850 µs", "12.3 ms"}) {
+		t.Fatalf("duration = %q", got)
+	}
+	if got := column(t, m, "time"); got[0] != "2026-10-17 09:30:00" {
+		t.Fatalf("time = %q", got)
+	}
+	if got := column(t, m, "command"); got[1] != `KEYS "*"` {
+		t.Fatalf("command = %q", got)
+	}
+	if s := screen(m); !strings.Contains(s, "user:1") || !strings.Contains(s, "web") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	if durationText(1240*time.Millisecond) != "1.24 s" {
+		t.Fatalf("1.24 s: %q", durationText(1240*time.Millisecond))
+	}
+
+	r.slow = nil
+	pressHold(t, m, "space", "r")
+	if s := screen(m); !strings.Contains(s, "the slow log is empty") {
+		t.Fatalf("empty:\n%s", s)
+	}
+}
+
+func TestSlowLogRedacts(t *testing.T) {
+	m, r, _ := openServerTab(t, config.Connection{})
+	clip := captureClipboard(t)
+	r.slow = []rdb.SlowEntry{
+		{ID: 2, Args: []string{"AUTH", "s3cret"}},
+		{ID: 1, Args: []string{"CONFIG", "SET", "requirepass", "s3cret"}},
+	}
+	pressHold(t, m, "]")
+	for _, c := range column(t, m, "command") {
+		if strings.Contains(c, "s3cret") {
+			t.Fatalf("command shows the password: %q", c)
+		}
+	}
+	if s := screen(m); strings.Contains(s, "s3cret") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	pressHold(t, m, "space", "y", "c")
+	if *clip == "" || strings.Contains(*clip, "s3cret") {
+		t.Fatalf("clipboard = %q", *clip)
+	}
+}
+
+func TestClientsSection(t *testing.T) {
+	m, r, _ := openServerTab(t, config.Connection{})
+	r.clients = testClients()
+	pressHold(t, m, "]", "]")
+	if got := column(t, m, "idle"); !slices.Equal(got, []string{"2m 5s", "0s"}) {
+		t.Fatalf("idle = %q", got)
+	}
+	if got := column(t, m, "addr"); len(got) != 2 || got[1] != "10.0.0.2:5001" {
+		t.Fatalf("addr = %q", got)
+	}
+	// [ from the status section wraps to the clients
+	pressHold(t, m, "[", "[", "[")
+	if st := m.activeTab().(*serverTab); st.section != secClients {
+		t.Fatalf("section = %d", st.section)
+	}
+}
+
+func clientsCalls(r *fakeRedis) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.clientsN
+}
+
+func killedIDs(r *fakeRedis) []int64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.killed)
+}
+
+func TestKillClient(t *testing.T) {
+	m, r, _ := openServerTab(t, config.Connection{})
+	r.clients = testClients()
+	pressHold(t, m, "]", "]")
+	before := clientsCalls(r)
+	pressHold(t, m, "d", "d")
+	if s := screen(m); !strings.Contains(s, "Dangerous command") || !strings.Contains(s, "CLIENT KILL ID 7") {
+		t.Fatalf("confirm:\n%s", s)
+	}
+	pressHold(t, m, "y")
+	if got := killedIDs(r); !slices.Equal(got, []int64{7}) {
+		t.Fatalf("killed = %v", got)
+	}
+	if s := screen(m); !strings.Contains(s, "killed client 7 (10.0.0.1:5000)") {
+		t.Fatalf("status:\n%s", s)
+	}
+	if clientsCalls(r) != before+1 {
+		t.Fatalf("list not re-read: %d -> %d", before, clientsCalls(r))
+	}
+	if got := column(t, m, "id"); !slices.Equal(got, []string{"8"}) {
+		t.Fatalf("ids after kill = %v", got)
+	}
+}
+
+func TestKillClientGone(t *testing.T) {
+	m, r, _ := openServerTab(t, config.Connection{})
+	r.clients = testClients()
+	pressHold(t, m, "]", "]")
+	r.mu.Lock()
+	r.clients = r.clients[1:]
+	r.mu.Unlock()
+	pressHold(t, m, "d", "d", "y")
+	if s := screen(m); !strings.Contains(s, "client 7 is already gone") {
+		t.Fatalf("status:\n%s", s)
+	}
+}
+
+func TestKillClientOtherSection(t *testing.T) {
+	m, r, _ := openServerTab(t, config.Connection{})
+	pressHold(t, m, "]", "d", "d")
+	if s := screen(m); !strings.Contains(s, "kill works in the clients list") || len(killedIDs(r)) != 0 {
+		t.Fatalf("screen:\n%s", s)
+	}
+}
+
+func TestKillClientProd(t *testing.T) {
+	m, r, _ := openServerTab(t, config.Connection{Env: config.EnvProd, ReadOnly: boolPtr(false)})
+	r.clients = testClients()
+	pressHold(t, m, "]", "]", "d", "d")
+	if s := screen(m); !strings.Contains(s, "PROD · Dangerous command") {
+		t.Fatalf("confirm:\n%s", s)
+	}
+	pressHold(t, m, "y")
+	if got := killedIDs(r); len(got) != 0 {
+		t.Fatalf("y killed on prod: %v", got)
+	}
+	pressHold(t, m, "backspace")
+	typeText(t, m, "cache")
+	pressHold(t, m, "enter")
+	if got := killedIDs(r); !slices.Equal(got, []int64{7}) {
+		t.Fatalf("killed = %v", got)
+	}
+}
+
+func TestKillClientReadOnly(t *testing.T) {
+	m, r, _ := openServerTab(t, config.Connection{ReadOnly: boolPtr(true)})
+	r.clients = testClients()
+	pressHold(t, m, "]", "]", "d", "d")
+	if s := screen(m); !strings.Contains(s, "read-only") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	if got := killedIDs(r); len(got) != 0 {
+		t.Fatalf("killed = %v", got)
+	}
+}
+
+func TestServerSectionNoPerm(t *testing.T) {
+	m, r, _ := openServerTab(t, config.Connection{})
+	r.slowErr = replyErr("NOPERM this user has no permissions to run the 'slowlog|get' command")
+	r.clients = testClients()
+	pressHold(t, m, "]")
+	if s := screen(m); !strings.Contains(s, "permission denied") {
+		t.Fatalf("slow log:\n%s", s)
+	}
+	pressHold(t, m, "]")
+	if s := screen(m); strings.Contains(s, "permission denied") || !strings.Contains(s, "10.0.0.2:5001") {
+		t.Fatalf("clients:\n%s", s)
+	}
+}
+
+func TestServerExport(t *testing.T) {
+	m, r, _ := openServerTab(t, config.Connection{})
+	r.clients = testClients()
+	if src := m.activeTab().(*serverTab).exportSource(); src.rs != nil {
+		t.Fatalf("status exports %v", src.rs)
+	}
+	pressHold(t, m, "]", "]")
+	if src := m.activeTab().(*serverTab).exportSource(); src.name != "clients" || len(src.rs.Rows) != 2 {
+		t.Fatalf("clients export = %+v", src)
 	}
 }

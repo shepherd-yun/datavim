@@ -223,21 +223,45 @@ func GlobEscape(s string) string {
 	return b.String()
 }
 
-// Redact is the line shown in messages and kept in history: the password
-// of AUTH (and of HELLO … AUTH user pass) is ***.
+// Redact is the line shown in messages and kept in history (and the slow
+// log's commands): the passwords of AUTH, HELLO … AUTH user pass, CONFIG SET
+// requirepass / masterauth, ACL SETUSER's >pass and #hash rules and
+// MIGRATE … AUTH / AUTH2 are ***.
 func Redact(args []string) string {
 	parts := make([]string, len(args))
 	for i, a := range args {
 		parts[i] = Quote(a)
 	}
-	if len(args) > 1 && strings.EqualFold(args[0], "AUTH") {
+	is := func(i int, s string) bool { return i < len(args) && strings.EqualFold(args[i], s) }
+	switch {
+	case is(0, "AUTH") && len(args) > 1:
 		parts[len(parts)-1] = "***"
-	}
-	if len(args) > 0 && strings.EqualFold(args[0], "HELLO") {
+	case is(0, "HELLO"):
 		for i := 1; i+2 < len(args); i++ {
-			if strings.EqualFold(args[i], "AUTH") {
+			if is(i, "AUTH") {
 				parts[i+2] = "***"
 				break
+			}
+		}
+	case is(0, "CONFIG") && is(1, "SET"):
+		for i := 2; i+1 < len(args); i += 2 {
+			if is(i, "requirepass") || is(i, "masterauth") {
+				parts[i+1] = "***"
+			}
+		}
+	case is(0, "ACL") && is(1, "SETUSER"):
+		for i := 3; i < len(args); i++ {
+			if strings.HasPrefix(args[i], ">") || strings.HasPrefix(args[i], "#") {
+				parts[i] = "***"
+			}
+		}
+	case is(0, "MIGRATE"):
+		for i := 1; i < len(args); i++ {
+			switch {
+			case is(i, "AUTH") && i+1 < len(args):
+				parts[i+1] = "***"
+			case is(i, "AUTH2") && i+2 < len(args):
+				parts[i+2] = "***"
 			}
 		}
 	}
