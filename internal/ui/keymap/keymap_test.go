@@ -1,6 +1,7 @@
 package keymap
 
 import (
+	"slices"
 	"strings"
 	"testing"
 )
@@ -373,5 +374,35 @@ func TestResultsShareFilterAndEditKeys(t *testing.T) {
 	}
 	if a, _ := k.Resolve(Results, []string{"]"}); a != LoadMore {
 		t.Errorf("] in results = %v", a)
+	}
+}
+
+func TestImportBindings(t *testing.T) {
+	k := Default()
+	tests := []struct {
+		ctx    Context
+		seq    []string
+		action Action
+	}{
+		{Tree, []string{"I"}, ImportData},
+		{Import, []string{"j"}, Down},
+		{Import, []string{"]"}, NextSection},
+		{Import, []string{"["}, PrevSection},
+		{Import, []string{"i"}, EditCell},
+		{Import, []string{"enter"}, EditCell},
+		{Import, []string{"x"}, ImportToggle},
+		{Import, []string{"a"}, ImportAll},
+		{Import, []string{"A"}, ImportNone},
+		{Import, []string{"t"}, ImportType},
+		{Import, []string{"space", "w"}, SubmitEdits},
+		{Import, []string{"space", "r"}, Refresh},
+	}
+	for _, tt := range tests {
+		if a, r := k.Resolve(tt.ctx, tt.seq); a != tt.action || r != Matched {
+			t.Errorf("Resolve(%s, %v) = %q, %v; want %q", tt.ctx, tt.seq, a, r, tt.action)
+		}
+	}
+	if !slices.Contains(Contexts(), Import) {
+		t.Fatalf("Contexts() = %v", Contexts())
 	}
 }

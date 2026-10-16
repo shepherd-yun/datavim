@@ -20,6 +20,7 @@ const (
 	Console   Context = "console"
 	Results   Context = "results"
 	Diff      Context = "diff"
+	Import    Context = "import"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
 	// only one-key bindings count there.
 	Popup Context = "popup"
@@ -131,6 +132,11 @@ const (
 	PrevChange        Action = "diff.prev"
 	WriteScript       Action = "diff.script"
 	DataDiff          Action = "diff.data"
+	ImportData        Action = "import.open"
+	ImportToggle      Action = "import.toggle"
+	ImportAll         Action = "import.all"
+	ImportNone        Action = "import.none"
+	ImportType        Action = "import.type"
 )
 
 const (

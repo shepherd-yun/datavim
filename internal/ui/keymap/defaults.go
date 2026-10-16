@@ -69,6 +69,7 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
 		Binding{Tree, keys("m"), MarkCompare, "Mark as the compare source"},
 		Binding{Tree, keys("C"), Compare, "Compare with the marked node"},
+		Binding{Tree, keys("I"), ImportData, "Import data from a file (database or schema: into a new table)"},
 		Binding{Tree, keys("y", "y"), YankName, "Copy name"},
 		Binding{Tree, keys("y", "q"), YankQualified, "Copy qualified name (db.table)"},
 		Binding{Tree, keys("z", "o"), FoldOpen, "Expand"},
@@ -143,6 +144,19 @@ func DefaultBindings() []Binding {
 		Binding{Diff, keys(LeaderToken, "w"), WriteScript, "Write the sync script to a new console"},
 		Binding{Diff, keys("D"), DataDiff, "Compare the data / back to the structure"},
 		Binding{Diff, keys("F"), FilterPrompt, "Filter the compared rows (WHERE on both sides)"},
+	)
+
+	b = append(b, vertical(Import)...)
+	b = append(b,
+		Binding{Import, keys("["), PrevSection, "Previous section"},
+		Binding{Import, keys("]"), NextSection, "Next section"},
+		Binding{Import, keys("i"), EditCell, "Edit the setting, the target column or the new column's name"},
+		Binding{Import, keys("enter"), EditCell, "Edit the setting, the target column or the new column's name"},
+		Binding{Import, keys("x"), ImportToggle, "Import / skip the column"},
+		Binding{Import, keys("a"), ImportAll, "Import every column"},
+		Binding{Import, keys("A"), ImportNone, "Skip every column"},
+		Binding{Import, keys("t"), ImportType, "New table: the column's type"},
+		Binding{Import, keys(LeaderToken, "w"), SubmitEdits, "Check the file and import it"},
 	)
 
 	b = append(b,
