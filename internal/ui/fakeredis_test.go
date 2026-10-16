@@ -304,4 +304,3 @@ func (f *fakeBackend) Redis(_ context.Context, name string, n int) (rdb.Client, 
 	}
 	return &fakeRedisClient{r: f.redis, db: n}, nil
 }
-
