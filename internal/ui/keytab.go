@@ -14,6 +14,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/edit"
 	"github.com/shepherd-yun/sqlvim/internal/rcmd"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
@@ -113,12 +114,11 @@ type keyLoadedMsg struct {
 	conn      string
 	info      rdb.KeyInfo // with the first page only
 	first     bool
-	text      string // a string's value (what was read of it)
-	rs        *db.ResultSet
-	raw       [][]string // rs's cells unescaped, for the detail popup
-	next      uint64     // HSCAN / SSCAN cursor
-	nextStart int64      // LRANGE / ZRANGE start
-	nextAfter string     // stream ID
+	text      string        // a string's value (what was read of it)
+	rs        *db.ResultSet // raw cells: the tab escapes them for the grid
+	next      uint64        // HSCAN / SSCAN cursor
+	nextStart int64         // LRANGE / ZRANGE start
+	nextAfter string        // stream ID
 	more      bool
 	err       error
 }
@@ -157,22 +157,25 @@ type keyTab struct {
 	used   valueFormat
 	view   *textview.Model
 
-	grid      *grid.Model
-	raw       [][]string
-	match     string
-	next      uint64
-	nextStart int64
-	nextAfter string
-	more      bool
+	grid       *grid.Model
+	table      *edit.Table // the loaded rows, raw, with staged changes; nil for strings and module types
+	submitting bool
+	match      string
+	next       uint64
+	nextStart  int64
+	nextAfter  string
+	more       bool
 
 	width, height int
 }
 
 func newKeyTab(id int, b Backend, keys *keymap.Keymap, conn string, n int, key string, s config.Settings) *keyTab {
-	return &keyTab{
+	t := &keyTab{
 		id: id, backend: b, keys: keys, conn: conn, db: n, key: key, pageSize: max(s.PageSize, 1),
 		view: textview.New(), grid: grid.New(nil, s.MaxColumnWidth),
 	}
+	t.grid.SetMarks(t.mark)
+	return t
 }
 
 // openKey opens (or shows) the detail tab of key in db n of conn.
@@ -314,11 +317,11 @@ func readKeyPage(ctx context.Context, c rdb.Client, key string, info rdb.KeyInfo
 	for _, r := range rows {
 		vals := make([]db.Value, len(r))
 		for i, v := range r {
-			vals[i] = db.Value{Text: rcmd.Escape(v)}
+			vals[i] = db.Value{Text: v}
 		}
 		rs.Rows = append(rs.Rows, vals)
 	}
-	msg.rs, msg.raw = rs, rows
+	msg.rs = rs
 	return nil
 }
 
@@ -326,6 +329,8 @@ func (t *keyTab) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case keyLoadedMsg:
 		t.apply(m)
+	case cellEditedMsg:
+		t.cellEdited(m)
 	case keyFilterMsg:
 		t.match = rcmd.Pattern(m.text)
 		return t.load(true)
@@ -342,7 +347,7 @@ func (t *keyTab) apply(m keyLoadedMsg) {
 	t.err = ""
 	if m.first {
 		t.info, t.loaded = m.info, true
-		t.raw, t.text, t.more = nil, "", false
+		t.table, t.text, t.more = nil, "", false
 		t.grid.SetResult(nil)
 	}
 	if !t.info.Exists {
@@ -354,18 +359,40 @@ func (t *keyTab) apply(m keyLoadedMsg) {
 		t.render()
 	}
 	if m.rs != nil {
-		if m.first {
-			t.raw = m.raw
-			t.grid.SetResult(m.rs)
+		if m.first || t.table == nil {
+			t.table = edit.New(m.rs.Columns, t.unseen(m.rs.Rows), nil)
+			t.grid.SetResult(escapedResult(t.table.Result()))
 		} else {
-			old := t.grid.Result()
-			rs := &db.ResultSet{Columns: old.Columns, Rows: append(append([][]db.Value{}, old.Rows...), m.rs.Rows...)}
-			t.raw = append(t.raw, m.raw...)
-			t.grid.ReplaceResult(rs)
+			t.table.Append(t.unseen(m.rs.Rows), nil)
+			t.showChanges()
 		}
 	}
 	t.next, t.nextStart, t.nextAfter, t.more = m.next, m.nextStart, m.nextAfter, m.more
 	t.SetSize(t.width, t.height)
+}
+
+// unseen drops the hash fields and set members already loaded: HSCAN and
+// SSCAN may return one again on a later page.
+func (t *keyTab) unseen(rows [][]db.Value) [][]db.Value {
+	if t.info.Type != "hash" && t.info.Type != "set" {
+		return rows
+	}
+	seen := map[string]bool{}
+	if t.table != nil {
+		for i := range t.table.Len() {
+			if r := t.table.Row(i); r.Orig != nil {
+				seen[r.Orig[0].Text] = true
+			}
+		}
+	}
+	out := rows[:0:0]
+	for _, r := range rows {
+		if !seen[r[0].Text] {
+			seen[r[0].Text] = true
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 func (t *keyTab) render() {
@@ -409,11 +436,14 @@ func (t *keyTab) Handle(a keymap.Action) tea.Cmd {
 		}
 	}
 	if a == keymap.CellDetail {
-		if r, c := t.grid.Position(); r < len(t.raw) && c < len(t.raw[r]) {
+		if r, c := t.grid.Position(); t.table != nil && r < t.table.Len() {
 			col, _ := t.grid.Column()
-			return openOverlay(overlay.NewDetail(col.Name, t.raw[r][c]))
+			return openOverlay(overlay.NewDetail(col.Name, t.table.Row(r).Values[c].Text))
 		}
 		return nil
+	}
+	if cmd, ok := t.handleEdit(a); ok {
+		return cmd
 	}
 	if cmd, ok := gridAction(t.grid, a); ok {
 		return cmd
@@ -490,6 +520,9 @@ func (t *keyTab) header() string {
 	}
 	if t.match != "" {
 		parts = append(parts, "filter "+rcmd.Escape(t.match))
+	}
+	if n := t.changes(); n > 0 {
+		parts = append(parts, plural(n, "unsaved change"))
 	}
 	return strings.Join(parts, " · ")
 }

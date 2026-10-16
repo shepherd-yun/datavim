@@ -156,6 +156,13 @@ func DefaultBindings() []Binding {
 		Binding{RedisKey, keys("v"), ValueFormat, "Value format: auto, text, JSON, hex"},
 		Binding{RedisKey, keys("F"), FilterPrompt, "Filter fields / members (pattern)"},
 		Binding{RedisKey, keys("f", "x"), FilterClear, "Clear the filter"},
+		Binding{RedisKey, keys("i"), EditCell, "Edit the cell"},
+		Binding{RedisKey, keys("enter"), EditCell, "Edit the cell"},
+		Binding{RedisKey, keys("o"), InsertRow, "Add a field / element / member / entry"},
+		Binding{RedisKey, keys("d", "d"), DeleteRow, "Delete the field / element / member / entry"},
+		Binding{RedisKey, keys("u"), UndoEdit, "Undo the last change"},
+		Binding{RedisKey, keys("U"), UndoAllEdits, "Discard every change"},
+		Binding{RedisKey, keys(LeaderToken, "w"), SubmitEdits, "Submit changes (:w)"},
 	)
 
 	b = append(b, gridBindings(RedisResults)...)
