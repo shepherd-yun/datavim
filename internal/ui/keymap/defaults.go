@@ -26,6 +26,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(LeaderToken, LeaderToken), GlobalSearch, "Search everything"},
 		{Global, keys(LeaderToken, "f"), Recent, "Recent tabs and files"},
 		{Global, keys(LeaderToken, "l"), Locate, "Locate the current tab in the tree"},
+		{Global, keys(LeaderToken, "k"), OpenKey, "Open a Redis key by name"},
 	}
 	for _, c := range []struct{ key, format, desc string }{
 		{"t", "tsv", "Copy as TSV"},
@@ -73,6 +74,8 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("I"), ImportData, "Import data from a file (database or schema: into a new table)"},
 		Binding{Tree, keys("y", "y"), YankName, "Copy name"},
 		Binding{Tree, keys("y", "q"), YankQualified, "Copy qualified name (db.table)"},
+		Binding{Tree, keys("F"), FilterPrompt, "Filter Redis keys (pattern)"},
+		Binding{Tree, keys("f", "x"), FilterClear, "Clear the Redis key filter"},
 		Binding{Tree, keys("z", "o"), FoldOpen, "Expand"},
 		Binding{Tree, keys("z", "c"), FoldClose, "Collapse (on a leaf, its parent)"},
 		Binding{Tree, keys("z", "a"), FoldToggle, "Toggle expanded"},

@@ -339,3 +339,111 @@ func TestRedisPasswordPrompt(t *testing.T) {
 		t.Fatalf("root not reloaded: %+v", root)
 	}
 }
+
+// lastScan is the last SCAN fakeRedis received.
+func lastScan(t *testing.T, r *fakeRedis) fakeScanCall {
+	t.Helper()
+	scans := r.scanCalls()
+	if len(scans) == 0 {
+		t.Fatal("no scan")
+	}
+	return scans[len(scans)-1]
+}
+
+func TestRedisFilter(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.fill(0, "user:", 3)
+	r.fill(0, "sess:", 2)
+	dbn := expandDB0(t, m)
+	pressAll(t, m, "F")
+	if _, ok := m.overlay.(*overlay.Prompt); !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	typeText(t, m, "sess")
+	pressAll(t, m, "enter")
+	if got := lastScan(t, r).match; got != "*sess*" {
+		t.Fatalf("match = %q", got)
+	}
+	if got := countKeys(dbn); got != 2 || !strings.Contains(dbn.Detail, "filter *sess*") {
+		t.Fatalf("keys = %d, detail %q", got, dbn.Detail)
+	}
+	pressAll(t, m, "f", "x")
+	if got := countKeys(dbn); got != 5 || lastScan(t, r).match != "" || strings.Contains(dbn.Detail, "filter") {
+		t.Fatalf("after clear: keys = %d, match %q, detail %q", got, lastScan(t, r).match, dbn.Detail)
+	}
+}
+
+func TestRedisFilterStopsOnScanned(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.fill(0, "k", 150_000)
+	expandDB0(t, m)
+	before := len(r.scanCalls())
+	pressAll(t, m, "F")
+	typeText(t, m, "nomatch")
+	pressAll(t, m, "enter")
+	if n := len(r.scanCalls()) - before; n != 100 {
+		t.Fatalf("filter load sent %d scans", n)
+	}
+	more := moreNode(m.redisDBNode(redisDBKey{"cache", 0}))
+	if more == nil || !strings.Contains(more.Name, "found 0") || !strings.Contains(more.Name, "load more") {
+		t.Fatalf("more = %+v", more)
+	}
+}
+
+func TestRedisFilterFromFolder(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.fill(0, "user:", 3)
+	expandDB0(t, m)
+	pressAll(t, m, "j") // the user folder
+	if n := m.tree.Selected(); n.Kind != tree.KindKeyFolder {
+		t.Fatalf("selected %+v", n)
+	}
+	pressAll(t, m, "F")
+	if s := screen(m); !strings.Contains(s, "user:*") {
+		t.Fatalf("prompt:\n%s", s)
+	}
+}
+
+func TestRedisFilterIgnoredOnSQL(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.setFocus(focusTree)
+	pressAll(t, m, "F")
+	if m.overlay != nil {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+}
+
+func TestOpenKeyNotFound(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.fill(0, "user:", 3)
+	expandDB0(t, m)
+	pressAll(t, m, "space", "k")
+	if _, ok := m.overlay.(*overlay.Prompt); !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	typeText(t, m, "nope")
+	pressAll(t, m, "enter")
+	if m.status != "key not found: nope" || len(m.tabs) != 0 {
+		t.Fatalf("status = %q, tabs %d", m.status, len(m.tabs))
+	}
+}
+
+func TestOpenKeyCompletion(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.fill(0, "user:", 2)
+	r.fill(0, "sess:", 1)
+	expandDB0(t, m)
+	cands := m.keyCandidates(redisDBKey{"cache", 0}, "user")
+	if len(cands) != 2 || cands[0].Text != "user:0" || cands[1].Text != "user:1" {
+		t.Fatalf("candidates = %+v", cands)
+	}
+}
+
+func TestOpenKeyNoRedisContext(t *testing.T) {
+	m, _ := newTestModel(t)
+	m.setFocus(focusTree)
+	pressAll(t, m, "space", "k")
+	if m.status != "select a redis connection first" || m.overlay != nil {
+		t.Fatalf("status = %q", m.status)
+	}
+}

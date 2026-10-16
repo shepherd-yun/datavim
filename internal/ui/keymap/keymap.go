@@ -105,6 +105,7 @@ const (
 	GlobalSearch      Action = "search.global"
 	Recent            Action = "recent.open"
 	Locate            Action = "tree.locate"
+	OpenKey           Action = "redis.openkey"
 	FilterEqual       Action = "filter.eq"
 	FilterNotEqual    Action = "filter.ne"
 	FilterContains    Action = "filter.contains"

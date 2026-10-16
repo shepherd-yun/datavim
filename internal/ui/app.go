@@ -204,6 +204,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.childrenLoaded(msg)
 	case redisScanMsg:
 		return m, m.scanned(msg)
+	case redisFilterMsg:
+		return m, m.filterKeys(msg.key, msg.text)
+	case openKeyMsg:
+		return m, checkKey(m.backend, msg)
+	case keyCheckedMsg:
+		return m, m.keyChecked(msg)
 	case metaLoadedMsg:
 		return m, m.metaLoaded(msg)
 	case metaStaleMsg:
@@ -478,6 +484,8 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		return m.locate()
 	case keymap.NewConnection:
 		m.overlay = overlay.NewConnForm(m.keys)
+	case keymap.OpenKey:
+		return m.openKeyPrompt()
 	case keymap.Refresh:
 		var cmd tea.Cmd
 		if conn, ns := m.contextNamespace(); conn != "" {
@@ -587,6 +595,14 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 		}
 	case keymap.DeleteNode:
 		return m.deleteNode()
+	case keymap.FilterPrompt:
+		return m.filterKeysPrompt()
+	case keymap.FilterClear:
+		if n := t.Selected(); n != nil {
+			if k, ok := redisKeyOf(n); ok {
+				return m.filterKeys(k, "")
+			}
+		}
 	}
 	return nil
 }
