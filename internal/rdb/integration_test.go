@@ -847,3 +847,146 @@ func TestUnlinkScanKeys(t *testing.T) {
 		}
 	})
 }
+
+func TestInfo(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		r.FlushAll(ctx) // the container is shared: other tests leave keys in other dbs
+		for i := range 3 {
+			r.Set(ctx, fmt.Sprint("k", i), "v", 0)
+		}
+		info, err := open(t, s, Config{}).Info(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info["redis_version"] == "" {
+			t.Fatalf("no redis_version: %v", info)
+		}
+		if n, ok := info.Int("connected_clients"); !ok || n < 1 {
+			t.Fatalf("connected_clients = %d %v", n, ok)
+		}
+		if n := info.Keys(); n != 3 {
+			t.Fatalf("Keys() = %d", n)
+		}
+		if _, ok := info.Int("used_memory"); !ok {
+			t.Fatal("no used_memory")
+		}
+	})
+}
+
+func TestSlowLog(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		if err := r.ConfigSet(ctx, "slowlog-log-slower-than", "0").Err(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { r.ConfigSet(context.Background(), "slowlog-log-slower-than", "10000") })
+		r.Set(ctx, "a", "1", 0)
+		got, err := open(t, s, Config{}).SlowLog(ctx, 10)
+		if err != nil {
+			t.Fatal(err)
+		}
+		found := false
+		for _, e := range got {
+			if len(e.Args) > 0 && strings.EqualFold(e.Args[0], "set") && e.Duration >= 0 {
+				found = true
+			}
+		}
+		if !found {
+			t.Fatalf("no SET entry: %+v", got)
+		}
+	})
+}
+
+func TestClients(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		probe := raw(t, s, 0, "")
+		if err := probe.Do(ctx, "client", "setname", "probe").Err(); err != nil {
+			t.Fatal(err)
+		}
+		c := open(t, s, Config{})
+		list, err := c.Clients(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var id int64 = -1
+		for _, ci := range list {
+			if ci["name"] == "probe" {
+				id, _ = strconv.ParseInt(ci["id"], 10, 64)
+			}
+		}
+		if id < 0 {
+			t.Fatalf("no probe client: %v", list)
+		}
+		ok, err := c.KillClient(ctx, id)
+		if err != nil || !ok {
+			t.Fatalf("kill: %v %v", ok, err)
+		}
+		ok, err = c.KillClient(ctx, id)
+		if err != nil || ok {
+			t.Fatalf("kill again: %v %v", ok, err)
+		}
+	})
+}
+
+func keySizeFixture(t *testing.T, ctx context.Context, r *redis.Client) {
+	t.Helper()
+	p := r.Pipeline()
+	p.Set(ctx, "s", "hello", 0)
+	p.HSet(ctx, "h", "a", "1", "b", "2")
+	p.RPush(ctx, "l", "1", "2", "3")
+	p.SAdd(ctx, "st", "x", "y", "z", "w")
+	p.ZAdd(ctx, "z", redis.Z{Score: 1, Member: "m"})
+	p.XAdd(ctx, &redis.XAddArgs{Stream: "x", Values: []string{"f", "v"}})
+	if _, err := p.Exec(ctx); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestKeySizes(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		keySizeFixture(t, ctx, raw(t, s, 0, ""))
+		c := open(t, s, Config{})
+		in := []KeyEntry{{"s", "string"}, {"h", "hash"}, {"l", "list"}, {"st", "set"}, {"z", "zset"}, {"x", "stream"}}
+		got, err := c.KeySizes(ctx, in, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := []int64{5, 2, 3, 4, 1, 1}
+		if len(got) != len(want) {
+			t.Fatalf("got %+v", got)
+		}
+		for i, ks := range got {
+			if ks.Key != in[i].Key || ks.Type != in[i].Type || ks.Len != want[i] || ks.Mem <= 0 {
+				t.Fatalf("got[%d] = %+v", i, ks)
+			}
+		}
+		got, err = c.KeySizes(ctx, in[:1], false)
+		if err != nil || len(got) != 1 || got[0].Mem != -1 || got[0].Len != 5 {
+			t.Fatalf("memory=false: %+v %v", got, err)
+		}
+	})
+}
+
+func TestKeySizesSkipsGone(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		keySizeFixture(t, ctx, raw(t, s, 0, ""))
+		got, err := open(t, s, Config{}).KeySizes(ctx, []KeyEntry{{"gone", "string"}, {"h", "string"}, {"s", "string"}}, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(got) != 1 || got[0].Key != "s" {
+			t.Fatalf("got %+v", got)
+		}
+	})
+}

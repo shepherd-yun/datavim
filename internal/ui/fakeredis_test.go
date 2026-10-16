@@ -54,6 +54,18 @@ type fakeRedis struct {
 	onApply  func(p redit.Plan) // runs after an Apply is recorded, unlocked
 	unlinks  [][]string         // the keys of every Unlink
 	version  string             // Version(); "" is 7.2.0
+
+	info       rdb.Info // what Info returns
+	infoErr    error
+	infoCalls  int
+	slow       []rdb.SlowEntry
+	slowErr    error
+	slowCalls  int
+	clients    []rdb.ClientInfo
+	clientsErr error
+	clientsN   int     // Clients calls
+	killed     []int64 // every KillClient id
+	sizesCalls int
 }
 
 func newFakeRedis() *fakeRedis {
@@ -189,23 +201,30 @@ func (c *fakeRedisClient) KeyInfo(_ context.Context, key string) (rdb.KeyInfo, e
 	if v.ttl > 0 {
 		info.TTL = v.ttl
 	}
-	switch v.typ {
-	case "string":
-		info.Len, info.Encoding = int64(len(v.str)), "raw"
-	case "hash":
-		info.Len = int64(len(v.hash))
-	case "list":
-		info.Len = int64(len(v.list))
-	case "set":
-		info.Len = int64(len(v.set))
-	case "zset":
-		info.Len = int64(len(v.zset))
-	case "stream":
-		info.Len = int64(len(v.stream))
-	default:
-		info.Len = -1
+	info.Len = v.length()
+	if v.typ == "string" {
+		info.Encoding = "raw"
 	}
 	return info, nil
+}
+
+// length is what STRLEN / HLEN / … would say; -1 for module types.
+func (v fakeValue) length() int64 {
+	switch v.typ {
+	case "string":
+		return int64(len(v.str))
+	case "hash":
+		return int64(len(v.hash))
+	case "list":
+		return int64(len(v.list))
+	case "set":
+		return int64(len(v.set))
+	case "zset":
+		return int64(len(v.zset))
+	case "stream":
+		return int64(len(v.stream))
+	}
+	return -1
 }
 
 func (c *fakeRedisClient) GetString(_ context.Context, key string, maxBytes int64) (string, error) {
@@ -346,6 +365,77 @@ func (c *fakeRedisClient) ScanKeys(ctx context.Context, cursor uint64, match str
 		keys[i] = k.Key
 	}
 	return keys, page.Cursor, err
+}
+
+func (c *fakeRedisClient) Info(context.Context) (rdb.Info, error) {
+	c.r.mu.Lock()
+	defer c.r.mu.Unlock()
+	c.r.infoCalls++
+	if c.r.infoErr != nil {
+		return nil, c.r.infoErr
+	}
+	out := rdb.Info{}
+	for k, v := range c.r.info {
+		out[k] = v
+	}
+	return out, nil
+}
+
+func (c *fakeRedisClient) SlowLog(_ context.Context, n int64) ([]rdb.SlowEntry, error) {
+	c.r.mu.Lock()
+	defer c.r.mu.Unlock()
+	c.r.slowCalls++
+	if c.r.slowErr != nil {
+		return nil, c.r.slowErr
+	}
+	out := slices.Clone(c.r.slow)
+	if int64(len(out)) > n {
+		out = out[:n]
+	}
+	return out, nil
+}
+
+func (c *fakeRedisClient) Clients(context.Context) ([]rdb.ClientInfo, error) {
+	c.r.mu.Lock()
+	defer c.r.mu.Unlock()
+	c.r.clientsN++
+	if c.r.clientsErr != nil {
+		return nil, c.r.clientsErr
+	}
+	return slices.Clone(c.r.clients), nil
+}
+
+func (c *fakeRedisClient) KillClient(_ context.Context, id int64) (bool, error) {
+	c.r.mu.Lock()
+	defer c.r.mu.Unlock()
+	c.r.killed = append(c.r.killed, id)
+	for i, ci := range c.r.clients {
+		if ci["id"] == strconv.FormatInt(id, 10) {
+			c.r.clients = slices.Delete(c.r.clients, i, i+1)
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// KeySizes takes Mem as len(str)-ish: the value's length times 10.
+func (c *fakeRedisClient) KeySizes(_ context.Context, keys []rdb.KeyEntry, memory bool) ([]rdb.KeySize, error) {
+	c.r.mu.Lock()
+	defer c.r.mu.Unlock()
+	c.r.sizesCalls++
+	out := make([]rdb.KeySize, 0, len(keys))
+	for _, k := range keys {
+		v, ok := c.r.dbs[c.db][k.Key]
+		if !ok || v.typ != k.Type {
+			continue
+		}
+		ks := rdb.KeySize{Key: k.Key, Type: k.Type, Len: v.length(), Mem: -1}
+		if memory {
+			ks.Mem = 10 * max(ks.Len, 1)
+		}
+		out = append(out, ks)
+	}
+	return out, nil
 }
 
 // addRedis adds a redis connection backed by f.redis (created on first use).

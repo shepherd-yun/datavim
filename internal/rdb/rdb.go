@@ -86,6 +86,18 @@ type Client interface {
 	// ScanKeys is one SCAN without the TYPE lookups.
 	ScanKeys(ctx context.Context, cursor uint64, match string, count int64) ([]string, uint64, error)
 
+	// Info sends INFO with no section: the default sections (Redis 5 takes one section at most).
+	Info(ctx context.Context) (Info, error)
+	// SlowLog is SLOWLOG GET n, newest first.
+	SlowLog(ctx context.Context, n int64) ([]SlowEntry, error)
+	Clients(ctx context.Context) ([]ClientInfo, error)
+	// KillClient is CLIENT KILL ID id; false when no such client.
+	KillClient(ctx context.Context, id int64) (bool, error)
+	// KeySizes reads every key's length in one pipeline, plus MEMORY USAGE
+	// key SAMPLES 0 when memory. Keys gone meanwhile (or whose type changed)
+	// are left out; a MEMORY error leaves Mem at -1 and is not an error.
+	KeySizes(ctx context.Context, keys []KeyEntry, memory bool) ([]KeySize, error)
+
 	Close() error
 }
 
@@ -186,23 +198,7 @@ func sortDBs(dbs []DBInfo) {
 
 // parseKeyspace reads "db0:keys=3,expires=0,avg_ttl=0" lines.
 func parseKeyspace(info string) map[int]int64 {
-	out := map[int]int64{}
-	for line := range strings.SplitSeq(info, "\n") {
-		name, rest, ok := strings.Cut(strings.TrimSpace(line), ":")
-		if !ok || !strings.HasPrefix(name, "db") {
-			continue
-		}
-		i, err := strconv.Atoi(name[2:])
-		if err != nil {
-			continue
-		}
-		for kv := range strings.SplitSeq(rest, ",") {
-			if v, ok := strings.CutPrefix(kv, "keys="); ok {
-				out[i], _ = strconv.ParseInt(v, 10, 64)
-			}
-		}
-	}
-	return out
+	return ParseInfo(info).keyspace()
 }
 
 // infoValue is one field of an INFO reply.
