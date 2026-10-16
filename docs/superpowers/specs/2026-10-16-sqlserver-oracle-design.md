@@ -19,7 +19,7 @@ sqlvim 目前只支持 MySQL 和 PostgreSQL。作者日常要连一台公司内�
 - 现有 MySQL / PostgreSQL 的行为不变。
 
 **第一版不做：**
-- 修改表结构（Modify Table）、schema 对比、数据对比、导入，以及 `DDLWriter.CreateTable` / `AlterTable` / `TableSchema`。在新引擎上触发这些功能时，提示 `not supported for <driver> yet` 并直接返回，不能报错，也不能做一半。
+- 修改表结构（Modify Table）、schema 对比、数据对比、导入，以及 `DDLWriter.CreateTable` / `AlterTable`。在新引擎上触发这些功能时，提示 `not supported for <driver> yet` 并直接返回，不能报错，也不能做一半。
 - Windows / AD / Kerberos 认证、Azure AD、Oracle wallet、TNS 名、LDAP。
 - SQL Server 命名实例（`host\instance`，依赖 SQL Browser）。需要的话可以直接填端口，或者通过 params 传给驱动。
 - Oracle 的 SID 连接方式（只支持 service name）、RAC、多租户 CDB 根容器管理。
@@ -115,7 +115,7 @@ Oracle 会把没加引号的标识符转成大写。树和结构视图按目录�
 
 - `DDL`：SQL Server 没有 `SHOW CREATE TABLE`，要根据 `sys.*` 拼出 CREATE TABLE 加索引（参考 PG 的 `ddl.go`），视图和例程用 `OBJECT_DEFINITION`。Oracle 用 `DBMS_METADATA.GET_DDL`，并去掉 storage 子句。
 - `Catalog`：只读当前 `Conn` 所在的库（SQL Server）或 service（Oracle）里用户可见的对象，供搜索和补全使用。CRM 库有几千张表，Catalog 查询必须是少量几条批量查询，不能每张表查一次。
-- `TableSchema` 第一版返回一个 sentinel 错误（不支持），调用方据此显示 §2 的提示。
+- `TableSchema`：树展开表节点（列、索引、键）时会调用它，所以不能返回「不支持」。第一版用 Columns、Indexes、ForeignKeys 加表注释组合出结果，不保证类型和默认值是规范化的；依赖规范化的功能由 `SchemaTools` 能力关闭。（这是写计划时发现后修订的。）
 
 ## 6. 安全规则（修订主设计 §5.3）
 
