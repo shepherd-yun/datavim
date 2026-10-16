@@ -206,7 +206,7 @@ func readTableMeta(ctx context.Context, m db.MetaReader, d sqlx.Dialect, ref db.
 		return nil, err
 	}
 	view := false
-	if d == sqlx.Postgres && len(primaryKey(cols)) == 0 {
+	if d.Features().RowLocator == sqlx.LocateRowID && len(primaryKey(cols)) == 0 {
 		tables, err := m.Tables(ctx, ref.Namespace)
 		if err != nil {
 			return nil, err
@@ -444,7 +444,7 @@ func completeCondition(d sqlx.Dialect, cols []db.Column, text string, cursor int
 		})
 	}
 	kws := filterKeywords
-	if d == sqlx.Postgres {
+	if d.Features().ILike {
 		kws = append(slices.Clone(kws), "ILIKE")
 	}
 	lower := strings.ToUpper(prefix) != prefix

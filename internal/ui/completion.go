@@ -20,12 +20,13 @@ const maxCandidates = 50
 
 // defaultNamespace is where a console resolves unqualified table names:
 // its database (MySQL; the configured one when the console has none), or
-// its schema, else public (PostgreSQL).
+// its schema, else the engine's default schema (public, dbo; Oracle's ""
+// is the current user).
 func defaultNamespace(cfg config.Connection, key meta.Key, ns db.Namespace) db.Namespace {
-	if cfg.Driver == "postgres" {
+	if f := sqlx.DialectOf(cfg.Driver).Features(); f.Schemas {
 		schema := ns.Schema
 		if schema == "" {
-			schema = "public"
+			schema = f.DefaultSchema
 		}
 		return db.Namespace{Database: key.Database, Schema: schema}
 	}
@@ -153,7 +154,7 @@ func (t *consoleTab) qualified(q string) db.Namespace {
 	switch {
 	case q == "":
 		return t.defNS
-	case t.dialect == sqlx.Postgres:
+	case t.dialect.Features().Schemas:
 		return db.Namespace{Database: t.defNS.Database, Schema: q}
 	}
 	return db.Namespace{Database: q}
@@ -176,7 +177,7 @@ func (t *consoleTab) tableCandidates(snap *meta.Snapshot, qualifier string) []co
 	}
 	for _, ns := range snap.Catalog.Namespaces {
 		name := ns.Database
-		if t.dialect == sqlx.Postgres {
+		if t.dialect.Features().Schemas {
 			name = ns.Schema
 		}
 		out = append(out, complete.Candidate{Text: sqlx.QuoteIfNeeded(name, t.dialect), Label: name, Kind: complete.Namespace})

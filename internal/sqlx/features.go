@@ -22,6 +22,9 @@ type Features struct {
 	ILike          bool       // ILIKE is available
 	RowLocator     RowLocator // how to find a row without a key
 	DefaultSchema  string     // schema used when none is given; "" is the current user
+	// FallbackDatabase is the database a database-scoped connection without
+	// one configured opens.
+	FallbackDatabase string
 }
 
 var features = [...]Features{
@@ -32,10 +35,12 @@ var features = [...]Features{
 	Postgres: {
 		Databases: true, Schemas: true, ServerReadOnly: true, TxDDL: true, AbortedTx: true,
 		SchemaTools: true, ILike: true, RowLocator: LocateRowID, DefaultSchema: "public",
+		FallbackDatabase: "postgres",
 	},
 	SQLServer: {
 		Databases: true, Schemas: true, TxDDL: true,
 		RowLocator: LocateAllColumns, DefaultSchema: "dbo",
+		FallbackDatabase: "master",
 	},
 	Oracle: {
 		Schemas: true, DDLCommits: true, RowLocator: LocateRowID,

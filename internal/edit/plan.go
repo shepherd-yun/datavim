@@ -147,11 +147,14 @@ func (tg Target) insert(name string, cols []db.ColumnInfo, r *Row) string {
 			vals = append(vals, sqlx.Literal(d, c.DatabaseType, r.Values[i]))
 		}
 	}
-	switch {
-	case len(names) > 0:
+	if len(names) > 0 {
 		return "INSERT INTO " + name + " (" + strings.Join(names, ", ") + ") VALUES (" + strings.Join(vals, ", ") + ")"
-	case d == sqlx.Postgres:
-		return "INSERT INTO " + name + " DEFAULT VALUES"
 	}
-	return "INSERT INTO " + name + " () VALUES ()"
+	//exhaustive:enforce
+	switch d {
+	case sqlx.MySQL:
+		return "INSERT INTO " + name + " () VALUES ()"
+	case sqlx.Postgres, sqlx.SQLServer, sqlx.Oracle:
+	}
+	return "INSERT INTO " + name + " DEFAULT VALUES"
 }

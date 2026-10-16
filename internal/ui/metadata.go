@@ -9,6 +9,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/meta"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 )
 
@@ -26,20 +27,22 @@ type metaLoadedMsg struct {
 type metaStaleMsg struct{ conn, database string }
 
 // metaKeyFor is the key of the catalog that covers database on conn: a
-// MySQL catalog covers the server, a PostgreSQL one a single database.
+// MySQL catalog covers the server, a PostgreSQL or SQL Server one a single
+// database, an Oracle one the connection's service.
 func metaKeyFor(b Backend, conn, database string) (meta.Key, bool) {
 	cfg, ok := b.Connection(conn)
 	if !ok {
 		return meta.Key{}, false
 	}
-	if cfg.Driver != "postgres" {
+	f := sqlx.DialectOf(cfg.Driver).Features()
+	if !f.Databases || !f.Schemas {
 		return meta.Key{Conn: conn}, true
 	}
 	if database == "" {
 		database = cfg.Database
 	}
 	if database == "" {
-		database = "postgres"
+		database = f.FallbackDatabase
 	}
 	return meta.Key{Conn: conn, Database: database}, true
 }

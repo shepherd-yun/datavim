@@ -3,6 +3,7 @@ package ui
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
@@ -40,7 +41,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			{keymap.OpenConsole, "Open console"},
 			{keymap.Refresh, "Refresh"},
 		}
-		if cfg, _ := m.backend.Connection(n.Conn); n.Kind == tree.KindSchema || cfg.Driver != "postgres" {
+		if cfg, _ := m.backend.Connection(n.Conn); n.Kind == tree.KindSchema || !sqlx.DialectOf(cfg.Driver).Features().Schemas {
 			entries = append(entries, entry{keymap.ImportData, "Create table from file…"})
 		}
 		if _, problem := m.compareSideOf(n); problem == "" {

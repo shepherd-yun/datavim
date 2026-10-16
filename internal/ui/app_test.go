@@ -23,11 +23,17 @@ import (
 func newTestModel(t *testing.T) (*Model, *fakeBackend) {
 	t.Helper()
 	b := newFakeBackend()
+	return newTestModelWith(t, b), b
+}
+
+// newTestModelWith is newTestModel on backend b.
+func newTestModelWith(t *testing.T, b *fakeBackend) *Model {
+	t.Helper()
 	m := New(b, newFakeStore(), config.Settings{PageSize: 2, MaxColumnWidth: 40, MaxRows: 10})
 	m.whichKeyDelay = 0
 	m.timings = timings{}
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	return m, b
+	return m
 }
 
 // drain runs cmd and feeds every resulting message back into m.

@@ -96,7 +96,7 @@ func containsFilter(d sqlx.Dialect, col, s string) string {
 // wildcards; it ignores case like containsFilter.
 func likeFilter(d sqlx.Dialect, col, pattern string) string {
 	lit := sqlx.Literal(d, "TEXT", db.Value{Text: pattern})
-	if d == sqlx.Postgres {
+	if d.Features().ILike {
 		return sqlx.QuoteIdent(d, col) + "::text ILIKE " + lit
 	}
 	return sqlx.QuoteIdent(d, col) + " LIKE " + lit

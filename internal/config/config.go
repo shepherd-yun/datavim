@@ -106,7 +106,7 @@ type settingsFile struct {
 	Theme map[string]string `toml:"theme"`
 }
 
-var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432}
+var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432, "sqlserver": 1433, "oracle": 1521}
 
 type connectionsFile struct {
 	Connections []Connection `toml:"connection"`
@@ -190,7 +190,7 @@ func Normalize(c Connection) (Connection, error) {
 	}
 	port, ok := defaultPorts[c.Driver]
 	if !ok {
-		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql or postgres)", c.Name, c.Driver)
+		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql, postgres, sqlserver or oracle)", c.Name, c.Driver)
 	}
 	if c.Port == 0 {
 		c.Port = port

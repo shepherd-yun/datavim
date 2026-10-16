@@ -68,6 +68,10 @@ func (t *structureTab) startEdit() tea.Cmd {
 	if t.ed != nil || t.editLoading {
 		return nil
 	}
+	if p := schemaToolsProblem(t.backend, t.conn); p != "" {
+		t.setStatus(p, true)
+		return nil
+	}
 	if cfg, _ := t.backend.Connection(t.conn); cfg.IsReadOnly() {
 		t.setStatus(readOnlyHint, true)
 		return nil

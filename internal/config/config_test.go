@@ -86,7 +86,7 @@ func TestLoadErrors(t *testing.T) {
 	}{
 		{"missing name", "[[connection]]\ndriver = \"mysql\"\n", "name is required"},
 		{"duplicate", "[[connection]]\nname=\"a\"\ndriver=\"mysql\"\n[[connection]]\nname=\"a\"\ndriver=\"mysql\"\n", "duplicate"},
-		{"unknown driver", "[[connection]]\nname=\"a\"\ndriver=\"oracle\"\n", "unknown driver"},
+		{"unknown driver", "[[connection]]\nname=\"a\"\ndriver=\"sqlite\"\n", "unknown driver"},
 		{"bad env", "[[connection]]\nname=\"a\"\ndriver=\"mysql\"\nenv=\"qa\"\n", "unknown env"},
 		{"unknown key", "[[connection]]\nname=\"a\"\ndriver=\"mysql\"\nhostt=\"x\"\n", "hostt"},
 		{"syntax", "[[connection]]\nname = \n", "connections.toml:2:"},
@@ -206,6 +206,12 @@ func TestNormalize(t *testing.T) {
 	}
 	if c.Port != 5432 || c.Host != "localhost" || c.Env != EnvDev {
 		t.Fatalf("defaults not applied: %+v", c)
+	}
+	for driver, port := range map[string]int{"sqlserver": 1433, "oracle": 1521} {
+		c, err := Normalize(Connection{Name: "x", Driver: driver})
+		if err != nil || c.Port != port {
+			t.Errorf("%s: port %d, err %v", driver, c.Port, err)
+		}
 	}
 	for _, bad := range []Connection{
 		{Driver: "mysql"},
@@ -357,7 +363,7 @@ func TestUpdateConnectionErrors(t *testing.T) {
 	if _, err := UpdateConnection(dir, "local", Connection{Name: "last", Driver: "mysql"}); err == nil || !strings.Contains(err.Error(), "already exists") {
 		t.Errorf("rename onto another connection: %v", err)
 	}
-	if _, err := UpdateConnection(dir, "local", Connection{Name: "local", Driver: "oracle"}); err == nil {
+	if _, err := UpdateConnection(dir, "local", Connection{Name: "local", Driver: "sqlite"}); err == nil {
 		t.Error("invalid connection")
 	}
 	data, _ := os.ReadFile(filepath.Join(dir, "connections.toml"))

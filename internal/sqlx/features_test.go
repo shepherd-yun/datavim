@@ -8,8 +8,8 @@ func TestFeatures(t *testing.T) {
 		want Features
 	}{
 		{MySQL, Features{Databases: true, ServerReadOnly: true, DDLCommits: true, SchemaTools: true, RowLocator: LocateAllColumns}},
-		{Postgres, Features{Databases: true, Schemas: true, ServerReadOnly: true, TxDDL: true, AbortedTx: true, SchemaTools: true, ILike: true, RowLocator: LocateRowID, DefaultSchema: "public"}},
-		{SQLServer, Features{Databases: true, Schemas: true, TxDDL: true, RowLocator: LocateAllColumns, DefaultSchema: "dbo"}},
+		{Postgres, Features{Databases: true, Schemas: true, ServerReadOnly: true, TxDDL: true, AbortedTx: true, SchemaTools: true, ILike: true, RowLocator: LocateRowID, DefaultSchema: "public", FallbackDatabase: "postgres"}},
+		{SQLServer, Features{Databases: true, Schemas: true, TxDDL: true, RowLocator: LocateAllColumns, DefaultSchema: "dbo", FallbackDatabase: "master"}},
 		{Oracle, Features{Schemas: true, DDLCommits: true, RowLocator: LocateRowID}},
 	}
 	for _, tt := range tests {

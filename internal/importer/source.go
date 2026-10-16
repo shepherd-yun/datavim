@@ -1,6 +1,9 @@
 // Package importer reads CSV, TSV and XLSX files and writes their rows into
 // a table: cell conversion, type inference for a new table, batched INSERTs
 // in one transaction. It does no terminal IO.
+//
+// Import is a schema tool (sqlx.Features.SchemaTools): it only runs on MySQL
+// and PostgreSQL, so its engine checks pick one of the two.
 package importer
 
 import (

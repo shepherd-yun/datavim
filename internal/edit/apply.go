@@ -92,7 +92,7 @@ func (e *DDLError) Unwrap() error { return e.Err }
 // one by one and stop at the first failure. Unlike Apply it does not count
 // rows: DDL reports none.
 func ApplyDDL(ctx context.Context, s db.Querier, d sqlx.Dialect, stmts []string) error {
-	tx := d == sqlx.Postgres
+	tx := d.Features().TxDDL
 	if tx {
 		if _, err := s.Exec(ctx, sqlx.BeginSQL(d)); err != nil {
 			return fmt.Errorf("begin transaction: %w", err)

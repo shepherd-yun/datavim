@@ -47,11 +47,14 @@ func ChooseKey(d sqlx.Dialect, cols []db.Column, idx []db.Index, view bool) Key 
 			return Key{Kind: UniqueKey, Columns: ix.Columns}
 		}
 	}
-	switch {
-	case d == sqlx.Postgres && !view:
-		return Key{Kind: RowID}
-	case d == sqlx.MySQL:
+	switch d.Features().RowLocator {
+	case sqlx.LocateRowID:
+		if !view {
+			return Key{Kind: RowID}
+		}
+	case sqlx.LocateAllColumns:
 		return Key{Kind: AllColumns}
+	case sqlx.LocateNone:
 	}
 	return Key{}
 }

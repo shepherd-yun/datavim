@@ -36,6 +36,9 @@ func TestChooseKey(t *testing.T) {
 		{"postgres table", sqlx.Postgres, plain, nil, false, Key{Kind: RowID}},
 		{"postgres view", sqlx.Postgres, plain, nil, true, Key{}},
 		{"mysql without key", sqlx.MySQL, plain, nil, true, Key{Kind: AllColumns}},
+		{"sqlserver without key", sqlx.SQLServer, plain, nil, false, Key{Kind: AllColumns}},
+		{"oracle table", sqlx.Oracle, plain, nil, false, Key{Kind: RowID}},
+		{"oracle view", sqlx.Oracle, plain, nil, true, Key{}},
 	} {
 		if got := ChooseKey(c.d, c.cols, c.idx, c.view); !cmp.Equal(got, c.want) {
 			t.Errorf("%s: got %+v, want %+v", c.name, got, c.want)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/importer"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
 )
@@ -46,13 +47,17 @@ func (m *Model) importFromNode() tea.Cmd {
 	if n == nil {
 		return nil
 	}
+	if p := schemaToolsProblem(m.backend, n.Conn); p != "" {
+		m.setStatus(p, true)
+		return nil
+	}
 	cfg, _ := m.backend.Connection(n.Conn)
 	var ref db.TableRef
 	create := false
 	switch {
 	case n.Kind == tree.KindTable:
 		ref = n.TableRef()
-	case n.Kind == tree.KindSchema, n.Kind == tree.KindDatabase && cfg.Driver != "postgres":
+	case n.Kind == tree.KindSchema, n.Kind == tree.KindDatabase && !sqlx.DialectOf(cfg.Driver).Features().Schemas:
 		ref, create = db.TableRef{Namespace: n.NS}, true
 	case n.Kind == tree.KindDatabase:
 		m.setStatus("PostgreSQL creates tables in a schema · select a schema", true)
@@ -66,7 +71,7 @@ func (m *Model) importFromNode() tea.Cmd {
 		return nil
 	}
 	// A namespace-only ref joins as "app.", hence the TrimSuffix.
-	where := strings.TrimSuffix(strings.Join(tableParts(cfg.Driver, ref), "."), ".")
+	where := strings.TrimSuffix(strings.Join(tableParts(sqlx.DialectOf(cfg.Driver), ref), "."), ".")
 	title := "Import into " + where
 	if create {
 		title = "Create a table in " + where

@@ -64,10 +64,11 @@ type exportDoneMsg struct {
 	err  error
 }
 
-// tableParts is the INSERT target: database.table (MySQL) or schema.table (PostgreSQL).
-func tableParts(driver string, ref db.TableRef) []string {
+// tableParts is the INSERT target: database.table on engines without
+// schemas (MySQL), else schema.table.
+func tableParts(d sqlx.Dialect, ref db.TableRef) []string {
 	ns := ref.Database
-	if driver == "postgres" {
+	if d.Features().Schemas {
 		ns = ref.Schema
 	}
 	if ns == "" {
@@ -82,7 +83,7 @@ func (t *dataTab) exportSource() exportSrc {
 	q.rowID = false
 	return exportSrc{
 		rs: t.grid.Result(), name: t.ref.Name, conn: t.conn, ref: t.ref, query: q, whole: true,
-		opts: export.Options{Driver: cfg.Driver, Table: tableParts(cfg.Driver, t.ref)},
+		opts: export.Options{Driver: cfg.Driver, Table: tableParts(sqlx.DialectOf(cfg.Driver), t.ref)},
 	}
 }
 

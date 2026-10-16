@@ -4,6 +4,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
@@ -17,12 +18,15 @@ type compareSourceMsg struct{ src, tgt compareSide }
 func (m *Model) compareSideOf(n *tree.Node) (compareSide, string) {
 	cfg, _ := m.backend.Connection(n.Conn)
 	s := compareSide{conn: n.Conn, driver: cfg.Driver}
+	if p := schemaToolsProblem(m.backend, n.Conn); p != "" {
+		return s, p
+	}
 	switch {
 	case n.Kind == tree.KindTable:
 		s.ref = n.TableRef()
 	case n.Kind == tree.KindView:
 		return s, "views are not compared"
-	case n.Kind == tree.KindSchema, n.Kind == tree.KindDatabase && cfg.Driver != "postgres":
+	case n.Kind == tree.KindSchema, n.Kind == tree.KindDatabase && !sqlx.DialectOf(cfg.Driver).Features().Schemas:
 		s.ref = db.TableRef{Namespace: n.NS}
 	case n.Kind == tree.KindDatabase:
 		return s, "PostgreSQL compares schemas · select a schema"

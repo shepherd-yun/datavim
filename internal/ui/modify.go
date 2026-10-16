@@ -46,8 +46,22 @@ func (m *Model) tableBlocked(conn string, ref db.TableRef, self tab) string {
 	return ""
 }
 
+// schemaToolsProblem says why conn's engine has no Modify Table, compare
+// or import yet ("" when it has them).
+func schemaToolsProblem(b Backend, conn string) string {
+	cfg, _ := b.Connection(conn)
+	if d := sqlx.DialectOf(cfg.Driver); !d.Features().SchemaTools {
+		return "not supported for " + d.Driver() + " yet"
+	}
+	return ""
+}
+
 // modifyTable opens the structure of ref and starts modifying it.
 func (m *Model) modifyTable(conn string, ref db.TableRef) tea.Cmd {
+	if p := schemaToolsProblem(m.backend, conn); p != "" {
+		m.setStatus(p, true)
+		return nil
+	}
 	if cfg, _ := m.backend.Connection(conn); cfg.IsReadOnly() {
 		m.setStatus(readOnlyHint, true)
 		return nil

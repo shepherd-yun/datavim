@@ -201,7 +201,8 @@ type Table struct {
 }
 
 // New starts modifying s, a table as MetaReader.TableSchema read it on an
-// engine of dialect d.
+// engine of dialect d. Modify Table is a schema tool: d is MySQL or
+// PostgreSQL (sqlx.Features.SchemaTools), so it checks for one of the two.
 func New(s db.TableSchema, d sqlx.Dialect) *Table {
 	t := &Table{before: s, quote: func(n string) string { return n }}
 	if d == sqlx.Postgres {

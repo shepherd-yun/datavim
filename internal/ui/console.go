@@ -487,7 +487,7 @@ func (t *consoleTab) trackTx(results []runner.Result, sessionLost bool) {
 	for _, r := range results {
 		if r.Err != nil {
 			// PostgreSQL refuses everything but ROLLBACK after an error in a transaction.
-			if t.inTx && t.dialect == sqlx.Postgres && !db.IsConnLost(r.Err) {
+			if t.inTx && t.dialect.Features().AbortedTx && !db.IsConnLost(r.Err) {
 				t.txAborted = true
 			}
 			continue
@@ -510,8 +510,8 @@ func (t *consoleTab) trackTx(results []runner.Result, sessionLost bool) {
 		case sqlx.Write:
 			t.txWrites++
 		case sqlx.DDL:
-			if t.dialect == sqlx.MySQL {
-				t.log("MySQL committed the open transaction implicitly before " + oneLine(r.SQL))
+			if t.dialect.Features().DDLCommits {
+				t.log(engineName(t.dialect) + " committed the open transaction implicitly before " + oneLine(r.SQL))
 				t.clearTx()
 			} else {
 				t.txWrites++
@@ -951,7 +951,7 @@ func openSession(ctx context.Context, b Backend, conn string, ns db.Namespace) (
 		return nil, err
 	}
 	cfg, _ := b.Connection(conn)
-	if q := scopeSQL(cfg.Driver, c.Dialect(), ns); q != "" {
+	if q := scopeSQL(sqlx.DialectOf(cfg.Driver), c.Dialect(), ns); q != "" {
 		if _, err := s.Exec(octx, q); err != nil {
 			_ = s.Close()
 			return nil, err
@@ -961,14 +961,40 @@ func openSession(ctx context.Context, b Backend, conn string, ns db.Namespace) (
 }
 
 // scopeSQL points a fresh session at the namespace the console was opened on.
-func scopeSQL(driver string, d db.Dialect, ns db.Namespace) string {
-	switch {
-	case driver == "mysql" && ns.Database != "":
-		return "USE " + d.QuoteIdent(ns.Database)
-	case driver == "postgres" && ns.Schema != "":
-		return "SET search_path TO " + d.QuoteIdent(ns.Schema) + ", public"
+// q quotes the names; SQL Server cannot change a session's default schema.
+func scopeSQL(d sqlx.Dialect, q db.Dialect, ns db.Namespace) string {
+	//exhaustive:enforce
+	switch d {
+	case sqlx.MySQL, sqlx.SQLServer:
+		if ns.Database != "" {
+			return "USE " + q.QuoteIdent(ns.Database)
+		}
+	case sqlx.Postgres:
+		if ns.Schema != "" {
+			return "SET search_path TO " + q.QuoteIdent(ns.Schema) + ", public"
+		}
+	case sqlx.Oracle:
+		if ns.Schema != "" {
+			return "ALTER SESSION SET CURRENT_SCHEMA = " + q.QuoteIdent(ns.Schema)
+		}
 	}
 	return ""
+}
+
+// engineName is the product name of d for messages.
+func engineName(d sqlx.Dialect) string {
+	//exhaustive:enforce
+	switch d {
+	case sqlx.MySQL:
+		return "MySQL"
+	case sqlx.Postgres:
+		return "PostgreSQL"
+	case sqlx.SQLServer:
+		return "SQL Server"
+	case sqlx.Oracle:
+		return "Oracle"
+	}
+	return d.Driver()
 }
 
 func (t *consoleTab) shutdown() func() {

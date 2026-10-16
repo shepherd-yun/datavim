@@ -18,6 +18,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/importer"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
@@ -119,7 +120,9 @@ func (t *importTab) SetSize(w, h int)              { t.width, t.height = max(w, 
 func (t *importTab) setStatus(s string, isErr bool) { t.status, t.statusErr = s, isErr }
 
 // refName is the table as people write it: app.users.
-func (t *importTab) refName() string { return strings.Join(tableParts(t.driver, t.ref), ".") }
+func (t *importTab) refName() string {
+	return strings.Join(tableParts(sqlx.DialectOf(t.driver), t.ref), ".")
+}
 
 type importLoadedMsg struct {
 	tabID, gen int
