@@ -339,6 +339,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s := d.session
 			return m, func() tea.Msg { _ = s.Close(); return nil }
 		}
+		if d, ok := msg.(redisRunMsg); ok && d.session != nil {
+			s := d.session
+			return m, func() tea.Msg { _ = s.Close(); return nil }
+		}
 	}
 	return m, nil
 }

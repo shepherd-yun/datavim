@@ -707,3 +707,13 @@ func TestRedisConsoleOpenCellKeyMissing(t *testing.T) {
 		t.Fatalf("status %q", m.status)
 	}
 }
+
+func TestRedisLateRunResultForClosedTabClosesSession(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	s := &fakeRedisSession{r: r}
+	_, cmd := m.Update(redisRunMsg{tabID: 99, session: s})
+	drainAll(t, m, cmd)
+	if !s.closed {
+		t.Fatal("the session of a closed console was left open")
+	}
+}
