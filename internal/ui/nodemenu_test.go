@@ -29,6 +29,43 @@ func TestActionMenuOnTable(t *testing.T) {
 	}
 }
 
+func TestActionMenuRunsAnEntryByItsKeys(t *testing.T) {
+	m, _ := newTestModel(t)
+	selectNode(t, m, "local", "app", "users")
+	press(t, m, "a")
+	wantScreen(t, m, "T", "Truncate table")
+	press(t, m, "T")
+	wantScreen(t, m, "Truncate table users")
+	press(t, m, "esc")
+
+	// a two-key entry waits for its second key
+	press(t, m, "a")
+	press(t, m, "d")
+	wantScreen(t, m, "Drop table")
+	press(t, m, "d")
+	wantScreen(t, m, "Drop table users", "Type users to confirm")
+}
+
+func TestActionMenuFollowsRemappedKeys(t *testing.T) {
+	m, _ := newTestModel(t)
+	k, err := keymap.Custom("", map[keymap.Context]map[string]string{keymap.Tree: {"T": "", "X": "table.truncate"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	m.SetKeymap(k)
+	selectNode(t, m, "local", "app", "users")
+	press(t, m, "a")
+	press(t, m, "X")
+	wantScreen(t, m, "Truncate table users")
+}
+
+func TestTruncateKeyInTheTree(t *testing.T) {
+	m, _ := newTestModel(t)
+	selectNode(t, m, "local", "app", "users")
+	press(t, m, "T")
+	wantScreen(t, m, "Truncate table users")
+}
+
 func TestActionMenuOnView(t *testing.T) {
 	m, _ := newTestModel(t)
 	selectNode(t, m, "local", "app", "active")

@@ -93,8 +93,11 @@ All notable changes to this project are documented here. The format follows
 - `dd` on a table or view in the tree drops it once you type its name, and `r` renames it;
   open tabs of the table close or follow the new name. Read-only connections, a console with
   an open transaction and unsaved edits of the table block both.
-- `a` in the tree opens a menu of what you can do with the selected node and runs the entry
-  you pick. Truncating a table lives there (bind `table.truncate` in `keymap.toml` for a key).
+- `a` in the tree opens a menu of what you can do with the selected node. An entry's key, the
+  one it has in the tree (`e`, `dd`, `T`, `yy`, `<Space>c` …), runs it right away; `j` / `k`
+  and `Enter` pick one too.
+- `T` in the tree truncates the selected table (type its name to confirm); rebind
+  `table.truncate` in `keymap.toml` to change it.
 - Schema compare: `m` in the tree marks a table, a MySQL database or a PostgreSQL schema as the
   source and `C` compares it with the selected node of the same kind, on the same connection or
   another one of the same engine. The diff tab lists the differing columns, indexes, comments

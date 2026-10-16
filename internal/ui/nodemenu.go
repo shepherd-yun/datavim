@@ -1,8 +1,6 @@
 package ui
 
 import (
-	"fmt"
-
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
@@ -14,7 +12,8 @@ import (
 type menuItem struct {
 	action keymap.Action
 	desc   string
-	keys   string // as bound in the keymap; empty when unbound
+	keys   string   // as bound in the keymap; empty when unbound
+	seq    []string // the keys as key events read; nil when unbound
 }
 
 // menuPickedMsg runs the action picked in the actions menu.
@@ -96,23 +95,25 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 	}
 	items := make([]menuItem, len(entries))
 	for i, e := range entries {
-		items[i] = menuItem{action: e.a, desc: e.desc, keys: m.keys.KeysFor(keymap.Tree, e.a)}
+		seq := m.keys.SeqFor(keymap.Tree, e.a)
+		items[i] = menuItem{action: e.a, desc: e.desc, keys: m.keys.Display(seq), seq: seq}
 	}
 	return items
 }
 
-// openNodeMenu shows the actions menu of the selected node.
+// openNodeMenu shows the actions menu of the selected node: an entry's
+// keys run it, the same keys that run it in the tree.
 func (m *Model) openNodeMenu() {
 	n := m.tree.Selected()
 	if n == nil {
 		return
 	}
 	items := m.nodeMenu(n)
-	labels := make([]string, len(items))
+	entries := make([]overlay.MenuItem, len(items))
 	for i, it := range items {
-		labels[i] = fmt.Sprintf("%-10s %s", it.keys, it.desc)
+		entries[i] = overlay.MenuItem{Keys: it.seq, Label: it.keys, Desc: it.desc}
 	}
-	m.overlay = overlay.NewChoice(n.Name, labels, func(i int) tea.Msg {
+	m.overlay = overlay.NewMenu(n.Name, entries, func(i int) tea.Msg {
 		return menuPickedMsg{action: items[i].action}
 	})
 }

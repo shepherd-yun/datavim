@@ -338,12 +338,21 @@ func (k *Keymap) Help(ctx Context) []HelpEntry {
 // KeysFor is how the first binding of a reads in ctx ("<space>w"), or ""
 // when nothing in ctx triggers it. Hints use it so they follow keymap.toml.
 func (k *Keymap) KeysFor(ctx Context, a Action) string {
-	for _, b := range k.scope(ctx) {
-		if b.Action == a {
-			return k.Display(b.Keys)
-		}
+	if seq := k.SeqFor(ctx, a); seq != nil {
+		return k.Display(seq)
 	}
 	return ""
+}
+
+// SeqFor is the first key sequence bound to a in ctx (or globally) as key
+// events read, or nil.
+func (k *Keymap) SeqFor(ctx Context, a Action) []string {
+	for _, b := range k.scope(ctx) {
+		if b.Action == a {
+			return b.Keys
+		}
+	}
+	return nil
 }
 
 // OwnKey is how the first one-key binding of a in ctx itself (globals

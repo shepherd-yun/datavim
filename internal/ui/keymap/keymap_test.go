@@ -200,7 +200,7 @@ func TestConnectionEditBindings(t *testing.T) {
 	if a, res := k.Resolve(Tree, []string{"d", "d"}); a != DeleteNode || res != Matched {
 		t.Errorf("dd: %q %v", a, res)
 	}
-	for key, want := range map[string]Action{"a": NodeActions, "r": RenameTable} {
+	for key, want := range map[string]Action{"a": NodeActions, "r": RenameTable, "T": TruncateTable} {
 		if a, res := k.Resolve(Tree, []string{key}); a != want || res != Matched {
 			t.Errorf("%s = %v %v, want %v", key, a, res, want)
 		}

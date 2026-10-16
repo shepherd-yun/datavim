@@ -66,6 +66,7 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("e"), EditNode, "Edit connection / modify table"},
 		Binding{Tree, keys("d", "d"), DeleteNode, "Delete connection / drop table or view"},
 		Binding{Tree, keys("r"), RenameTable, "Rename table or view"},
+		Binding{Tree, keys("T"), TruncateTable, "Truncate table"},
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
 		Binding{Tree, keys("m"), MarkCompare, "Mark as the compare source"},
 		Binding{Tree, keys("C"), Compare, "Compare with the marked node"},

@@ -165,7 +165,8 @@ picks the workspace by directory.
 | `e` | Structure: modify the table — `i` edits a field (`h` / `l` pick it), `o` adds a column or index, `dd` deletes, `u` / `U` undo, `<Space>w` previews and runs the ALTER |
 | `dd` | Tree: delete the selected connection, or drop the selected table or view (type its name to confirm); on a column or index, stage its drop in Modify Table |
 | `r` | Tree: rename the selected table or view |
-| `a` | Tree: actions on the selected node, including truncating a table |
+| `T` | Tree: truncate the selected table (type its name to confirm) |
+| `a` | Tree: actions on the selected node; press an entry's key to run it (the same key as in the tree) |
 | `m` / `C` | Tree: mark a table, MySQL database or PostgreSQL schema as the compare source / compare it with the selected one (without a mark, pick the source from the loaded metadata) |
 | `x` / `]c` `[c` / `~` | Diff tab: include or skip a change in the script / next, previous change / swap source and target |
 | `<Space>w` | Diff tab: write the picked changes as a script into a new console on the target (nothing runs until you run it there) |

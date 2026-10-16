@@ -13,7 +13,7 @@ func Contexts() []Context {
 
 // KnownActions maps every bindable action to its description.
 func KnownActions() map[Action]string {
-	out := map[Action]string{Quit: "Quit", TruncateTable: "Truncate table"}
+	out := map[Action]string{Quit: "Quit"}
 	for _, b := range DefaultBindings() {
 		if out[b.Action] == "" {
 			out[b.Action] = b.Desc
