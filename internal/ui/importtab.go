@@ -2,9 +2,11 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -16,6 +18,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/importer"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
@@ -585,4 +588,233 @@ func (t *importTab) progressText() string { return "" }
 // stripStyle drops ANSI styling, so a selected line is drawn in one style.
 func stripStyle(s string) string { return ansi.Strip(s) }
 
-func (t *importTab) Handle(keymap.Action) tea.Cmd { return nil }
+func (t *importTab) Handle(a keymap.Action) tea.Cmd {
+	t.setStatus("", false)
+	if t.phase != importIdle {
+		t.setStatus(joinHints("importing…", keyHint(t.keys, keymap.Global, keymap.Cancel, "cancels")), false)
+		return nil
+	}
+	switch a {
+	case keymap.Down:
+		t.move(1)
+	case keymap.Up:
+		t.move(-1)
+	case keymap.Top:
+		t.cursor[t.section] = 0
+	case keymap.Bottom:
+		t.move(t.sectionLen(t.section))
+	case keymap.HalfPageDown:
+		t.move(max(t.height/4, 1))
+	case keymap.HalfPageUp:
+		t.move(-max(t.height/4, 1))
+	case keymap.NextSection:
+		t.section = (t.section + 1) % sectionCount
+	case keymap.PrevSection:
+		t.section = (t.section + sectionCount - 1) % sectionCount
+	case keymap.EditCell:
+		return t.edit()
+	case keymap.ImportToggle:
+		t.toggle()
+	case keymap.ImportAll:
+		t.pickAll(true)
+	case keymap.ImportNone:
+		t.pickAll(false)
+	case keymap.ImportType:
+		return t.editType()
+	case keymap.Refresh:
+		return t.load()
+	case keymap.SubmitEdits:
+		return t.submit()
+	}
+	return nil
+}
+
+func (t *importTab) move(delta int) {
+	t.cursor[t.section] = textutil.Clamp(t.cursor[t.section]+delta, 0, max(t.sectionLen(t.section)-1, 0))
+}
+
+// mapCursor is the mapping row under the cursor; outside the mapping it
+// says where the mapping keys work.
+func (t *importTab) mapCursor() (int, bool) {
+	if t.section != secMapping {
+		t.setStatus(joinHints("this works in the mapping", keyHint(t.keys, keymap.Import, keymap.NextSection, "moves between sections")), true)
+		return 0, false
+	}
+	if len(t.rows) == 0 {
+		return 0, false
+	}
+	return textutil.Clamp(t.cursor[secMapping], 0, len(t.rows)-1), true
+}
+
+func (t *importTab) toggle() {
+	i, ok := t.mapCursor()
+	if !ok {
+		return
+	}
+	if !t.create && t.rows[i].target < 0 {
+		t.setStatus(joinHints("no target column", keyHint(t.keys, keymap.Import, keymap.EditCell, "picks one")), true)
+		return
+	}
+	t.rows[i].picked = !t.rows[i].picked
+}
+
+func (t *importTab) pickAll(on bool) {
+	if _, ok := t.mapCursor(); !ok {
+		return
+	}
+	for i := range t.rows {
+		if t.create || t.rows[i].target >= 0 {
+			t.rows[i].picked = on
+		}
+	}
+}
+
+// setTarget maps file column i to table column target (-1: skip). A target
+// held by a skipped row moves over; one held by a picked row is refused.
+func (t *importTab) setTarget(i, target int) {
+	if target < 0 {
+		t.rows[i] = mapRow{target: -1}
+		return
+	}
+	for j, r := range t.rows {
+		if j == i || r.target != target {
+			continue
+		}
+		if r.picked {
+			t.setStatus(t.cols[target].Name+" already takes "+t.sample.Header[j], true)
+			return
+		}
+		t.rows[j].target = -1
+	}
+	t.rows[i] = mapRow{picked: true, target: target}
+}
+
+func (t *importTab) edit() tea.Cmd {
+	switch t.section {
+	case secSource:
+		s := t.settings()
+		return t.editSetting(s[textutil.Clamp(t.cursor[secSource], 0, len(s)-1)])
+	case secMapping:
+		return t.editMapping()
+	}
+	return nil
+}
+
+func nonEmpty(s string) error {
+	if strings.TrimSpace(s) == "" {
+		return errors.New("enter a value")
+	}
+	return nil
+}
+
+// ask opens a prompt whose answer set applies to the tab.
+func (t *importTab) ask(title, label, initial string, validate func(string) error, set func(t *importTab, v string) tea.Cmd) tea.Cmd {
+	id := t.id
+	var opts []overlay.PromptOption
+	if validate != nil {
+		opts = append(opts, overlay.WithValidate(validate))
+	}
+	return openOverlay(overlay.NewPrompt(title, label, initial, func(v string) tea.Msg {
+		return importEditMsg{tabID: id, apply: func(t *importTab) tea.Cmd { return set(t, v) }}
+	}, opts...))
+}
+
+func next[T comparable](list []T, cur T) T {
+	return list[(slices.Index(list, cur)+1)%len(list)]
+}
+
+func (t *importTab) editSetting(s importSetting) tea.Cmd {
+	switch s {
+	case setFile:
+		return t.ask("Import", "File:", t.path, nonEmpty, func(t *importTab, v string) tea.Cmd {
+			p := expandHome(strings.TrimSpace(v), t.home)
+			if abs, err := filepath.Abs(p); err == nil {
+				p = abs
+			}
+			t.path, t.opts.Format, t.opts.Sheet = p, importer.DefaultOptions(p).Format, ""
+			return t.load()
+		})
+	case setFormat:
+		t.opts.Format, t.opts.Sheet = next([]importer.Format{importer.CSV, importer.TSV, importer.XLSX}, t.opts.Format), ""
+		return t.load()
+	case setDelimiter:
+		t.opts.Delimiter = next([]rune{',', ';', '|'}, t.opts.Delimiter)
+		return t.load()
+	case setEncoding:
+		t.opts.Encoding = next([]importer.Encoding{importer.UTF8, importer.GBK}, t.opts.Encoding)
+		return t.load()
+	case setHeader:
+		return t.ask("Header", "Row with the column names (0: none):", strconv.Itoa(t.opts.HeaderRow), func(v string) error {
+			if n, err := strconv.Atoi(strings.TrimSpace(v)); err != nil || n < 0 {
+				return errors.New("enter a row number, 0 for none")
+			}
+			return nil
+		}, func(t *importTab, v string) tea.Cmd {
+			t.opts.HeaderRow, _ = strconv.Atoi(strings.TrimSpace(v))
+			return t.load()
+		})
+	case setSheet:
+		id, path := t.id, t.path
+		return func() tea.Msg {
+			names, err := importer.Sheets(path)
+			if err != nil {
+				return importEditMsg{tabID: id, apply: func(t *importTab) tea.Cmd { t.setStatus(errorText(err), true); return nil }}
+			}
+			return openOverlayMsg{overlay: overlay.NewPicker("Sheet", names, func(i int) tea.Msg {
+				return importEditMsg{tabID: id, apply: func(t *importTab) tea.Cmd { t.opts.Sheet = names[i]; return t.load() }}
+			})}
+		}
+	case setNull:
+		return t.ask("Empty cells", "Text that means NULL:", t.null, nil, func(t *importTab, v string) tea.Cmd {
+			t.null = v
+			return t.load()
+		})
+	case setTable:
+		return t.ask("New table", "Name:", t.ref.Name, nonEmpty, func(t *importTab, v string) tea.Cmd {
+			t.ref.Name = strings.TrimSpace(v)
+			return nil
+		})
+	}
+	return nil
+}
+
+func (t *importTab) editMapping() tea.Cmd {
+	i, ok := t.mapCursor()
+	if !ok {
+		return nil
+	}
+	id, header := t.id, t.sample.Header[i]
+	if t.create {
+		return t.ask("Column "+header, "Name:", t.rows[i].name, nonEmpty, func(t *importTab, v string) tea.Cmd {
+			t.rows[i].name = strings.TrimSpace(v)
+			return nil
+		})
+	}
+	labels, idx := []string{"(skip)"}, []int{-1}
+	for j, c := range t.cols {
+		if c.Generated == "" {
+			labels, idx = append(labels, c.Name+"  "+c.Type), append(idx, j)
+		}
+	}
+	return openOverlay(overlay.NewPicker(header+" →", labels, func(k int) tea.Msg {
+		return importEditMsg{tabID: id, apply: func(t *importTab) tea.Cmd { t.setTarget(i, idx[k]); return nil }}
+	}))
+}
+
+func (t *importTab) editType() tea.Cmd {
+	if !t.create {
+		t.setStatus(joinHints("the table's types are fixed", keyHint(t.keys, keymap.Import, keymap.ImportType, "changes types of a new table")), true)
+		return nil
+	}
+	i, ok := t.mapCursor()
+	if !ok {
+		return nil
+	}
+	return t.ask("Column "+t.rows[i].name, "Type:", t.rows[i].typ, nonEmpty, func(t *importTab, v string) tea.Cmd {
+		t.rows[i].typ = strings.TrimSpace(v)
+		return nil
+	})
+}
+
+// submit comes in Task 11; until then it does nothing.
+func (t *importTab) submit() tea.Cmd { return nil }

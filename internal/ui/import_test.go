@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/shepherd-yun/sqlvim/internal/db"
 )
 
 // importFixture writes name into a temp directory that becomes the export
@@ -131,5 +133,115 @@ func TestImportInNodeMenu(t *testing.T) {
 	press(t, m, "a")
 	if !strings.Contains(screen(m), "Create table from file") {
 		t.Fatalf("database menu:\n%s", screen(m))
+	}
+}
+
+func TestImportMappingKeys(t *testing.T) {
+	m, _ := newTestModel(t)
+	importFixture(t, m, "orders.csv", ordersCSV)
+	it := openImportOn(t, m, "orders.csv", "local", "app", "users")
+	// cursor starts on the first mapping row (ID → id)
+	press(t, m, "x")
+	if it.rows[0].picked {
+		t.Fatal("x did not skip ID")
+	}
+	if !strings.Contains(screen(m), "app.users needs values for id") {
+		t.Fatalf("missing id not shown:\n%s", screen(m))
+	}
+	press(t, m, "x")
+	press(t, m, "j", "j", "x") // note has no target
+	if it.rows[2].picked || !strings.Contains(screen(m), "no target column") {
+		t.Fatalf("note: %+v\n%s", it.rows[2], screen(m))
+	}
+	press(t, m, "A")
+	if it.rows[0].picked || it.rows[1].picked {
+		t.Fatal("A left columns picked")
+	}
+	press(t, m, "a")
+	if !it.rows[0].picked || !it.rows[1].picked || it.rows[2].picked {
+		t.Fatalf("a: %+v", it.rows)
+	}
+	// i on note: pick name → refused while Name holds it
+	press(t, m, "i")
+	typeText(t, m, "name")
+	press(t, m, "enter")
+	if it.rows[2].target != -1 || !strings.Contains(screen(m), "name already takes Name") {
+		t.Fatalf("conflict: %+v\n%s", it.rows[2], screen(m))
+	}
+	// skip Name, then note can take name
+	press(t, m, "k", "x", "j", "i")
+	typeText(t, m, "name")
+	press(t, m, "enter")
+	if it.rows[2].target != 1 || !it.rows[2].picked || it.rows[1].target != -1 {
+		t.Fatalf("steal: %+v", it.rows)
+	}
+}
+
+func TestImportSourceSettings(t *testing.T) {
+	m, _ := newTestModel(t)
+	importFixture(t, m, "orders.csv", "ID;Name\n1;Alice\n")
+	it := openImportOn(t, m, "orders.csv", "local", "app", "users")
+	if len(it.sample.Header) != 1 {
+		t.Fatalf("header %v", it.sample.Header)
+	}
+	press(t, m, "[") // to Source; rows: file, format, delimiter, encoding, header, null
+	press(t, m, "j", "j", "enter")
+	if it.opts.Delimiter != ';' || len(it.sample.Header) != 2 || !it.rows[1].picked {
+		t.Fatalf("delimiter %q, header %v, rows %+v", it.opts.Delimiter, it.sample.Header, it.rows)
+	}
+	press(t, m, "j", "j", "enter") // header row prompt
+	press(t, m, "ctrl+u")
+	typeText(t, m, "0")
+	press(t, m, "enter")
+	if it.opts.HeaderRow != 0 || it.sample.Header[0] != "column_1" {
+		t.Fatalf("no header: %+v", it.sample.Header)
+	}
+}
+
+func TestImportNewTableEdits(t *testing.T) {
+	m, _ := newTestModel(t)
+	importFixture(t, m, "orders.csv", ordersCSV)
+	it := openImportOn(t, m, "orders.csv", "local", "app")
+	press(t, m, "i", "ctrl+u")
+	typeText(t, m, "order_id")
+	press(t, m, "enter", "t", "ctrl+u")
+	typeText(t, m, "int")
+	press(t, m, "enter")
+	if it.rows[0].name != "order_id" || it.rows[0].typ != "int" {
+		t.Fatalf("row %+v", it.rows[0])
+	}
+	if !strings.Contains(screen(m), "order_id  int") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+func TestImportPreviewNamesTheBadCell(t *testing.T) {
+	m, _ := newTestModel(t)
+	importFixture(t, m, "orders.csv", "ID,Name\n1,a\nabc,b\n")
+	openImportOn(t, m, "orders.csv", "local", "app", "users")
+	press(t, m, "]", "j") // the preview, second row
+	if !strings.Contains(screen(m), `line 3, ID: "abc" is not an integer`) || !strings.Contains(screen(m), "✗ abc") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+func TestImportSkipsGeneratedAndAutoIncrement(t *testing.T) {
+	m, b := newTestModel(t)
+	b.conn.setColumns([]db.Column{
+		{Name: "id", Type: "bigint", PrimaryKey: true, AutoIncrement: true},
+		{Name: "name", Type: "text", Nullable: true},
+		{Name: "upper_name", Type: "text", Nullable: true, Generated: "upper(name)"},
+	})
+	importFixture(t, m, "p.csv", "name,upper_name\na,A\n")
+	it := openImportOn(t, m, "p.csv", "local", "app", "users")
+	if it.rows[1].picked || it.rows[1].target != -1 {
+		t.Fatalf("generated column mapped: %+v", it.rows[1])
+	}
+	if strings.Contains(screen(m), "needs values for") {
+		t.Fatalf("auto-increment reported missing:\n%s", screen(m))
+	}
+	press(t, m, "j", "i")
+	if strings.Contains(screen(m), "upper_name  text") {
+		t.Fatalf("generated column offered:\n%s", screen(m))
 	}
 }
