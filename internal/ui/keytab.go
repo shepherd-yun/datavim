@@ -151,6 +151,7 @@ type keyTab struct {
 	pageSize int
 
 	info    rdb.KeyInfo
+	starred bool // shown as ★ in the header
 	loaded  bool
 	loading bool
 	err     string
@@ -194,8 +195,10 @@ func newKeyTab(id int, b Backend, keys *keymap.Keymap, conn string, n int, key s
 
 // openKey opens (or shows) the detail tab of key in db n of conn.
 func (m *Model) openKey(conn string, n int, key string) tea.Cmd {
-	return m.showTab(keyTabKey(conn, n, key), func(id int) tab {
-		return newKeyTab(id, m.backend, m.keys, conn, n, key, m.settings)
+	return m.openTab(keyTabKey(conn, n, key), recentKey(conn, n, key), func(id int) tab {
+		t := newKeyTab(id, m.backend, m.keys, conn, n, key, m.settings)
+		t.starred = m.isFavorite(favKey{conn: conn, db: n, key: key})
+		return t
 	})
 }
 
@@ -536,8 +539,16 @@ func (t *keyTab) Handle(a keymap.Action) tea.Cmd {
 	return nil
 }
 
-// header is "hash · TTL 3593s · 12 fields · 1.2 KB · listpack".
+// header is "hash · TTL 3593s · 12 fields · 1.2 KB · listpack", after a
+// ★ when the key is starred.
 func (t *keyTab) header() string {
+	if t.starred {
+		return "★ " + t.plainHeader()
+	}
+	return t.plainHeader()
+}
+
+func (t *keyTab) plainHeader() string {
 	if !t.loaded {
 		return "loading…"
 	}

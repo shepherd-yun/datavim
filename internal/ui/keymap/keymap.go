@@ -117,6 +117,8 @@ const (
 	OpenCellKey       Action = "redis.open_cell_key"
 	ServerInfo        Action = "redis.server"
 	KillClient        Action = "redis.killclient"
+	ToggleFavorite    Action = "redis.favorite"
+	Favorites         Action = "redis.favorites"
 	FilterEqual       Action = "filter.eq"
 	FilterNotEqual    Action = "filter.ne"
 	FilterContains    Action = "filter.contains"

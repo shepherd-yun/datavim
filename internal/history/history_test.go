@@ -161,3 +161,71 @@ func TestRecentIsPruned(t *testing.T) {
 		t.Fatalf("kept %d, newest %q, oldest %q", len(got), got[0].Name, got[len(got)-1].Name)
 	}
 }
+
+func TestFavorites(t *testing.T) {
+	s, err := Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	base := time.Date(2026, 10, 17, 9, 0, 0, 0, time.UTC)
+	a := Favorite{Conn: "cache", Database: "0", Name: "a", Time: base}
+	b := Favorite{Conn: "cache", Database: "0", Name: "b", Time: base.Add(time.Minute)}
+	names := func() []string {
+		t.Helper()
+		fs, err := s.Favorites()
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []string
+		for _, f := range fs {
+			out = append(out, f.Name)
+		}
+		return out
+	}
+	for _, f := range []Favorite{a, b} {
+		if err := s.AddFavorite(f); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := fmt.Sprint(names()); got != "[b a]" {
+		t.Fatalf("favorites = %s", got)
+	}
+	a.Time = base.Add(2 * time.Minute)
+	if err := s.AddFavorite(a); err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(names()); got != "[a b]" {
+		t.Fatalf("after re-adding a: %s", got)
+	}
+	fs, _ := s.Favorites()
+	if fs[0].Conn != "cache" || fs[0].Database != "0" || !fs[0].Time.Equal(a.Time) {
+		t.Fatalf("favorite = %+v", fs[0])
+	}
+	if err := s.RemoveFavorite(Favorite{Conn: "cache", Database: "0", Name: "a"}); err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(names()); got != "[b]" {
+		t.Fatalf("after removing a: %s", got)
+	}
+}
+
+func TestFavoritesUpgrade(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "state.db")
+	s, err := Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.db.Exec(`DROP TABLE favorites`); err != nil {
+		t.Fatal(err)
+	}
+	_ = s.Close()
+	s, err = Open(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = s.Close() }()
+	if err := s.AddFavorite(Favorite{Conn: "c", Database: "0", Name: "k", Time: time.Now()}); err != nil {
+		t.Fatal(err)
+	}
+}

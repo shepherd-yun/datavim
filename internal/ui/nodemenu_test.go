@@ -161,7 +161,7 @@ func TestRedisNodeMenu(t *testing.T) {
 		t.Fatalf("folder: %q", got)
 	}
 	pressAll(t, m, "j")
-	if got := menuDescs(m); !slices.Equal(got, []string{"Open", "Rename key", "Delete key", "Copy name"}) {
+	if got := menuDescs(m); !slices.Equal(got, []string{"Open", "Star / unstar", "Rename key", "Delete key", "Copy name"}) {
 		t.Fatalf("key: %q", got)
 	}
 	pressAll(t, m, "a")

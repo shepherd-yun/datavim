@@ -46,6 +46,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 	case tree.KindRedisKey:
 		entries = []entry{
 			{keymap.Open, "Open"},
+			{keymap.ToggleFavorite, "Star / unstar"},
 			{keymap.RenameTable, "Rename key"},
 			{keymap.DeleteNode, "Delete key"},
 		}

@@ -544,10 +544,11 @@ func (s *fakeSession) Close() error {
 }
 
 type fakeStore struct {
-	mu      sync.Mutex
-	entries []history.Entry
-	drafts  map[string]string
-	recents []history.Recent // oldest first
+	mu        sync.Mutex
+	entries   []history.Entry
+	drafts    map[string]string
+	recents   []history.Recent   // oldest first
+	favorites []history.Favorite // oldest first
 }
 
 func newFakeStore() *fakeStore { return &fakeStore{drafts: map[string]string{}} }
@@ -708,6 +709,31 @@ func (s *fakeStore) AddRecent(r history.Recent) error {
 	})
 	s.recents = append(s.recents, r)
 	return nil
+}
+
+func (s *fakeStore) AddFavorite(f history.Favorite) error {
+	_ = s.RemoveFavorite(f)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.favorites = append(s.favorites, f)
+	return nil
+}
+
+func (s *fakeStore) RemoveFavorite(f history.Favorite) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.favorites = slices.DeleteFunc(s.favorites, func(o history.Favorite) bool {
+		return o.Conn == f.Conn && o.Database == f.Database && o.Name == f.Name
+	})
+	return nil
+}
+
+func (s *fakeStore) Favorites() ([]history.Favorite, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	out := slices.Clone(s.favorites)
+	slices.Reverse(out)
+	return out, nil
 }
 
 func (s *fakeStore) Recent(limit int) ([]history.Recent, error) {

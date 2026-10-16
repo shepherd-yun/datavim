@@ -10,6 +10,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/history"
+	"github.com/shepherd-yun/sqlvim/internal/rcmd"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 )
 
@@ -47,9 +48,19 @@ var recentKinds = map[string]string{
 	history.RecentStructure: "struct",
 	history.RecentConsole:   "console",
 	history.RecentFile:      "file",
+	history.RecentRedisKey:  "key",
+}
+
+// recentKey is the recent entry of key in db n of conn: the key quoted, so
+// that binary bytes survive the TEXT column.
+func recentKey(conn string, n int, key string) history.Recent {
+	return history.Recent{Kind: history.RecentRedisKey, Conn: conn, Database: strconv.Itoa(n), Name: rcmd.Quote(key)}
 }
 
 func recentLabel(r history.Recent) string {
+	if r.Kind == history.RecentRedisKey {
+		return fmt.Sprintf("%-8s %s  %s", recentKinds[r.Kind], storedKeyLabel(r.Conn, r.Database, r.Name), r.Time.Local().Format("01-02 15:04"))
+	}
 	parts := []string{r.Database, r.Schema, r.Name}
 	if r.Kind == history.RecentFile {
 		parts = parts[:2] // Name is the file, shown first
@@ -101,6 +112,8 @@ func (m *Model) openRecent(r history.Recent) tea.Cmd {
 		return m.openConsole(r.Conn, ns)
 	case history.RecentFile:
 		return m.openFile(r.Conn, ns, r.Name)
+	case history.RecentRedisKey:
+		return m.openStoredKey(r.Conn, r.Database, r.Name)
 	}
 	return nil
 }
@@ -120,6 +133,8 @@ func (m *Model) touchActive() tea.Cmd {
 		r.Kind = history.RecentStructure
 	case *redisConsoleTab:
 		r.Kind, r.Database = history.RecentConsole, strconv.Itoa(x.openDB)
+	case *keyTab:
+		r = recentKey(x.conn, x.db, x.key)
 	case *consoleTab:
 		r.Kind, r.Name = history.RecentConsole, ""
 		if x.file != nil {

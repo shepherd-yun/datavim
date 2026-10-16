@@ -23,7 +23,16 @@ const (
 	RecentStructure = "structure"
 	RecentConsole   = "console"
 	RecentFile      = "file" // Name holds the file's absolute path
+	// RecentRedisKey is a Redis key: Database is the db number, Name the
+	// key as rcmd.Quote wrote it.
+	RecentRedisKey = "rkey"
 )
+
+// Favorite is a starred Redis key; Name is rcmd.Quote(key).
+type Favorite struct {
+	Conn, Database, Name string
+	Time                 time.Time
+}
 
 // Recent is a table, structure view or console the user opened.
 type Recent struct {
@@ -71,6 +80,13 @@ var schema = []string{
 		name        TEXT NOT NULL,
 		at          INTEGER NOT NULL,
 		PRIMARY KEY (kind, conn, db_name, schema_name, name)
+	)`,
+	`CREATE TABLE IF NOT EXISTS favorites (
+		conn    TEXT NOT NULL,
+		db_name TEXT NOT NULL,
+		name    TEXT NOT NULL,
+		at      INTEGER NOT NULL,
+		PRIMARY KEY (conn, db_name, name)
 	)`,
 }
 
@@ -193,6 +209,40 @@ func (s *Store) Recent(limit int) ([]Recent, error) {
 		}
 		r.Time = time.UnixMilli(at).UTC()
 		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// AddFavorite stars f, or moves an existing star to f.Time.
+func (s *Store) AddFavorite(f Favorite) error {
+	_, err := s.db.Exec(`INSERT INTO favorites (conn, db_name, name, at) VALUES (?, ?, ?, ?)
+		ON CONFLICT (conn, db_name, name) DO UPDATE SET at = excluded.at`,
+		f.Conn, f.Database, f.Name, f.Time.UnixMilli())
+	return err
+}
+
+// RemoveFavorite unstars the key f names (Conn, Database, Name).
+func (s *Store) RemoveFavorite(f Favorite) error {
+	_, err := s.db.Exec(`DELETE FROM favorites WHERE conn = ? AND db_name = ? AND name = ?`, f.Conn, f.Database, f.Name)
+	return err
+}
+
+// Favorites returns every starred key, newest first.
+func (s *Store) Favorites() ([]Favorite, error) {
+	rows, err := s.db.Query(`SELECT conn, db_name, name, at FROM favorites ORDER BY at DESC, rowid DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []Favorite
+	for rows.Next() {
+		var f Favorite
+		var at int64
+		if err := rows.Scan(&f.Conn, &f.Database, &f.Name, &at); err != nil {
+			return nil, err
+		}
+		f.Time = time.UnixMilli(at).UTC()
+		out = append(out, f)
 	}
 	return out, rows.Err()
 }

@@ -102,7 +102,8 @@ type Model struct {
 	statusErr bool
 
 	timings     timings
-	shownTab    int // the ID of the tab syncShown last saw on screen; 0: none
+	favorites   map[favKey]bool // the starred Redis keys
+	shownTab    int             // the ID of the tab syncShown last saw on screen; 0: none
 	lastSearch  string
 	searchConn  string // connection the global search is scoped to
 	searchKey   meta.Key
@@ -173,7 +174,7 @@ func (m *Model) title() string {
 	return "sqlvim — " + m.workspace
 }
 
-func (m *Model) Init() tea.Cmd { return nil }
+func (m *Model) Init() tea.Cmd { return loadFavorites(m.store) }
 
 func (m *Model) View() tea.View {
 	v := tea.NewView(m.render())
@@ -275,6 +276,12 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.recentLoaded(msg)
 	case recentPickedMsg:
 		return m, m.openRecent(msg.r)
+	case favoritesLoadedMsg:
+		m.favoritesLoaded(msg)
+	case favoritesListedMsg:
+		m.favoritesListed(msg)
+	case favoritePickedMsg:
+		return m, m.openStoredKey(msg.f.Conn, msg.f.Database, msg.f.Name)
 	case overlay.PasswordSubmittedMsg:
 		return m, m.passwordSubmitted(msg)
 	case passphraseMsg:
@@ -538,6 +545,10 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		m.overlay = overlay.NewConnForm(m.keys)
 	case keymap.OpenKey:
 		return m.openKeyPrompt()
+	case keymap.Favorites:
+		return m.showFavorites()
+	case keymap.ToggleFavorite:
+		return m.toggleFavoriteHere()
 	case keymap.ServerInfo:
 		conn := m.contextConn()
 		if conn == "" || !isRedis(m.backend, conn) {

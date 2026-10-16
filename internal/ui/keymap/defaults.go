@@ -28,6 +28,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(LeaderToken, "l"), Locate, "Locate the current tab in the tree"},
 		{Global, keys(LeaderToken, "k"), OpenKey, "Open a Redis key by name"},
 		{Global, keys(LeaderToken, "i"), ServerInfo, "Redis server: status, slow log, clients"},
+		{Global, keys(LeaderToken, "F"), Favorites, "Starred Redis keys"},
 	}
 	for _, c := range []struct{ key, format, desc string }{
 		{"t", "tsv", "Copy as TSV"},
@@ -71,6 +72,7 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("T"), TruncateTable, "Truncate table"},
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
 		Binding{Tree, keys("o"), NewKey, "New Redis key"},
+		Binding{Tree, keys("*"), ToggleFavorite, "Star / unstar the Redis key"},
 		Binding{Tree, keys("m"), MarkCompare, "Mark as the compare source"},
 		Binding{Tree, keys("C"), Compare, "Compare with the marked node"},
 		Binding{Tree, keys("I"), ImportData, "Import data from a file (database or schema: into a new table)"},
@@ -169,6 +171,7 @@ func DefaultBindings() []Binding {
 		Binding{RedisKey, keys("t"), SetTTL, "Set or remove the TTL"},
 		Binding{RedisKey, keys("r"), RenameTable, "Rename the key"},
 		Binding{RedisKey, keys("D"), DeleteNode, "Delete the key"},
+		Binding{RedisKey, keys("*"), ToggleFavorite, "Star / unstar the Redis key"},
 	)
 
 	b = append(b, gridBindings(RedisResults)...)
