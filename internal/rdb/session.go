@@ -66,7 +66,7 @@ func OpenSession(ctx context.Context, cfg Config) (Session, error) {
 		return c, err
 	}
 	s.rc = redis.NewClient(opt)
-	if err := s.rc.Ping(ctx).Err(); err != nil {
+	if err := s.rc.Ping(ctx).Err(); err != nil && !IsNoPerm(err) { // NOPERM: connected, PING not allowed
 		_ = s.rc.Close()
 		return nil, wrap(ctx, err)
 	}
@@ -126,7 +126,7 @@ func (s *session) Ping(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if r.Kind == KindError {
+	if r.Kind == KindError && !strings.HasPrefix(r.Str, "NOPERM") { // the server answered: alive
 		return errors.New(r.Str)
 	}
 	return nil

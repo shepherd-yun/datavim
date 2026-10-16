@@ -109,20 +109,26 @@ type client struct {
 
 // Open builds the pool and checks it with PING and INFO server. go-redis
 // falls back to RESP2 by itself when the server rejects HELLO (Redis 5).
+// An ACL user may not be allowed PING or INFO (+@read has neither): a
+// NOPERM reply still means the connection and the login work, and the
+// version is then "".
 func Open(ctx context.Context, cfg Config) (Client, error) {
 	opt := options(cfg)
 	opt.PoolSize = 4
 	c := &client{rc: redis.NewClient(opt), db: cfg.DB}
-	if err := c.rc.Ping(ctx).Err(); err != nil {
+	if err := c.rc.Ping(ctx).Err(); err != nil && !IsNoPerm(err) {
 		_ = c.rc.Close()
 		return nil, wrap(ctx, err)
 	}
 	info, err := c.rc.Info(ctx, "server").Result()
-	if err != nil {
+	switch {
+	case IsNoPerm(err):
+	case err != nil:
 		_ = c.rc.Close()
 		return nil, wrap(ctx, err)
+	default:
+		c.version = infoValue(info, "redis_version")
 	}
-	c.version = infoValue(info, "redis_version")
 	return c, nil
 }
 
@@ -159,12 +165,21 @@ func (c *client) DBSize(ctx context.Context) (int64, error) {
 
 // Databases asks CONFIG GET databases for the count; when CONFIG is not
 // allowed it lists the dbs INFO keyspace has keys in, plus the configured one.
+// An ACL user allowed neither (+@read) sees the configured db, counted
+// with DBSIZE.
 func (c *client) Databases(ctx context.Context) ([]DBInfo, error) {
 	ks, err := c.rc.Info(ctx, "keyspace").Result()
-	if err != nil {
+	if err != nil && !IsNoPerm(err) {
 		return nil, wrap(ctx, err)
 	}
 	keys := parseKeyspace(ks)
+	if err != nil {
+		n, err := c.rc.DBSize(ctx).Result()
+		if err != nil {
+			return nil, wrap(ctx, err)
+		}
+		keys[c.db] = n
+	}
 	n := 0
 	if m, err := c.rc.ConfigGet(ctx, "databases").Result(); err == nil {
 		n, _ = strconv.Atoi(m["databases"])

@@ -990,3 +990,44 @@ func TestKeySizesSkipsGone(t *testing.T) {
 		}
 	})
 }
+
+// An ACL user with only +@read (no PING, no INFO), as the README suggests
+// for production, can still connect and browse.
+func TestOpenReadOnlyACL(t *testing.T) {
+	ctx := context.Background()
+	s := start(t, "redis:7")
+	r := raw(t, s, 0, "")
+	if err := r.Do(ctx, "acl", "setuser", "reader", "on", ">pw", "~*", "+@read").Err(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { r.Do(context.Background(), "acl", "deluser", "reader") })
+	r.Set(ctx, "k", "v", 0)
+	c := open(t, s, Config{User: "reader", Password: "pw"})
+	if v := c.Version(); v != "" {
+		t.Fatalf("Version() = %q, want empty (INFO not allowed)", v)
+	}
+	if got := scanAll(t, c, "*"); got["k"] != "string" {
+		t.Fatalf("scan = %v", got)
+	}
+	// neither INFO keyspace nor CONFIG GET: the configured db, counted with DBSIZE
+	if dbs, err := c.Databases(ctx); err != nil || len(dbs) != 1 || dbs[0] != (DBInfo{0, 1}) {
+		t.Fatalf("Databases = %v, %v", dbs, err)
+	}
+	if _, err := c.Info(ctx); !IsNoPerm(err) {
+		t.Fatalf("Info err = %v, want NOPERM", err)
+	}
+	if _, err := Open(ctx, Config{Host: s.host, Port: s.port, User: "reader", Password: "wrong"}); err == nil {
+		t.Fatal("wrong password connected")
+	}
+	sess, err := OpenSession(ctx, Config{Host: s.host, Port: s.port, User: "reader", Password: "pw"})
+	if err != nil {
+		t.Fatalf("console session: %v", err)
+	}
+	defer func() { _ = sess.Close() }()
+	if err := sess.Ping(ctx); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+	if rep, err := sess.Do(ctx, "GET", "k"); err != nil || rep.Str != "v" {
+		t.Fatalf("GET: %+v %v", rep, err)
+	}
+}
