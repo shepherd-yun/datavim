@@ -26,6 +26,8 @@ const (
 	RedisResults Context = "redis_results"
 	// RedisServer is a redis connection's server tab (status, slow log, clients).
 	RedisServer Context = "redis_server"
+	// RedisBigKeys is a big-key analysis tab.
+	RedisBigKeys Context = "redis_bigkeys"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
 	// only one-key bindings count there.
 	Popup Context = "popup"
@@ -119,6 +121,7 @@ const (
 	KillClient        Action = "redis.killclient"
 	ToggleFavorite    Action = "redis.favorite"
 	Favorites         Action = "redis.favorites"
+	BigKeys           Action = "redis.bigkeys"
 	FilterEqual       Action = "filter.eq"
 	FilterNotEqual    Action = "filter.ne"
 	FilterContains    Action = "filter.contains"

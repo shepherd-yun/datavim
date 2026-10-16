@@ -153,11 +153,11 @@ func menuDescs(m *Model) []string {
 
 func TestRedisNodeMenu(t *testing.T) {
 	m, _ := newKeyModel(t, "user:1", "solo")
-	if got := menuDescs(m); !slices.Equal(got, []string{"Open console", "Server status", "New key", "Filter keys", "Refresh", "Delete keys…", "Copy name"}) {
+	if got := menuDescs(m); !slices.Equal(got, []string{"Open console", "Server status", "New key", "Filter keys", "Analyze big keys…", "Refresh", "Delete keys…", "Copy name"}) {
 		t.Fatalf("db: %q", got)
 	}
 	pressAll(t, m, "j")
-	if got := menuDescs(m); !slices.Equal(got, []string{"New key", "Delete keys under user:…", "Copy name"}) {
+	if got := menuDescs(m); !slices.Equal(got, []string{"New key", "Analyze big keys…", "Delete keys under user:…", "Copy name"}) {
 		t.Fatalf("folder: %q", got)
 	}
 	pressAll(t, m, "j")

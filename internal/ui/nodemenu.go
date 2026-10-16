@@ -35,12 +35,14 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			{keymap.ServerInfo, "Server status"},
 			{keymap.NewKey, "New key"},
 			{keymap.FilterPrompt, "Filter keys"},
+			{keymap.BigKeys, "Analyze big keys…"},
 			{keymap.Refresh, "Refresh"},
 			{keymap.DeleteNode, "Delete keys…"},
 		}
 	case tree.KindKeyFolder:
 		entries = []entry{
 			{keymap.NewKey, "New key"},
+			{keymap.BigKeys, "Analyze big keys…"},
 			{keymap.DeleteNode, "Delete keys under " + rcmd.Escape(n.Key) + "…"},
 		}
 	case tree.KindRedisKey:

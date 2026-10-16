@@ -73,6 +73,7 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
 		Binding{Tree, keys("o"), NewKey, "New Redis key"},
 		Binding{Tree, keys("*"), ToggleFavorite, "Star / unstar the Redis key"},
+		Binding{Tree, keys("B"), BigKeys, "Find the biggest Redis keys"},
 		Binding{Tree, keys("m"), MarkCompare, "Mark as the compare source"},
 		Binding{Tree, keys("C"), Compare, "Compare with the marked node"},
 		Binding{Tree, keys("I"), ImportData, "Import data from a file (database or schema: into a new table)"},
@@ -188,6 +189,9 @@ func DefaultBindings() []Binding {
 		Binding{RedisServer, keys("]"), NextSection, "Next section"},
 		Binding{RedisServer, keys("d", "d"), KillClient, "Kill the client (clients list)"},
 	)
+
+	b = append(b, gridBindings(RedisBigKeys)...)
+	b = append(b, Binding{RedisBigKeys, keys("enter"), Open, "Open the key"})
 
 	b = append(b, vertical(Import)...)
 	b = append(b,

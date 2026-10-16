@@ -8,7 +8,7 @@ import (
 
 // Contexts lists the tables keymap.toml may contain.
 func Contexts() []Context {
-	return []Context{Global, Tree, Grid, Structure, Console, Results, Diff, Import, RedisKey, RedisResults, RedisServer, Popup}
+	return []Context{Global, Tree, Grid, Structure, Console, Results, Diff, Import, RedisKey, RedisResults, RedisServer, RedisBigKeys, Popup}
 }
 
 // KnownActions maps every bindable action to its description.

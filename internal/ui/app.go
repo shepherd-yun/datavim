@@ -278,6 +278,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.openRecent(msg.r)
 	case favoritesLoadedMsg:
 		m.favoritesLoaded(msg)
+	case bigKeysChosenMsg:
+		return m, m.bigKeysChosen(msg)
+	case bigKeysRunMsg:
+		return m, m.runBigKeys(msg)
 	case favoritesListedMsg:
 		m.favoritesListed(msg)
 	case favoritePickedMsg:
@@ -671,6 +675,8 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 		return m.deleteNode()
 	case keymap.NewKey:
 		return m.newKeyPrompt()
+	case keymap.BigKeys:
+		return m.startBigKeys()
 	case keymap.FilterPrompt:
 		return m.filterKeysPrompt()
 	case keymap.FilterClear:
@@ -812,6 +818,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 	case serverInfoMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case serverLoadedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
+	case bigKeysStepMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	default:
 		return
