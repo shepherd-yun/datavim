@@ -21,6 +21,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/editor"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/textview"
@@ -114,11 +115,13 @@ type redisConsoleTab struct {
 	messages     []string
 
 	session    rdb.Session
+	tx         rcmd.TxState
 	hadSession bool // a session was open before: a new one is a reconnect
 	running    bool
 	cancel     context.CancelFunc
 	started    time.Time
 	gen        int
+	pending    []rcmd.Line // the batch being checked or waiting for confirmation
 	attempt    []rcmd.Line // the latest batch, kept to retry it once a password is entered
 	runText    string      // the editor text the batch came from
 	clipPaste  *vimedit.ClipboardPaste
@@ -343,11 +346,41 @@ func (t *redisConsoleTab) run(lines []rcmd.Line) tea.Cmd {
 		return nil
 	}
 	t.runText = t.editor.Value()
-	for _, l := range lines {
-		if _, err := rcmd.Split(l.Text); err != nil {
-			return t.refuse(l, splitStatus(l, err))
+	t.gen++
+	t.pending = lines
+	if rcmd.NeedsDBSize(lines) {
+		id, gen, b, conn, n := t.id, t.gen, t.backend, t.conn, t.db
+		return func() tea.Msg {
+			ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+			defer cancel()
+			msg := redisDBSizeMsg{tabID: id, gen: gen}
+			msg.err = withRedis(ctx, b, conn, n, func(c rdb.Client) error {
+				var err error
+				msg.size, err = c.DBSize(ctx)
+				return err
+			})
+			return msg
 		}
 	}
+	return t.guard(-1)
+}
+
+// guard checks the pending batch (spec §7.2) with dbSize from DBSIZE (-1
+// when the batch has no KEYS), then runs it, asks to confirm it, or
+// refuses all of it. The connection's settings are read now, so
+// :set noreadonly applies at once.
+func (t *redisConsoleTab) guard(dbSize int64) tea.Cmd {
+	lines := t.pending
+	cfg, _ := t.backend.Connection(t.conn)
+	p := rcmd.Policy{ReadOnly: cfg.IsReadOnly(), Prod: cfg.Env == config.EnvProd, Conn: t.conn, DBSize: dbSize, InMulti: t.tx.InMulti}
+	switch chk := rcmd.Guard(lines, p); chk.Verdict {
+	case rcmd.Reject:
+		t.pending = nil
+		return t.refuse(lines[chk.Line], chk.Reason)
+	case rcmd.Confirm:
+		return openOverlay(overlay.NewConfirm(chk.Title, chk.Body, chk.Expect, redisConfirmMsg{tabID: t.id, gen: t.gen}))
+	}
+	t.pending = nil
 	return t.execute(lines)
 }
 
@@ -361,7 +394,11 @@ func splitStatus(l rcmd.Line, err error) string {
 
 // refuse reports a batch that does not run because of line l.
 func (t *redisConsoleTab) refuse(l rcmd.Line, reason string) tea.Cmd {
-	t.log("✗ " + oneLine(l.Text) + " — " + reason)
+	cmd := "line " + strconv.Itoa(l.Num)
+	if args, err := rcmd.Split(l.Text); err == nil {
+		cmd = oneLine(rcmd.Redact(args))
+	}
+	t.log("✗ " + cmd + " — " + reason)
 	t.setStatus(reason, true)
 	t.gotoLine(l)
 	return nil
@@ -453,6 +490,22 @@ func (t *redisConsoleTab) Update(msg tea.Msg) tea.Cmd {
 		}
 	case redisRunMsg:
 		return t.done(m)
+	case redisConfirmMsg:
+		if m.gen == t.gen && t.pending != nil && !t.running {
+			lines := t.pending
+			t.pending = nil
+			return t.execute(lines)
+		}
+	case redisDBSizeMsg:
+		if m.gen != t.gen || t.pending == nil {
+			return nil
+		}
+		if m.err != nil {
+			l := t.pending[0]
+			t.pending = nil
+			return t.refuse(l, "cannot check DBSIZE before KEYS: "+m.err.Error())
+		}
+		return t.guard(m.size)
 	case clipboardTextMsg:
 		req := t.clipPaste
 		t.clipPaste = nil
@@ -774,3 +827,17 @@ func (t *redisConsoleTab) statusLine() string {
 	}
 	return theme.Muted.Render(textutil.Fit(hint, t.width))
 }
+
+type (
+	// redisConfirmMsg runs the batch waiting for confirmation.
+	redisConfirmMsg struct{ tabID, gen int }
+	// redisDBSizeMsg is DBSIZE, looked up before a batch with KEYS.
+	redisDBSizeMsg struct {
+		tabID, gen int
+		size       int64
+		err        error
+	}
+)
+
+func (m redisConfirmMsg) TabID() int { return m.tabID }
+func (m redisDBSizeMsg) TabID() int  { return m.tabID }

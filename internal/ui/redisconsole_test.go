@@ -389,3 +389,142 @@ func TestRedisConsoleScalarText(t *testing.T) {
 		t.Fatalf("text %q", c.text)
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }
+
+func TestRedisConsoleReadOnly(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{ReadOnly: boolPtr(true)})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "GET a\nSET a 1", keymap.RunAll)
+	if !strings.Contains(c.status, ":set noreadonly") || len(sent(b)) != 0 {
+		t.Fatalf("status %q, sent %q", c.status, sent(b))
+	}
+	if line, _ := c.editor.Cursor(); line != 1 {
+		t.Fatalf("cursor on line %d, want the refused one", line)
+	}
+	if !strings.Contains(strings.Join(c.messages, "\n"), "✗ SET a 1 — ") {
+		t.Fatalf("messages %q", c.messages)
+	}
+}
+
+func TestRedisConsoleMultiBypass(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{ReadOnly: boolPtr(true)})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "MULTI\nSET a 1\nEXEC", keymap.RunAll)
+	if len(sent(b)) != 0 {
+		t.Fatalf("batch sent %q", sent(b))
+	}
+	for _, line := range []string{"MULTI", "SET a 1", "DISCARD"} {
+		runR(t, m, c, line, keymap.RunStatement)
+	}
+	if got := sent(b); !slices.Equal(got, []string{"MULTI", "DISCARD"}) {
+		t.Fatalf("sent %q", got)
+	}
+}
+
+func TestRedisConsoleProdConfirm(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{Env: config.EnvProd, ReadOnly: boolPtr(false)})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "SET a 1", keymap.RunStatement)
+	if m.overlay == nil || !strings.Contains(screen(m), "Write to PROD") {
+		t.Fatalf("no confirmation:\n%s", screen(m))
+	}
+	pressAll(t, m, "esc")
+	if len(sent(b)) != 0 {
+		t.Fatalf("sent %q after esc", sent(b))
+	}
+	runR(t, m, c, "SET a 1", keymap.RunStatement)
+	pressAll(t, m, "y")
+	if got := sent(b); !slices.Equal(got, []string{"SET a 1"}) {
+		t.Fatalf("sent %q", got)
+	}
+	runR(t, m, c, "GET a", keymap.RunStatement)
+	if m.overlay != nil {
+		t.Fatal("a read asks for confirmation")
+	}
+}
+
+func TestRedisConsoleDangerProd(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{Env: config.EnvProd, ReadOnly: boolPtr(false)})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "FLUSHDB", keymap.RunStatement)
+	if !strings.Contains(screen(m), "PROD · Dangerous command") {
+		t.Fatalf("no confirmation:\n%s", screen(m))
+	}
+	pressAll(t, m, "y", "enter")
+	if len(sent(b)) != 0 {
+		t.Fatal("y alone ran FLUSHDB on prod")
+	}
+	pressAll(t, m, "backspace")
+	typeText(t, m, "cache")
+	pressAll(t, m, "enter")
+	if got := sent(b); !slices.Equal(got, []string{"FLUSHDB"}) {
+		t.Fatalf("sent %q", got)
+	}
+}
+
+func TestRedisConsoleDangerDev(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "FLUSHDB", keymap.RunStatement)
+	if !strings.Contains(screen(m), "Dangerous command") {
+		t.Fatalf("no confirmation:\n%s", screen(m))
+	}
+	pressAll(t, m, "y")
+	if got := sent(b); !slices.Equal(got, []string{"FLUSHDB"}) {
+		t.Fatalf("sent %q", got)
+	}
+}
+
+func TestRedisConsoleKeys(t *testing.T) {
+	m, b, r := newRedisModel(t, config.Connection{})
+	r.fill(0, "k", 20000)
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "KEYS *", keymap.RunStatement)
+	if !strings.Contains(c.status, "SCAN") || len(sent(b)) != 0 || m.overlay != nil {
+		t.Fatalf("status %q, sent %q", c.status, sent(b))
+	}
+	r.fill(5, "k", 5)
+	runR(t, m, c, "SELECT 5", keymap.RunStatement)
+	runR(t, m, c, "KEYS *", keymap.RunStatement)
+	if !strings.Contains(screen(m), "Dangerous command") {
+		t.Fatalf("no confirmation on a small db:\n%s", screen(m))
+	}
+	pressAll(t, m, "y")
+	if got := sent(b); !slices.Equal(got, []string{"SELECT 5", "KEYS *"}) {
+		t.Fatalf("sent %q", got)
+	}
+}
+
+func TestRedisConsoleUnsupported(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "SUBSCRIBE ch", keymap.RunStatement)
+	if c.status != "SUBSCRIBE is not supported in sqlvim" || len(sent(b)) != 0 {
+		t.Fatalf("status %q, sent %q", c.status, sent(b))
+	}
+}
+
+func TestRedisConsoleNoReadonlyUnlock(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{ReadOnly: boolPtr(true)})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "SET a 1", keymap.RunStatement)
+	command(t, m, "set noreadonly")
+	runR(t, m, c, "SET a 1", keymap.RunStatement)
+	if got := sent(b); !slices.Equal(got, []string{"SET a 1"}) {
+		t.Fatalf("sent %q", got)
+	}
+}
+
+func TestRedisConsoleStaleConfirm(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "FLUSHDB", keymap.RunStatement)
+	ok := redisConfirmMsg{tabID: c.id, gen: c.gen}
+	pressAll(t, m, "esc")
+	runR(t, m, c, "GET a", keymap.RunStatement)
+	drainAll(t, m, func() tea.Msg { return ok })
+	if got := sent(b); slices.Contains(got, "FLUSHDB") {
+		t.Fatalf("a stale confirmation ran: %q", got)
+	}
+}
