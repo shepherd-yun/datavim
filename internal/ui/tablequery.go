@@ -9,13 +9,13 @@ import (
 )
 
 // tableQuery is what a data tab shows: its filter and sort, the key that
-// keeps pages stable and whether rows carry their ctid.
+// keeps pages stable and whether rows carry their row id.
 type tableQuery struct {
 	where string   // the filter without WHERE; "" for every row
 	sort  string   // the column sorted by; "" for key order
 	desc  bool     // sort descending
 	key   []string // ORDER BY after the sort column
-	rowID bool     // PostgreSQL: select ctid::text first
+	rowID bool     // select the row id (ctid, ROWID) first
 }
 
 var errBadFilter = errors.New("the filter must be a condition, like: name = 'x' AND id > 10")
@@ -23,11 +23,10 @@ var errBadFilter = errors.New("the filter must be a condition, like: name = 'x' 
 // sql is the query without pagination. The filter is closed on its own
 // line, so a trailing -- comment cannot swallow ORDER BY or LIMIT.
 func (q tableQuery) sql(d sqlx.Dialect, ref db.TableRef) string {
-	sel := "SELECT * FROM "
+	s := "SELECT * FROM " + sqlx.QualifiedName(d, ref)
 	if q.rowID {
-		sel = "SELECT ctid::text, * FROM "
+		s = sqlx.RowIDSelect(d, sqlx.QualifiedName(d, ref))
 	}
-	s := sel + sqlx.QualifiedName(d, ref)
 	if q.where != "" {
 		s += " WHERE (" + q.where + "\n)"
 	}

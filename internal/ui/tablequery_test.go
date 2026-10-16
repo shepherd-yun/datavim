@@ -104,3 +104,12 @@ func TestLikeFilterKeepsWildcards(t *testing.T) {
 		}
 	}
 }
+
+func TestTableQueryOracleRowID(t *testing.T) {
+	ref := db.TableRef{Namespace: db.Namespace{Schema: "HR"}, Name: "EMP"}
+	q := tableQuery{rowID: true, where: "SAL > 1", sort: "ENAME"}
+	want := "SELECT ROWIDTOCHAR(t.ROWID), t.* FROM \"HR\".\"EMP\" t WHERE (SAL > 1\n) ORDER BY \"ENAME\""
+	if got := q.sql(sqlx.Oracle, ref); got != want {
+		t.Fatalf("got  %q\nwant %q", got, want)
+	}
+}

@@ -97,7 +97,7 @@ func (tg Target) where(cols []db.ColumnInfo, r *Row) (string, error) {
 		if r.ID == "" {
 			return "", ErrNoKey
 		}
-		return "ctid = " + sqlx.Literal(d, "", db.Value{Text: r.ID}), nil
+		return sqlx.RowIDMatch(d, r.ID), nil
 	case PrimaryKey, UniqueKey:
 		for _, name := range tg.Key.Columns {
 			i := slices.IndexFunc(cols, func(c db.ColumnInfo) bool { return c.Name == name })
@@ -156,7 +156,7 @@ func (tg Target) warning() string {
 		}
 		return tg.Table.Name + " has no primary key or unique NOT NULL index: rows are matched by all their values, one row at most (" + one + ")"
 	case RowID:
-		return tg.Table.Name + " has no primary key or unique NOT NULL index: rows are matched by their ctid"
+		return tg.Table.Name + " has no primary key or unique NOT NULL index: rows are matched by their " + sqlx.RowIDName(tg.Dialect)
 	}
 	return ""
 }
@@ -179,7 +179,11 @@ func (tg Target) insert(name string, cols []db.ColumnInfo, r *Row) string {
 	switch d {
 	case sqlx.MySQL:
 		return "INSERT INTO " + name + " () VALUES ()"
-	case sqlx.Postgres, sqlx.SQLServer, sqlx.Oracle:
+	case sqlx.Oracle: // no DEFAULT VALUES: give the first column its default
+		if len(cols) > 0 {
+			return "INSERT INTO " + name + " (" + sqlx.QuoteIdent(d, tg.column(cols, 0).Name) + ") VALUES (DEFAULT)"
+		}
+	case sqlx.Postgres, sqlx.SQLServer:
 	}
 	return "INSERT INTO " + name + " DEFAULT VALUES"
 }
