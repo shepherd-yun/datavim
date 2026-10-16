@@ -92,6 +92,14 @@ Redis 不会回滚：`EXEC` 里某条命令失败时，它前后的命令仍然�
 `D` 删除（`UNLINK`）；树上对 key 按 `r` / `dd` 效果一样，`o` 新建 key，在文件夹或 db 上按 `dd` 删除匹配的 key（文件夹的前缀，
 或 db 的过滤条件）：sqlvim 先数出数量、列出前 20 个，再每批 500 个删除，`Ctrl-c` 可以停止。删除过程中新写入的 key 可能删不到。
 
+服务器页（在 Redis 连接上按 `<Space>i`，或节点菜单里的 `Server status`）用 `INFO` 显示服务器状态——版本、角色、运行时间、
+客户端数、key 数、内存、命中率、淘汰和过期的 key 数——以及 ops/sec、内存、网络流量的 sparkline。每 2 秒采样一次，
+而且只在状态分区显示在屏幕上时采样：切到别的标签页或分区就停止。`[` / `]` 切到慢查询和客户端列表（`<Space>r` 重新读取）；
+在客户端列表里按 `dd` 确认后杀掉客户端。服务器 ACL 不允许的部分显示 `permission denied`。`*` 收藏光标处或当前页的 key，
+`<Space>F` 列出收藏的 key，打开过的 key 会出现在 `<Space>f` 里。key 详情页上 `<Space>x…` 导出值（已加载的行或整个 key；
+二进制值写成 `\xNN`）。在 db 或文件夹上按 `B` 找出每种类型最大的 key：它会遍历匹配 db 过滤条件或文件夹的所有 key
+（每批 1,000 个，批与批之间会停顿，`Ctrl-c` 停止），所以生产实例上请在低峰时运行。
+
 ## 编辑表数据
 
 改动会先暂存：改过的单元格变黄，新增行变绿，标记删除的行变红。
@@ -213,6 +221,12 @@ sqlvim --list-workspaces
 | `t` / `r` / `D` | Redis key 详情页：设置或去掉 TTL / 重命名 / 删除 key |
 | `o` | 树里 Redis 的 db、文件夹或 key 上：新建 key |
 | `g d` | Redis 控制台结果：打开单元格里的 key |
+| `<Space>i` | Redis 服务器页：状态、慢查询、客户端 |
+| `[` / `]` | Redis 服务器页：上一个 / 下一个分区 |
+| `dd` | Redis 服务器页的客户端列表：杀掉客户端 |
+| `*` | 树或 Redis key 详情页：收藏 / 取消收藏 key |
+| `<Space>F` | 收藏的 Redis key |
+| `B` | 树里 Redis 的 db 或文件夹上：找出最大的 key（`Enter` 打开） |
 | `<Space>r` | 刷新树节点或 tab，并重新加载该连接的元数据 |
 | `?` | 当前面板的帮助 |
 | `:q` / `:qa` | 关闭 tab / 退出 |
@@ -223,7 +237,7 @@ sqlvim --list-workspaces
 | `:set noreadonly` / `:set readonly` | 本次会话解锁 / 锁定连接 |
 | `:q!` / `:qa!` | 关闭 / 退出，不询问未结束的事务 |
 | `<Space><Space>` | 搜索表、视图、列、函数、schema 和数据库，范围是所有连接，并加载尚未打开的连接的元数据（可以用 `db.table.column`、`table.column` 或其中一段按上级模糊限定，打开列时光标直接落在该列；`@` 开头只搜当前上下文的连接；`Enter` 打开，`Ctrl-o` 打开结构）。`Tab` / `Shift-Tab` 切换到搜索已打开 console 的内容（`Enter` 跳到那一行）或 SQL 历史（查询为空时列出最近的语句，`Enter` 像 `<Space>h` 一样插入语句） |
-| `<Space>f` | 最近打开的表、结构、控制台和文件 |
+| `<Space>f` | 最近打开的表、结构、控制台、文件和 Redis key |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |
 

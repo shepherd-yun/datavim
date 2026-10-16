@@ -62,6 +62,22 @@ All notable changes to this project are documented here. The format follows
   keys and wants the connection name for deleting, the submit preview is titled `PROD · …`. A
   string loaded only in part (over 1 MB) and binary values are not edited in place (use the
   console); Redis has no NULL. On Redis 5, changing a string keeps its TTL.
+- Redis server tab and tools. `<Space>i` on a Redis connection (or the node menu's
+  `Server status`) opens `<conn> · server`: version, role and replicas, uptime, clients, keys,
+  memory / peak / `maxmemory` and policy, hit rate, evicted and expired keys, and sparklines of
+  ops/sec, memory and network in / out over the last 5 minutes, sampled every 2 seconds and
+  only while the status is on screen. `[` / `]` switch to the slow log (`SLOWLOG GET 128`;
+  passwords in `AUTH`, `CONFIG SET requirepass` and the like show as `***`) and the client list
+  (`CLIENT LIST`), where `dd` kills a client (`CLIENT KILL ID`, confirmed like a dangerous
+  command; refused on read-only connections). A part the server's ACL refuses shows
+  `permission denied` and the others still work. `*` stars a key (in the tree or its tab, shown
+  as `★`) and `<Space>F` lists the starred keys; opened keys join `<Space>f`, binary names
+  included. `<Space>x…` on a key tab exports its value: the loaded rows, or, when there are more,
+  the whole key read 1,000 at a time; binary values are written as `\xNN` and counted in the
+  status. `B` on a db or folder analyzes the biggest keys (like `redis-cli --bigkeys`): `SCAN` in
+  batches of 1,000 with a pause between them, the lengths (optionally `MEMORY USAGE`) in one
+  pipeline per batch, the 20 biggest keys of each type with a summary, progress, `Ctrl-c` to
+  stop and `<Space>r` to run it again; prod asks first, and `Enter` opens a key.
 - SQL Server support (2014–2022, user name and password, SSH tunnels): browse databases,
   schemas, tables, views and routines, run T-SQL in the console (`GO` separates batches,
   `BEGIN TRAN` / `COMMIT` / `ROLLBACK` are tracked), filter, sort and edit table data (`N'…'`

@@ -116,6 +116,19 @@ tree `r` / `dd` on a key do the same, `o` creates a key, and `dd` on a folder or
 keys matching it (the prefix, or the db's filter): sqlvim counts them, lists the first 20 and
 deletes them 500 at a time; `Ctrl-c` stops it. Keys written while it runs may be missed.
 
+The server tab (`<Space>i` on a Redis connection, or `Server status` in its node menu) shows the
+server's status from `INFO` — version, role, uptime, clients, keys, memory, hit rate, evicted
+and expired keys — with sparklines of ops/sec, memory and network traffic. It samples every 2
+seconds, and only while its status section is on screen: switching to another tab or section
+stops it. `[` / `]` switch to the slow log and the client list (`<Space>r` reloads them); `dd`
+in the client list kills a client after a confirmation. Whatever the server's ACL refuses shows
+`permission denied`. `*` stars the key under the cursor or in the tab, `<Space>F` lists the
+starred keys, and opened keys are listed in `<Space>f`. On a key tab `<Space>x…` exports the
+value (the loaded rows or the whole key; binary values are written as `\xNN`). `B` on a db or
+folder finds the biggest keys of each type: it walks every key that matches the db's filter or
+the folder (in batches of 1,000, pausing between them, `Ctrl-c` stops it), so on a production
+instance run it at a quiet time.
+
 ## Editing table data
 
 Changes are staged: edited cells turn yellow, new rows green and rows marked for deletion red.
@@ -249,7 +262,7 @@ picks the workspace by directory.
 | `:set noreadonly` / `:set readonly` | Unlock / lock the connection for this session |
 | `:q!` / `:qa!` | Close / quit without asking about open transactions |
 | `<Space><Space>` | Search tables, views, columns, routines, schemas and databases in every connection, loading the metadata of those not opened yet (`db.table.column`, `table.column` or any part of it narrows by parent, fuzzily, and opening a column puts the cursor on it; `@` searches only the connection in context; `Enter` opens, `Ctrl-o` opens the structure). `Tab` / `Shift-Tab` switch to the lines of the open consoles (`Enter` jumps to the line) or the SQL history (an empty query lists the recent statements, `Enter` inserts one as `<Space>h` does) |
-| `<Space>f` | Recently opened tables, structures, consoles and files |
+| `<Space>f` | Recently opened tables, structures, consoles, files and Redis keys |
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
 | `v` | Redis key tab: show a string as auto / text / JSON / hex |
@@ -257,6 +270,12 @@ picks the workspace by directory.
 | `t` / `r` / `D` | Redis key tab: set or remove the TTL / rename the key / delete it |
 | `o` | Tree, on a Redis db, folder or key: new key |
 | `g d` | Redis console results: open the key in the cell |
+| `<Space>i` | Redis server tab: status, slow log, clients |
+| `[` / `]` | Redis server tab: previous / next section |
+| `dd` | Redis server tab, client list: kill the client |
+| `*` | Tree or Redis key tab: star / unstar the key |
+| `<Space>F` | Starred Redis keys |
+| `B` | Tree, on a Redis db or folder: find the biggest keys (`Enter` opens one) |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (`Ctrl-n` / `Ctrl-p` open the popup when closed) |
 | `Enter` / `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes the popup, a second `Esc` leaves insert mode) |
 
