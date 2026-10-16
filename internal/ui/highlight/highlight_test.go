@@ -147,3 +147,18 @@ func TestSQLConstantsAndBacktickIdentifiers(t *testing.T) {
 		t.Errorf("PostgreSQL null is class %d", got)
 	}
 }
+
+func TestHighlightTSQL(t *testing.T) {
+	src := "SELECT TOP 5 * FROM [dbo].[order] WHERE name = N'x' -- c"
+	spans := SQL(src, sqlx.SQLServer)
+	for _, tc := range []struct {
+		text string
+		want Class
+	}{
+		{"SELECT", Keyword}, {"TOP", Keyword}, {"[dbo]", Plain}, {"order]", Plain}, {"N'x'", String}, {"-- c", Comment},
+	} {
+		if got := classAt(spans, strings.Index(src, tc.text)); got != tc.want {
+			t.Errorf("%q is class %d, want %d (%+v)", tc.text, got, tc.want, spans)
+		}
+	}
+}

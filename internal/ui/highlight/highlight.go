@@ -31,8 +31,9 @@ type Span struct {
 
 // Lexers are used from the UI goroutine only.
 var sqlLexers = map[sqlx.Dialect]chroma.Lexer{
-	sqlx.MySQL:    lexer("mysql"),
-	sqlx.Postgres: lexer("postgresql"),
+	sqlx.MySQL:     lexer("mysql"),
+	sqlx.Postgres:  lexer("postgresql"),
+	sqlx.SQLServer: lexer("tsql"),
 }
 
 func lexer(name string) chroma.Lexer {
@@ -78,6 +79,18 @@ func SQL(src string, d sqlx.Dialect) []Span {
 		} else if quoted {
 			c = Plain
 		}
+		if d == sqlx.SQLServer && t.Type == chroma.Operator && (t.Value == "[" || t.Value == "]") {
+			c = Plain // a [quoted identifier]
+		}
+		if n := len(out); c == String && n > 0 && off > 0 && (src[off-1] == 'N' || src[off-1] == 'n') &&
+			d == sqlx.SQLServer && (off == 1 || !isWordByte(src[off-2])) {
+			// N'…' is one Unicode string literal
+			out[n-1].End--
+			if out[n-1].End == out[n-1].Start {
+				out = out[:n-1]
+			}
+			off--
+		}
 		if n := len(out); n > 0 && out[n-1].Class == c {
 			out[n-1].End = end
 		} else {
@@ -89,6 +102,10 @@ func SQL(src string, d sqlx.Dialect) []Span {
 		out = append(out, Span{Start: off, End: len(src), Class: Plain})
 	}
 	return out
+}
+
+func isWordByte(c byte) bool {
+	return c == '_' || c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9'
 }
 
 func classOf(t chroma.TokenType) Class {

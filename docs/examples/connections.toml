@@ -36,3 +36,13 @@ user     = "app"
 database = "app"
 env      = "staging"
 ssh      = "bastion"       # a Host alias from ~/.ssh/config (ProxyJump works too)
+
+[[connection]]
+name     = "crm"
+driver   = "sqlserver"
+host     = "10.0.3.9"
+port     = 1433
+user     = "reader"
+database = "crm"
+env      = "prod"          # SQL Server: read-only is enforced by sqlvim only
+params   = { encrypt = "disable" }   # older servers; or TrustServerCertificate = "true", tlsmin = "1.0"

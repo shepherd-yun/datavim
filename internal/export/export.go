@@ -44,7 +44,7 @@ func (f Format) Label() string {
 // Options tunes a writer.
 type Options struct {
 	NoHeader bool     // TSV and CSV: leave out the header line
-	Driver   string   // SQL: "mysql" or "postgres", selects quoting rules
+	Driver   string   // SQL: the connection's driver name, selects quoting and literal rules
 	Table    []string // SQL: target table name parts, e.g. {"app", "users"}
 }
 

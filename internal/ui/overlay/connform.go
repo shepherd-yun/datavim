@@ -2,6 +2,7 @@ package overlay
 
 import (
 	"fmt"
+	"maps"
 	"strconv"
 	"strings"
 
@@ -37,6 +38,8 @@ const (
 	ffUser
 	ffPassword
 	ffDatabase
+	ffEncrypt // SQL Server only
+	ffTrust   // SQL Server only
 	ffSSH
 	ffEnv
 	ffSave
@@ -49,18 +52,26 @@ type ConnForm struct {
 	cur      int
 	err      string
 	original string // editing this connection; empty for a new one
+	// kept from the edited connection: the form does not show them
+	params   map[string]string
+	readOnly *bool
 }
+
+// encryptChoices are go-mssqldb's encrypt values; default leaves it out.
+var encryptChoices = []string{"default", "true", "false", "disable"}
 
 // NewConnForm builds an empty form.
 func NewConnForm(keys *keymap.Keymap) *ConnForm {
 	return &ConnForm{keys: keys, fields: []formField{
 		ffName:     {label: "Name"},
-		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres"}},
+		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver"}},
 		ffHost:     {label: "Host", input: newField("localhost")},
 		ffPort:     {label: "Port"},
 		ffUser:     {label: "User"},
 		ffPassword: {label: "Password", secret: true},
 		ffDatabase: {label: "Database"},
+		ffEncrypt:  {label: "Encrypt", choices: encryptChoices},
+		ffTrust:    {label: "Trust cert", choices: []string{"no", "yes"}},
 		ffSSH:      {label: "SSH host"},
 		ffEnv:      {label: "Env", choices: []string{"dev", "staging", "prod"}},
 		ffSave:     {label: "Save password", choices: []string{"yes", "no"}},
@@ -71,6 +82,7 @@ func NewConnForm(keys *keymap.Keymap) *ConnForm {
 func NewEditConnForm(keys *keymap.Keymap, c config.Connection) *ConnForm {
 	f := NewConnForm(keys)
 	f.original = c.Name
+	f.params, f.readOnly = maps.Clone(c.Params), c.ReadOnly
 	set := func(i int, v string) { f.fields[i].input = newField(v) }
 	set(ffName, c.Name)
 	set(ffHost, c.Host)
@@ -89,7 +101,39 @@ func NewEditConnForm(keys *keymap.Keymap, c config.Connection) *ConnForm {
 	}
 	choose(ffDriver, c.Driver)
 	choose(ffEnv, string(c.Env))
+	choose(ffEncrypt, strings.ToLower(param(c.Params, "encrypt")))
+	if strings.EqualFold(param(c.Params, "TrustServerCertificate"), "true") {
+		choose(ffTrust, "yes")
+	}
 	return f
+}
+
+// param looks key up in any case.
+func param(p map[string]string, key string) string {
+	for k, v := range p {
+		if strings.EqualFold(k, key) {
+			return v
+		}
+	}
+	return ""
+}
+
+// shown reports whether field i applies to the chosen driver.
+func (f *ConnForm) shown(i int) bool {
+	if i == ffEncrypt || i == ffTrust {
+		return f.value(ffDriver) == "sqlserver"
+	}
+	return true
+}
+
+// step moves the cursor by dir to the next shown field, wrapping around.
+func (f *ConnForm) step(dir int) {
+	for {
+		f.cur = (f.cur + dir + len(f.fields)) % len(f.fields)
+		if f.shown(f.cur) {
+			return
+		}
+	}
 }
 
 func (f *ConnForm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
@@ -101,14 +145,14 @@ func (f *ConnForm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 	case "esc":
 		return nil, nil
 	case "tab", "down":
-		f.cur = (f.cur + 1) % len(f.fields)
+		f.step(1)
 	case "shift+tab", "up":
-		f.cur = (f.cur + len(f.fields) - 1) % len(f.fields)
+		f.step(-1)
 	case "enter":
 		if f.cur == len(f.fields)-1 {
 			return f.submit()
 		}
-		f.cur++
+		f.step(1)
 	default:
 		if fd.choices == nil {
 			fd.input.handle(msg)
@@ -148,6 +192,7 @@ func (f *ConnForm) submit() (Overlay, tea.Cmd) {
 	c, err := config.Normalize(config.Connection{
 		Name: f.text(ffName), Driver: f.value(ffDriver), Host: f.text(ffHost), Port: port,
 		User: f.text(ffUser), Database: f.text(ffDatabase), SSH: f.text(ffSSH), Env: config.Env(f.value(ffEnv)),
+		ReadOnly: f.readOnly, Params: f.submitParams(),
 	})
 	if err != nil {
 		f.err = err.Error()
@@ -158,10 +203,38 @@ func (f *ConnForm) submit() (Overlay, tea.Cmd) {
 	})
 }
 
+// submitParams are the edited connection's params with the SQL Server
+// fields applied: default and no remove their key.
+func (f *ConnForm) submitParams() map[string]string {
+	p := maps.Clone(f.params)
+	if p == nil {
+		p = map[string]string{}
+	}
+	// go-mssqldb reads keys in any case and refuses one given twice
+	maps.DeleteFunc(p, func(k, _ string) bool {
+		return strings.EqualFold(k, "encrypt") || strings.EqualFold(k, "TrustServerCertificate")
+	})
+	if f.value(ffDriver) == "sqlserver" {
+		if e := f.value(ffEncrypt); e != "default" {
+			p["encrypt"] = e
+		}
+		if f.value(ffTrust) == "yes" {
+			p["TrustServerCertificate"] = "true"
+		}
+	}
+	if len(p) == 0 {
+		return nil
+	}
+	return p
+}
+
 func (f *ConnForm) View(width, _ int) string {
 	w := max(min(width-4, 60), 30)
 	lines := make([]string, 0, len(f.fields)+4)
 	for i, fd := range f.fields {
+		if !f.shown(i) {
+			continue
+		}
 		var v string
 		label := fmt.Sprintf("%-14s", fd.label)
 		switch {

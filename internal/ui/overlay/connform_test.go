@@ -1,6 +1,7 @@
 package overlay
 
 import (
+	"maps"
 	"strings"
 	"testing"
 
@@ -112,5 +113,69 @@ func TestConnFormSaveKeyFollowsTheKeymap(t *testing.T) {
 	}
 	if _, msg := send(t, f, "ctrl+w"); msg.(ConnFormMsg).Conn.Name != "x" {
 		t.Fatalf("ctrl+w saves: %v", msg)
+	}
+}
+
+func TestConnFormSQLServerEncrypt(t *testing.T) {
+	f := NewConnForm(keymap.Default())
+	if v := ansi.Strip(f.View(80, 30)); strings.Contains(v, "Encrypt") || strings.Contains(v, "Trust cert") {
+		t.Fatalf("mysql shows the SQL Server fields:\n%s", v)
+	}
+	keys := []string{
+		"m", "s", "tab", // name
+		"space", "space", "tab", // driver -> sqlserver
+		"tab", "tab", "tab", "tab", // host, port, user, password
+		"c", "r", "m", "tab", // database
+		"right", "right", "right", "tab", // encrypt: default -> true -> false -> disable
+		"right", // trust cert -> yes
+		"ctrl+s",
+	}
+	o, msg := send(t, f, keys...)
+	if o != nil {
+		t.Fatalf("form still open:\n%s", ansi.Strip(f.View(80, 30)))
+	}
+	got := msg.(ConnFormMsg).Conn
+	if got.Driver != "sqlserver" || got.Port != 1433 || got.Database != "crm" {
+		t.Fatalf("conn = %+v", got)
+	}
+	want := map[string]string{"encrypt": "disable", "TrustServerCertificate": "true"}
+	if !maps.Equal(got.Params, want) {
+		t.Fatalf("params = %v, want %v", got.Params, want)
+	}
+
+	// default and no write nothing; other params survive an edit.
+	orig := config.Connection{Name: "ms", Driver: "sqlserver", Params: map[string]string{"encrypt": "disable", "tlsmin": "1.0"}}
+	f = NewEditConnForm(keymap.Default(), orig)
+	if v := ansi.Strip(f.View(80, 30)); !strings.Contains(v, "disable") {
+		t.Fatalf("edit form shows the encrypt setting:\n%s", v)
+	}
+	_, msg = send(t, f, "ctrl+s")
+	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, map[string]string{"encrypt": "disable", "tlsmin": "1.0"}) {
+		t.Fatalf("edited params = %v", p)
+	}
+	f = NewEditConnForm(keymap.Default(), orig)
+	f.cur = ffEncrypt
+	_, msg = send(t, f, "right", "ctrl+s") // disable -> default
+	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, map[string]string{"tlsmin": "1.0"}) {
+		t.Fatalf("default drops encrypt: %v", p)
+	}
+}
+
+func TestConnFormSQLServerParamsIgnoreCase(t *testing.T) {
+	orig := config.Connection{Name: "ms", Driver: "sqlserver", Params: map[string]string{"Encrypt": "DISABLE", "trustservercertificate": "true"}}
+	_, msg := send(t, NewEditConnForm(keymap.Default(), orig), "ctrl+s")
+	want := map[string]string{"encrypt": "disable", "TrustServerCertificate": "true"}
+	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, want) {
+		t.Fatalf("params = %v, want %v", p, want)
+	}
+}
+
+func TestEditConnFormKeepsHiddenSettings(t *testing.T) {
+	off := false
+	orig := config.Connection{Name: "pg", Driver: "postgres", ReadOnly: &off, Params: map[string]string{"sslmode": "disable"}}
+	_, msg := send(t, NewEditConnForm(keymap.Default(), orig), "ctrl+s")
+	got := msg.(ConnFormMsg).Conn
+	if got.ReadOnly == nil || *got.ReadOnly || !maps.Equal(got.Params, orig.Params) {
+		t.Fatalf("readonly %v, params %v", got.ReadOnly, got.Params)
 	}
 }

@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- SQL Server support (2014–2022, user name and password, SSH tunnels): browse databases,
+  schemas, tables, views and routines, run T-SQL in the console (`GO` separates batches,
+  `BEGIN TRAN` / `COMMIT` / `ROLLBACK` are tracked), filter, sort and edit table data (`N'…'`
+  literals; tables without a key are matched by all their values with `TOP (1)`), view
+  structure and DDL, export, rename, truncate and drop tables. The connection form has
+  `Encrypt` and `Trust cert` fields for older servers. Read-only SQL Server connections are
+  guarded by sqlvim alone and more strictly: every statement of a batch is checked, and
+  `EXEC` of anything but a few read-only system procedures is blocked. Modify Table, compare
+  and import say "not supported for sqlserver yet".
 - Typing a space in the console opens what usually comes next, with nothing selected so that
   `Enter` still types a newline (`Tab` or `↓` picks): `*` and the columns after `SELECT`,
   `FROM` after the select list, `WHERE` / `JOIN` / `ORDER BY` … after a table, `ON` after a
@@ -146,6 +155,8 @@ All notable changes to this project are documented here. The format follows
   keys, and a hint line at the bottom.
 
 ### Fixed
+- Editing a connection in the form (`e` in the tree) no longer drops its `params` and
+  `readonly` settings from `connections.toml`.
 - The search (`<Space><Space>`), the columns popup and the pickers draw the cursor where it is:
   after `Ctrl-a`, `←` or `Alt-b` it used to stay drawn at the end of the text.
 - The MySQL driver's own messages (such as `unexpected EOF` when a server cannot be reached)

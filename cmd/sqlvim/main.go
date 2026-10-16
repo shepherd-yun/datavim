@@ -16,6 +16,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db/mysql"
 	"github.com/shepherd-yun/sqlvim/internal/db/postgres"
+	"github.com/shepherd-yun/sqlvim/internal/db/sqlserver"
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/secret"
@@ -168,7 +169,8 @@ func openStore(stateDir string) (*history.Store, error) {
 // go to its keychain accounts, and ssh connections use tunnels.
 func newManager(cfg *config.Config, ws config.Workspace, tunnels session.Tunneler) *session.Manager {
 	dir := ws.ConfigDir
-	mgr := session.NewManager(cfg.Connections, secret.Keyring{Prefix: keychainPrefix(ws)}, mysql.Driver{}, postgres.Driver{})
+	mgr := session.NewManager(cfg.Connections, secret.Keyring{Prefix: keychainPrefix(ws)},
+		mysql.Driver{}, postgres.Driver{}, sqlserver.Driver{})
 	mgr.Persist = func(c config.Connection) error {
 		_, err := config.AppendConnection(dir, c)
 		return err
