@@ -28,8 +28,14 @@ type Fixture struct {
 	ManyRowsSQL string
 	// OpenReadOnly opens another connection to the same database with ReadOnly set.
 	OpenReadOnly func(ctx context.Context) (db.Conn, error)
-	// Driver is the driver's name, "mysql" or "postgres".
-	Driver string
+	// Dialect is the driver's dialect; the contract reads its Features to
+	// skip what the engine does not support.
+	Dialect sqlx.Dialect
+	// EmptyIsNull is set when '' is stored as NULL (Oracle).
+	EmptyIsNull bool
+	// NVarcharSQL creates the table uni: id (int primary key) and name, a
+	// column that stores any Unicode text.
+	NVarcharSQL []string
 	// NormTypesSQL creates the table norm_types: columns id (auto-increment
 	// primary key), n (DEFAULT 0), flag, name (DEFAULT 'x'), created_at
 	// (DEFAULT CURRENT_TIMESTAMP), big, price, body, ci (its own collation),
@@ -63,6 +69,19 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	ns := f.NS
 	d := conn.Dialect()
 	ref := func(name string) db.TableRef { return db.TableRef{Namespace: ns, Name: name} }
+	sd := f.Dialect
+	feat := sd.Features()
+	// empty is what reading back '' gives.
+	empty := db.Value{Text: ""}
+	if f.EmptyIsNull {
+		empty = db.Value{Null: true}
+	}
+	needSchemaTools := func(t *testing.T) {
+		t.Helper()
+		if !feat.SchemaTools {
+			t.Skip("schema tools are not supported on " + sd.Driver())
+		}
+	}
 
 	t.Run("Query returns columns and text values, NULL distinct from empty", func(t *testing.T) {
 		rs, err := conn.Query(ctx, "SELECT id, name, email, note FROM "+d.QualifiedName(ref("users"))+" ORDER BY id")
@@ -81,7 +100,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		want := [][]db.Value{
 			{{Text: "1"}, {Text: "alice"}, {Text: "a@x.com"}, {Text: "hi"}},
-			{{Text: "2"}, {Text: "李雷"}, {Text: ""}, {Null: true}},
+			{{Text: "2"}, {Text: "李雷"}, empty, {Null: true}},
 			{{Text: "3"}, {Text: "bob"}, {Null: true}, {Text: "multi\nline"}},
 		}
 		if diff := cmp.Diff(want, rs.Rows); diff != "" {
@@ -274,6 +293,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	})
 
 	t.Run("TableSchema reads the table with normalized types and defaults", func(t *testing.T) {
+		needSchemaTools(t)
 		s, err := conn.Meta().TableSchema(ctx, ref("users"))
 		if err != nil {
 			t.Fatal(err)
@@ -554,6 +574,9 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	})
 
 	t.Run("ReadOnly connections reject writes on the server", func(t *testing.T) {
+		if !feat.ServerReadOnly {
+			t.Skip(sd.Driver() + " has no server-side read-only mode: runner.Guard covers it")
+		}
 		ro, err := f.OpenReadOnly(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -576,7 +599,6 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 	})
 
-	sd := sqlx.DialectOf(f.Driver)
 	read := func(t *testing.T, q string) *db.ResultSet {
 		t.Helper()
 		rs, err := conn.Query(ctx, q)
@@ -637,7 +659,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			t.Fatalf("%v\n%s", err, strings.Join(stmts, "\n"))
 		}
 		want := [][]db.Value{
-			{{Text: "1"}, {Text: tricky}, {Text: ""}},
+			{{Text: "1"}, {Text: tricky}, empty},
 			{{Text: "3"}, {Null: true}, {Null: true}},
 		}
 		if diff := cmp.Diff(want, read(t, all).Rows); diff != "" {
@@ -705,7 +727,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 	})
 
-	t.Run("rows without a key are located by their values or ctid", func(t *testing.T) {
+	t.Run("rows without a key are located by their values or row id", func(t *testing.T) {
 		table := ref("edit_bare")
 		name := d.QualifiedName(table)
 		for _, q := range []string{
@@ -721,7 +743,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		key := edit.ChooseKey(sd, cols, idx, false)
 		sel := "SELECT * FROM " + name + " ORDER BY name, n"
 		if key.Kind == edit.RowID {
-			sel = "SELECT ctid::text, * FROM " + name + " ORDER BY name, n"
+			sel = rowIDSelect(sd, name) + " ORDER BY name, n"
 		}
 		rs := read(t, sel)
 		var ids []string
@@ -734,7 +756,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		tb := edit.New(rs.Columns, rs.Rows, ids)
 		_ = tb.SetCell(0, 1, db.Value{Text: "2"}) // one of two identical rows
-		tb.Delete(2)                              // n IS NULL (MySQL) or its ctid
+		tb.Delete(2)                              // n IS NULL or its row id
 		stmts, warnings, err := edit.Plan(tb, edit.Target{Dialect: sd, Table: table, Key: key})
 		if err != nil || len(warnings) != 1 {
 			t.Fatalf("plan: %v %v", err, warnings)
@@ -746,6 +768,48 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if diff := cmp.Diff(want, read(t, "SELECT name, n FROM "+name+" ORDER BY name, n").Rows); diff != "" {
 			t.Fatalf("rows (-want +got):\n%s", diff)
 		}
+	})
+
+	t.Run("Unicode text round-trips through staged edits", func(t *testing.T) {
+		for _, q := range f.NVarcharSQL {
+			if _, err := conn.Exec(ctx, q); err != nil {
+				t.Fatalf("%s: %v", q, err)
+			}
+		}
+		table := ref("uni")
+		cols, err := conn.Meta().Columns(ctx, table)
+		if err != nil {
+			t.Fatal(err)
+		}
+		idx, err := conn.Meta().Indexes(ctx, table)
+		if err != nil {
+			t.Fatal(err)
+		}
+		target := edit.Target{Dialect: sd, Table: table, Key: edit.ChooseKey(sd, cols, idx, false)}
+		all := "SELECT id, name FROM " + d.QualifiedName(table) + " ORDER BY id"
+		step := func(change func(tb *edit.Table), want string) {
+			t.Helper()
+			rs := read(t, all)
+			tb := edit.New(rs.Columns, rs.Rows, nil)
+			change(tb)
+			stmts, _, err := edit.Plan(tb, target)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := apply(t, stmts); err != nil {
+				t.Fatalf("%v\n%s", err, strings.Join(stmts, "\n"))
+			}
+			got := read(t, all).Rows
+			if len(got) != 1 || got[0][1].Text != want {
+				t.Fatalf("after\n%s\nrows = %v, want name %q", strings.Join(stmts, "\n"), got, want)
+			}
+		}
+		step(func(tb *edit.Table) {
+			at := tb.InsertAfter(-1)
+			_ = tb.SetCell(at, 0, db.Value{Text: "1"})
+			_ = tb.SetCell(at, 1, db.Value{Text: "张三"})
+		}, "张三")
+		step(func(tb *edit.Table) { _ = tb.SetCell(0, 1, db.Value{Text: "李四"}) }, "李四")
 	})
 
 	t.Run("DDLWriter renames, truncates and drops tables and views", func(t *testing.T) {
@@ -802,6 +866,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	})
 
 	t.Run("schema sync round-trips through DiffTable, AlterTable and CreateTable", func(t *testing.T) {
+		needSchemaTools(t)
 		exec := func(stmts []string) {
 			t.Helper()
 			for _, q := range stmts {
@@ -853,6 +918,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	})
 
 	t.Run("NormalizeType agrees with TableSchema", func(t *testing.T) {
+		needSchemaTools(t)
 		w := d.DDL()
 		for col, want := range f.NormTypes {
 			if got := w.NormalizeType(want); got != want {
@@ -868,6 +934,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	})
 
 	t.Run("ApplyDDL rolls back PostgreSQL DDL and stops at the first failure", func(t *testing.T) {
+		needSchemaTools(t)
 		tbl := d.QualifiedName(ref("mod_tx"))
 		for _, q := range []string{"DROP TABLE IF EXISTS " + tbl, "CREATE TABLE " + tbl + " (id int)"} {
 			if _, err := conn.Exec(ctx, q); err != nil {
@@ -880,7 +947,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		defer func() { _ = s.Close() }()
 		add := "ALTER TABLE " + tbl + " ADD COLUMN extra int"
-		err = edit.ApplyDDL(ctx, s, sqlx.DialectOf(f.Driver), []string{add, add})
+		err = edit.ApplyDDL(ctx, s, sd, []string{add, add})
 		var de *edit.DDLError
 		if !errors.As(err, &de) || de.Index != 1 {
 			t.Fatalf("err = %v", err)
@@ -890,9 +957,9 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			t.Fatal(err)
 		}
 		kept := slices.ContainsFunc(cols, func(c db.Column) bool { return c.Name == "extra" })
-		mysql := f.Driver == "mysql"
-		if kept != mysql || de.RolledBack == mysql {
-			t.Fatalf("extra kept = %v, rolled back = %v on %s", kept, de.RolledBack, f.Driver)
+		committed := !feat.TxDDL
+		if kept != committed || de.RolledBack == committed {
+			t.Fatalf("extra kept = %v, rolled back = %v on %s", kept, de.RolledBack, sd.Driver())
 		}
 		if _, err := s.Query(ctx, "SELECT 1"); err != nil {
 			t.Fatalf("the session is unusable after the failure: %v", err)
@@ -900,8 +967,9 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	})
 
 	t.Run("Modify Table edits round-trip through schemaedit and AlterTable", func(t *testing.T) {
+		needSchemaTools(t)
 		w := d.DDL()
-		dialect := sqlx.DialectOf(f.Driver)
+		dialect := sd
 		tbl := ref("mod_t")
 		if _, err := conn.Exec(ctx, "DROP TABLE IF EXISTS "+d.QualifiedName(tbl)); err != nil {
 			t.Fatal(err)
@@ -996,7 +1064,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			names = append(names, c.Name)
 		}
 		want := []string{"id", "full_name", "email", "phone", "qty"}
-		if f.Driver == "postgres" {
+		if sd == sqlx.Postgres {
 			want = []string{"id", "full_name", "qty", "email", "phone"} // PostgreSQL adds columns at the end
 		}
 		if !slices.Equal(names, want) {
@@ -1056,6 +1124,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	})
 
 	t.Run("data sync round-trips through datadiff and edit", func(t *testing.T) {
+		needSchemaTools(t)
 		for _, q := range f.DataCompareSQL {
 			if _, err := conn.Exec(ctx, q); err != nil {
 				t.Fatalf("%s: %v", q, err)
@@ -1073,7 +1142,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		dialect := sqlx.DialectOf(f.Driver)
+		dialect := sd
 		compare := func(where string) ([]datadiff.Row, []db.ColumnInfo) {
 			t.Helper()
 			src := spec.NewSource(100)
@@ -1125,4 +1194,18 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	})
 
 	runImportContract(t, conn, f)
+}
+
+// rowIDSelect selects the row id of each row of table name ahead of its
+// columns, as the data grid does on engines that locate rows by row id.
+func rowIDSelect(d sqlx.Dialect, name string) string {
+	//exhaustive:enforce
+	switch d {
+	case sqlx.Postgres:
+		return "SELECT ctid::text, * FROM " + name
+	case sqlx.Oracle:
+		return "SELECT ROWIDTOCHAR(t.ROWID), t.* FROM " + name + " t"
+	case sqlx.MySQL, sqlx.SQLServer:
+	}
+	panic(d.Driver() + " has no row id")
 }

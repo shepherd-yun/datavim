@@ -14,6 +14,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/db/dbtest"
 	"github.com/shepherd-yun/sqlvim/internal/db/postgres"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
 var fixture = []string{
@@ -71,7 +72,8 @@ func TestContract(t *testing.T) {
 		})
 	}
 	dbtest.RunContract(t, conn, dbtest.Fixture{
-		Driver:       "postgres",
+		Dialect:      sqlx.Postgres,
+		NVarcharSQL:  []string{`CREATE TABLE app.uni (id int PRIMARY KEY, name text)`},
 		NS:           db.Namespace{Database: "app", Schema: "app"},
 		SleepSQL:     "SELECT pg_sleep(30)",
 		ManyRowsSQL:  "SELECT generate_series(1, 30000000)",

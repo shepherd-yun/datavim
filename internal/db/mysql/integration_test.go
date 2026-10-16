@@ -14,6 +14,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/db/dbtest"
 	"github.com/shepherd-yun/sqlvim/internal/db/mysql"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
 var fixture = []string{
@@ -61,9 +62,10 @@ func TestContract(t *testing.T) {
 		}
 	}
 	dbtest.RunContract(t, conn, dbtest.Fixture{
-		Driver:   "mysql",
-		NS:       db.Namespace{Database: "app"},
-		SleepSQL: "SELECT SLEEP(30)",
+		Dialect:     sqlx.MySQL,
+		NVarcharSQL: []string{"CREATE TABLE app.uni (id INT PRIMARY KEY, name VARCHAR(50)) CHARACTER SET utf8mb4"},
+		NS:          db.Namespace{Database: "app"},
+		SleepSQL:    "SELECT SLEEP(30)",
 		ManyRowsSQL: "WITH d AS (SELECT 0 n UNION ALL SELECT 1 UNION ALL SELECT 2 UNION ALL SELECT 3 UNION ALL SELECT 4 " +
 			"UNION ALL SELECT 5 UNION ALL SELECT 6 UNION ALL SELECT 7 UNION ALL SELECT 8 UNION ALL SELECT 9) " +
 			"SELECT a.n FROM d a, d b, d c, d e, d f, d g, d h, d i",

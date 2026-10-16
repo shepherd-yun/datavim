@@ -19,8 +19,13 @@ import (
 // string parameters for every column type, NULL, DEFAULT, rollback, the
 // rejected row, and new tables.
 func runImportContract(t *testing.T, conn db.Conn, f Fixture) {
+	if !f.Dialect.Features().SchemaTools {
+		t.Run("importer", func(t *testing.T) { t.Skip("import is not supported on " + f.Dialect.Driver()) })
+		return
+	}
 	ctx := context.Background()
 	d := conn.Dialect()
+	driver := f.Dialect.Driver()
 	ref := func(name string) db.TableRef { return db.TableRef{Namespace: f.NS, Name: name} }
 	exec := func(t *testing.T, q string) {
 		t.Helper()
@@ -51,9 +56,9 @@ func runImportContract(t *testing.T, conn db.Conn, f Fixture) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p := importer.Plan{Driver: f.Driver, Table: table, Width: len(cols)}
+		p := importer.Plan{Driver: driver, Table: table, Width: len(cols)}
 		for i, c := range cols {
-			p.Columns = append(p.Columns, importer.Column{Source: i, Header: c.Name, Target: importer.TargetOf(f.Driver, c)})
+			p.Columns = append(p.Columns, importer.Column{Source: i, Header: c.Name, Target: importer.TargetOf(driver, c)})
 		}
 		return p
 	}
@@ -116,9 +121,9 @@ func runImportContract(t *testing.T, conn db.Conn, f Fixture) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		p := importer.Plan{Driver: f.Driver, Table: table, Width: 1, Columns: []importer.Column{
-			{Source: 0, Header: "name", Target: importer.TargetOf(f.Driver, cols[1])},
-			{Source: -1, Header: "(generate)", Generate: true, Target: importer.TargetOf(f.Driver, cols[0])},
+		p := importer.Plan{Driver: driver, Table: table, Width: 1, Columns: []importer.Column{
+			{Source: 0, Header: "name", Target: importer.TargetOf(driver, cols[1])},
+			{Source: -1, Header: "(generate)", Generate: true, Target: importer.TargetOf(driver, cols[0])},
 		}}
 		src := file(t, "name\na\nb\n")
 		if n, err := run(t, importer.Job{Path: src, Options: importer.DefaultOptions(src), Plan: p, Rows: 2}); err != nil || n != 2 {
@@ -141,15 +146,15 @@ func runImportContract(t *testing.T, conn db.Conn, f Fixture) {
 			exec(t, "DROP TABLE IF EXISTS "+d.QualifiedName(table))
 			src := file(t, tc.data)
 			o := importer.DefaultOptions(src)
-			in := importer.NewInferrer(f.Driver, "")
+			in := importer.NewInferrer(driver, "")
 			sample, err := importer.Read(ctx, src, o, importer.PreviewRows, in.Add)
 			if err != nil {
 				t.Fatal(err)
 			}
 			schema := in.Schema(table, importer.UniqueIdents(sample.Header))
-			p := importer.Plan{Driver: f.Driver, Table: table, Width: len(sample.Header)}
+			p := importer.Plan{Driver: driver, Table: table, Width: len(sample.Header)}
 			for i, c := range schema.Columns {
-				p.Columns = append(p.Columns, importer.Column{Source: i, Header: c.Name, Target: importer.TargetOf(f.Driver, c)})
+				p.Columns = append(p.Columns, importer.Column{Source: i, Header: c.Name, Target: importer.TargetOf(driver, c)})
 			}
 			create, _ := d.DDL().CreateTable(schema)
 			job := importer.Job{Path: src, Options: o, Plan: p, Create: create, Drop: d.DDL().DropTable(table, false)}
@@ -163,7 +168,7 @@ func runImportContract(t *testing.T, conn db.Conn, f Fixture) {
 				continue
 			}
 			// imp_bad infers id as varchar (x is not a number); force bigint so row 3 fails.
-			job.Plan.Columns[0].Target = importer.TargetOf(f.Driver, db.Column{Name: "id", Type: "bigint"})
+			job.Plan.Columns[0].Target = importer.TargetOf(driver, db.Column{Name: "id", Type: "bigint"})
 			schema.Columns[0].Type = "bigint"
 			job.Create, _ = d.DDL().CreateTable(schema)
 			if _, err := run(t, job); err == nil {
@@ -174,7 +179,7 @@ func runImportContract(t *testing.T, conn db.Conn, f Fixture) {
 				t.Fatal(err)
 			}
 			if slices.ContainsFunc(tables, func(x db.Table) bool { return x.Name == tc.table }) {
-				t.Fatalf("%s is left behind on %s", tc.table, f.Driver)
+				t.Fatalf("%s is left behind on %s", tc.table, driver)
 			}
 		}
 	})
