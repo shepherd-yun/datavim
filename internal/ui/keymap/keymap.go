@@ -22,6 +22,8 @@ const (
 	Diff      Context = "diff"
 	Import    Context = "import"
 	RedisKey  Context = "redis_key"
+	// RedisResults is the result pane of a redis console.
+	RedisResults Context = "redis_results"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
 	// only one-key bindings count there.
 	Popup Context = "popup"

@@ -36,6 +36,9 @@ const (
 
 var errRedisUnsupported = errors.New("not supported for redis yet")
 
+// errRedisTx is the answer to the SQL transaction commands in a redis console.
+const errRedisTx = "redis transactions: use MULTI … EXEC / DISCARD"
+
 // redisDBKey names one db of a redis connection.
 type redisDBKey struct {
 	conn string

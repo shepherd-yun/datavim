@@ -89,11 +89,11 @@ func TestViewReply(t *testing.T) {
 		},
 	} {
 		args, _ := rcmd.Split(tc.cmd)
-		max := tc.max
-		if max == 0 {
-			max = 100
+		limit := tc.max
+		if limit == 0 {
+			limit = 100
 		}
-		v := viewReply(args, tc.reply, max)
+		v := viewReply(args, tc.reply, limit)
 		if !slices.Equal(v.Columns, tc.cols) || !equalRows(v.Rows, tc.rows) || !slices.Equal(v.Lines, tc.lines) ||
 			v.Truncated != tc.truncated || (tc.summary != "" && v.Summary != tc.summary) {
 			t.Errorf("%s: viewReply = %+v", tc.name, v)
@@ -113,5 +113,5 @@ func TestViewReply(t *testing.T) {
 }
 
 func equalRows(a, b [][]string) bool {
-	return slices.EqualFunc(a, b, func(x, y []string) bool { return slices.Equal(x, y) })
+	return slices.EqualFunc(a, b, slices.Equal[[]string])
 }

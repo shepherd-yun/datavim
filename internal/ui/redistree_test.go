@@ -309,7 +309,7 @@ func TestRedisScanCancel(t *testing.T) {
 func TestRedisSQLActionsRefused(t *testing.T) {
 	m, b, _ := newRedisModel(t, config.Connection{})
 	m.setFocus(focusTree)
-	for _, keys := range [][]string{{"space", "c"}, {"C"}, {"m"}, {"space", "s"}, {"a"}, {"I"}, {"T"}, {"r"}} {
+	for _, keys := range [][]string{{"C"}, {"m"}, {"space", "s"}, {"a"}, {"I"}, {"T"}, {"r"}} {
 		pressAll(t, m, keys...)
 		if m.status != "not supported for redis yet" {
 			t.Fatalf("%v: status = %q", keys, m.status)

@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"log/slog"
+	"strconv"
 	"time"
 
 	tea "charm.land/bubbletea/v2"
@@ -94,6 +95,9 @@ func (m *Model) openRecent(r history.Recent) tea.Cmd {
 	case history.RecentStructure:
 		return m.openStructure(r.Conn, db.TableRef{Namespace: ns, Name: r.Name})
 	case history.RecentConsole:
+		if isRedis(m.backend, r.Conn) {
+			return m.openRedisConsole(r.Conn, redisDBOf(ns))
+		}
 		return m.openConsole(r.Conn, ns)
 	case history.RecentFile:
 		return m.openFile(r.Conn, ns, r.Name)
@@ -114,6 +118,8 @@ func (m *Model) touchActive() tea.Cmd {
 		r.Kind = history.RecentData
 	case *structureTab:
 		r.Kind = history.RecentStructure
+	case *redisConsoleTab:
+		r.Kind, r.Database = history.RecentConsole, strconv.Itoa(x.openDB)
 	case *consoleTab:
 		r.Kind, r.Name = history.RecentConsole, ""
 		if x.file != nil {

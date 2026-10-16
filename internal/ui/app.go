@@ -260,8 +260,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.jumpTab(vimedit.TabJump(msg))
 	case tea.ClipboardMsg:
 		// the terminal's answer to an OSC 52 read, asked for by "+p in the active console
-		if c, ok := m.activeTab().(*consoleTab); ok {
-			return m, c.Update(clipboardTextMsg{tabID: c.id, text: msg.Content})
+		if c, ok := m.activeTab().(pasteTab); ok {
+			return m, c.Update(clipboardTextMsg{tabID: c.ID(), text: msg.Content})
 		}
 	case tea.PasteMsg:
 		// Like keys, a paste goes to the command line, then a popup, then
@@ -276,7 +276,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		case m.overlay != nil:
 		case m.focus == focusTabs:
-			if c, ok := m.activeTab().(*consoleTab); ok {
+			if c, ok := m.activeTab().(pasteTab); ok {
 				return m, c.Paste(msg)
 			}
 		}
@@ -420,6 +420,10 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	case keymap.Quit:
 		return m.requestQuit(false)
 	case keymap.ToggleTx:
+		if _, ok := m.activeTab().(*redisConsoleTab); ok && m.focus == focusTabs {
+			m.setStatus(errRedisTx, true)
+			return nil
+		}
 		if m.refuseRedis(m.contextConn()) {
 			return nil
 		}
@@ -441,8 +445,8 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 			m.setStatus("select a connection first", true)
 			return nil
 		}
-		if m.refuseRedis(conn) {
-			return nil
+		if isRedis(m.backend, conn) {
+			return m.openRedisConsole(conn, redisDBOf(ns))
 		}
 		return m.openConsole(conn, ns)
 	case keymap.History:
@@ -714,6 +718,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case runDoneMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
+	case redisRunMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
 	case editsAppliedMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case diffLoadedMsg:
@@ -733,6 +739,13 @@ func (m *Model) runCommand(text string) tea.Cmd {
 	}
 	verb, arg, _ := strings.Cut(cmd, " ")
 	arg = strings.TrimSpace(arg)
+	switch verb {
+	case "e", "edit", "w", "write", "w!", "write!", "wq":
+		if _, ok := m.activeTab().(*redisConsoleTab); ok && m.focus == focusTabs || verb[0] == 'e' && m.refuseRedis(m.contextConn()) {
+			m.setStatus(errRedisUnsupported.Error(), true)
+			return nil
+		}
+	}
 	if verb == "e" || verb == "edit" {
 		return m.editFile(arg)
 	}
@@ -765,6 +778,10 @@ func (m *Model) runCommand(text string) tea.Cmd {
 	case "locate":
 		return m.locate()
 	case "commit", "rollback":
+		if _, ok := m.activeTab().(*redisConsoleTab); ok {
+			m.setStatus(errRedisTx, true)
+			return nil
+		}
 		if c, ok := m.activeTab().(*consoleTab); ok {
 			return c.endTx(cmd == "commit")
 		}
@@ -1023,6 +1040,12 @@ func (m *Model) openColumnsFromContext() tea.Cmd {
 		return nil
 	}
 	return m.openColumns(conn, ref)
+}
+
+// pasteTab is a console: it takes terminal pastes and clipboard reads.
+type pasteTab interface {
+	tab
+	Paste(msg tea.PasteMsg) tea.Cmd
 }
 
 // keyTakingTab returns the focused tab when it reads keys before the
@@ -1303,9 +1326,21 @@ func (m *Model) useHistory(e history.Entry) tea.Cmd {
 	if c, ok := m.activeTab().(*consoleTab); ok && m.focus == focusTabs {
 		return c.insertText(e.SQL)
 	}
+	if c, ok := m.activeTab().(*redisConsoleTab); ok && m.focus == focusTabs {
+		return c.insertText(e.SQL)
+	}
 	if _, ok := m.backend.Connection(e.Conn); !ok {
 		m.setStatus("connection "+e.Conn+" no longer exists", true)
 		return nil
+	}
+	if isRedis(m.backend, e.Conn) {
+		n, err := strconv.Atoi(e.Database)
+		if err != nil {
+			n = -1
+		}
+		open := m.openRedisConsole(e.Conn, n)
+		c := m.activeTab().(*redisConsoleTab)
+		return tea.Batch(open, c.insertText(e.SQL))
 	}
 	open := m.openConsole(e.Conn, db.Namespace{Database: e.Database})
 	c := m.activeTab().(*consoleTab)

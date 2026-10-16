@@ -158,6 +158,13 @@ func DefaultBindings() []Binding {
 		Binding{RedisKey, keys("f", "x"), FilterClear, "Clear the filter"},
 	)
 
+	b = append(b, gridBindings(RedisResults)...)
+	b = append(b,
+		Binding{RedisResults, keys("M"), ToggleMessages, "Toggle messages"},
+		Binding{RedisResults, keys("ctrl+k"), FocusEditor, "Focus editor"},
+		Binding{RedisResults, keys("ctrl+j"), FocusEditor, "Focus editor (wraps)"},
+	)
+
 	b = append(b, vertical(Import)...)
 	b = append(b,
 		Binding{Import, keys("["), PrevSection, "Previous section"},

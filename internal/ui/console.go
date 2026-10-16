@@ -361,13 +361,20 @@ func (t *consoleTab) TakeKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 // effects carries out what the editor asked of the console: the system
 // clipboard for "+ and tab jumps for gt / gT.
 func (t *consoleTab) effects(res vimedit.Result) tea.Cmd {
+	return editorEffects(t.id, res, &t.clipPaste)
+}
+
+// editorEffects carries out a console editor's requests: the system
+// clipboard for "+ (a paste waits in *paste for clipboardTextMsg) and tab
+// jumps for gt / gT.
+func editorEffects(id int, res vimedit.Result, paste **vimedit.ClipboardPaste) tea.Cmd {
 	var cmds []tea.Cmd
 	if res.Clipboard != nil {
 		cmds = append(cmds, copyToClipboard(*res.Clipboard))
 	}
 	if res.Paste != nil {
-		req, id := *res.Paste, t.id
-		t.clipPaste = &req
+		req := *res.Paste
+		*paste = &req
 		cmds = append(cmds, readClipboard(func(text string) tea.Msg {
 			return clipboardTextMsg{tabID: id, text: text}
 		}))
@@ -727,15 +734,7 @@ func (t *consoleTab) Update(msg tea.Msg) tea.Cmd {
 			return editDoneMsg{tabID: id, path: path, err: err}
 		})
 	case editDoneMsg:
-		id, path, editErr := t.id, m.path, m.err
-		return func() tea.Msg {
-			defer func() { _ = os.Remove(path) }()
-			if editErr != nil {
-				return editTextMsg{tabID: id, err: editErr}
-			}
-			data, err := os.ReadFile(path)
-			return editTextMsg{tabID: id, text: string(data), err: err}
-		}
+		return readEditedFile(t.id, m)
 	case editTextMsg:
 		if m.err != nil {
 			t.setStatus("editor: "+m.err.Error()+" · text unchanged", true)
@@ -1092,14 +1091,32 @@ func (t *consoleTab) insertText(sql string) tea.Cmd {
 }
 
 func (t *consoleTab) externalEdit() tea.Cmd {
-	id, text := t.id, t.editor.Value()
+	return writeTempEdit(t.id, t.editor.Value(), "sqlvim-*.sql")
+}
+
+// writeTempEdit writes text to a new temp file named after pattern for
+// $EDITOR; editFileMsg carries its path.
+func writeTempEdit(id int, text, pattern string) tea.Cmd {
 	return func() tea.Msg {
-		f, err := os.CreateTemp("", "sqlvim-*.sql")
+		f, err := os.CreateTemp("", pattern)
 		if err != nil {
 			return editFileMsg{tabID: id, err: err}
 		}
 		_, err = f.WriteString(text)
 		return editFileMsg{tabID: id, path: f.Name(), err: errors.Join(err, f.Close())}
+	}
+}
+
+// readEditedFile reads (and removes) the temp file $EDITOR finished with.
+func readEditedFile(id int, m editDoneMsg) tea.Cmd {
+	path, editErr := m.path, m.err
+	return func() tea.Msg {
+		defer func() { _ = os.Remove(path) }()
+		if editErr != nil {
+			return editTextMsg{tabID: id, err: editErr}
+		}
+		data, err := os.ReadFile(path)
+		return editTextMsg{tabID: id, text: string(data), err: err}
 	}
 }
 
