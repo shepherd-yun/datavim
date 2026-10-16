@@ -33,6 +33,7 @@ type fakeConn struct {
 	affected   map[string]int64               // statement text -> RowsAffected (default 1)
 	tables     []db.Table                     // returned by Tables when set
 	schemas    map[db.TableRef]db.TableSchema // returned by TableSchema
+	columns    []db.Column                    // returned by Columns when set
 	data       map[string]*db.ResultSet       // table name -> what a query FROM `app`.`name` returns
 	blockData  bool                           // data queries wait until their context ends
 	dropAt     int                            // the next Stream fails with ErrConnLost after this many rows
@@ -48,6 +49,12 @@ func (c *fakeConn) setTables(ts []db.Table) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.tables = ts
+}
+
+func (c *fakeConn) setColumns(cols []db.Column) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.columns = cols
 }
 
 func (c *fakeConn) setSchemas(ss ...db.TableSchema) {
@@ -254,6 +261,12 @@ func (m fakeMeta) Tables(context.Context, db.Namespace) ([]db.Table, error) {
 }
 
 func (m fakeMeta) Columns(context.Context, db.TableRef) ([]db.Column, error) {
+	m.c.mu.Lock()
+	cols := slices.Clone(m.c.columns)
+	m.c.mu.Unlock()
+	if cols != nil {
+		return cols, nil
+	}
 	if m.c.keyless() {
 		return []db.Column{{Name: "id", Type: "bigint"}, {Name: "name", Type: "text", Nullable: true}}, nil
 	}

@@ -301,6 +301,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, runTableOp(m.backend, m.store, msg.op, msg.sql)
 	case tableOpDoneMsg:
 		return m, m.tableOpDone(msg)
+	case importFileMsg:
+		return m, m.openImport(msg)
 	case modifySubmitMsg:
 		m.modifySubmit(msg)
 	case modifyAppliedMsg:
@@ -523,6 +525,8 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 		t.FocusPath()
 	case keymap.Refresh:
 		return m.refreshNode()
+	case keymap.ImportData:
+		return m.importFromNode()
 	case keymap.Password:
 		if n := t.Selected(); n != nil {
 			m.retryNode = nil

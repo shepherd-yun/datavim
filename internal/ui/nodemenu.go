@@ -41,6 +41,9 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			{keymap.OpenConsole, "Open console"},
 			{keymap.Refresh, "Refresh"},
 		}
+		if cfg, _ := m.backend.Connection(n.Conn); n.Kind == tree.KindSchema || cfg.Driver != "postgres" {
+			entries = append(entries, entry{keymap.ImportData, "Create table from file…"})
+		}
 		if _, problem := m.compareSideOf(n); problem == "" {
 			entries = append(entries, entry{keymap.MarkCompare, "Mark for compare"}, entry{keymap.Compare, "Compare with the marked one"})
 		}
@@ -56,6 +59,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 		}
 		if n.Kind == tree.KindTable {
 			entries = append(entries, entry{keymap.EditNode, "Modify table"})
+			entries = append(entries, entry{keymap.ImportData, "Import data from file…"})
 		}
 		entries = append(entries,
 			entry{keymap.CopyDDL, "Copy DDL"},
