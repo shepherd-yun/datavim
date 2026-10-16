@@ -49,10 +49,10 @@ type fakeRedis struct {
 	match  []string // HashPage / SetPage match arguments
 	block  chan struct{}
 
-	applied  []redit.Plan // every Apply, in order
-	applyErr error        // what Apply returns
+	applied  []redit.Plan       // every Apply, in order
+	applyErr error              // what Apply returns
 	onApply  func(p redit.Plan) // runs after an Apply is recorded, unlocked
-	unlinks  [][]string   // the keys of every Unlink
+	unlinks  [][]string         // the keys of every Unlink
 }
 
 func newFakeRedis() *fakeRedis {
