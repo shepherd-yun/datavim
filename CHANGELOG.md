@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-10-17
+
 ### Added
 - Redis connections: `driver = "redis"`, port 6379, `database` is
   the db number (0 when empty), password optional (sqlvim connects without one and asks only
@@ -397,6 +399,7 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/sqlvim/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/sqlvim/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/shepherd-yun/sqlvim/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/shepherd-yun/sqlvim/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/shepherd-yun/sqlvim/releases/tag/v1.0.0
