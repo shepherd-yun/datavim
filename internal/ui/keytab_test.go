@@ -206,3 +206,20 @@ func TestKeyTabPassword(t *testing.T) {
 		t.Fatalf("not reloaded: %+v", kt.info)
 	}
 }
+
+func TestKeyTabStatusKeepsHeight(t *testing.T) {
+	var list []string
+	for i := range 4 {
+		list = append(list, fmt.Sprint("e", i))
+	}
+	m, _ := openTestKey(t, "l", fakeValue{typ: "list", list: list})
+	kt := m.activeTab().(*keyTab)
+	kt.SetSize(80, 5)
+	pressAll(t, m, "]", "]") // the second says "no more"
+	if kt.status != "no more" {
+		t.Fatalf("status = %q", kt.status)
+	}
+	if n := strings.Count(kt.View(true), "\n") + 1; n > 5 {
+		t.Fatalf("view is %d lines for a height of 5", n)
+	}
+}

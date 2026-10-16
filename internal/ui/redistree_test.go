@@ -447,3 +447,20 @@ func TestOpenKeyNoRedisContext(t *testing.T) {
 		t.Fatalf("status = %q", m.status)
 	}
 }
+
+func TestRedisCollapseDuringScan(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.fill(0, "k", 5000)
+	m.setFocus(focusTree)
+	pressAll(t, m, "l", "j")
+	_, cmd := m.Update(uitest.Key("l")) // the first batch is in flight
+	dbn := m.tree.Selected()
+	pressAll(t, m, "h")
+	drainAll(t, m, cmd)
+	if dbn.Expanded {
+		t.Fatal("a scan batch opened the db the user closed")
+	}
+	if got := countKeys(dbn); got != 5000 {
+		t.Fatalf("keys = %d", got)
+	}
+}

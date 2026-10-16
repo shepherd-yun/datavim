@@ -334,6 +334,9 @@ func (m *Model) loadKeys(k redisDBKey, s *keyScan) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.ctx, s.cancel, s.running = ctx, cancel, true
 	s.loadScanned, s.loadMatched = 0, 0
+	if n := m.redisDBNode(k); n != nil {
+		n.Expanded = true // a load shows its keys; batches leave the node as the user has it
+	}
 	m.rebuildDB(k, s)
 	return m.scanCmd(ctx, k, s, false)
 }
@@ -444,7 +447,7 @@ func (m *Model) rebuildDB(k redisDBKey, s *keyScan) {
 		children = append(children, &tree.Node{Kind: tree.KindMore, Name: more, Conn: k.conn, NS: n.NS})
 	}
 	tree.Adopt(n, children)
-	n.Expanded, n.Loading, n.Err = true, s.running, ""
+	n.Loading, n.Err = s.running, ""
 	n.Detail = groupDigits(max(s.total, 0))
 	if s.pattern != "" {
 		n.Detail += " · filter " + rcmd.Escape(s.pattern)

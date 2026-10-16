@@ -516,6 +516,7 @@ func (t *keyTab) headerLines() []string {
 }
 
 func (t *keyTab) View(focused bool) string {
+	t.SetSize(t.width, t.height) // the header grows with a status line
 	head := t.headerLines()
 	for i, l := range head {
 		head[i] = textutil.Fit(l, t.width)
