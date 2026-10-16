@@ -464,3 +464,18 @@ func TestRedisCollapseDuringScan(t *testing.T) {
 		t.Fatalf("keys = %d", got)
 	}
 }
+
+func TestRefreshKeepsFolderSelection(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.fill(0, "user:", 3)
+	r.put(0, "other", fakeValue{typ: "string", str: "v"})
+	expandDB0(t, m)
+	pressAll(t, m, "j")
+	if n := m.tree.Selected(); n.Kind != tree.KindKeyFolder || n.Key != "user:" {
+		t.Fatalf("selected %+v", n)
+	}
+	pressAll(t, m, "space", "r")
+	if n := m.tree.Selected(); n.Kind != tree.KindKeyFolder || n.Key != "user:" {
+		t.Fatalf("after refresh the cursor is on %v %q, want the folder", n.Kind, n.Key)
+	}
+}

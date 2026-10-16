@@ -156,6 +156,9 @@ func TestBulkDeleteCancel(t *testing.T) {
 	if m.bulk != nil {
 		t.Fatal("stopped")
 	}
+	if n := m.tree.Selected(); n.Kind != tree.KindKeyFolder || n.Key != "del:" {
+		t.Fatalf("after the rescan the cursor is on %v %q: a second dd must not mean every key", n.Kind, n.Key)
+	}
 }
 
 func TestBulkDeleteNoMatch(t *testing.T) {

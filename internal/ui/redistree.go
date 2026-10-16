@@ -61,6 +61,17 @@ type keyScan struct {
 	cancel  context.CancelFunc
 
 	loadScanned, loadMatched int // this load's counts
+
+	// wantSel is the folder or key the cursor was on when a restart
+	// emptied the db: the cursor goes back to it once a batch brings it
+	// back (else it would stay on the db, where dd deletes every key).
+	wantSel *selRef
+}
+
+// selRef names a node under a db node.
+type selRef struct {
+	kind tree.Kind
+	key  string
 }
 
 func newKeyScan(sep, pattern string) *keyScan {
@@ -438,12 +449,14 @@ func (m *Model) rebuildDB(k redisDBKey, s *keyScan) {
 	}
 	walk(n.Children)
 	sel := m.tree.Selected()
-	var selKind tree.Kind
-	var selKey string
-	reselect := sel != nil && sel.Conn == k.conn && sel.Parent() != nil && sel.NS == n.NS && sel != n
-	if reselect {
-		selKind, selKey = sel.Kind, sel.Key
+	var want *selRef
+	switch {
+	case sel != nil && sel.Conn == k.conn && sel.Parent() != nil && sel.NS == n.NS && sel != n:
+		want = &selRef{kind: sel.Kind, key: sel.Key}
+	case sel == n:
+		want = s.wantSel // still parked on the db since the restart
 	}
+	s.wantSel = nil
 
 	children := buildKeyNodes(k.conn, k.db, s.keys, s.sep, s.done, expanded)
 	if more := m.moreLine(s); more != "" {
@@ -455,10 +468,10 @@ func (m *Model) rebuildDB(k redisDBKey, s *keyScan) {
 	if s.pattern != "" {
 		n.Detail += " · filter " + rcmd.Escape(s.pattern)
 	}
-	if reselect {
-		m.tree.SelectWhere(func(c *tree.Node) bool {
-			return c.Kind == selKind && c.Key == selKey && c.Conn == k.conn && c.NS == n.NS
-		})
+	if want != nil && !m.tree.SelectWhere(func(c *tree.Node) bool {
+		return c.Kind == want.kind && c.Key == want.key && c.Conn == k.conn && c.NS == n.NS
+	}) && s.running {
+		s.wantSel = want
 	}
 }
 
