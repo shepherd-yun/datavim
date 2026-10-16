@@ -13,15 +13,26 @@ type Dialect int
 const (
 	MySQL Dialect = iota
 	Postgres
+	SQLServer
+	Oracle
 )
 
-// DialectOf maps a driver name ("mysql", "postgres") to its dialect.
+var driverNames = [...]string{MySQL: "mysql", Postgres: "postgres", SQLServer: "sqlserver", Oracle: "oracle"}
+
+// DialectOf maps a driver name ("mysql", "postgres", "sqlserver", "oracle")
+// to its dialect. Unknown names map to MySQL; config validation rejects them
+// before they get here.
 func DialectOf(driver string) Dialect {
-	if driver == "postgres" {
-		return Postgres
+	for d, name := range driverNames {
+		if name == driver {
+			return Dialect(d)
+		}
 	}
 	return MySQL
 }
+
+// Driver is the driver name of d, the inverse of DialectOf.
+func (d Dialect) Driver() string { return driverNames[d] }
 
 type tokKind int
 
