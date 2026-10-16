@@ -79,7 +79,7 @@ type pageLoadedMsg struct {
 	rs      *db.ResultSet
 	hasMore bool
 	meta    *tableMeta // read with the page when the tab did not know it yet
-	ids     []string   // PostgreSQL ctids, when rows are located by them
+	ids     []string   // row ids (ctid, ROWID), when rows are located by them
 	err     error
 }
 
@@ -228,7 +228,7 @@ func (tm *tableMeta) order() []string {
 	return nil
 }
 
-// fetchPage reads one page; with q.rowID the leading ctid column is split
+// fetchPage reads one page; with q.rowID the leading row id column is split
 // off into ids.
 func fetchPage(ctx context.Context, c db.Conn, d sqlx.Dialect, ref db.TableRef, q tableQuery, page, size int) (*db.ResultSet, []string, bool, error) {
 	rs, err := c.Query(ctx, c.Dialect().Paginate(q.sql(d, ref), size+1, page*size))

@@ -23,8 +23,10 @@ type Key struct {
 }
 
 // ChooseKey picks how rows of a table are located: its primary key, else a
-// unique index over NOT NULL columns, else ctid (PostgreSQL tables) or
-// every column (MySQL). A PostgreSQL view without a key has none.
+// unique index over NOT NULL columns, else the engine's fallback
+// (sqlx.Features.RowLocator): the row id of a table (PostgreSQL ctid,
+// Oracle ROWID) or every column (MySQL, SQL Server). A view without a key
+// on a row-id engine has none.
 func ChooseKey(d sqlx.Dialect, cols []db.Column, idx []db.Index, view bool) Key {
 	nullable := make(map[string]bool, len(cols))
 	var pk []string

@@ -22,7 +22,7 @@ const (
 // Row is one row of the page being edited. Callers read it; only Table
 // changes it.
 type Row struct {
-	ID     string     // PostgreSQL ctid when rows are located by it
+	ID     string     // row id (PostgreSQL ctid, Oracle ROWID) when rows are located by it
 	Orig   []db.Value // as read from the server; nil for a new row
 	Values []db.Value // as shown and written
 	Set    []bool     // cells given a value (new rows: cells not left to their default)
@@ -63,7 +63,7 @@ type Table struct {
 	undo []step
 }
 
-// New stages changes over rows; ids, when not nil, holds each row's ctid.
+// New stages changes over rows; ids, when not nil, holds each row's row id.
 func New(cols []db.ColumnInfo, rows [][]db.Value, ids []string) *Table {
 	t := &Table{cols: cols, orig: rows, ids: ids}
 	t.Reset()

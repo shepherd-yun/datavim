@@ -196,7 +196,7 @@ func resolveMapping(names []string, cols []db.Column) ([]string, string) {
 
 // keyBlocked says why rows read through a result whose table columns are
 // mapping cannot be changed ("" when they can): every column that locates
-// a row must be in the result, and a console result has no ctid.
+// a row must be in the result, and a console result has no row id.
 func keyBlocked(table string, key edit.Key, cols []db.Column, mapping []string) string {
 	switch key.Kind {
 	case edit.PrimaryKey, edit.UniqueKey:
