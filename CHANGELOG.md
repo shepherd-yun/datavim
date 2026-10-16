@@ -7,6 +7,15 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Import data from CSV, TSV or XLSX files, like DataGrip's Import Data from File: `I` on a
+  table (or "Import data from file…" in its `a` menu) opens an Import tab with the file's
+  settings (delimiter, UTF-8 or GBK, header row, sheet, NULL text), the column mapping (`x`
+  imports or skips a column, `i` picks the target column) and a preview of the converted
+  rows. `<Space>w` checks the whole file first and lists the rows that cannot be imported,
+  then inserts everything in one transaction: any failure, `Ctrl-c` or a lost connection
+  writes nothing, and a rejected row is named by its line. On a database or schema `I`
+  creates a new table with column types inferred from the file (`t` changes a type).
+  Read-only connections refuse; prod asks for the table name.
 - Open `.sql` files in a console: `:e <file>` opens one on the connection and database in
   context (`~` and relative paths work; files up to 2 MB). It runs like any console, the tab
   shows `[+]` while it has unsaved changes, and `:w` saves it (`:w <file>` saves as, `:wq`

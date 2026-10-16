@@ -12,6 +12,7 @@ A terminal SQL client for MySQL and PostgreSQL with vim keys and DataGrip-style 
 - A highlighted SQL console with a **built-in vim editor**, completion and `$EDITOR` hand-off.
 - `<Space><Space>` searches every table, view, column and routine; `<Space>f` reopens recent tabs.
 - Copy and export results (TSV, CSV, JSON, Markdown, INSERT, xlsx), SQL history.
+- Import CSV, TSV and xlsx files into a table, or into a new table inferred from the file.
 - SSH tunnels (agent, keys, ProxyJump), production safeguards, manual transactions.
 - Your own keys (`keymap.toml`) and colors (`[theme]`).
 
@@ -157,6 +158,8 @@ picks the workspace by directory.
 | `<Space>y t/c/j/m/i` | Copy result as TSV / CSV / JSON / Markdown / INSERT |
 | `<Space>yd` | Copy the DDL of the table under the cursor (tree, data or structure tab); `y` in a routine's definition copies it |
 | `<Space>x c/j/s/x` | Export result as CSV / JSON / SQL / xlsx |
+| `I` | Tree: import a CSV / TSV / xlsx file into the table; on a database or schema, into a new table |
+| `x` / `a` `A` / `i` / `t` | Import tab: import or skip a column / all / none / pick the target column (new table: rename) / new table: column type; `[` `]` switch sections, `<Space>w` checks and imports |
 | `<Space>n` | New connection |
 | `e` | Tree: edit the selected connection (saved to `connections.toml`), or modify the selected table — on a column or index, with the cursor on it |
 | `e` | Structure: modify the table — `i` edits a field (`h` / `l` pick it), `o` adds a column or index, `dd` deletes, `u` / `U` undo, `<Space>w` previews and runs the ALTER |
@@ -258,6 +261,7 @@ with a syntax error, the cursor jumps to where the server says the error is.
 - In manual commit mode (`<Space>t`) quitting or closing a console with an open transaction
   asks first. If the connection drops during a transaction, sqlvim says the transaction is
   lost instead of reconnecting silently. Use `<Space>t` rather than `SET autocommit = 0`.
+- Imports run in one transaction and write nothing unless every row goes in; on MySQL a table the import created is dropped again.
 
 ## Development
 

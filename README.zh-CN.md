@@ -10,6 +10,7 @@
 - 带语法高亮的 SQL 控制台，**内置 vim 编辑器**、自动补全，可交给 `$EDITOR` 编辑。
 - `<Space><Space>` 搜索所有表、视图、列和函数；`<Space>f` 重新打开最近的 tab。
 - 复制与导出结果（TSV、CSV、JSON、Markdown、INSERT、xlsx），SQL 历史。
+- 把 CSV、TSV、xlsx 文件导入到表，或从文件推断结构新建表。
 - SSH 隧道（agent、密钥、ProxyJump），生产环境保护，手动事务。
 - 自定义按键（`keymap.toml`）与颜色（`[theme]`）。
 
@@ -146,6 +147,8 @@ sqlvim --list-workspaces
 | `<Space>y t/c/j/m/i` | 复制结果为 TSV / CSV / JSON / Markdown / INSERT |
 | `<Space>yd` | 复制光标所在表的 DDL（树、数据 tab 或结构 tab）；在函数定义弹窗里按 `y` 复制其定义 |
 | `<Space>x c/j/s/x` | 导出结果为 CSV / JSON / SQL / xlsx |
+| `I` | 树：把 CSV / TSV / xlsx 文件导入到这张表；在库或 schema 上则新建表 |
+| `x` / `a` `A` / `i` / `t` | Import tab：导入或跳过一列 / 全选 / 全不选 / 选目标列（新表：改列名）/ 新表：改类型；`[` `]` 切换区域，`<Space>w` 校验并导入 |
 | `<Space>n` | 新建连接 |
 | `e` | 树：编辑选中的连接（保存到 `connections.toml`），或修改选中的表；在列或索引上，光标停在该行 |
 | `e` | 结构页：修改表——`i` 编辑字段（`h` / `l` 选择字段），`o` 新增列或索引，`dd` 删除，`u` / `U` 撤销，`<Space>w` 预览并执行 ALTER |
@@ -239,6 +242,7 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，
   sqlvim 会提示事务已丢失，而不是悄悄重连。请用 `<Space>t` 而不是 `SET autocommit = 0`。
+- 导入在一个事务里完成，只要有一行失败就什么都不写；MySQL 上导入新建的表会被删掉。
 
 ## 开发
 
