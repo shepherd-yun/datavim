@@ -62,7 +62,7 @@ type Node struct {
 	parent *Node
 }
 
-func (n *Node) Parent() *Node         { return n.parent }
+func (n *Node) Parent() *Node { return n.parent }
 func (n *Node) Expandable() bool {
 	return n.Kind <= KindView || n.Kind == KindGroup || n.Kind == KindRedisDB || n.Kind == KindKeyFolder
 }
