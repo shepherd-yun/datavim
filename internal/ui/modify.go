@@ -33,9 +33,9 @@ func (m *Model) tableBlocked(conn string, ref db.TableRef, self tab) string {
 			continue
 		}
 		switch t := t.(type) {
-		case *consoleTab:
-			if t.conn == conn && t.openTx() {
-				return "a console on " + conn + " has an open transaction · :commit or :rollback first"
+		case txHolder:
+			if c, _ := t.Target(); c == conn && t.openTx() {
+				return openTxNote(conn, t)
 			}
 		case stager:
 			if c, r := t.Target(); c == conn && r == ref && t.changes() > 0 {

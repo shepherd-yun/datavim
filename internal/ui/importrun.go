@@ -33,8 +33,10 @@ func (m *Model) importBlocked(conn string, ref db.TableRef, create bool) string 
 		return readOnlyHint
 	}
 	for _, t := range m.tabs {
-		if c, ok := t.(*consoleTab); ok && c.conn == conn && c.openTx() {
-			return "a console on " + conn + " has an open transaction · :commit or :rollback first"
+		if c, ok := t.(txHolder); ok && c.openTx() {
+			if tc, _ := c.Target(); tc == conn {
+				return openTxNote(conn, c)
+			}
 		}
 	}
 	return ""

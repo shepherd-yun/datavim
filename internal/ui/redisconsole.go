@@ -68,6 +68,7 @@ type (
 		db          int         // the session's db when the run ended
 		results     []redisResult
 		reconnected bool
+		txLost      bool  // the session failed its PING during a WATCH: nothing ran
 		err         error // opening the session failed
 		total       int   // commands asked for
 	}
@@ -384,14 +385,6 @@ func (t *redisConsoleTab) guard(dbSize int64) tea.Cmd {
 	return t.execute(lines)
 }
 
-func splitStatus(l rcmd.Line, err error) string {
-	var se *rcmd.SplitError
-	if errors.As(err, &se) {
-		return fmt.Sprintf("line %d, col %d: %s", l.Num, se.Col, se.Msg)
-	}
-	return err.Error()
-}
-
 // refuse reports a batch that does not run because of line l.
 func (t *redisConsoleTab) refuse(l rcmd.Line, reason string) tea.Cmd {
 	cmd := "line " + strconv.Itoa(l.Num)
@@ -418,19 +411,25 @@ func (t *redisConsoleTab) execute(lines []rcmd.Line) tea.Cmd {
 	t.running, t.cancel, t.started = true, cancel, time.Now()
 	t.setStatus("", false)
 	gen, id, b, conn := t.gen, t.id, t.backend, t.conn
-	s, n, had := t.session, t.db, t.hadSession
+	s, n, had, tx := t.session, t.db, t.hadSession, t.tx
 	t.session = nil // owned by the command until redisRunMsg hands it back
 	run := func() tea.Msg {
 		defer cancel()
 		msg := redisRunMsg{tabID: id, gen: gen, conn: conn, db: n, total: len(lines)}
-		if s != nil {
+		// Inside MULTI a PING would be queued (and show up in EXEC), so the
+		// session is used as it is.
+		if s != nil && !tx.InMulti {
 			pctx, pcancel := context.WithTimeout(ctx, pingTimeout)
 			err := s.Ping(pctx)
 			pcancel()
 			if err != nil {
-				slog.Info("redis console session lost", "conn", conn, "err", err)
+				slog.Info("redis console session lost", "conn", conn, "watching", tx.Watching, "err", err)
 				_ = s.Close()
 				s = nil
+				if tx.Watching {
+					msg.txLost = true // a new connection would run outside the WATCH
+					return msg
+				}
 			}
 		}
 		if s == nil {
@@ -565,6 +564,11 @@ func (t *redisConsoleTab) done(m redisRunMsg) tea.Cmd {
 	}
 	t.running, t.cancel = false, nil
 	t.session, t.db = m.session, m.db
+	if m.txLost {
+		t.loseTx()
+		t.setStatus(errRedisTxLost, true)
+		return nil
+	}
 	if m.err != nil {
 		text := m.err.Error()
 		if errors.Is(m.err, session.ErrPasswordRequired) {
@@ -583,6 +587,9 @@ func (t *redisConsoleTab) done(m redisRunMsg) tea.Cmd {
 	var shown *replyView
 	var text []string
 	for _, r := range m.results {
+		if r.Err == nil {
+			t.tx.Apply(r.Args, r.Reply.Kind == rdb.KindError)
+		}
 		total += r.Duration
 		t.log(describeRedis(r, t.maxRows))
 		if r.Err != nil {
@@ -606,6 +613,9 @@ func (t *redisConsoleTab) done(m redisRunMsg) tea.Cmd {
 		t.view.Top()
 		t.showMessages = false
 	}
+	if m.session == nil && t.tx.Active() {
+		t.loseTx() // the connection dropped: the server forgot the MULTI / WATCH
+	}
 	if len(m.results) == 0 {
 		t.setStatus("canceled", true)
 		return nil
@@ -627,6 +637,19 @@ func (t *redisConsoleTab) done(m redisRunMsg) tea.Cmd {
 	}
 	return t.record(m.results)
 }
+
+// errRedisTxLost is the note for a MULTI or WATCH whose connection dropped.
+const errRedisTxLost = "transaction lost: the connection dropped; the queued commands and WATCH are gone · run again to reconnect"
+
+// loseTx forgets a MULTI / WATCH the server no longer has.
+func (t *redisConsoleTab) loseTx() {
+	t.log("✗ " + errRedisTxLost)
+	t.tx = rcmd.TxState{}
+}
+
+func (t *redisConsoleTab) openTx() bool { return t.tx.Active() }
+
+func (t *redisConsoleTab) endTxHint() string { return "EXEC or DISCARD first" }
 
 func failText(r redisResult) string {
 	if r.Err != nil {
@@ -841,3 +864,6 @@ type (
 
 func (m redisConfirmMsg) TabID() int { return m.tabID }
 func (m redisDBSizeMsg) TabID() int  { return m.tabID }
+
+// TxStatus is the status bar badge for a MULTI or WATCH.
+func (t *redisConsoleTab) TxStatus() string { return t.tx.Badge() }

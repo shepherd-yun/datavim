@@ -630,9 +630,9 @@ func sqlOnlyTreeAction(a keymap.Action, n *tree.Node) bool {
 func (m *Model) canChange(conn string) bool {
 	for _, t := range m.tabs {
 		switch t := t.(type) {
-		case *consoleTab:
-			if t.conn == conn && t.openTx() {
-				m.setStatus("a console on "+conn+" has an open transaction · :commit or :rollback first", true)
+		case txHolder:
+			if c, _ := t.Target(); c == conn && t.openTx() {
+				m.setStatus(openTxNote(conn, t), true)
 				return false
 			}
 		case stager:
@@ -807,7 +807,7 @@ func (m *Model) requestClose(force bool) tea.Cmd {
 		m.overlay = overlay.NewConfirm("Unsaved changes", append(lines, "Closing the tab discards them."), "", closeTabConfirmedMsg{tabID: t.ID()})
 		return nil
 	}
-	if c, ok := t.(*consoleTab); ok && c.openTx() && !force {
+	if c, ok := t.(txHolder); ok && c.openTx() && !force {
 		m.overlay = overlay.NewConfirm("Open transaction", []string{
 			c.Title() + " has an open transaction (" + c.TxStatus() + ").",
 			"Closing the console rolls it back.",
@@ -861,11 +861,16 @@ func (m *Model) unsavedTables() []string {
 	return out
 }
 
+// openTxNote says that a console on conn holds a transaction, and what ends it.
+func openTxNote(conn string, t txHolder) string {
+	return "a console on " + conn + " has an open transaction · " + t.endTxHint()
+}
+
 // openTransactions names the consoles with an uncommitted transaction.
 func (m *Model) openTransactions() []string {
 	var out []string
 	for _, t := range m.tabs {
-		if c, ok := t.(*consoleTab); ok && c.openTx() {
+		if c, ok := t.(txHolder); ok && c.openTx() {
 			out = append(out, c.Title())
 		}
 	}
@@ -897,9 +902,11 @@ func (m *Model) setOption(opt string) tea.Cmd {
 		return nil
 	}
 	for _, t := range m.tabs {
-		if c, ok := t.(*consoleTab); ok && c.conn == cfg.Name && c.openTx() {
-			m.setStatus("a console on "+cfg.Name+" has an open transaction · :commit or :rollback first", true)
-			return nil
+		if c, ok := t.(txHolder); ok && c.openTx() {
+			if conn, _ := c.Target(); conn == cfg.Name {
+				m.setStatus(openTxNote(cfg.Name, c), true)
+				return nil
+			}
 		}
 	}
 	if err := m.backend.SetReadOnly(cfg.Name, ro); err != nil {
@@ -1560,7 +1567,7 @@ func (m *Model) renderStatus() string {
 	if ok && cfg.IsReadOnly() {
 		parts = append(parts, theme.Muted.Render("RO"))
 	}
-	if c, ok := m.activeTab().(*consoleTab); ok {
+	if c, ok := m.activeTab().(txHolder); ok {
 		if tx := c.TxStatus(); tx != "" {
 			parts = append(parts, theme.Accent.Render(tx))
 		}

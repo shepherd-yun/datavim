@@ -486,6 +486,17 @@ func (t *consoleTab) TxStatus() string {
 
 func (t *consoleTab) openTx() bool { return t.inTx }
 
+func (t *consoleTab) endTxHint() string { return ":commit or :rollback first" }
+
+// txHolder is a tab that holds a server-side transaction: the SQL console
+// and the redis console (MULTI / WATCH).
+type txHolder interface {
+	tab
+	openTx() bool
+	TxStatus() string
+	endTxHint() string // what ends it, for "… first" messages
+}
+
 func (t *consoleTab) clearTx() { t.inTx, t.txWrites, t.txAborted = false, 0, false }
 
 // trackTx follows the transaction through the statements that ran.

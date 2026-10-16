@@ -528,3 +528,128 @@ func TestRedisConsoleStaleConfirm(t *testing.T) {
 		t.Fatalf("a stale confirmation ran: %q", got)
 	}
 }
+
+func TestRedisConsoleTxBadge(t *testing.T) {
+	m, _, _ := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "MULTI\nSET a 1", keymap.RunAll)
+	if s := statusLine(m); !strings.Contains(s, "TX 1") {
+		t.Fatalf("status bar: %s", s)
+	}
+	if !strings.Contains(strings.Join(c.messages, "\n"), "SET a 1 — QUEUED") {
+		t.Fatalf("messages %q", c.messages)
+	}
+	runR(t, m, c, "EXEC", keymap.RunStatement)
+	if s := statusLine(m); strings.Contains(s, "TX") || c.TxStatus() != "" {
+		t.Fatalf("status bar after EXEC: %s", s)
+	}
+}
+
+func TestRedisConsoleNoPingInMulti(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "MULTI", keymap.RunStatement)
+	pings := b.lastSession().pingCount()
+	runR(t, m, c, "SET a 1", keymap.RunStatement)
+	runR(t, m, c, "EXEC", keymap.RunStatement)
+	if got := b.lastSession().pingCount(); got != pings {
+		t.Fatalf("pings %d → %d inside MULTI", pings, got)
+	}
+	runR(t, m, c, "GET a", keymap.RunStatement)
+	if got := b.lastSession().pingCount(); got != pings+1 {
+		t.Fatalf("no ping after EXEC: %d", got)
+	}
+}
+
+func TestRedisConsoleCloseInTx(t *testing.T) {
+	m, _, _ := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "MULTI", keymap.RunStatement)
+	command(t, m, "q")
+	if !strings.Contains(screen(m), "Open transaction") || len(m.tabs) != 1 {
+		t.Fatalf(":q in MULTI:\n%s", screen(m))
+	}
+	pressAll(t, m, "esc")
+	command(t, m, "qa")
+	if s := screen(m); !strings.Contains(s, "Open transactions") || !strings.Contains(s, "redis:cache/db0") {
+		t.Fatalf(":qa in MULTI:\n%s", s)
+	}
+	pressAll(t, m, "esc")
+	m.setFocus(focusTree)
+	pressAll(t, m, "g", "g")
+	if m.canChange("cache") {
+		t.Fatal("the connection can be changed under an open MULTI")
+	}
+}
+
+func TestRedisConsoleReconnectRestoresDB(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "SELECT 3", keymap.RunStatement)
+	c.editor.SetValue("BLPOP q 0")
+	cmds := c.Handle(keymap.RunStatement)().(tea.BatchMsg)
+	done := make(chan tea.Msg, 1)
+	go func() { done <- cmds[0]() }()
+	time.Sleep(10 * time.Millisecond)
+	c.Handle(keymap.Cancel)
+	drainAll(t, m, func() tea.Msg { return <-done })
+	if c.Title() != "redis:cache/db3" {
+		t.Fatalf("title after cancel %q", c.Title())
+	}
+	runR(t, m, c, "GET a", keymap.RunStatement)
+	if got := b.sessionCalls(); len(got) != 2 || got[1] != 3 {
+		t.Fatalf("RedisSession calls %v", got)
+	}
+	if !strings.Contains(strings.Join(c.messages, "\n"), "reconnected (db 3)") || c.Title() != "redis:cache/db3" {
+		t.Fatalf("messages %q, title %q", c.messages, c.Title())
+	}
+}
+
+func TestRedisConsoleTxLost(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "MULTI", keymap.RunStatement)
+	b.lastSession().setLost()
+	runR(t, m, c, "SET a 1", keymap.RunStatement)
+	if !strings.Contains(strings.Join(c.messages, "\n"), "transaction lost") || c.TxStatus() != "" {
+		t.Fatalf("messages %q, tx %q", c.messages, c.TxStatus())
+	}
+	if got := b.sessionCalls(); len(got) != 1 {
+		t.Fatalf("reconnected inside the lost transaction: %v", got)
+	}
+	runR(t, m, c, "GET a", keymap.RunStatement)
+	if got := b.sessionCalls(); len(got) != 2 {
+		t.Fatalf("the next run did not reconnect: %v", got)
+	}
+}
+
+func TestRedisConsoleWatchPingLost(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "WATCH k", keymap.RunStatement)
+	if c.TxStatus() != "WATCH" {
+		t.Fatalf("tx %q", c.TxStatus())
+	}
+	s := b.lastSession()
+	s.setLost()
+	runR(t, m, c, "GET a", keymap.RunStatement)
+	if !strings.Contains(strings.Join(c.messages, "\n"), "transaction lost") || c.TxStatus() != "" {
+		t.Fatalf("messages %q", c.messages)
+	}
+	if slices.Contains(s.commands(), "GET a") || len(b.sessionCalls()) != 1 {
+		t.Fatalf("sent %q, sessions %v", s.commands(), b.sessionCalls())
+	}
+}
+
+func TestRedisConsoleSetReadonlyInTx(t *testing.T) {
+	m, b, _ := newRedisModel(t, config.Connection{ReadOnly: boolPtr(false)})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "MULTI", keymap.RunStatement)
+	command(t, m, "set readonly")
+	if !strings.Contains(m.status, "open transaction") {
+		t.Fatalf("status %q", m.status)
+	}
+	if cfg, _ := b.Connection("cache"); cfg.IsReadOnly() {
+		t.Fatal("read-only changed under an open MULTI")
+	}
+}
