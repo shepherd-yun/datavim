@@ -204,6 +204,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.childrenLoaded(msg)
 	case redisScanMsg:
 		return m, m.scanned(msg)
+	case redisKeyChangedMsg:
+		m.keyChanged(msg)
 	case redisFilterMsg:
 		return m, m.filterKeys(msg.key, msg.text)
 	case openKeyMsg:
@@ -729,6 +731,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 	case diffLoadedMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case keyLoadedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
+	case keyAppliedMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	default:
 		return

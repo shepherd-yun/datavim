@@ -51,6 +51,7 @@ type fakeRedis struct {
 
 	applied  []redit.Plan // every Apply, in order
 	applyErr error        // what Apply returns
+	onApply  func(p redit.Plan) // runs after an Apply is recorded, unlocked
 	unlinks  [][]string   // the keys of every Unlink
 }
 
@@ -268,10 +269,20 @@ func (c *fakeRedisClient) StreamPage(_ context.Context, key, after string, count
 
 func (c *fakeRedisClient) Apply(_ context.Context, p redit.Plan) error {
 	c.r.mu.Lock()
-	defer c.r.mu.Unlock()
 	c.r.applied = append(c.r.applied, p)
 	c.r.calls = append(c.r.calls, "Apply "+p.Key)
-	return c.r.applyErr
+	err, hook := c.r.applyErr, c.r.onApply
+	c.r.mu.Unlock()
+	if hook != nil {
+		hook(p)
+	}
+	return err
+}
+
+func (r *fakeRedis) appliedPlans() []redit.Plan {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return slices.Clone(r.applied)
 }
 
 func (c *fakeRedisClient) Expire(_ context.Context, key string, ttl time.Duration) (bool, error) {

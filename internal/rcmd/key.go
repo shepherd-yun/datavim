@@ -91,3 +91,58 @@ func Segments(key, sep string) []string {
 	}
 	return strings.Split(key, sep)
 }
+
+// Match reports whether s matches the SCAN MATCH glob pattern as Redis
+// matches it: * ? [abc] [^a] [a-z] and \ escapes, byte by byte.
+func Match(pattern, s string) bool {
+	if pattern == "" {
+		return s == ""
+	}
+	switch pattern[0] {
+	case '*':
+		for i := 0; i <= len(s); i++ {
+			if Match(pattern[1:], s[i:]) {
+				return true
+			}
+		}
+		return false
+	case '?':
+		return s != "" && Match(pattern[1:], s[1:])
+	case '[':
+		if s == "" {
+			return false
+		}
+		end := strings.IndexByte(pattern[1:], ']')
+		if end < 0 {
+			return s[0] == '[' && Match(pattern[1:], s[1:])
+		}
+		class := pattern[1 : 1+end]
+		not := strings.HasPrefix(class, "^")
+		if not {
+			class = class[1:]
+		}
+		in := false
+		for i := 0; i < len(class); i++ {
+			switch {
+			case class[i] == '\\' && i+1 < len(class):
+				i++
+				in = in || class[i] == s[0]
+			case i+2 < len(class) && class[i+1] == '-':
+				lo, hi := class[i], class[i+2]
+				if lo > hi {
+					lo, hi = hi, lo
+				}
+				in = in || s[0] >= lo && s[0] <= hi
+				i += 2
+			default:
+				in = in || class[i] == s[0]
+			}
+		}
+		return in != not && Match(pattern[2+end:], s[1:])
+	case '\\':
+		if len(pattern) > 1 {
+			return s != "" && s[0] == pattern[1] && Match(pattern[2:], s[1:])
+		}
+	}
+	return s != "" && s[0] == pattern[0] && Match(pattern[1:], s[1:])
+}

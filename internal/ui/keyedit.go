@@ -1,13 +1,22 @@
 package ui
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
+	"strconv"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/edit"
 	"github.com/shepherd-yun/sqlvim/internal/rcmd"
+	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
+	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
@@ -216,8 +225,171 @@ func (t *keyTab) undoAll() {
 	t.setStatus("discarded "+plural(n, "change"), false)
 }
 
-// submit previews the staged changes (Task 5).
-func (t *keyTab) submit() tea.Cmd { return nil }
+// keyAppliedMsg is the outcome of a submit.
+type keyAppliedMsg struct {
+	tabID int
+	conn  string
+	n     int
+	err   error
+}
+
+func (m keyAppliedMsg) TabID() int               { return m.tabID }
+func (m keyAppliedMsg) failure() (string, error) { return m.conn, m.err }
+
+// redisKeyChangedMsg tells the tree a key was written: typ "" means it is
+// gone.
+type redisKeyChangedMsg struct {
+	conn     string
+	db       int
+	key, typ string
+}
+
+// keyChanged updates the scanned keys of the key's db; a db not scanned
+// has nothing to update.
+func (m *Model) keyChanged(msg redisKeyChangedMsg) {
+	k := redisDBKey{conn: msg.conn, db: msg.db}
+	s := m.scans[k]
+	if s == nil {
+		return
+	}
+	_, had := s.keys[msg.key]
+	switch {
+	case msg.typ == "" && had:
+		delete(s.keys, msg.key)
+		if s.total > 0 {
+			s.total--
+		}
+	case msg.typ != "" && (had || s.pattern == "" || rcmd.Match(s.pattern, msg.key)):
+		s.keys[msg.key] = msg.typ
+		if !had && s.total >= 0 {
+			s.total++
+		}
+	}
+	m.rebuildDB(k, s)
+}
+
+// editPolicy is what the connection allows sqlvim's own commands.
+func (t *keyTab) editPolicy() rcmd.Policy {
+	cfg, _ := t.backend.Connection(t.conn)
+	return rcmd.Policy{ReadOnly: cfg.IsReadOnly(), Prod: cfg.Env == config.EnvProd, Conn: t.conn, DBSize: -1}
+}
+
+// tomb is a list placeholder no real element is likely to equal.
+func tomb() string {
+	var b [8]byte
+	_, _ = rand.Read(b[:])
+	return "sqlvim:deleted:" + hex.EncodeToString(b[:])
+}
+
+// plan turns the staged changes into a redit.Plan.
+func (t *keyTab) plan() (redit.Plan, error) {
+	return redit.Build(t.table, redit.Target{Key: t.key, Type: t.info.Type, Len: t.info.Len, Tomb: tomb()})
+}
+
+// expectText is what a check wants, as the preview shows it.
+func expectText(c redit.Check) string {
+	switch c.Expect {
+	case redit.ExpectNil:
+		return "nil"
+	case redit.ExpectInt:
+		return strconv.FormatInt(c.Int, 10)
+	case redit.ExpectScore:
+		return strconv.FormatFloat(c.Score, 'g', -1, 64)
+	case redit.ExpectLen:
+		return plural(int(c.Int), "element")
+	}
+	return `"` + rcmd.Escape(c.Value) + `"`
+}
+
+// previewLines are the checks, a blank line, and the commands.
+func previewLines(p redit.Plan) []string {
+	var lines []string
+	for _, c := range p.Checks {
+		lines = append(lines, "check: "+clipRunes(rcmd.Redact(c.Args), 200)+" == "+clipRunes(expectText(c), 200))
+	}
+	if len(lines) > 0 {
+		lines = append(lines, "")
+	}
+	for _, cmd := range p.Cmds {
+		lines = append(lines, clipRunes(rcmd.Redact(cmd), 200))
+	}
+	return lines
+}
+
+func clipRunes(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
+}
+
+// submit previews the staged changes after the safety checks.
+func (t *keyTab) submit() tea.Cmd {
+	switch {
+	case t.submitting:
+		t.setStatus("submitting changes…", true)
+		return nil
+	case t.changes() == 0:
+		t.setStatus("no changes to submit", false)
+		return nil
+	}
+	if msg := t.editBlocked(); msg != "" {
+		t.setStatus(msg, true)
+		return nil
+	}
+	p, err := t.plan()
+	if err != nil {
+		t.setStatus(err.Error(), true)
+		return nil
+	}
+	policy := t.editPolicy()
+	if chk := rcmd.GuardArgs(p.Cmds, policy); chk.Verdict == rcmd.Reject {
+		t.setStatus(chk.Reason, true)
+		return nil
+	}
+	title := "Submit " + plural(p.N, "change") + " to " + rcmd.Escape(t.key)
+	if policy.Prod {
+		title = "PROD · " + title
+	}
+	t.previewGen++
+	t.pending = &p
+	return openOverlay(overlay.NewPreview(title, previewLines(p), submitConfirmedMsg{tabID: t.id, gen: t.previewGen}))
+}
+
+// apply runs the confirmed plan.
+func (t *keyTab) applyPlan(p redit.Plan) tea.Cmd {
+	t.submitting = true
+	id, b, conn, n := t.id, t.backend, t.conn, t.db
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+		defer cancel()
+		err := withRedis(ctx, b, conn, n, func(c rdb.Client) error { return c.Apply(ctx, p) })
+		return keyAppliedMsg{tabID: id, conn: conn, n: p.N, err: err}
+	}
+}
+
+func (t *keyTab) applied(m keyAppliedMsg) tea.Cmd {
+	t.submitting = false
+	var changed *rdb.ChangedError
+	var execErr *rdb.ExecError
+	switch {
+	case m.err == nil:
+		t.setStatus("saved "+plural(m.n, "change"), false)
+	case errors.As(m.err, &changed):
+		t.setStatus(m.err.Error(), true)
+		return nil // the staged changes stay
+	case errors.As(m.err, &execErr):
+		t.setStatus(m.err.Error(), true)
+	case errors.Is(m.err, session.ErrPasswordRequired):
+		return nil // the password prompt reloads the key
+	default:
+		t.setStatus(m.err.Error(), true)
+		return nil
+	}
+	t.notifyTree = true
+	return t.load(true)
+}
 
 // handleEdit runs the edit actions; ok is false for other actions.
 func (t *keyTab) handleEdit(a keymap.Action) (cmd tea.Cmd, ok bool) {

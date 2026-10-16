@@ -17,6 +17,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/edit"
 	"github.com/shepherd-yun/sqlvim/internal/rcmd"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
@@ -160,6 +161,9 @@ type keyTab struct {
 	grid       *grid.Model
 	table      *edit.Table // the loaded rows, raw, with staged changes; nil for strings and module types
 	submitting bool
+	previewGen int         // tells the current preview from stale ones
+	pending    *redit.Plan // the previewed plan, until confirmed
+	notifyTree bool        // the next load tells the tree what the key is now
 	match      string
 	next       uint64
 	nextStart  int64
@@ -329,8 +333,24 @@ func (t *keyTab) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case keyLoadedMsg:
 		t.apply(m)
+		if m.first && m.err == nil && t.notifyTree {
+			t.notifyTree = false
+			ch := redisKeyChangedMsg{conn: t.conn, db: t.db, key: t.key}
+			if t.info.Exists {
+				ch.typ = t.info.Type
+			}
+			return func() tea.Msg { return ch }
+		}
 	case cellEditedMsg:
 		t.cellEdited(m)
+	case submitConfirmedMsg:
+		if m.gen == t.previewGen && t.pending != nil && !t.submitting {
+			p := *t.pending
+			t.pending = nil
+			return t.applyPlan(p)
+		}
+	case keyAppliedMsg:
+		return t.applied(m)
 	case keyFilterMsg:
 		t.match = rcmd.Pattern(m.text)
 		return t.load(true)

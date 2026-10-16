@@ -10,6 +10,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
 )
@@ -199,4 +200,99 @@ func TestKeyTabCloseAsks(t *testing.T) {
 		t.Fatalf("overlay %T, tabs %d", m.overlay, len(m.tabs))
 	}
 	_ = c
+}
+
+func TestKeySubmitPreview(t *testing.T) {
+	for _, env := range []config.Env{config.EnvDev, config.EnvProd} {
+		m, b, r := newRedisModel(t, config.Connection{Env: env})
+		_ = b.SetReadOnly("cache", false)
+		r.put(0, "h", testHash())
+		drainAll(t, m, m.openKey("cache", 0, "h"))
+		pressAll(t, m, "l")
+		editTo(t, m, "9")
+		pressAll(t, m, "space", "w")
+		if _, ok := m.overlay.(*overlay.Preview); !ok {
+			t.Fatalf("%s: overlay %T, status %q", env, m.overlay, m.activeTab().(*keyTab).status)
+		}
+		s := screen(m)
+		title := "Submit 1 change to h"
+		if env == config.EnvProd {
+			title = "PROD · " + title
+		}
+		for _, want := range []string{title, `check: HGET h a == "1"`, "HSET h a 9"} {
+			if !strings.Contains(s, want) {
+				t.Fatalf("%s: preview misses %q:\n%s", env, want, s)
+			}
+		}
+	}
+}
+
+func TestKeySubmitApplies(t *testing.T) {
+	m, r := openTestKey(t, "h", testHash())
+	kt := m.activeTab().(*keyTab)
+	pressAll(t, m, "l")
+	editTo(t, m, "9")
+	before := strings.Count(strings.Join(r.keyCalls(), "\n"), "KeyInfo")
+	pressAll(t, m, "space", "w", "y")
+	plans := r.appliedPlans()
+	if len(plans) != 1 || len(plans[0].Cmds) != 1 || strings.Join(plans[0].Cmds[0], " ") != "HSET h a 9" {
+		t.Fatalf("applied %+v", plans)
+	}
+	if kt.status != "saved 1 change" || kt.changes() != 0 {
+		t.Fatalf("status %q, changes %d", kt.status, kt.changes())
+	}
+	if after := strings.Count(strings.Join(r.keyCalls(), "\n"), "KeyInfo"); after != before+1 {
+		t.Fatalf("KeyInfo calls %d → %d", before, after)
+	}
+}
+
+func TestKeySubmitConflict(t *testing.T) {
+	m, r := openTestKey(t, "h", testHash())
+	r.applyErr = &rdb.ChangedError{What: `field "a" changed`}
+	kt := m.activeTab().(*keyTab)
+	pressAll(t, m, "l")
+	editTo(t, m, "9")
+	pressAll(t, m, "space", "w", "y")
+	if kt.status != `key changed since loaded; refresh and retry · field "a" changed` || kt.changes() != 1 {
+		t.Fatalf("status %q, changes %d", kt.status, kt.changes())
+	}
+}
+
+func TestKeySubmitExecError(t *testing.T) {
+	m, r := openTestKey(t, "h", testHash())
+	r.applyErr = &rdb.ExecError{Index: 0, Total: 1, Err: fmt.Errorf("WRONGTYPE x")}
+	kt := m.activeTab().(*keyTab)
+	pressAll(t, m, "l")
+	editTo(t, m, "9")
+	pressAll(t, m, "space", "w", "y")
+	if kt.status != "command 1 of 1 failed: WRONGTYPE x · the others were applied" || kt.changes() != 0 {
+		t.Fatalf("status %q, changes %d", kt.status, kt.changes())
+	}
+}
+
+func TestKeySubmitNull(t *testing.T) {
+	m, _ := openTestKey(t, "h", testHash())
+	kt := m.activeTab().(*keyTab)
+	pressAll(t, m, "o")
+	editTo(t, m, "c") // the field; the value stays NULL
+	pressAll(t, m, "space", "w")
+	if m.overlay != nil || kt.status != "redis has no NULL · type a value (empty is fine)" {
+		t.Fatalf("overlay %T, status %q", m.overlay, kt.status)
+	}
+}
+
+func TestKeySubmitTreeUpdate(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.put(0, "h", fakeValue{typ: "hash", hash: [][2]string{{"a", "1"}}})
+	r.put(0, "other", fakeValue{typ: "string", str: "v"})
+	db0 := expandDB0(t, m)
+	if countKeys(db0) != 2 {
+		t.Fatalf("keys %d", countKeys(db0))
+	}
+	drainAll(t, m, m.openKey("cache", 0, "h"))
+	r.onApply = func(redit.Plan) { r.del(0, "h") }
+	pressAll(t, m, "d", "d", "space", "w", "y")
+	if countKeys(db0) != 1 || db0.Children[0].Key != "other" {
+		t.Fatalf("tree:\n%s", screen(m))
+	}
 }

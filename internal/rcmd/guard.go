@@ -222,3 +222,17 @@ func NeedsDBSize(lines []Line) bool {
 	}
 	return false
 }
+
+// GuardArgs is Guard over commands sqlvim made itself (each joined with
+// Quote).
+func GuardArgs(cmds [][]string, p Policy) Check {
+	lines := make([]Line, len(cmds))
+	for i, cmd := range cmds {
+		parts := make([]string, len(cmd))
+		for j, a := range cmd {
+			parts[j] = Quote(a)
+		}
+		lines[i] = Line{Text: strings.Join(parts, " "), Num: i + 1}
+	}
+	return Guard(lines, p)
+}

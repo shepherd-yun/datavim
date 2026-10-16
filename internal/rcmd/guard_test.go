@@ -120,3 +120,44 @@ func TestNeedsDBSize(t *testing.T) {
 		t.Errorf("GET keys detected")
 	}
 }
+
+func TestGuardArgs(t *testing.T) {
+	cmds := [][]string{{"HSET", "k", "f", "v"}}
+	ro := GuardArgs(cmds, Policy{ReadOnly: true, Conn: "cache", DBSize: -1})
+	if ro.Verdict != Reject || !strings.Contains(ro.Reason, ":set noreadonly") {
+		t.Fatalf("read-only: %+v", ro)
+	}
+	if c := GuardArgs(cmds, Policy{Prod: true, Conn: "cache", DBSize: -1}); c.Verdict != Confirm || c.Expect != "" {
+		t.Fatalf("prod: %+v", c)
+	}
+	if c := GuardArgs(cmds, Policy{Conn: "cache", DBSize: -1}); c.Verdict != Allow {
+		t.Fatalf("dev: %+v", c)
+	}
+	spaced := GuardArgs([][]string{{"HSET", "a b", "f\xff", "v\n"}}, Policy{Prod: true, Conn: "cache", DBSize: -1})
+	if spaced.Verdict != Confirm || len(spaced.Body) != 2 || !strings.Contains(spaced.Body[1], `write: HSET "a b"`) {
+		t.Fatalf("quoted args stay one write command: %+v", spaced)
+	}
+}
+
+func TestMatch(t *testing.T) {
+	for _, c := range []struct {
+		pattern, s string
+		want       bool
+	}{
+		{"*", "a/b:c", true},
+		{"user:*", "user:1", true},
+		{"user:*", "users", false},
+		{"h?llo", "hello", true},
+		{"h[ae]llo", "hallo", true},
+		{"h[^e]llo", "hello", false},
+		{"h[a-c]llo", "hbllo", true},
+		{`a\*b`, "a*b", true},
+		{`a\*b`, "axb", false},
+		{"*x", "\xffx", true},
+		{"", "a", false},
+	} {
+		if got := Match(c.pattern, c.s); got != c.want {
+			t.Errorf("Match(%q, %q) = %v", c.pattern, c.s, got)
+		}
+	}
+}
