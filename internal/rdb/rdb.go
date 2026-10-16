@@ -61,6 +61,15 @@ type Client interface {
 	Databases(ctx context.Context) ([]DBInfo, error)
 	// Scan sends one SCAN and returns the keys that still exist, with types.
 	Scan(ctx context.Context, cursor uint64, match string, count int64) (ScanPage, error)
+
+	KeyInfo(ctx context.Context, key string) (KeyInfo, error)
+	GetString(ctx context.Context, key string, maxBytes int64) (string, error)
+	HashPage(ctx context.Context, key string, cursor uint64, match string, count int64) ([][2]string, uint64, error)
+	ListPage(ctx context.Context, key string, start, count int64) ([]string, error)
+	SetPage(ctx context.Context, key string, cursor uint64, match string, count int64) ([]string, uint64, error)
+	ZSetPage(ctx context.Context, key string, start, count int64) ([]ZMember, error)
+	StreamPage(ctx context.Context, key, after string, count int64) ([]StreamEntry, error)
+
 	Close() error
 }
 
@@ -74,15 +83,15 @@ type client struct {
 // falls back to RESP2 by itself when the server rejects HELLO (Redis 5).
 func Open(ctx context.Context, cfg Config) (Client, error) {
 	opt := &redis.Options{
-		Addr:                  net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
-		Username:              cfg.User,
-		Password:              cfg.Password,
-		DB:                    cfg.DB,
-		Protocol:              3,
-		PoolSize:              4,
-		ContextTimeoutEnabled: true,
-		DisableIdentity:       true,
-		MaxRetries:            -1,
+		Addr:                     net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
+		Username:                 cfg.User,
+		Password:                 cfg.Password,
+		DB:                       cfg.DB,
+		Protocol:                 3,
+		PoolSize:                 4,
+		ContextTimeoutEnabled:    true,
+		DisableIdentity:          true,
+		MaxRetries:               -1,
 		MaintNotificationsConfig: &maintnotifications.Config{Mode: maintnotifications.ModeDisabled},
 	}
 	if cfg.Dial != nil {
