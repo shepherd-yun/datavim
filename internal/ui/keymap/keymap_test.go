@@ -80,7 +80,7 @@ func TestContextOverridesGlobal(t *testing.T) {
 }
 
 func TestContinuations(t *testing.T) {
-	hints := Default().Continuations(Tree, []string{"space"})
+	hints := Default().Continuations(Tree, KindAny, []string{"space"})
 	var found bool
 	for _, h := range hints {
 		if h.Keys == "s" && strings.Contains(h.Desc, "structure") {
@@ -94,7 +94,7 @@ func TestContinuations(t *testing.T) {
 
 func TestHelpMergesAliases(t *testing.T) {
 	var line string
-	for _, e := range Default().Help(Tree) {
+	for _, e := range Default().Help(Tree, KindAny) {
 		if e.Desc == "Move down" {
 			line = e.Keys
 		}
@@ -404,5 +404,88 @@ func TestImportBindings(t *testing.T) {
 	}
 	if !slices.Contains(Contexts(), Import) {
 		t.Fatalf("Contexts() = %v", Contexts())
+	}
+}
+
+func TestKindFiltersHelpAndContinuations(t *testing.T) {
+	k := Default()
+	has := func(entries []HelpEntry, desc string) bool {
+		for _, e := range entries {
+			if e.Desc == desc {
+				return true
+			}
+		}
+		return false
+	}
+	tests := []struct {
+		kind      Kind
+		want, not []string
+	}{
+		{KindAny, []string{"Truncate table", "New Redis key", "Copy DDL", "Open a Redis key by name"}, nil},
+		{
+			KindSQL,
+			[]string{"Truncate table", "Copy DDL", "SQL history", "Delete connection / drop table or view"},
+			[]string{"New Redis key", "Open a Redis key by name", "Filter Redis keys (pattern)", "Command history"},
+		},
+		{
+			KindRedis,
+			[]string{"New Redis key", "Open a Redis key by name", "Command history", "Delete connection / delete Redis keys", "Open the key"},
+			[]string{"Truncate table", "Copy DDL", "Copy qualified name (db.table)", "Copy as INSERT", "SQL history"},
+		},
+	}
+	for _, tt := range tests {
+		help := k.Help(Tree, tt.kind)
+		for _, d := range tt.want {
+			if !has(help, d) {
+				t.Errorf("kind %d: help lacks %q", tt.kind, d)
+			}
+		}
+		for _, d := range tt.not {
+			if has(help, d) {
+				t.Errorf("kind %d: help lists %q", tt.kind, d)
+			}
+		}
+	}
+
+	leader := func(kind Kind) map[string]string {
+		out := map[string]string{}
+		for _, h := range k.Continuations(Tree, kind, []string{"space"}) {
+			out[h.Keys] = h.Desc
+		}
+		return out
+	}
+	if l := leader(KindRedis); l["s"] != "" || l["t"] != "" || l["k"] == "" || l["i"] == "" {
+		t.Errorf("redis leader = %v", l)
+	}
+	if l := leader(KindSQL); l["k"] != "" || l["F"] != "" || l["s"] == "" || l["t"] == "" {
+		t.Errorf("sql leader = %v", l)
+	}
+	// Bindings stay live on either kind: only the listing changes.
+	if a, _ := k.Resolve(Tree, []string{"T"}); a != TruncateTable {
+		t.Errorf("T = %q", a)
+	}
+}
+
+func TestKindTablesNameBoundActions(t *testing.T) {
+	bound := map[Context]map[Action]bool{}
+	for _, b := range DefaultBindings() {
+		if bound[b.Context] == nil {
+			bound[b.Context] = map[Action]bool{}
+		}
+		bound[b.Context][b.Action] = true
+	}
+	for ctx, m := range kinds {
+		for a := range m {
+			if !bound[ctx][a] {
+				t.Errorf("kinds: %s is not bound in %s", a, ctx)
+			}
+		}
+	}
+	for ctx, m := range kindDescs {
+		for a := range m {
+			if !bound[ctx][a] {
+				t.Errorf("kindDescs: %s is not bound in %s", a, ctx)
+			}
+		}
 	}
 }

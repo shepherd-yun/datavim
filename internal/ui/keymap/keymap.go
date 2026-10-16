@@ -324,30 +324,34 @@ func (k *Keymap) Resolve(ctx Context, seq []string) (Action, Result) {
 	return "", NoMatch
 }
 
-// Continuations lists what can follow prefix in ctx, sorted by key.
-func (k *Keymap) Continuations(ctx Context, prefix []string) []Hint {
+// Continuations lists what can follow prefix in ctx on kind, sorted by key.
+func (k *Keymap) Continuations(ctx Context, kind Kind, prefix []string) []Hint {
 	var out []Hint
 	for _, b := range k.scope(ctx) {
-		if len(b.Keys) > len(prefix) && hasPrefix(b.Keys, prefix) {
-			out = append(out, Hint{Keys: k.Display(b.Keys[len(prefix):]), Desc: b.Desc})
+		if len(b.Keys) > len(prefix) && hasPrefix(b.Keys, prefix) && b.shows(kind) {
+			out = append(out, Hint{Keys: k.Display(b.Keys[len(prefix):]), Desc: b.descFor(kind)})
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Keys < out[j].Keys })
 	return out
 }
 
-// Help lists bindings visible in ctx, merging aliases of the same action.
-func (k *Keymap) Help(ctx Context) []HelpEntry {
+// Help lists bindings visible in ctx on kind, merging aliases of the same
+// action.
+func (k *Keymap) Help(ctx Context, kind Kind) []HelpEntry {
 	var out []HelpEntry
 	index := map[string]int{}
 	for _, b := range k.scope(ctx) {
+		if !b.shows(kind) {
+			continue
+		}
 		id := string(b.Context) + "\x00" + string(b.Action)
 		if i, ok := index[id]; ok {
 			out[i].Keys += ", " + k.Display(b.Keys)
 			continue
 		}
 		index[id] = len(out)
-		out = append(out, HelpEntry{Context: b.Context, Keys: k.Display(b.Keys), Desc: b.Desc})
+		out = append(out, HelpEntry{Context: b.Context, Keys: k.Display(b.Keys), Desc: b.descFor(kind)})
 	}
 	return out
 }

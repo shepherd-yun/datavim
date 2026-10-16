@@ -456,6 +456,19 @@ func (m *Model) context() keymap.Context {
 	return keymap.Tree
 }
 
+// connKind is the kind of connection in view, which help and which-key list
+// the keys of: the active tab's, or the selected tree node's.
+func (m *Model) connKind() keymap.Kind {
+	conn := m.contextConn()
+	switch {
+	case conn == "":
+		return keymap.KindAny
+	case isRedis(m.backend, conn):
+		return keymap.KindRedis
+	}
+	return keymap.KindSQL
+}
+
 func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	if n, ok := keymap.TabNumber(a); ok {
 		if n-1 >= len(m.tabs) {
@@ -519,7 +532,7 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	case keymap.CommandLine:
 		m.cmdline = overlay.NewCmdLine()
 	case keymap.Help:
-		entries := m.keys.Help(m.context())
+		entries := m.keys.Help(m.context(), m.connKind())
 		if m.context() == keymap.Console {
 			entries = withEditorHelp(entries)
 		}
@@ -1606,7 +1619,7 @@ func (m *Model) render() string {
 		screen = overlay.Center(screen, m.overlay.View(m.width, m.height), m.width, m.height)
 	}
 	if m.showWhichKey {
-		box := overlay.WhichKey(m.keys.Continuations(m.context(), m.pending))
+		box := overlay.WhichKey(m.keys.Continuations(m.context(), m.connKind(), m.pending))
 		x := max(m.width-lipgloss.Width(box), 0)
 		y := max(m.height-1-lipgloss.Height(box), 0)
 		screen = overlay.PlaceAt(screen, box, x, y)

@@ -975,3 +975,28 @@ func TestLocateWithoutTabOrMissingNode(t *testing.T) {
 		t.Fatalf("status: %s", s)
 	}
 }
+
+func TestHintsFollowConnectionKind(t *testing.T) {
+	m, _ := newTestModel(t)
+	if k := m.connKind(); k != keymap.KindSQL {
+		t.Fatalf("sql kind = %v", k)
+	}
+	press(t, m, "space")
+	if s := screen(m); !strings.Contains(s, "Columns / structure") || strings.Contains(s, "Open a Redis key by name") {
+		t.Fatalf("sql which-key:\n%s", s)
+	}
+
+	r, _, _ := newRedisModel(t, config.Connection{})
+	if k := r.connKind(); k != keymap.KindRedis {
+		t.Fatalf("redis kind = %v", k)
+	}
+	press(t, r, "space")
+	if s := screen(r); !strings.Contains(s, "Open a Redis key by name") || strings.Contains(s, "Columns / structure") {
+		t.Fatalf("redis which-key:\n%s", s)
+	}
+	press(t, r, "esc")
+	press(t, r, "?")
+	if s := screen(r); strings.Contains(s, "Truncate table") || !strings.Contains(s, "Help") {
+		t.Fatalf("redis help:\n%s", s)
+	}
+}

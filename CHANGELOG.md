@@ -208,6 +208,11 @@ All notable changes to this project are documented here. The format follows
   `compare_max_rows` rows (`config.toml`, default 100000); `D` goes back to the structure.
 
 ### Changed
+- Help (`?`) and the leader's which-key list only the keys for the kind of connection in
+  view: on a Redis connection, db, key or tab they leave out tables, structure, DDL and manual
+  commit; on a SQL one they leave out the Redis keys, favorites and server status. Shared keys
+  such as `dd`, `r` and `<Space>h` are described for that kind. The keys themselves still work
+  the same everywhere.
 - A console opens in INSERT mode, ready to type; `Esc` goes to NORMAL mode for the vim keys,
   the leader and tab switching.
 - In the tree, `l` and `→` on a table or view expand it; `Enter` opens its data. Rebind

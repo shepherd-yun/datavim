@@ -45,7 +45,7 @@ func TestCustomRebindsAddsAndUnbinds(t *testing.T) {
 	if a, _ := k.Resolve(Grid, []string{"f", "f"}); a != FilterEqual {
 		t.Fatal("untouched defaults stay")
 	}
-	for _, h := range k.Help(Grid) {
+	for _, h := range k.Help(Grid, KindAny) {
 		if h.Desc == "Sort by column: asc, desc, off" && h.Keys != "S" {
 			t.Fatalf("help for sort = %q, want only S", h.Keys)
 		}
