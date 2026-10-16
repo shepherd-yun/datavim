@@ -101,3 +101,37 @@ func (m *Model) openImport(msg importFileMsg) tea.Cmd {
 		return t
 	})
 }
+
+// importConfirmed starts the confirmed import unless something changed
+// meanwhile (read-only, a console transaction, staged changes).
+func (m *Model) importConfirmed(msg importConfirmedMsg) tea.Cmd {
+	t, ok := m.tabByID(msg.tabID).(*importTab)
+	if !ok {
+		return nil
+	}
+	if why := m.importBlocked(t.conn, t.ref, t.create); why != "" {
+		t.job = nil
+		t.setStatus(why, true)
+		m.setStatus(why, true)
+		return nil
+	}
+	return t.start()
+}
+
+// importDone updates the tab, then the tree and the catalog: a new table
+// shows up, and a failed one is looked up again in case it was left over.
+func (m *Model) importDone(msg importDoneMsg) tea.Cmd {
+	m.tree.SetBroken(msg.conn, db.IsConnLost(msg.err))
+	var cmd tea.Cmd
+	if t := m.tabByID(msg.tabID); t != nil {
+		cmd = t.Update(msg)
+	}
+	if msg.err != nil && !msg.create {
+		return cmd
+	}
+	cmds := []tea.Cmd{cmd, m.metaStale(metaStaleMsg{conn: msg.conn, database: msg.ref.Database})}
+	if msg.create {
+		cmds = append(cmds, m.reloadTables(msg.conn, msg.ref.Namespace, ""))
+	}
+	return tea.Batch(cmds...)
+}

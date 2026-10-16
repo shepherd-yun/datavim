@@ -303,6 +303,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.tableOpDone(msg)
 	case importFileMsg:
 		return m, m.openImport(msg)
+	case importConfirmedMsg:
+		return m, m.importConfirmed(msg)
+	case importDoneMsg:
+		return m, m.importDone(msg)
 	case modifySubmitMsg:
 		m.modifySubmit(msg)
 	case modifyAppliedMsg:

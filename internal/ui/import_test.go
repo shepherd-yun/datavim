@@ -1,12 +1,19 @@
 package ui
 
 import (
+	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
+	tea "charm.land/bubbletea/v2"
+
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/importer"
 )
 
 // importFixture writes name into a temp directory that becomes the export
@@ -243,5 +250,181 @@ func TestImportSkipsGeneratedAndAutoIncrement(t *testing.T) {
 	press(t, m, "j", "i")
 	if strings.Contains(screen(m), "upper_name  text") {
 		t.Fatalf("generated column offered:\n%s", screen(m))
+	}
+}
+
+// importTab test speed: progress ticks fire at once.
+func fastTicks(it *importTab) { it.tick = 0 }
+
+func TestImportIntoATable(t *testing.T) {
+	m, b := newTestModel(t)
+	importFixture(t, m, "orders.csv", ordersCSV)
+	it := openImportOn(t, m, "orders.csv", "local", "app", "users")
+	fastTicks(it)
+	press(t, m, "space", "w")
+	if !strings.Contains(screen(m), "Insert 2 rows into app.users") {
+		t.Fatalf("no confirmation:\n%s", screen(m))
+	}
+	press(t, m, "y")
+	want := []string{
+		"START TRANSACTION",
+		"SAVEPOINT sqlvim_import",
+		"INSERT INTO `app`.`users` (`id`, `name`) VALUES (?, ?), (?, ?)",
+		"RELEASE SAVEPOINT sqlvim_import",
+		"COMMIT",
+	}
+	if got := b.conn.execList(); !slices.Equal(got[len(got)-len(want):], want) {
+		t.Fatalf("execs %v", got)
+	}
+	if !strings.Contains(screen(m), "imported 2 rows into app.users") {
+		t.Fatalf("status:\n%s", screen(m))
+	}
+}
+
+func TestImportDryRunStopsOnProblems(t *testing.T) {
+	m, b := newTestModel(t)
+	importFixture(t, m, "orders.csv", "ID,Name\n1,a\nabc,b\n")
+	it := openImportOn(t, m, "orders.csv", "local", "app", "users")
+	fastTicks(it)
+	press(t, m, "space", "w")
+	s := screen(m)
+	for _, want := range []string{"Problems (1 row)", `line 3, ID: "abc" is not an integer`, "1 row cannot be imported"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q:\n%s", want, s)
+		}
+	}
+	if m.overlay != nil || len(b.conn.execList()) != 0 {
+		t.Fatalf("overlay %v, execs %v", m.overlay, b.conn.execList())
+	}
+}
+
+func TestImportRefusesWithoutRequiredColumns(t *testing.T) {
+	m, _ := newTestModel(t)
+	importFixture(t, m, "orders.csv", ordersCSV)
+	openImportOn(t, m, "orders.csv", "local", "app", "users")
+	press(t, m, "x", "space", "w") // skip ID
+	if !strings.Contains(screen(m), "needs values for id") || m.overlay != nil {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+func TestImportOnProdAsksForTheName(t *testing.T) {
+	m, b := newTestModel(t)
+	if err := b.SetReadOnly("prod", false); err != nil { // prod is read-only by default
+		t.Fatal(err)
+	}
+	importFixture(t, m, "orders.csv", ordersCSV)
+	it := openImportOn(t, m, "orders.csv", "prod", "app", "users")
+	fastTicks(it)
+	press(t, m, "space", "w")
+	if !strings.Contains(screen(m), "PROD · Import into users") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	press(t, m, "y", "enter")
+	if slices.Contains(b.conn.execList(), "BEGIN") {
+		t.Fatal("y alone imported on prod")
+	}
+	press(t, m, "ctrl+u")
+	typeText(t, m, "users")
+	press(t, m, "enter")
+	if !slices.Contains(b.conn.execList(), `INSERT INTO "users" ("id", "name") VALUES ($1, $2), ($3, $4)`) {
+		t.Fatalf("execs %v", b.conn.execList())
+	}
+}
+
+func TestImportFailureRollsBack(t *testing.T) {
+	m, b := newTestModel(t)
+	importFixture(t, m, "orders.csv", ordersCSV)
+	it := openImportOn(t, m, "orders.csv", "local", "app", "users")
+	fastTicks(it)
+	b.conn.setFail("INSERT INTO `app`.`users` (`id`, `name`) VALUES (?, ?), (?, ?)", errors.New("boom"))
+	press(t, m, "space", "w", "y")
+	if got := b.conn.execList(); got[len(got)-1] != "ROLLBACK" {
+		t.Fatalf("execs %v", got)
+	}
+	if !strings.Contains(screen(m), "import failed, nothing was written: lines 2–3: boom") {
+		t.Fatalf("status:\n%s", screen(m))
+	}
+}
+
+func TestImportCreatesATable(t *testing.T) {
+	m, b := newTestModel(t)
+	importFixture(t, m, "orders.csv", ordersCSV)
+	it := openImportOn(t, m, "orders.csv", "local", "app")
+	fastTicks(it)
+	press(t, m, "space", "w")
+	if !strings.Contains(screen(m), "CREATE TABLE `app`.`orders`;") {
+		t.Fatalf("no DDL:\n%s", screen(m))
+	}
+	press(t, m, "y")
+	got := b.conn.execList()
+	if i := slices.Index(got, "CREATE TABLE `app`.`orders`"); i < 0 || got[i+1] != "START TRANSACTION" || got[len(got)-1] != "COMMIT" {
+		t.Fatalf("execs %v", got)
+	}
+	if !strings.Contains(screen(m), "imported 2 rows into app.orders") {
+		t.Fatalf("status:\n%s", screen(m))
+	}
+}
+
+func TestImportRefusesAnExistingNewTable(t *testing.T) {
+	m, b := newTestModel(t)
+	importFixture(t, m, "users.csv", ordersCSV)
+	it := openImportOn(t, m, "users.csv", "local", "app")
+	fastTicks(it)
+	press(t, m, "space", "w")
+	if !strings.Contains(screen(m), "table app.users already exists") || len(b.conn.execList()) != 0 {
+		t.Fatalf("execs %v\n%s", b.conn.execList(), screen(m))
+	}
+}
+
+func TestImportRechecksOnConfirm(t *testing.T) {
+	m, b := newTestModel(t)
+	importFixture(t, m, "orders.csv", ordersCSV)
+	it := openImportOn(t, m, "orders.csv", "local", "app", "users")
+	fastTicks(it)
+	press(t, m, "space", "w")
+	if err := b.SetReadOnly("local", true); err != nil {
+		t.Fatal(err)
+	}
+	press(t, m, "y")
+	if len(b.conn.execList()) != 0 || !strings.Contains(statusLine(m), "read-only") {
+		t.Fatalf("status %s, execs %v", statusLine(m), b.conn.execList())
+	}
+}
+
+func TestImportCancelAndClose(t *testing.T) {
+	m, _ := newTestModel(t)
+	importFixture(t, m, "orders.csv", ordersCSV)
+	it := openImportOn(t, m, "orders.csv", "local", "app", "users")
+	ctx, cancel := context.WithCancel(context.Background())
+	it.phase, it.cancel = importRunning, cancel
+	press(t, m, "ctrl+c")
+	if ctx.Err() == nil {
+		t.Fatal("ctrl+c did not cancel the import")
+	}
+	drain(t, m, func() tea.Msg { return importDoneMsg{tabID: it.id, conn: "local", ref: it.ref, err: context.Canceled} })
+	if !strings.Contains(screen(m), "import cancelled, nothing was written") {
+		t.Fatalf("status:\n%s", screen(m))
+	}
+
+	ctx, cancel = context.WithCancel(context.Background())
+	it.phase, it.cancel = importRunning, cancel
+	it.shutdown()()
+	if ctx.Err() == nil {
+		t.Fatal("closing the tab did not cancel the import")
+	}
+}
+
+func TestImportErrorText(t *testing.T) {
+	tests := map[error]string{
+		context.Canceled:                                               "import cancelled, nothing was written",
+		fmt.Errorf("%w: reset", db.ErrConnLost):                        "connection lost: the transaction is gone and nothing was committed",
+		&importer.LeftoverError{Table: "app.t", Err: context.Canceled}: "import cancelled, nothing was written · table app.t was created but is empty; drop it manually",
+		errors.New("x"):                                                "import failed, nothing was written: x",
+	}
+	for err, want := range tests {
+		if got := importErrorText(err); got != want {
+			t.Errorf("importErrorText(%v) = %q, want %q", err, got, want)
+		}
 	}
 }

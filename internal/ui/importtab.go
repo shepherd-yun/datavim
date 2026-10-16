@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -175,6 +176,14 @@ func (t *importTab) Update(msg tea.Msg) tea.Cmd {
 		t.loaded(m)
 	case importEditMsg:
 		return m.apply(t)
+	case importCheckedMsg:
+		return t.checked(m)
+	case importDoneMsg:
+		t.done(m)
+	case importTickMsg:
+		if m.gen == t.gen && t.phase != importIdle {
+			return t.tickCmd()
+		}
 	}
 	return nil
 }
@@ -582,9 +591,6 @@ func (t *importTab) statusLine() string {
 	))
 }
 
-// progressText is set up in Task 11; until then it is empty.
-func (t *importTab) progressText() string { return "" }
-
 // stripStyle drops ANSI styling, so a selected line is drawn in one style.
 func stripStyle(s string) string { return ansi.Strip(s) }
 
@@ -816,5 +822,255 @@ func (t *importTab) editType() tea.Cmd {
 	})
 }
 
-// submit comes in Task 11; until then it does nothing.
-func (t *importTab) submit() tea.Cmd { return nil }
+type (
+	importCheckedMsg struct {
+		tabID, gen int
+		job        importer.Job
+		result     importer.CheckResult
+		exists     bool
+		err        error
+	}
+	// importConfirmedMsg is the user's yes; the root model checks again
+	// that the import may run, then starts it.
+	importConfirmedMsg struct{ tabID int }
+	importDoneMsg      struct {
+		tabID  int
+		conn   string
+		ref    db.TableRef
+		create bool
+		rows   int
+		took   time.Duration
+		err    error
+	}
+	importTickMsg struct{ tabID, gen int }
+)
+
+func (m importCheckedMsg) TabID() int { return m.tabID }
+func (m importDoneMsg) TabID() int    { return m.tabID }
+func (m importTickMsg) TabID() int    { return m.tabID }
+
+// plan is the import as mapped, or why it cannot run.
+func (t *importTab) plan() (importer.Plan, string) {
+	p := importer.Plan{Driver: t.driver, Table: t.ref, Columns: t.columns(), Width: len(t.sample.Header), Null: t.null}
+	switch {
+	case t.loading:
+		return p, "the file is still loading"
+	case t.loadErr != "":
+		return p, t.loadErr
+	case len(p.Columns) == 0:
+		return p, "pick at least one column"
+	case len(t.missing()) > 0:
+		return p, t.refName() + " needs values for " + strings.Join(t.missing(), ", ")
+	case t.create && strings.TrimSpace(t.ref.Name) == "":
+		return p, "name the new table"
+	}
+	if t.create {
+		seen := map[string]bool{}
+		for _, c := range p.Columns {
+			k := strings.ToLower(c.Target.Name)
+			if k == "" || seen[k] {
+				return p, "two columns are called " + c.Target.Name
+			}
+			seen[k] = true
+		}
+	}
+	return p, ""
+}
+
+// newSchema is the new table: the picked columns, named and typed as mapped.
+func (t *importTab) newSchema() db.TableSchema {
+	s := db.TableSchema{Ref: t.ref}
+	for _, c := range t.columns() {
+		s.Columns = append(s.Columns, db.Column{
+			Name: c.Target.Name, Type: c.Target.Type, Nullable: c.Target.Nullable, Position: len(s.Columns) + 1,
+		})
+	}
+	return s
+}
+
+func (t *importTab) tickCmd() tea.Cmd {
+	id, gen := t.id, t.gen
+	return tea.Tick(t.tick, func(time.Time) tea.Msg { return importTickMsg{tabID: id, gen: gen} })
+}
+
+// submit checks the whole file (and, for a new table, that the name is
+// free), then asks for confirmation.
+func (t *importTab) submit() tea.Cmd {
+	p, problem := t.plan()
+	if problem != "" {
+		t.setStatus(problem, true)
+		return nil
+	}
+	if t.cancel != nil {
+		t.cancel()
+	}
+	t.gen++
+	t.phase, t.problems, t.failed, t.job = importChecking, nil, 0, nil
+	t.progress = new(atomic.Int64)
+	ctx, cancel := context.WithTimeout(context.Background(), importTimeout)
+	t.cancel = cancel
+	id, gen, b, conn, ref, path, o, progress := t.id, t.gen, t.backend, t.conn, t.ref, t.path, t.opts, t.progress
+	create, schema := t.create, t.newSchema()
+	check := func() tea.Msg {
+		defer cancel()
+		msg := importCheckedMsg{tabID: id, gen: gen, job: importer.Job{Path: path, Options: o, Plan: p}}
+		if create {
+			msg.err = withConn(ctx, b, conn, ref.Database, func(c db.Conn) error {
+				tables, err := c.Meta().Tables(ctx, ref.Namespace)
+				if err != nil {
+					return err
+				}
+				msg.exists = slices.ContainsFunc(tables, func(x db.Table) bool { return strings.EqualFold(x.Name, ref.Name) })
+				w := c.Dialect().DDL()
+				msg.job.Create, _ = w.CreateTable(schema)
+				msg.job.Drop = w.DropTable(ref, false)
+				return nil
+			})
+			if msg.err != nil || msg.exists {
+				return msg
+			}
+		}
+		msg.result, msg.err = importer.Check(ctx, path, o, p, progress)
+		return msg
+	}
+	return tea.Batch(check, t.tickCmd())
+}
+
+func (t *importTab) checked(m importCheckedMsg) tea.Cmd {
+	if m.gen != t.gen {
+		return nil
+	}
+	t.phase, t.cancel = importIdle, nil
+	switch {
+	case errors.Is(m.err, context.Canceled):
+		t.setStatus("check cancelled", false)
+	case m.err != nil:
+		t.setStatus("check failed: "+errorText(m.err), true)
+	case m.exists:
+		t.setStatus(joinHints("table "+t.refName()+" already exists", "rename it in the Source section"), true)
+	case m.result.Failed > 0:
+		t.problems, t.failed = m.result.Errors, m.result.Failed
+		t.section, t.cursor[secPreview], t.offset[secPreview] = secPreview, 0, 0
+		t.setStatus(plural(m.result.Failed, "row")+" cannot be imported · nothing was written", true)
+	case m.result.Rows == 0:
+		t.setStatus("the file has no rows to import", true)
+	default:
+		t.total = m.result.Rows
+		job := m.job
+		t.job = &job
+		return openOverlay(t.confirmation())
+	}
+	return nil
+}
+
+func (t *importTab) confirmation() overlay.Overlay {
+	cfg, _ := t.backend.Connection(t.conn)
+	title := "Import into " + t.refName()
+	if t.create {
+		title = "Create " + t.refName()
+	}
+	var lines []string
+	for _, q := range t.job.Create {
+		lines = append(lines, q+";", "")
+	}
+	insert := len(lines)
+	lines = append(lines, fmt.Sprintf("Insert %s into %s in one transaction.", plural(t.total, "row"), t.refName()))
+	ok := importConfirmedMsg{tabID: t.id}
+	if cfg.Env != config.EnvProd {
+		return overlay.NewPreview(title, lines, ok)
+	}
+	lines = append(lines, "", "Type "+t.ref.Name+" to confirm.")
+	return overlay.NewConfirm("PROD · "+title, lines, t.ref.Name, ok, overlay.WithDanger(insert))
+}
+
+// start runs the confirmed import on its own session.
+func (t *importTab) start() tea.Cmd {
+	if t.job == nil {
+		return nil
+	}
+	job := *t.job
+	t.job = nil
+	t.gen++
+	t.phase, t.progress = importRunning, new(atomic.Int64)
+	ctx, cancel := context.WithTimeout(context.Background(), importTimeout)
+	t.cancel = cancel
+	id, b, conn, ref, create, progress := t.id, t.backend, t.conn, t.ref, t.create, t.progress
+	run := func() tea.Msg {
+		defer cancel()
+		begin := time.Now()
+		msg := importDoneMsg{tabID: id, conn: conn, ref: ref, create: create}
+		c, err := b.Conn(ctx, conn, ref.Database)
+		if err == nil {
+			var s db.Session
+			if s, err = c.Session(ctx); err == nil {
+				msg.rows, err = importer.Run(ctx, s, job, progress)
+				_ = s.Close()
+			}
+		}
+		if db.IsConnLost(err) {
+			b.Reset(conn)
+		}
+		msg.err, msg.took = err, time.Since(begin)
+		slog.Info("import", "conn", conn, "table", ref.Name, "rows", msg.rows, "took", msg.took, "failed", err != nil)
+		return msg
+	}
+	return tea.Batch(run, t.tickCmd())
+}
+
+func (t *importTab) done(m importDoneMsg) {
+	t.phase, t.cancel = importIdle, nil
+	if m.err != nil {
+		t.setStatus(importErrorText(m.err), true)
+		return
+	}
+	t.setStatus(fmt.Sprintf("imported %s into %s in %s", plural(m.rows, "row"), t.refName(), m.took.Round(time.Millisecond)), false)
+}
+
+// importErrorText says what a failed import did: never anything.
+func importErrorText(err error) string {
+	suffix := ""
+	var left *importer.LeftoverError
+	if errors.As(err, &left) {
+		suffix, err = " · table "+left.Table+" was created but is empty; drop it manually", left.Err
+	}
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "import cancelled, nothing was written" + suffix
+	case errors.Is(err, context.DeadlineExceeded):
+		return "import timed out, nothing was written" + suffix
+	case db.IsConnLost(err):
+		return "connection lost: the transaction is gone and nothing was committed" + suffix
+	}
+	return "import failed, nothing was written: " + err.Error() + suffix
+}
+
+func (t *importTab) progressText() string {
+	if t.progress == nil {
+		return ""
+	}
+	n := int(t.progress.Load())
+	if t.phase == importChecking {
+		return fmt.Sprintf("checking… %s read", plural(n, "row"))
+	}
+	return fmt.Sprintf("inserting %d / %s", n, plural(t.total, "row"))
+}
+
+func (t *importTab) cancelRun() tea.Cmd {
+	if t.phase == importIdle || t.cancel == nil {
+		t.setStatus("nothing is running", false)
+		return nil
+	}
+	t.cancel()
+	return nil
+}
+
+// shutdown cancels a running check or import when the tab closes; the
+// import then rolls back.
+func (t *importTab) shutdown() func() {
+	c := t.cancel
+	return func() {
+		if c != nil {
+			c()
+		}
+	}
+}
