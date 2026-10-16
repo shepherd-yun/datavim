@@ -7,14 +7,14 @@ import (
 
 func TestEscape(t *testing.T) {
 	for in, want := range map[string]string{
-		"user:1":           "user:1",
-		"\x1f\x8bab\xff":   `\x1F\x8Bab\xFF`,
-		"a\nb":             `a\nb`,
-		"a\tb":             `a\tb`,
-		"中文":               "中文",
-		`a\b`:              `a\\b`,
-		"":                 "",
-		"\x7f":             `\x7F`,
+		"user:1":         "user:1",
+		"\x1f\x8bab\xff": `\x1F\x8Bab\xFF`,
+		"a\nb":           `a\nb`,
+		"a\tb":           `a\tb`,
+		"中文":             "中文",
+		`a\b`:            `a\\b`,
+		"":               "",
+		"\x7f":           `\x7F`,
 	} {
 		if got := Escape(in); got != want {
 			t.Errorf("Escape(%q) = %q, want %q", in, got, want)
