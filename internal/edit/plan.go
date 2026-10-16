@@ -33,8 +33,20 @@ func (tg Target) column(cols []db.ColumnInfo, i int) db.ColumnInfo {
 var ErrNoKey = errors.New("no primary key, unique NOT NULL index or row id: rows can only be added")
 
 // incomparable types do not reliably match their text with =, so
-// AllColumns leaves them out of the WHERE clause.
-var incomparable = map[string]bool{"FLOAT": true, "DOUBLE": true, "REAL": true, "JSON": true, "GEOMETRY": true}
+// AllColumns leaves them out of the WHERE clause. SQL Server cannot compare
+// its legacy and CLR types with = at all.
+var (
+	incomparable     = map[string]bool{"FLOAT": true, "DOUBLE": true, "REAL": true, "JSON": true, "GEOMETRY": true}
+	incomparableTSQL = map[string]bool{
+		"TEXT": true, "NTEXT": true, "IMAGE": true, "XML": true, "GEOGRAPHY": true, "GEOMETRY": true,
+		"HIERARCHYID": true, "SQL_VARIANT": true,
+	}
+)
+
+func matchable(d sqlx.Dialect, dbType string) bool {
+	t := sqlx.NormType(dbType)
+	return !incomparable[t] && (d != sqlx.SQLServer || !incomparableTSQL[t])
+}
 
 // Plan turns the staged changes into statements: deletes, then updates,
 // then inserts, each in row order. Rows are located by the values read
@@ -50,7 +62,7 @@ func Plan(t *Table, tg Target) (stmts, warnings []string, err error) {
 			if err != nil {
 				return nil, nil, err
 			}
-			dels = append(dels, "DELETE FROM "+name+" WHERE "+where+tg.limit())
+			dels = append(dels, "DELETE "+tg.top()+"FROM "+name+" WHERE "+where+tg.limit())
 		case Modified:
 			where, err := tg.where(t.cols, r)
 			if err != nil {
@@ -63,7 +75,7 @@ func Plan(t *Table, tg Target) (stmts, warnings []string, err error) {
 					sets = append(sets, sqlx.QuoteIdent(d, c.Name)+" = "+sqlx.Literal(d, c.DatabaseType, r.Values[i]))
 				}
 			}
-			upds = append(upds, "UPDATE "+name+" SET "+strings.Join(sets, ", ")+" WHERE "+where+tg.limit())
+			upds = append(upds, "UPDATE "+tg.top()+name+" SET "+strings.Join(sets, ", ")+" WHERE "+where+tg.limit())
 		case Inserted:
 			ins = append(ins, tg.insert(name, t.cols, r))
 		}
@@ -100,7 +112,7 @@ func (tg Target) where(cols []db.ColumnInfo, r *Row) (string, error) {
 	case AllColumns:
 		for i := range cols {
 			c := tg.column(cols, i)
-			if !incomparable[sqlx.NormType(c.DatabaseType)] {
+			if matchable(d, c.DatabaseType) {
 				parts = append(parts, match(d, c, r.Orig[i]))
 			}
 		}
@@ -119,9 +131,18 @@ func match(d sqlx.Dialect, c db.ColumnInfo, v db.Value) string {
 	return col + " = " + sqlx.Literal(d, c.DatabaseType, v)
 }
 
+// limit and top keep a statement located by all its values to one row:
+// LIMIT 1 at the end, or TOP (1) after the verb on SQL Server.
 func (tg Target) limit() string {
-	if tg.Key.Kind == AllColumns {
+	if tg.Key.Kind == AllColumns && tg.Dialect != sqlx.SQLServer {
 		return " LIMIT 1"
+	}
+	return ""
+}
+
+func (tg Target) top() string {
+	if tg.Key.Kind == AllColumns && tg.Dialect == sqlx.SQLServer {
+		return "TOP (1) "
 	}
 	return ""
 }
@@ -129,7 +150,11 @@ func (tg Target) limit() string {
 func (tg Target) warning() string {
 	switch tg.Key.Kind {
 	case AllColumns:
-		return tg.Table.Name + " has no primary key or unique NOT NULL index: rows are matched by all their values, one row at most (LIMIT 1)"
+		one := "LIMIT 1"
+		if tg.Dialect == sqlx.SQLServer {
+			one = "TOP (1)"
+		}
+		return tg.Table.Name + " has no primary key or unique NOT NULL index: rows are matched by all their values, one row at most (" + one + ")"
 	case RowID:
 		return tg.Table.Name + " has no primary key or unique NOT NULL index: rows are matched by their ctid"
 	}
