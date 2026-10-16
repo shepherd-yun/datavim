@@ -13,6 +13,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/editor"
 )
 
 // maxCandidates bounds the completion popup.
@@ -244,16 +245,25 @@ func (t *consoleTab) acceptCompletion() tea.Cmd {
 // drawPopup draws the completion popup at the cursor: below it when it
 // fits, otherwise above.
 func (t *consoleTab) drawPopup(view string) string {
-	if t.popup == nil || !t.CapturesInput() {
+	if !t.CapturesInput() {
 		return view
 	}
-	x, y := t.editor.CursorPos()
+	return placePopup(view, t.popup, t.editor, t.width, t.height)
+}
+
+// placePopup draws a console's completion popup p (nil: none) over view at
+// the editor's cursor: below it when it fits, otherwise above.
+func placePopup(view string, p *complete.Model, ed *editor.Model, width, height int) string {
+	if p == nil {
+		return view
+	}
+	x, y := ed.CursorPos()
 	x, y = x+1, y+1 // inside the editor's frame
-	box := t.popup.View(min(t.width, 60), min(t.height, 12))
+	box := p.View(min(width, 60), min(height, 12))
 	w, h := lipgloss.Width(box), lipgloss.Height(box)
 	top := y + 1
-	if top+h > t.height+2 {
+	if top+h > height+2 {
 		top = max(y-h, 0)
 	}
-	return overlay.PlaceAt(view, box, min(x, max(t.width+2-w, 0)), top)
+	return overlay.PlaceAt(view, box, min(x, max(width+2-w, 0)), top)
 }

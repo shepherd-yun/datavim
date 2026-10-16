@@ -20,8 +20,10 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/rcmd"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
 	"github.com/shepherd-yun/sqlvim/internal/session"
+	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/editor"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/textview"
@@ -46,6 +48,7 @@ func (m *Model) openRedisConsole(conn string, n int) tea.Cmd {
 	return m.openTab(rconsoleTabKey(conn, n), rec, func(id int) tab {
 		t := newRedisConsoleTab(id, m.backend, m.store, conn, n, m.settings, m.timings)
 		t.keys = m.keys
+		t.keysFn = func(db int, prefix string) []string { return m.redisKeys(conn, db, prefix, completeScanKeys) }
 		return t
 	})
 }
@@ -107,6 +110,13 @@ type redisConsoleTab struct {
 	timings   timings
 
 	editor       *editor.Model
+	popup        *complete.Model                      // completion popup; nil when closed
+	popStart     int                                  // byte offset the popup's word starts at
+	hint         string                               // the argument hint of the command at the cursor
+	keysFn       func(db int, prefix string) []string // the tree's scanned keys
+	extraKeys    map[string]bool                      // keys the console's completion scans found
+	scanned      map[string]bool                      // prefixes scanned for completion: true when the scan was complete
+	keyGen       int                                  // bumped when the db changes; older scans are dropped
 	grid         *grid.Model
 	view         *textview.Model
 	text         []string   // the text result on screen; nil when the grid shows a table
@@ -138,7 +148,9 @@ func newRedisConsoleTab(id int, b Backend, st Store, conn string, n int, s confi
 		maxRows: s.MaxRows, timings: tm, editorCmd: s.EditorCommand(os.Getenv),
 		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), view: textview.New(), keys: keymap.Default(),
 	}
+	t.editor.SetHighlighter(highlight.Redis)
 	t.editor.EnterInsert() // a console opens ready to type
+	t.forgetKeys()
 	return t
 }
 
@@ -215,6 +227,9 @@ func (t *redisConsoleTab) log(line string) {
 
 func (t *redisConsoleTab) Input(msg tea.Msg) tea.Cmd {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
+		if cmd, used := t.popupKey(k.String()); used {
+			return cmd
+		}
 		switch k.String() {
 		case "ctrl+enter", "ctrl+j":
 			return t.runAtCursor()
@@ -224,10 +239,14 @@ func (t *redisConsoleTab) Input(msg tea.Msg) tea.Cmd {
 	}
 	before := t.editor.Version()
 	cmd := t.effects(t.editor.Update(msg))
-	if t.editor.Version() == before {
+	if t.editor.Version() == before || !t.editor.Insert() {
+		t.popup = nil // the cursor moved, or esc left INSERT mode
+		if !t.editor.Insert() {
+			t.hint = ""
+		}
 		return cmd
 	}
-	return tea.Batch(cmd, t.scheduleDraft())
+	return tea.Batch(cmd, t.suggest(false), t.scheduleDraft())
 }
 
 func (t *redisConsoleTab) Paste(msg tea.PasteMsg) tea.Cmd {
@@ -257,6 +276,7 @@ func (t *redisConsoleTab) TakeKey(msg tea.KeyPressMsg) (tea.Cmd, bool) {
 	if !res.Handled {
 		return nil, false
 	}
+	t.popup, t.hint = nil, ""
 	cmd := t.effects(res)
 	if t.editor.Version() != before {
 		cmd = tea.Batch(cmd, t.scheduleDraft())
@@ -507,6 +527,8 @@ func (t *redisConsoleTab) Update(msg tea.Msg) tea.Cmd {
 		}
 	case redisRunMsg:
 		return t.done(m)
+	case redisCompleteScanMsg:
+		return t.keysScanned(m)
 	case redisConfirmMsg:
 		if m.gen == t.gen && t.pending != nil && !t.running {
 			lines := t.pending
@@ -581,6 +603,9 @@ func (t *redisConsoleTab) done(m redisRunMsg) tea.Cmd {
 		return nil
 	}
 	t.running, t.cancel = false, nil
+	if m.db != t.db {
+		t.forgetKeys()
+	}
 	t.session, t.db = m.session, m.db
 	if m.txLost {
 		t.loseTx()
@@ -810,7 +835,11 @@ func (t *redisConsoleTab) Framed(title string, focused, danger bool) string {
 	w := t.width + 2
 	top := theme.Frame(title, t.editor.View(), w, t.editorH+2, onEditor, danger)
 	bottom := theme.Frame(t.resultsTitle(), results+"\n"+t.statusLine(), w, resultsH+3, onResults, danger)
-	return top + "\n" + bottom
+	view := top + "\n" + bottom
+	if !t.CapturesInput() {
+		return view
+	}
+	return placePopup(view, t.popup, t.editor, t.width, t.height)
 }
 
 func (t *redisConsoleTab) resultsTitle() string {
@@ -844,6 +873,8 @@ func (t *redisConsoleTab) statusLine() string {
 		return theme.Muted.Render(textutil.Fit(fmt.Sprintf("%s running %.1fs · ctrl+c cancel", frame, el.Seconds()), t.width))
 	case t.editor.Pending() != "" && !t.onResults:
 		return theme.Muted.Render(textutil.Fit(textutil.Sanitize(t.editor.Pending()), t.width))
+	case t.hint != "" && t.CapturesInput():
+		return theme.Accent.Render(textutil.Fit(textutil.Sanitize(t.hint), t.width))
 	case t.status != "" && t.statusErr:
 		return theme.Error.Render(textutil.Fit("✗ "+textutil.Sanitize(t.status), t.width))
 	case t.status != "":

@@ -2,11 +2,13 @@
 package highlight
 
 import (
+	"strconv"
 	"strings"
 
 	"github.com/alecthomas/chroma/v2"
 	"github.com/alecthomas/chroma/v2/lexers"
 
+	"github.com/shepherd-yun/sqlvim/internal/rcmd"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
@@ -184,4 +186,47 @@ func (h *Highlighter) Spans(src string) []Span {
 	}
 	h.cache = next
 	return out
+}
+
+// Redis classifies a redis console: the command (and a container's
+// subcommand) is a Keyword, quoted arguments are Strings, numbers are
+// Numbers and # or // lines are Comments.
+func Redis(src string) []Span {
+	var out []Span
+	start := 0
+	for line := range strings.SplitSeq(src, "\n") {
+		t := strings.TrimSpace(line)
+		switch {
+		case t == "":
+		case strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//"):
+			out = append(out, Span{Start: start, End: start + len(line), Class: Comment})
+		default:
+			toks := rcmd.Tokens(line)
+			words := 1
+			if c, _ := rcmd.Lookup([]string{toks[0].Text}); c.Subcommands {
+				words = 2
+			}
+			for i, tok := range toks {
+				s := Span{Start: start + tok.Start, End: start + tok.End}
+				switch {
+				case i < words && !tok.Quoted:
+					s.Class = Keyword
+				case tok.Quoted:
+					s.Class = String
+				case isNumber(tok.Text):
+					s.Class = Number
+				default:
+					continue
+				}
+				out = append(out, s)
+			}
+		}
+		start += len(line) + 1
+	}
+	return out
+}
+
+func isNumber(s string) bool {
+	_, err := strconv.ParseFloat(s, 64)
+	return err == nil && s != "" && strings.IndexFunc(s, func(r rune) bool { return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' }) < 0
 }

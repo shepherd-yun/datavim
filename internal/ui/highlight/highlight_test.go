@@ -177,3 +177,36 @@ func TestHighlightPLSQL(t *testing.T) {
 		}
 	}
 }
+
+func TestHighlightRedis(t *testing.T) {
+	class := func(src string, spans []Span, text string) Class {
+		i := strings.Index(src, text)
+		for _, s := range spans {
+			if s.Start == i && s.End == i+len(text) {
+				return s.Class
+			}
+		}
+		return Plain
+	}
+	src := "SET \"a b\" 10 # x\n# c\nCONFIG GET maxmemory\n  // d\nhset k 1.5"
+	spans := Redis(src)
+	for _, tc := range []struct {
+		text string
+		want Class
+	}{
+		{"SET", Keyword},
+		{`"a b"`, String},
+		{"10", Number},
+		{"# c", Comment},
+		{"CONFIG", Keyword},
+		{"GET", Keyword},
+		{"maxmemory", Plain},
+		{"  // d", Comment},
+		{"hset", Keyword},
+		{"1.5", Number},
+	} {
+		if got := class(src, spans, tc.text); got != tc.want {
+			t.Errorf("%q = %v, want %v (spans %+v)", tc.text, got, tc.want, spans)
+		}
+	}
+}

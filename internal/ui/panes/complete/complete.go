@@ -21,9 +21,11 @@ const (
 	View
 	Column
 	Namespace // a database (MySQL) or schema (PostgreSQL)
+	Command   // a redis command or subcommand
+	Key       // a redis key
 )
 
-var tags = [...]string{"kw", "table", "view", "col", "ns"}
+var tags = [...]string{"kw", "table", "view", "col", "ns", "cmd", "key"}
 
 // Candidate is one completion.
 type Candidate struct {
