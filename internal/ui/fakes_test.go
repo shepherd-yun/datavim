@@ -404,6 +404,10 @@ type fakeBackend struct {
 	redis        *fakeRedis           // backs the redis connections addRedis added
 	redisOpens   []string
 	connCalls    int
+	// sessionDBs is the n of every RedisSession call; sessions are the
+	// sessions handed out, in order.
+	sessionDBs []int
+	sessions   []*fakeRedisSession
 }
 
 func newFakeBackend() *fakeBackend {

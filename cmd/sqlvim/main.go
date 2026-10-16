@@ -184,6 +184,7 @@ func newManager(cfg *config.Config, ws config.Workspace, tunnels session.Tunnele
 	mgr.PersistRemove = func(name string) error { return config.RemoveConnection(dir, name) }
 	mgr.Tunnels = tunnels
 	mgr.RedisOpen = rdb.Open
+	mgr.RedisSessionOpen = rdb.OpenSession
 	return mgr
 }
 

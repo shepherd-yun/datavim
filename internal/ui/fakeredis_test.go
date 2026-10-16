@@ -6,6 +6,8 @@ import (
 	"path"
 	"slices"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
@@ -303,4 +305,271 @@ func (f *fakeBackend) Redis(_ context.Context, name string, n int) (rdb.Client, 
 		n = config.RedisDB(cfg)
 	}
 	return &fakeRedisClient{r: f.redis, db: n}, nil
+}
+
+// fakeRedisSession is a console session on fakeRedis. answer, when set,
+// replies first (ok false falls through to the built-in commands). block
+// makes every Do wait for ctx; lost makes Do and Ping fail like a dropped
+// connection.
+type fakeRedisSession struct {
+	r *fakeRedis
+
+	mu      sync.Mutex
+	db      int
+	inMulti bool
+	queued  [][]string
+	answer  func(args []string) (rdb.Reply, bool)
+	block   bool
+	lost    bool
+	closed  bool
+	dos     [][]string
+	pings   int
+}
+
+func (s *fakeRedisSession) DB() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.db
+}
+
+func (s *fakeRedisSession) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.closed = true
+	return nil
+}
+
+func (s *fakeRedisSession) setLost() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.lost = true
+}
+
+func (s *fakeRedisSession) setAnswer(fn func(args []string) (rdb.Reply, bool)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.answer = fn
+}
+
+// commands is every Do so far, as "SET a 1" lines.
+func (s *fakeRedisSession) commands() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []string
+	for _, d := range s.dos {
+		out = append(out, strings.Join(d, " "))
+	}
+	return out
+}
+
+func (s *fakeRedisSession) pingCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.pings
+}
+
+func (s *fakeRedisSession) Ping(context.Context) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.pings++
+	if s.lost || s.closed {
+		return fmt.Errorf("%w: broken pipe", db.ErrConnLost)
+	}
+	return nil
+}
+
+func (s *fakeRedisSession) Do(ctx context.Context, args ...string) (rdb.Reply, error) {
+	s.mu.Lock()
+	s.dos = append(s.dos, slices.Clone(args))
+	if s.lost || s.closed {
+		s.mu.Unlock()
+		return rdb.Reply{}, fmt.Errorf("%w: broken pipe", db.ErrConnLost)
+	}
+	block := s.block || len(args) == 3 && strings.EqualFold(args[0], "BLPOP") && args[2] == "0"
+	answer := s.answer
+	s.mu.Unlock()
+	if block {
+		<-ctx.Done()
+		s.mu.Lock()
+		s.closed = true
+		s.mu.Unlock()
+		return rdb.Reply{}, ctx.Err()
+	}
+	if answer != nil {
+		if r, ok := answer(args); ok {
+			return r, nil
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cmd := strings.ToUpper(args[0])
+	if s.inMulti && cmd != "EXEC" && cmd != "DISCARD" && cmd != "MULTI" {
+		s.queued = append(s.queued, args)
+		return str("QUEUED"), nil
+	}
+	switch cmd {
+	case "MULTI":
+		s.inMulti, s.queued = true, nil
+		return str("OK"), nil
+	case "EXEC":
+		if !s.inMulti {
+			return rdb.Reply{Kind: rdb.KindError, Str: "ERR EXEC without MULTI"}, nil
+		}
+		s.inMulti = false
+		out := rdb.Reply{Kind: rdb.KindArray}
+		for _, q := range s.queued {
+			out.Elems = append(out.Elems, s.run(q))
+		}
+		s.queued = nil
+		return out, nil
+	case "DISCARD":
+		s.inMulti, s.queued = false, nil
+		return str("OK"), nil
+	}
+	return s.run(args), nil
+}
+
+func str(s string) rdb.Reply { return rdb.Reply{Kind: rdb.KindString, Str: s} }
+
+// run answers one command outside MULTI; s.mu is held.
+func (s *fakeRedisSession) run(args []string) rdb.Reply {
+	r := s.r
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	data := r.dbs[s.db]
+	if data == nil {
+		data = map[string]fakeValue{}
+		r.dbs[s.db] = data
+	}
+	arg := func(i int) string {
+		if i < len(args) {
+			return args[i]
+		}
+		return ""
+	}
+	switch strings.ToUpper(args[0]) {
+	case "PING":
+		return str("PONG")
+	case "WATCH", "UNWATCH", "AUTH":
+		return str("OK")
+	case "SELECT":
+		n, err := strconv.Atoi(arg(1))
+		if err != nil {
+			return rdb.Reply{Kind: rdb.KindError, Str: "ERR value is not an integer or out of range"}
+		}
+		s.db = n
+		return str("OK")
+	case "GET":
+		v, ok := data[arg(1)]
+		if !ok {
+			return rdb.Reply{Kind: rdb.KindNil}
+		}
+		if v.typ != "string" {
+			return rdb.Reply{Kind: rdb.KindError, Str: "WRONGTYPE Operation against a key holding the wrong kind of value"}
+		}
+		return str(v.str)
+	case "SET":
+		data[arg(1)] = fakeValue{typ: "string", str: arg(2)}
+		delete(r.sorted, s.db)
+		return str("OK")
+	case "INCR":
+		n, _ := strconv.ParseInt(data[arg(1)].str, 10, 64)
+		data[arg(1)] = fakeValue{typ: "string", str: strconv.FormatInt(n+1, 10)}
+		return rdb.Reply{Kind: rdb.KindInt, Int: n + 1}
+	case "LPUSH":
+		if v, ok := data[arg(1)]; ok && v.typ != "list" {
+			return rdb.Reply{Kind: rdb.KindError, Str: "WRONGTYPE Operation against a key holding the wrong kind of value"}
+		}
+		v := data[arg(1)]
+		v.typ = "list"
+		v.list = append(slices.Clone(args[2:]), v.list...)
+		data[arg(1)] = v
+		return rdb.Reply{Kind: rdb.KindInt, Int: int64(len(v.list))}
+	case "DEL":
+		n := 0
+		for _, k := range args[1:] {
+			if _, ok := data[k]; ok {
+				delete(data, k)
+				n++
+			}
+		}
+		delete(r.sorted, s.db)
+		return rdb.Reply{Kind: rdb.KindInt, Int: int64(n)}
+	case "DBSIZE":
+		return rdb.Reply{Kind: rdb.KindInt, Int: int64(len(data))}
+	case "KEYS", "SCAN":
+		match := arg(1)
+		if strings.EqualFold(args[0], "SCAN") {
+			match = "*"
+		}
+		keys := rdb.Reply{Kind: rdb.KindArray}
+		var names []string
+		for k := range data {
+			if matches(match, k) {
+				names = append(names, k)
+			}
+		}
+		sort.Strings(names)
+		for _, k := range names {
+			keys.Elems = append(keys.Elems, str(k))
+		}
+		if strings.EqualFold(args[0], "KEYS") {
+			return keys
+		}
+		return rdb.Reply{Kind: rdb.KindArray, Elems: []rdb.Reply{str("0"), keys}}
+	case "HGETALL":
+		out := rdb.Reply{Kind: rdb.KindMap}
+		for _, fv := range data[arg(1)].hash {
+			out.Pairs = append(out.Pairs, [2]rdb.Reply{str(fv[0]), str(fv[1])})
+		}
+		return out
+	case "FLUSHDB":
+		r.dbs[s.db] = map[string]fakeValue{}
+		delete(r.sorted, s.db)
+		return str("OK")
+	}
+	return rdb.Reply{Kind: rdb.KindError, Str: "ERR unknown command '" + args[0] + "'"}
+}
+
+func (f *fakeBackend) RedisSession(_ context.Context, name string, n int) (rdb.Session, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.sessionDBs = append(f.sessionDBs, n)
+	if f.connErr != nil {
+		return nil, f.connErr
+	}
+	if f.needPassword {
+		return nil, session.ErrPasswordRequired
+	}
+	var cfg config.Connection
+	for _, c := range f.conns {
+		if c.Name == name {
+			cfg = c
+		}
+	}
+	if cfg.Driver != "redis" || f.redis == nil {
+		return nil, fmt.Errorf("connection %q is not a redis connection", name)
+	}
+	if n < 0 {
+		n = config.RedisDB(cfg)
+	}
+	s := &fakeRedisSession{r: f.redis, db: n}
+	f.sessions = append(f.sessions, s)
+	return s, nil
+}
+
+// lastSession is the newest session RedisSession handed out.
+func (f *fakeBackend) lastSession() *fakeRedisSession {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.sessions) == 0 {
+		return nil
+	}
+	return f.sessions[len(f.sessions)-1]
+}
+
+func (f *fakeBackend) sessionCalls() []int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return slices.Clone(f.sessionDBs)
 }

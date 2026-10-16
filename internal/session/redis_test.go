@@ -195,3 +195,97 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(time.Millisecond)
 	}
 }
+
+type fakeRedisSession struct{ rdb.Session }
+
+// fakeSessionOpener is fakeRedisOpener for console sessions.
+type fakeSessionOpener struct {
+	mu       sync.Mutex
+	needAuth bool
+	cfgs     []rdb.Config
+}
+
+func (f *fakeSessionOpener) open(_ context.Context, cfg rdb.Config) (rdb.Session, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.cfgs = append(f.cfgs, cfg)
+	if f.needAuth && cfg.Password == "" {
+		return nil, rdb.ErrAuthRequired
+	}
+	return &fakeRedisSession{}, nil
+}
+
+func setupRedisSession(c config.Connection) (*Manager, *fakeSessionOpener) {
+	m, _, _ := setupRedis(c)
+	op := &fakeSessionOpener{}
+	m.RedisSessionOpen = op.open
+	return m, op
+}
+
+func TestRedisSessionNoPassword(t *testing.T) {
+	m, op := setupRedisSession(config.Connection{})
+	if _, err := m.RedisSession(context.Background(), "r", 0); err != nil {
+		t.Fatal(err)
+	}
+	if len(op.cfgs) != 1 || op.cfgs[0].Password != "" || op.cfgs[0].Port != 6379 {
+		t.Fatalf("cfgs = %+v", op.cfgs)
+	}
+}
+
+func TestRedisSessionAuthRequired(t *testing.T) {
+	m, op := setupRedisSession(config.Connection{})
+	op.needAuth = true
+	ctx := context.Background()
+	if _, err := m.RedisSession(ctx, "r", 0); !errors.Is(err, ErrPasswordRequired) {
+		t.Fatalf("err = %v", err)
+	}
+	if err := m.SetPassword("r", "pw", false); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := m.RedisSession(ctx, "r", 0); err != nil {
+		t.Fatal(err)
+	}
+	if last := op.cfgs[len(op.cfgs)-1]; last.Password != "pw" {
+		t.Fatalf("cfg = %+v", last)
+	}
+}
+
+func TestRedisSessionDB(t *testing.T) {
+	m, op := setupRedisSession(config.Connection{Database: "2"})
+	ctx := context.Background()
+	if _, err := m.RedisSession(ctx, "r", -1); err != nil || op.cfgs[0].DB != 2 {
+		t.Fatalf("cfgs = %+v, err %v", op.cfgs, err)
+	}
+	if _, err := m.RedisSession(ctx, "r", 5); err != nil || op.cfgs[1].DB != 5 {
+		t.Fatalf("cfgs = %+v, err %v", op.cfgs, err)
+	}
+}
+
+func TestRedisSessionNotCached(t *testing.T) {
+	m, op := setupRedisSession(config.Connection{})
+	ctx := context.Background()
+	a, _ := m.RedisSession(ctx, "r", 0)
+	b, _ := m.RedisSession(ctx, "r", 0)
+	if a == b || len(op.cfgs) != 2 {
+		t.Fatalf("opened %d times", len(op.cfgs))
+	}
+}
+
+func TestRedisSessionTunnel(t *testing.T) {
+	m, op := setupRedisSession(config.Connection{SSH: "bastion", Params: map[string]string{"tls": "true"}})
+	m.Tunnels = &fakeTunnels{}
+	if _, err := m.RedisSession(context.Background(), "r", 0); err != nil {
+		t.Fatal(err)
+	}
+	if op.cfgs[0].Dial == nil || !op.cfgs[0].TLS {
+		t.Fatalf("cfg = %+v", op.cfgs[0])
+	}
+}
+
+func TestRedisSessionNotAvailable(t *testing.T) {
+	m, _ := setupRedisSession(config.Connection{})
+	m.RedisSessionOpen = nil
+	if _, err := m.RedisSession(context.Background(), "r", 0); err == nil {
+		t.Fatal("no error without an opener")
+	}
+}

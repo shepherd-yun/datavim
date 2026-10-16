@@ -33,6 +33,10 @@ type Tunneler interface {
 // RedisOpener opens a Redis client; rdb.Open implements it.
 type RedisOpener func(ctx context.Context, cfg rdb.Config) (rdb.Client, error)
 
+// RedisSessionOpener opens a dedicated Redis connection; rdb.OpenSession
+// implements it.
+type RedisSessionOpener func(ctx context.Context, cfg rdb.Config) (rdb.Session, error)
+
 type connKey struct {
 	conn     string
 	database string
@@ -53,6 +57,8 @@ type Manager struct {
 	Tunnels Tunneler
 	// RedisOpen, if set, opens redis connections; nil makes them unavailable.
 	RedisOpen RedisOpener
+	// RedisSessionOpen, if set, opens redis console sessions.
+	RedisSessionOpen RedisSessionOpener
 
 	mu        sync.Mutex
 	conns     []config.Connection
@@ -305,18 +311,9 @@ func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, err
 // default). With no known password it connects without one and asks for a
 // password (ErrPasswordRequired) only when the server answers NOAUTH.
 func (m *Manager) Redis(ctx context.Context, name string, n int) (rdb.Client, error) {
-	cfg, ok := m.Connection(name)
-	if !ok {
-		return nil, fmt.Errorf("unknown connection %q", name)
-	}
-	if cfg.Driver != "redis" {
-		return nil, fmt.Errorf("connection %q is not a redis connection", name)
-	}
-	if m.RedisOpen == nil {
-		return nil, fmt.Errorf("connection %q: driver %q not available", name, cfg.Driver)
-	}
-	if n < 0 {
-		n = config.RedisDB(cfg)
+	cfg, n, err := m.redisConn(name, n, m.RedisOpen != nil)
+	if err != nil {
+		return nil, err
 	}
 	key := connKey{conn: name, database: strconv.Itoa(n)}
 	m.mu.Lock()
@@ -326,26 +323,13 @@ func (m *Manager) Redis(ctx context.Context, name string, n int) (rdb.Client, er
 		return c, nil
 	}
 
-	pw, err := m.password(name)
-	if errors.Is(err, ErrPasswordRequired) {
-		pw, err = "", nil // try without one; NOAUTH asks below
-	}
+	rc, err := m.redisConfig(ctx, cfg, n)
 	if err != nil {
 		return nil, err
 	}
-	dial, err := m.dial(ctx, cfg)
-	if err != nil {
+	c, err = m.RedisOpen(ctx, rc)
+	if err := redisOpenErr(name, err); err != nil {
 		return nil, err
-	}
-	c, err = m.RedisOpen(ctx, rdb.Config{
-		Host: cfg.Host, Port: cfg.Port, User: cfg.User, Password: pw, DB: n,
-		TLS: param(cfg, "tls"), TLSSkipVerify: param(cfg, "tls_skip_verify"), Dial: dial,
-	})
-	if errors.Is(err, rdb.ErrAuthRequired) {
-		return nil, ErrPasswordRequired
-	}
-	if err != nil {
-		return nil, fmt.Errorf("connect %s: %w", name, err)
 	}
 
 	m.mu.Lock()
@@ -356,6 +340,74 @@ func (m *Manager) Redis(ctx context.Context, name string, n int) (rdb.Client, er
 	}
 	m.redis[key] = c
 	return c, nil
+}
+
+// RedisSession opens a new dedicated connection on db n (n < 0 means the
+// configured default) for a console. It is not cached: the caller closes
+// it. Passwords, tunnels and TLS work as for Redis.
+func (m *Manager) RedisSession(ctx context.Context, name string, n int) (rdb.Session, error) {
+	cfg, n, err := m.redisConn(name, n, m.RedisSessionOpen != nil)
+	if err != nil {
+		return nil, err
+	}
+	rc, err := m.redisConfig(ctx, cfg, n)
+	if err != nil {
+		return nil, err
+	}
+	s, err := m.RedisSessionOpen(ctx, rc)
+	if err := redisOpenErr(name, err); err != nil {
+		return nil, err
+	}
+	return s, nil
+}
+
+// redisConn checks that name is a usable redis connection and resolves
+// n < 0 to its default db.
+func (m *Manager) redisConn(name string, n int, available bool) (config.Connection, int, error) {
+	cfg, ok := m.Connection(name)
+	if !ok {
+		return cfg, n, fmt.Errorf("unknown connection %q", name)
+	}
+	if cfg.Driver != "redis" {
+		return cfg, n, fmt.Errorf("connection %q is not a redis connection", name)
+	}
+	if !available {
+		return cfg, n, fmt.Errorf("connection %q: driver %q not available", name, cfg.Driver)
+	}
+	if n < 0 {
+		n = config.RedisDB(cfg)
+	}
+	return cfg, n, nil
+}
+
+// redisConfig is the rdb.Config for db n: the known password or none (the
+// server's NOAUTH asks for one), the SSH tunnel and the TLS params.
+func (m *Manager) redisConfig(ctx context.Context, cfg config.Connection, n int) (rdb.Config, error) {
+	pw, err := m.password(cfg.Name)
+	if errors.Is(err, ErrPasswordRequired) {
+		pw, err = "", nil // try without one; NOAUTH asks
+	}
+	if err != nil {
+		return rdb.Config{}, err
+	}
+	dial, err := m.dial(ctx, cfg)
+	if err != nil {
+		return rdb.Config{}, err
+	}
+	return rdb.Config{
+		Host: cfg.Host, Port: cfg.Port, User: cfg.User, Password: pw, DB: n,
+		TLS: param(cfg, "tls"), TLSSkipVerify: param(cfg, "tls_skip_verify"), Dial: dial,
+	}, nil
+}
+
+func redisOpenErr(name string, err error) error {
+	if errors.Is(err, rdb.ErrAuthRequired) {
+		return ErrPasswordRequired
+	}
+	if err != nil {
+		return fmt.Errorf("connect %s: %w", name, err)
+	}
+	return nil
 }
 
 // param reports whether params[key] is "true".

@@ -212,7 +212,7 @@ func TestNewManagerPersistsToWorkspace(t *testing.T) {
 
 func TestNewManagerOpensRedis(t *testing.T) {
 	mgr := newManager(&config.Config{}, config.Workspace{Name: config.DefaultWorkspace, ConfigDir: t.TempDir()}, nil)
-	if mgr.RedisOpen == nil {
+	if mgr.RedisOpen == nil || mgr.RedisSessionOpen == nil {
 		t.Fatal("redis connections need an opener")
 	}
 }

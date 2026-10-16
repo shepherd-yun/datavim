@@ -18,6 +18,9 @@ type Backend interface {
 	// Redis returns a client for db number n of a redis connection; n < 0
 	// is the configured default.
 	Redis(ctx context.Context, name string, n int) (rdb.Client, error)
+	// RedisSession opens a new dedicated connection on db n (n < 0 is the
+	// configured default) for a console; the caller closes it.
+	RedisSession(ctx context.Context, name string, n int) (rdb.Session, error)
 	SetPassword(name, password string, save bool) error
 	// Reset drops the open connections of name so the next Conn reconnects.
 	Reset(name string)
