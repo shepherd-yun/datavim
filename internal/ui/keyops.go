@@ -12,7 +12,9 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/rcmd"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
 )
 
 // keyOp is a one-step change to a whole key (design §6.1, last row).
@@ -34,6 +36,7 @@ type keyOpReq struct {
 	typ       string        // the key's type, for the tree
 	ttl       time.Duration // keyOpTTL: < 0 removes it
 	overwrite bool          // keyOpRename: RENAME over an existing key
+	plan      *redit.Plan   // keyOpNew: what creates it
 }
 
 type (
@@ -228,6 +231,9 @@ func (m *Model) runKeyOp(req keyOpReq) tea.Cmd {
 				var n int64
 				n, err = c.Unlink(ctx, req.key)
 				out.ok = n > 0
+			case keyOpNew:
+				err = c.Apply(ctx, *req.plan)
+				out.ok = err == nil
 			}
 			return err
 		})
@@ -240,7 +246,12 @@ func (m *Model) runKeyOp(req keyOpReq) tea.Cmd {
 func (m *Model) keyOpDone(msg keyOpMsg) tea.Cmd {
 	req := msg.req
 	name := rcmd.Escape(req.key)
-	if msg.err != nil {
+	var changed *rdb.ChangedError
+	switch {
+	case req.op == keyOpNew && errors.As(msg.err, &changed):
+		m.setStatus(name+" already exists", true)
+		return nil
+	case msg.err != nil:
 		m.setStatus(name+": "+msg.err.Error(), true)
 		return nil
 	}
@@ -281,6 +292,16 @@ func (m *Model) keyOpDone(msg keyOpMsg) tea.Cmd {
 		m.setStatus("deleted "+name, false)
 		m.keyChanged(redisKeyChangedMsg{conn: req.conn, db: req.db, key: req.key})
 		return reload(req.key)
+	case keyOpNew:
+		m.keyChanged(redisKeyChangedMsg{conn: req.conn, db: req.db, key: req.key, typ: req.typ})
+		open := reload(req.key)
+		if open == nil {
+			open = m.openKey(req.conn, req.db, req.key)
+		} else {
+			open = tea.Batch(open, m.openKey(req.conn, req.db, req.key))
+		}
+		m.setStatus("created "+name, false)
+		return open
 	}
 	return nil
 }
@@ -306,4 +327,95 @@ func (m *Model) retargetKeyTab(conn string, n int, from, to string) tea.Cmd {
 	}
 	kt.key = to
 	return tea.Batch(closed, kt.load(true))
+}
+
+type (
+	// newKeyTypeMsg is the type picked for a new key.
+	newKeyTypeMsg struct {
+		req    keyOpReq
+		prefix string // the selected folder's, raw
+	}
+	// newKeyNameMsg is the name typed for a new key.
+	newKeyNameMsg struct {
+		req  keyOpReq
+		text string
+	}
+	// newKeyArgsMsg is what was typed after the new key's name.
+	newKeyArgsMsg struct {
+		req  keyOpReq
+		text string
+	}
+)
+
+// newKeyPlan reads the values typed for a new key.
+func newKeyPlan(req keyOpReq, text string) (redit.Plan, error) {
+	args, err := rcmd.Split(text)
+	if err != nil {
+		return redit.Plan{}, err
+	}
+	return redit.NewKey(req.typ, req.key, args)
+}
+
+// newKeyPrompt is o in the tree: pick a type, then a name, then the first
+// values of a new key in the selected node's db.
+func (m *Model) newKeyPrompt() tea.Cmd {
+	n := m.tree.Selected()
+	k, ok := redisDBKey{}, false
+	if n != nil {
+		k, ok = redisKeyOf(n)
+	}
+	if !ok || !isRedis(m.backend, k.conn) {
+		m.setStatus("select a Redis db to add a key", true)
+		return nil
+	}
+	if cfg, _ := m.backend.Connection(k.conn); cfg.IsReadOnly() {
+		m.setStatus(readOnlyHint, true)
+		return nil
+	}
+	prefix := ""
+	if n.Kind == tree.KindKeyFolder {
+		prefix = n.Key
+	}
+	req := keyOpReq{op: keyOpNew, conn: k.conn, db: k.db}
+	m.overlay = overlay.NewChoice("New key in "+k.conn+"/db"+strconv.Itoa(k.db), redit.Types, func(i int) tea.Msg {
+		r := req
+		r.typ = redit.Types[i]
+		return newKeyTypeMsg{req: r, prefix: prefix}
+	})
+	return nil
+}
+
+func (m *Model) newKeyType(msg newKeyTypeMsg) {
+	req := msg.req
+	initial := ""
+	if msg.prefix != "" {
+		initial = rcmd.Quote(msg.prefix)
+	}
+	m.overlay = overlay.NewPrompt("New "+req.typ+" key", "Key", initial,
+		func(s string) tea.Msg { return newKeyNameMsg{req: req, text: s} },
+		overlay.WithValidate(func(s string) error { _, err := parseKeyName(s); return err }))
+}
+
+func (m *Model) newKeyName(msg newKeyNameMsg) {
+	req := msg.req
+	key, err := parseKeyName(msg.text)
+	if err != nil {
+		m.setStatus(err.Error(), true)
+		return
+	}
+	req.key = key
+	m.overlay = overlay.NewPrompt("New "+req.typ+" key "+rcmd.Escape(key), redit.Usage(req.typ), "",
+		func(s string) tea.Msg { return newKeyArgsMsg{req: req, text: s} },
+		overlay.WithValidate(func(s string) error { _, err := newKeyPlan(req, s); return err }))
+}
+
+func (m *Model) newKeyArgs(msg newKeyArgsMsg) tea.Cmd {
+	req := msg.req
+	p, err := newKeyPlan(req, msg.text)
+	if err != nil {
+		m.setStatus(err.Error(), true)
+		return nil
+	}
+	req.plan = &p
+	return m.guardKeyOp(req, p.Cmds)
 }

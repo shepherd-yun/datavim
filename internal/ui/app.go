@@ -218,6 +218,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case keyOpInputMsg:
 		return m, m.keyOpInput(msg)
+	case newKeyTypeMsg:
+		m.newKeyType(msg)
+	case newKeyNameMsg:
+		m.newKeyName(msg)
+	case newKeyArgsMsg:
+		return m, m.newKeyArgs(msg)
 	case keyOpRunMsg:
 		return m, m.runKeyOp(msg.req)
 	case keyOpMsg:
@@ -625,6 +631,8 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 		}
 	case keymap.DeleteNode:
 		return m.deleteNode()
+	case keymap.NewKey:
+		return m.newKeyPrompt()
 	case keymap.FilterPrompt:
 		return m.filterKeysPrompt()
 	case keymap.FilterClear:
@@ -642,6 +650,9 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 func sqlOnlyTreeAction(a keymap.Action, n *tree.Node) bool {
 	if n != nil && n.Kind == tree.KindRedisKey && (a == keymap.RenameTable || a == keymap.DeleteNode) {
 		return false
+	}
+	if a == keymap.NodeActions && n != nil && (n.Kind == tree.KindConn || isRedisNode(n)) {
+		return false // the menu lists only what the node can do
 	}
 	switch a {
 	case keymap.ImportData, keymap.MarkCompare, keymap.Compare, keymap.NodeActions,

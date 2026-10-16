@@ -83,6 +83,7 @@ const (
 	NodeActions       Action = "node.actions"
 	RenameTable       Action = "table.rename"
 	SetTTL            Action = "redis.ttl"
+	NewKey            Action = "redis.newkey"
 	TruncateTable     Action = "table.truncate"
 	ModifyTable       Action = "table.modify"
 	History           Action = "history.open"

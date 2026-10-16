@@ -69,6 +69,7 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("r"), RenameTable, "Rename table, view or Redis key"},
 		Binding{Tree, keys("T"), TruncateTable, "Truncate table"},
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
+		Binding{Tree, keys("o"), NewKey, "New Redis key"},
 		Binding{Tree, keys("m"), MarkCompare, "Mark as the compare source"},
 		Binding{Tree, keys("C"), Compare, "Compare with the marked node"},
 		Binding{Tree, keys("I"), ImportData, "Import data from a file (database or schema: into a new table)"},

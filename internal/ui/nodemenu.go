@@ -3,6 +3,7 @@ package ui
 import (
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shepherd-yun/sqlvim/internal/rcmd"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
@@ -28,6 +29,25 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 	}
 	var entries []entry
 	switch n.Kind {
+	case tree.KindRedisDB:
+		entries = []entry{
+			{keymap.OpenConsole, "Open console"},
+			{keymap.NewKey, "New key"},
+			{keymap.FilterPrompt, "Filter keys"},
+			{keymap.Refresh, "Refresh"},
+			{keymap.DeleteNode, "Delete keys…"},
+		}
+	case tree.KindKeyFolder:
+		entries = []entry{
+			{keymap.NewKey, "New key"},
+			{keymap.DeleteNode, "Delete keys under " + rcmd.Escape(n.Key) + "…"},
+		}
+	case tree.KindRedisKey:
+		entries = []entry{
+			{keymap.Open, "Open"},
+			{keymap.RenameTable, "Rename key"},
+			{keymap.DeleteNode, "Delete key"},
+		}
 	case tree.KindConn:
 		entries = []entry{
 			{keymap.OpenConsole, "Open console"},
@@ -91,7 +111,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 		entries = []entry{{keymap.Open, "Go to " + n.Ref.Name}, {keymap.Refresh, "Refresh"}}
 	}
 	entries = append(entries, entry{keymap.YankName, "Copy name"})
-	if n.Kind != tree.KindConn {
+	if n.Kind != tree.KindConn && !isRedisNode(n) {
 		entries = append(entries, entry{keymap.YankQualified, "Copy qualified name"})
 	}
 	items := make([]menuItem, len(entries))
@@ -117,4 +137,10 @@ func (m *Model) openNodeMenu() {
 	m.overlay = overlay.NewMenu(n.Name, entries, func(i int) tea.Msg {
 		return menuPickedMsg{action: items[i].action}
 	})
+}
+
+// isRedisNode reports whether n is a Redis db, folder, key or "load more" line.
+func isRedisNode(n *tree.Node) bool {
+	_, ok := redisKeyOf(n)
+	return ok
 }

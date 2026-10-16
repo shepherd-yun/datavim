@@ -1,11 +1,15 @@
 package ui
 
 import (
+	"reflect"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
 )
@@ -225,5 +229,117 @@ func TestKeyOpsReadOnly(t *testing.T) {
 		if m.overlay != nil || m.status != readOnlyHint {
 			t.Fatalf("tab %s: overlay %T, status %q", k, m.overlay, m.status)
 		}
+	}
+}
+
+// newKeyModel is a writable redis connection with db0 expanded and selected.
+func newKeyModel(t *testing.T, keys ...string) (*Model, *fakeRedis) {
+	t.Helper()
+	m, b, r := newRedisModel(t, config.Connection{})
+	_ = b.SetReadOnly("cache", false)
+	for _, k := range keys {
+		r.put(0, k, fakeValue{typ: "string", str: "v"})
+	}
+	expandDB0(t, m)
+	return m, r
+}
+
+// pickType presses o and picks typ in the type chooser.
+func pickType(t *testing.T, m *Model, typ string) {
+	t.Helper()
+	pressAll(t, m, "o")
+	if _, ok := m.overlay.(*overlay.Choice); !ok {
+		t.Fatalf("overlay %T, status %q", m.overlay, m.status)
+	}
+	pressAll(t, m, strconv.Itoa(slices.Index(redit.Types, typ)+1))
+}
+
+func TestNewKeyFlow(t *testing.T) {
+	m, r := newKeyModel(t, "other")
+	db0 := m.tree.Selected()
+	pickType(t, m, "hash")
+	answer(t, m, "user:1")
+	answer(t, m, `name "Al ice"`)
+	plans := r.appliedPlans()
+	if len(plans) != 1 || !reflect.DeepEqual(plans[0].Cmds, [][]string{{"HSET", "user:1", "name", "Al ice"}}) {
+		t.Fatalf("applied %+v, status %q", plans, m.status)
+	}
+	kt, ok := m.activeTab().(*keyTab)
+	if !ok || kt.key != "user:1" || m.status != "created user:1" {
+		t.Fatalf("tab %T, status %q", m.activeTab(), m.status)
+	}
+	if countKeys(db0) != 2 {
+		t.Fatalf("tree:\n%s", screen(m))
+	}
+}
+
+func TestNewKeyFolderPrefix(t *testing.T) {
+	m, _ := newKeyModel(t, "user:1", "user:2")
+	pressAll(t, m, "j")
+	if n := m.tree.Selected(); n.Kind != tree.KindKeyFolder {
+		t.Fatalf("selected %+v", n)
+	}
+	pickType(t, m, "string")
+	p, ok := m.overlay.(*overlay.Prompt)
+	if !ok || !strings.Contains(p.View(80, 24), "user:") {
+		t.Fatalf("overlay %T", m.overlay)
+	}
+}
+
+func TestNewKeyBadArgs(t *testing.T) {
+	m, r := newKeyModel(t)
+	pickType(t, m, "zset")
+	answer(t, m, "z")
+	answer(t, m, "a m")
+	if _, ok := m.overlay.(*overlay.Prompt); !ok || !strings.Contains(screen(m), "expected score member [score member …]") || len(r.appliedPlans()) != 0 {
+		t.Fatalf("overlay %T:\n%s", m.overlay, screen(m))
+	}
+}
+
+func TestNewKeyExists(t *testing.T) {
+	m, r := newKeyModel(t)
+	r.applyErr = &rdb.ChangedError{What: "key already exists"}
+	pickType(t, m, "string")
+	answer(t, m, "user:1")
+	answer(t, m, "v")
+	if m.status != "user:1 already exists" || len(m.tabs) != 0 {
+		t.Fatalf("status %q, tabs %d", m.status, len(m.tabs))
+	}
+}
+
+func TestNewKeyProd(t *testing.T) {
+	m, b, r := newRedisModel(t, config.Connection{Env: config.EnvProd})
+	_ = b.SetReadOnly("cache", false)
+	r.put(0, "k", fakeValue{typ: "string", str: "v"})
+	expandDB0(t, m)
+	pickType(t, m, "set")
+	answer(t, m, "s")
+	answer(t, m, "m")
+	if _, ok := m.overlay.(*overlay.Confirm); !ok || len(r.appliedPlans()) != 0 {
+		t.Fatalf("overlay %T", m.overlay)
+	}
+	pressAll(t, m, "y")
+	if len(r.appliedPlans()) != 1 {
+		t.Fatal("y creates it")
+	}
+}
+
+func TestNewKeyNotRedis(t *testing.T) {
+	m, _ := newTestModel(t)
+	selectNode(t, m, "local", "app", "users")
+	press(t, m, "o")
+	if m.overlay != nil || m.status != "select a Redis db to add a key" {
+		t.Fatalf("overlay %T, status %q", m.overlay, m.status)
+	}
+}
+
+func TestNewKeyReadOnly(t *testing.T) {
+	m, b, r := newRedisModel(t, config.Connection{})
+	_ = b.SetReadOnly("cache", true)
+	r.put(0, "k", fakeValue{typ: "string", str: "v"})
+	expandDB0(t, m)
+	pressAll(t, m, "o")
+	if m.overlay != nil || m.status != readOnlyHint {
+		t.Fatalf("overlay %T, status %q", m.overlay, m.status)
 	}
 }

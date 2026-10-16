@@ -142,3 +142,35 @@ func TestActionMenuOnColumn(t *testing.T) {
 		t.Fatalf("a column's menu must not offer to drop the table:\n%s", s)
 	}
 }
+
+func menuDescs(m *Model) []string {
+	var out []string
+	for _, it := range m.nodeMenu(m.tree.Selected()) {
+		out = append(out, it.desc)
+	}
+	return out
+}
+
+func TestRedisNodeMenu(t *testing.T) {
+	m, _ := newKeyModel(t, "user:1", "solo")
+	if got := menuDescs(m); !slices.Equal(got, []string{"Open console", "New key", "Filter keys", "Refresh", "Delete keys…", "Copy name"}) {
+		t.Fatalf("db: %q", got)
+	}
+	pressAll(t, m, "j")
+	if got := menuDescs(m); !slices.Equal(got, []string{"New key", "Delete keys under user:…", "Copy name"}) {
+		t.Fatalf("folder: %q", got)
+	}
+	pressAll(t, m, "j")
+	if got := menuDescs(m); !slices.Equal(got, []string{"Open", "Rename key", "Delete key", "Copy name"}) {
+		t.Fatalf("key: %q", got)
+	}
+	pressAll(t, m, "a")
+	if s := screen(m); !strings.Contains(s, "Rename key") || strings.Contains(s, "Drop table") {
+		t.Fatalf("menu:\n%s", s)
+	}
+	pressAll(t, m, "esc")
+	pressAll(t, m, "g", "g")
+	if got := menuDescs(m); !slices.Contains(got, "Open console") || !slices.Contains(got, "Delete connection") {
+		t.Fatalf("connection: %q", got)
+	}
+}
