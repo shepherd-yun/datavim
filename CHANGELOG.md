@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- An unreachable Redis server no longer garbles the screen: go-redis's own
+  messages (such as `failed to dial after 5 attempts`) now go to the log file
+  instead of the terminal.
+
 ## [2.0.0] - 2026-10-17
 
 ### Added
