@@ -147,3 +147,6 @@ func plainOrder(toks []token, cols []string) bool {
 	}
 	return ok()
 }
+
+// HasOrderBy reports a top-level ORDER BY in stmt.
+func HasOrderBy(stmt string, d Dialect) bool { return lastOrderBy(codeTokens(stmt, d)) >= 0 }

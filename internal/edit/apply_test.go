@@ -137,7 +137,7 @@ func TestApplyDDLOnMySQLStopsAtTheFirstFailure(t *testing.T) {
 
 func TestApplyInTxReleasesItsSavepoint(t *testing.T) {
 	f := &fakeQuerier{}
-	if err := ApplyInTx(context.Background(), f, []string{"a", "b"}); err != nil {
+	if err := ApplyInTx(context.Background(), f, sqlx.MySQL, []string{"a", "b"}); err != nil {
 		t.Fatal(err)
 	}
 	want := []string{"SAVEPOINT sqlvim_edit", "a", "b", "RELEASE SAVEPOINT sqlvim_edit"}
@@ -148,7 +148,7 @@ func TestApplyInTxReleasesItsSavepoint(t *testing.T) {
 
 func TestApplyInTxRollsBackToItsSavepoint(t *testing.T) {
 	f := &fakeQuerier{affected: map[string]int64{"b": 2}}
-	err := ApplyInTx(context.Background(), f, []string{"a", "b", "c"})
+	err := ApplyInTx(context.Background(), f, sqlx.Postgres, []string{"a", "b", "c"})
 	want := []string{"SAVEPOINT sqlvim_edit", "a", "b", "ROLLBACK TO SAVEPOINT sqlvim_edit"}
 	if diff := cmp.Diff(want, f.execs); diff != "" {
 		t.Fatalf("execs (-want +got):\n%s", diff)
@@ -159,5 +159,28 @@ func TestApplyInTxRollsBackToItsSavepoint(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "the transaction is still open") {
 		t.Fatalf("message: %v", err)
+	}
+}
+
+func TestApplyInTxSavepointSyntax(t *testing.T) {
+	for _, tc := range []struct {
+		d          sqlx.Dialect
+		ok, failed []string
+	}{
+		{sqlx.SQLServer, []string{"SAVE TRANSACTION sqlvim_edit", "a"}, []string{"SAVE TRANSACTION sqlvim_edit", "b", "ROLLBACK TRANSACTION sqlvim_edit"}},
+		{sqlx.Oracle, []string{"SAVEPOINT sqlvim_edit", "a"}, []string{"SAVEPOINT sqlvim_edit", "b", "ROLLBACK TO SAVEPOINT sqlvim_edit"}},
+	} {
+		f := &fakeQuerier{}
+		if err := ApplyInTx(context.Background(), f, tc.d, []string{"a"}); err != nil {
+			t.Fatal(err)
+		}
+		if diff := cmp.Diff(tc.ok, f.execs); diff != "" {
+			t.Errorf("%s ok (-want +got):\n%s", tc.d.Driver(), diff)
+		}
+		f = &fakeQuerier{affected: map[string]int64{"b": 0}}
+		_ = ApplyInTx(context.Background(), f, tc.d, []string{"b"})
+		if diff := cmp.Diff(tc.failed, f.execs); diff != "" {
+			t.Errorf("%s failed (-want +got):\n%s", tc.d.Driver(), diff)
+		}
 	}
 }

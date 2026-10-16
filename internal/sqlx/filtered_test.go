@@ -77,3 +77,16 @@ func TestFilteredEmptyAndNotSelect(t *testing.T) {
 		}
 	}
 }
+
+func TestHasOrderBy(t *testing.T) {
+	for sql, want := range map[string]bool{
+		"select * from t order by id":                         true,
+		"select * from (select top 1 * from t order by id) q": false,
+		"select 'order by' from t":                            false,
+		"select * from t -- order by x":                       false,
+	} {
+		if got := HasOrderBy(sql, SQLServer); got != want {
+			t.Errorf("HasOrderBy(%q) = %v", sql, got)
+		}
+	}
+}

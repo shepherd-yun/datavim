@@ -1,5 +1,7 @@
 package sqlx
 
+import "strings"
+
 // RowLocator is how staged edits find a row of a table without a usable key.
 type RowLocator int
 
@@ -49,3 +51,30 @@ var features = [...]Features{
 
 // Features returns the capabilities of d.
 func (d Dialect) Features() Features { return features[d] }
+
+// RowIDSelect selects every row of the table named name (quoted) with its
+// row id as text ahead of its columns, on an engine that locates rows by
+// row id: ctid on PostgreSQL, ROWID on Oracle (which wants an alias).
+func RowIDSelect(d Dialect, name string) string {
+	if d == Oracle {
+		return "SELECT ROWIDTOCHAR(t.ROWID), t.* FROM " + name + " t"
+	}
+	return "SELECT ctid::text, * FROM " + name
+}
+
+// RowIDMatch is the condition that finds the row whose id RowIDSelect read.
+func RowIDMatch(d Dialect, id string) string {
+	lit := "'" + strings.ReplaceAll(id, "'", "''") + "'"
+	if d == Oracle {
+		return "ROWID = CHARTOROWID(" + lit + ")"
+	}
+	return "ctid = " + lit
+}
+
+// RowIDName names the row id in messages.
+func RowIDName(d Dialect) string {
+	if d == Oracle {
+		return "ROWID"
+	}
+	return "ctid"
+}

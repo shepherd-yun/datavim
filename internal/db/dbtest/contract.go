@@ -33,6 +33,13 @@ type Fixture struct {
 	Dialect sqlx.Dialect
 	// EmptyIsNull is set when '' is stored as NULL (Oracle).
 	EmptyIsNull bool
+	// TempTable returns the statement that creates a session-private
+	// table of one int column id, and the name to select it by; nil means
+	// CREATE TEMPORARY TABLE.
+	TempTable func(name string) (create, table string)
+	// TextType is a column type for short text in any script; "" means
+	// varchar(50).
+	TextType string
 	// NVarcharSQL creates the table uni: id (int primary key) and name, a
 	// column that stores any Unicode text.
 	NVarcharSQL []string
@@ -75,6 +82,14 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	empty := db.Value{Text: ""}
 	if f.EmptyIsNull {
 		empty = db.Value{Null: true}
+	}
+	tempTable := f.TempTable
+	if tempTable == nil {
+		tempTable = func(name string) (string, string) { return "CREATE TEMPORARY TABLE " + name + " (id int)", name }
+	}
+	text := f.TextType
+	if text == "" {
+		text = "varchar(50)"
 	}
 	needSchemaTools := func(t *testing.T) {
 		t.Helper()
@@ -473,14 +488,15 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			t.Fatal(err)
 		}
 		defer func() { _ = s.Close() }()
-		for _, q := range []string{"CREATE TEMPORARY TABLE sqlvim_tmp (id int)", "INSERT INTO sqlvim_tmp VALUES (1), (2)"} {
+		createTmp, tmp := tempTable("sqlvim_tmp")
+		for _, q := range []string{createTmp, "INSERT INTO " + tmp + " VALUES (1), (2)"} {
 			if _, err := s.Exec(ctx, q); err != nil {
 				t.Fatalf("%s: %v", q, err)
 			}
 		}
 		countTmp := func() int {
 			t.Helper()
-			rs, err := s.Query(ctx, "SELECT id FROM sqlvim_tmp")
+			rs, err := s.Query(ctx, "SELECT id FROM "+tmp)
 			if err != nil {
 				t.Fatalf("session lost its state: %v", err)
 			}
@@ -505,7 +521,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 
 		var got int
-		err = s.Stream(ctx, "SELECT id FROM sqlvim_tmp ORDER BY id", func([]db.ColumnInfo) {}, func([]db.Value) error {
+		err = s.Stream(ctx, "SELECT id FROM "+tmp+" ORDER BY id", func([]db.ColumnInfo) {}, func([]db.Value) error {
 			got++
 			return db.ErrStop
 		})
@@ -535,7 +551,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			}
 			return rs.Rows[0][0].Text
 		}
-		if _, err := s.Exec(ctx, "BEGIN"); err != nil {
+		if _, err := s.Exec(ctx, sqlx.BeginSQL(sd)); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := s.Exec(ctx, "UPDATE "+users+" SET note = 'in tx' WHERE id = 1"); err != nil {
@@ -560,14 +576,15 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err := s.Exec(ctx, "CREATE TEMPORARY TABLE sqlvim_private (id int)"); err != nil {
+		createPrivate, private := tempTable("sqlvim_private")
+		if _, err := s.Exec(ctx, createPrivate); err != nil {
 			t.Fatal(err)
 		}
 		if err := s.Close(); err != nil {
 			t.Fatal(err)
 		}
 		for range 4 { // touch every pooled connection
-			if _, err := conn.Query(ctx, "SELECT * FROM sqlvim_private"); err == nil {
+			if _, err := conn.Query(ctx, "SELECT * FROM "+private); err == nil {
 				t.Fatal("a closed session's temporary table leaked into the pool")
 			}
 		}
@@ -621,7 +638,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		table := ref("edit_users")
 		name := d.QualifiedName(table)
 		for _, q := range []string{
-			"CREATE TABLE " + name + " (id int PRIMARY KEY, name varchar(50), note varchar(50))",
+			"CREATE TABLE " + name + " (id int PRIMARY KEY, name " + text + ", note " + text + ")",
 			"INSERT INTO " + name + " VALUES (1, 'a', NULL), (2, 'b', 'x')",
 		} {
 			if _, err := conn.Exec(ctx, q); err != nil {
@@ -714,10 +731,10 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			"UPDATE " + name + " SET name = 'y' WHERE id = 99",
 		}
 		var se *edit.StatementError
-		if err := edit.ApplyInTx(ctx, s, bad); !errors.As(err, &se) || se.Index != 1 {
+		if err := edit.ApplyInTx(ctx, s, sd, bad); !errors.As(err, &se) || se.Index != 1 {
 			t.Fatalf("err = %v", err)
 		}
-		if err := edit.ApplyInTx(ctx, s, []string{"UPDATE " + name + " SET name = 'after' WHERE id = 2"}); err != nil {
+		if err := edit.ApplyInTx(ctx, s, sd, []string{"UPDATE " + name + " SET name = 'after' WHERE id = 2"}); err != nil {
 			t.Fatalf("the transaction is usable after the rollback: %v", err)
 		}
 		exec("COMMIT")
@@ -1199,13 +1216,5 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 // rowIDSelect selects the row id of each row of table name ahead of its
 // columns, as the data grid does on engines that locate rows by row id.
 func rowIDSelect(d sqlx.Dialect, name string) string {
-	//exhaustive:enforce
-	switch d {
-	case sqlx.Postgres:
-		return "SELECT ctid::text, * FROM " + name
-	case sqlx.Oracle:
-		return "SELECT ROWIDTOCHAR(t.ROWID), t.* FROM " + name + " t"
-	case sqlx.MySQL, sqlx.SQLServer:
-	}
-	panic(d.Driver() + " has no row id")
+	return sqlx.RowIDSelect(d, name)
 }

@@ -256,14 +256,14 @@ func (t *consoleTab) applyEdits(stmts []string) tea.Cmd {
 		start := time.Now()
 		switch {
 		case inTx:
-			msg.err = edit.ApplyInTx(ctx, sess, stmts)
+			msg.err = edit.ApplyInTx(ctx, sess, d, stmts)
 		case manual:
 			if _, err := sess.Exec(ctx, sqlx.BeginSQL(d)); err != nil {
 				msg.err = err
 				break
 			}
 			msg.began = true
-			msg.err = edit.ApplyInTx(ctx, sess, stmts)
+			msg.err = edit.ApplyInTx(ctx, sess, d, stmts)
 		default:
 			msg.err = edit.Apply(ctx, sess, d, stmts)
 		}

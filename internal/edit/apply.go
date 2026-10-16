@@ -124,8 +124,8 @@ const Savepoint = "sqlvim_edit"
 // row; otherwise the transaction is rolled back to a savepoint taken
 // first, keeping what ran in it before, and a *StatementError names the
 // statement.
-func ApplyInTx(ctx context.Context, s db.Querier, stmts []string) error {
-	if _, err := s.Exec(ctx, "SAVEPOINT "+Savepoint); err != nil {
+func ApplyInTx(ctx context.Context, s db.Querier, d sqlx.Dialect, stmts []string) error {
+	if _, err := s.Exec(ctx, sqlx.SavepointSQL(d, Savepoint)); err != nil {
 		return fmt.Errorf("savepoint: %w", err)
 	}
 	for i, q := range stmts {
@@ -134,21 +134,23 @@ func ApplyInTx(ctx context.Context, s db.Querier, stmts []string) error {
 			err = &CountError{Affected: res.RowsAffected}
 		}
 		if err != nil {
-			rollbackTo(s)
+			rollbackTo(s, d)
 			return &StatementError{Index: i, SQL: q, Err: err, InTx: true}
 		}
 	}
-	if _, err := s.Exec(ctx, "RELEASE SAVEPOINT "+Savepoint); err != nil {
-		rollbackTo(s)
-		return fmt.Errorf("release savepoint: %w", err)
+	if release := sqlx.ReleaseSQL(d, Savepoint); release != "" {
+		if _, err := s.Exec(ctx, release); err != nil {
+			rollbackTo(s, d)
+			return fmt.Errorf("release savepoint: %w", err)
+		}
 	}
 	return nil
 }
 
 // rollbackTo undoes ApplyInTx's statements even when ctx was cancelled.
 // On PostgreSQL it also clears the failed state the error left.
-func rollbackTo(s db.Querier) {
+func rollbackTo(s db.Querier, d sqlx.Dialect) {
 	ctx, cancel := context.WithTimeout(context.Background(), rollbackTimeout)
 	defer cancel()
-	_, _ = s.Exec(ctx, "ROLLBACK TO SAVEPOINT "+Savepoint)
+	_, _ = s.Exec(ctx, sqlx.RollbackToSQL(d, Savepoint))
 }

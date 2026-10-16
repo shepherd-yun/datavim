@@ -20,6 +20,9 @@ func TransactionEffect(stmt string, d Dialect) TxEffect {
 	if d == SQLServer {
 		return tsqlTransactionEffect(toks)
 	}
+	if d == Oracle {
+		return oracleTransactionEffect(toks)
+	}
 	switch upper(toks[0]) {
 	case "BEGIN":
 		return TxBegin
@@ -70,4 +73,48 @@ func tsqlTransactionEffect(toks []token) TxEffect {
 		return TxEnd
 	}
 	return TxNone
+}
+
+// oracleTransactionEffect classifies Oracle's statements: SET TRANSACTION
+// opens a transaction explicitly; BEGIN and END belong to PL/SQL blocks.
+func oracleTransactionEffect(toks []token) TxEffect {
+	switch upper(toks[0]) {
+	case "SET":
+		if len(toks) > 1 && isWord(toks[1], "TRANSACTION") {
+			return TxBegin
+		}
+	case "COMMIT":
+		return TxEnd
+	case "ROLLBACK":
+		if indexWord(toks, 1, "TO") >= 0 {
+			return TxResume
+		}
+		return TxEnd
+	}
+	return TxNone
+}
+
+// SavepointSQL sets savepoint name in the open transaction.
+func SavepointSQL(d Dialect, name string) string {
+	if d == SQLServer {
+		return "SAVE TRANSACTION " + name
+	}
+	return "SAVEPOINT " + name
+}
+
+// RollbackToSQL undoes the transaction's work after savepoint name.
+func RollbackToSQL(d Dialect, name string) string {
+	if d == SQLServer {
+		return "ROLLBACK TRANSACTION " + name
+	}
+	return "ROLLBACK TO SAVEPOINT " + name
+}
+
+// ReleaseSQL forgets savepoint name; "" where the engine has no RELEASE
+// (SQL Server, Oracle) and savepoints simply end with the transaction.
+func ReleaseSQL(d Dialect, name string) string {
+	if d == SQLServer || d == Oracle {
+		return ""
+	}
+	return "RELEASE SAVEPOINT " + name
 }
