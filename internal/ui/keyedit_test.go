@@ -427,3 +427,11 @@ func TestKeyEditExternalCell(t *testing.T) {
 		t.Fatalf("binary cell: status %q", kt.status)
 	}
 }
+
+func TestExpectTextQuotes(t *testing.T) {
+	for v, want := range map[string]string{`{"x":1}`: `"{\"x\":1}"`, "1": `"1"`, "a\xffb": `"a\xFFb"`, `a\b`: `"a\\b"`} {
+		if got := expectText(redit.Check{Expect: redit.ExpectValue, Value: v}); got != want {
+			t.Errorf("expectText(%q) = %s, want %s", v, got, want)
+		}
+	}
+}

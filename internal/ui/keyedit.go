@@ -453,7 +453,7 @@ func expectText(c redit.Check) string {
 	case redit.ExpectLen:
 		return plural(int(c.Int), "element")
 	}
-	return `"` + rcmd.Escape(c.Value) + `"`
+	return `"` + strings.ReplaceAll(rcmd.Escape(c.Value), `"`, `\"`) + `"`
 }
 
 // previewLines are the checks, a blank line, and the commands.
