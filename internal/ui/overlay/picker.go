@@ -71,7 +71,7 @@ func (p *Picker) View(width, height int) string {
 	if p.cur >= p.offset+listH {
 		p.offset = p.cur - listH + 1
 	}
-	lines := []string{"> " + textutil.Sanitize(p.filter.String()) + "█"}
+	lines := []string{"> " + p.filter.View(w-4)}
 	if len(p.matches) == 0 {
 		lines = append(lines, theme.Muted.Render("(no matches)"))
 	}

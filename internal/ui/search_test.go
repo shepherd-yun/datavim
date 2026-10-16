@@ -242,7 +242,7 @@ func TestSearchStartsFromTheVisualSelection(t *testing.T) {
 		t.Fatalf("multi-line selection:\n%s", s)
 	}
 	press(t, m, "esc", "space", "space") // without a selection the search is empty
-	if s := screen(m); !strings.Contains(s, "> █") {
-		t.Fatalf("empty search:\n%s", s)
+	if q := m.overlay.(*overlay.Search).Requery().Text; q != "" {
+		t.Fatalf("empty search: %q", q)
 	}
 }

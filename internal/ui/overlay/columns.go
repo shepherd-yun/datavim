@@ -147,7 +147,7 @@ func (c *Columns) View(width, height int) string {
 		status = fmt.Sprintf("%d of %d columns", len(c.matches), len(c.cols))
 	}
 	lines := []string{
-		"> " + textutil.Sanitize(c.filter.String()) + "█",
+		"> " + c.filter.View(w-4),
 		theme.Muted.Render(status),
 	}
 	for _, l := range c.header {

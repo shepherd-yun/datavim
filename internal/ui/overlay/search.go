@@ -154,7 +154,7 @@ func (s *Search) View(width, height int) string {
 	}
 	lines := []string{
 		textutil.Fit(strings.Join(scopes, "  "), w-2),
-		"> " + textutil.Sanitize(s.query.String()) + "█",
+		"> " + s.query.View(w-4),
 		theme.Muted.Render(textutil.Fit(s.status(), w-2)),
 	}
 	for i := s.offset; i < len(s.items) && i < s.offset+listH; i++ {

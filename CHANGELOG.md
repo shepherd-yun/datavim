@@ -146,6 +146,8 @@ All notable changes to this project are documented here. The format follows
   keys, and a hint line at the bottom.
 
 ### Fixed
+- The search (`<Space><Space>`), the columns popup and the pickers draw the cursor where it is:
+  after `Ctrl-a`, `←` or `Alt-b` it used to stay drawn at the end of the text.
 - The MySQL driver's own messages (such as `unexpected EOF` when a server cannot be reached)
   go to the log file instead of being printed over the screen.
 - A MySQL query that stops early (a console reaching `max_rows`, a data compare over

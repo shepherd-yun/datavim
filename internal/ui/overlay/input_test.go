@@ -7,6 +7,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
@@ -159,5 +161,23 @@ func TestFieldViewMasked(t *testing.T) {
 			t.Fatalf("one bullet per rune: %q", v)
 		}
 		keysInto(&f, "left")
+	}
+}
+
+func TestFilterPopupsDrawTheCursorWhereItIs(t *testing.T) {
+	nop := func(int) tea.Msg { return nil }
+	k := keymap.Default()
+	for name, o := range map[string]Overlay{
+		"picker":  NewPicker("p", []string{"abc"}, nop),
+		"search":  NewSearch(k, "", "c"),
+		"columns": NewColumns(k, "t", []db.Column{{Name: "abc"}}, "", func(string, bool) tea.Msg { return nil }),
+	} {
+		o, _ = send(t, o, "a", "b", "c", "ctrl+a")
+		var f field
+		keysInto(&f, "a", "b", "c", "ctrl+a")
+		v := o.View(100, 40)
+		if strings.Contains(v, "█") || !strings.Contains(v, "> "+f.View(10)) {
+			t.Errorf("%s: the cursor is not on the a:\n%s", name, v)
+		}
 	}
 }
