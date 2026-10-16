@@ -161,6 +161,7 @@ func DefaultBindings() []Binding {
 	b = append(b, gridBindings(RedisResults)...)
 	b = append(b,
 		Binding{RedisResults, keys("M"), ToggleMessages, "Toggle messages"},
+		Binding{RedisResults, keys("g", "d"), OpenCellKey, "Open the Redis key in this cell"},
 		Binding{RedisResults, keys("ctrl+k"), FocusEditor, "Focus editor"},
 		Binding{RedisResults, keys("ctrl+j"), FocusEditor, "Focus editor (wraps)"},
 	)

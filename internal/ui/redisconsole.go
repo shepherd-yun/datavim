@@ -300,6 +300,9 @@ func (t *redisConsoleTab) Handle(a keymap.Action) tea.Cmd {
 }
 
 func (t *redisConsoleTab) resultsAction(a keymap.Action) tea.Cmd {
+	if a == keymap.OpenCellKey {
+		return t.openCellKey()
+	}
 	if t.text == nil {
 		cmd, _ := gridAction(t.grid, a)
 		return cmd
@@ -319,6 +322,21 @@ func (t *redisConsoleTab) resultsAction(a keymap.Action) tea.Cmd {
 		t.view.HalfPage(-1)
 	}
 	return nil
+}
+
+// openCellKey opens the key in the cell under the cursor: its raw bytes,
+// not the escaped text, on the session's current db.
+func (t *redisConsoleTab) openCellKey() tea.Cmd {
+	if t.table == nil || t.showMessages {
+		t.setStatus("no key here: the result is not a table", true)
+		return nil
+	}
+	row, col := t.grid.Position()
+	if row >= len(t.table.Rows) || col >= len(t.table.Rows[row]) {
+		return nil
+	}
+	msg := openKeyMsg{conn: t.conn, db: t.db, key: t.table.Rows[row][col]}
+	return func() tea.Msg { return msg }
 }
 
 // ---- running ----
@@ -842,6 +860,7 @@ func (t *redisConsoleTab) statusLine() string {
 	switch {
 	case t.onResults:
 		hint = joinHints(
+			keyHint(t.keys, keymap.RedisResults, keymap.OpenCellKey, "open key"),
 			keyHint(t.keys, keymap.RedisResults, keymap.ToggleMessages, "messages"),
 			keyHint(t.keys, keymap.RedisResults, keymap.FocusEditor, "editor"),
 			"hjkl move · yy copy row · K show cell · / search")

@@ -653,3 +653,57 @@ func TestRedisConsoleSetReadonlyInTx(t *testing.T) {
 		t.Fatal("read-only changed under an open MULTI")
 	}
 }
+
+func TestRedisConsoleOpenCellKey(t *testing.T) {
+	m, b, r := newRedisModel(t, config.Connection{})
+	r.put(0, "\xff", fakeValue{typ: "string", str: "v"})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "PING", keymap.RunStatement)
+	b.lastSession().setAnswer(func(args []string) (rdb.Reply, bool) {
+		return rarr(rs("0"), rarr(rs("\xff"), rs("b"))), args[0] == "SCAN"
+	})
+	runR(t, m, c, "SCAN 0", keymap.RunStatement)
+	pressAll(t, m, "ctrl+j", "l", "g", "d")
+	k, ok := m.activeTab().(*keyTab)
+	if !ok || k.Title() != `\xFF` {
+		t.Fatalf("tab = %T, status %q", m.activeTab(), m.status)
+	}
+	if calls := r.keyCalls(); !slices.Contains(calls, "KeyInfo \xff") {
+		t.Fatalf("key calls %q", calls)
+	}
+}
+
+func TestRedisConsoleOpenCellKeyDB(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.put(2, "k2", fakeValue{typ: "string", str: "v"})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "SELECT 2\nKEYS *", keymap.RunAll)
+	pressAll(t, m, "y") // KEYS asks first
+	pressAll(t, m, "ctrl+j", "l", "g", "d")
+	k, ok := m.activeTab().(*keyTab)
+	if !ok || k.db != 2 || k.key != "k2" {
+		t.Fatalf("tab = %T %+v, status %q", m.activeTab(), m.activeTab(), m.status)
+	}
+}
+
+func TestRedisConsoleOpenCellKeyText(t *testing.T) {
+	m, _, _ := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	runR(t, m, c, "GET a", keymap.RunStatement)
+	pressAll(t, m, "ctrl+j", "g", "d")
+	if c.status != "no key here: the result is not a table" {
+		t.Fatalf("status %q", c.status)
+	}
+}
+
+func TestRedisConsoleOpenCellKeyMissing(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	c := openRConsole(t, m, 0)
+	r.put(0, "gone", fakeValue{typ: "string", str: "v"})
+	runR(t, m, c, "SCAN 0", keymap.RunStatement)
+	r.del(0, "gone")
+	pressAll(t, m, "ctrl+j", "l", "g", "d")
+	if !strings.Contains(m.status, "key not found: gone") {
+		t.Fatalf("status %q", m.status)
+	}
+}

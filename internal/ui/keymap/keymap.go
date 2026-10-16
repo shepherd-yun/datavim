@@ -110,6 +110,7 @@ const (
 	Locate            Action = "tree.locate"
 	OpenKey           Action = "redis.openkey"
 	ValueFormat       Action = "redis.format"
+	OpenCellKey       Action = "redis.open_cell_key"
 	FilterEqual       Action = "filter.eq"
 	FilterNotEqual    Action = "filter.ne"
 	FilterContains    Action = "filter.contains"
