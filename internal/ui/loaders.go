@@ -46,24 +46,21 @@ func fetchChildren(ctx context.Context, c db.Conn, kind tree.Kind, connName stri
 		if err != nil {
 			return nil, err
 		}
+		if len(names) == 0 {
+			// no database level (Oracle): the schemas come right under the connection
+			return schemaNodes(ctx, meta, connName, "")
+		}
 		nodes := make([]*tree.Node, len(names))
 		for i, name := range names {
 			nodes[i] = &tree.Node{Kind: tree.KindDatabase, Name: name, Conn: connName, NS: db.Namespace{Database: name}}
 		}
 		return nodes, nil
 	case tree.KindDatabase:
-		schemas, err := meta.Schemas(ctx, ns.Database)
-		if err != nil {
-			return nil, err
-		}
-		if len(schemas) == 0 {
+		nodes, err := schemaNodes(ctx, meta, connName, ns.Database)
+		if err == nil && len(nodes) == 0 {
 			return tableNodes(ctx, meta, connName, ns)
 		}
-		nodes := make([]*tree.Node, len(schemas))
-		for i, s := range schemas {
-			nodes[i] = &tree.Node{Kind: tree.KindSchema, Name: s, Conn: connName, NS: db.Namespace{Database: ns.Database, Schema: s}}
-		}
-		return nodes, nil
+		return nodes, err
 	case tree.KindSchema:
 		return tableNodes(ctx, meta, connName, ns)
 	case tree.KindTable:
@@ -85,6 +82,19 @@ func fetchChildren(ctx context.Context, c db.Conn, kind tree.Kind, connName stri
 		return tableChildren(connName, db.TableSchema{Ref: ref, Columns: cols}), nil
 	}
 	return nil, fmt.Errorf("tree node kind %d has no children", kind)
+}
+
+// schemaNodes lists the schemas of database ("" when there is no database level).
+func schemaNodes(ctx context.Context, meta db.MetaReader, connName, database string) ([]*tree.Node, error) {
+	schemas, err := meta.Schemas(ctx, database)
+	if err != nil {
+		return nil, err
+	}
+	nodes := make([]*tree.Node, len(schemas))
+	for i, s := range schemas {
+		nodes[i] = &tree.Node{Kind: tree.KindSchema, Name: s, Conn: connName, NS: db.Namespace{Database: database, Schema: s}}
+	}
+	return nodes, nil
 }
 
 func tableNodes(ctx context.Context, meta db.MetaReader, connName string, ns db.Namespace) ([]*tree.Node, error) {

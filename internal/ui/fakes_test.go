@@ -37,6 +37,8 @@ type fakeConn struct {
 	data       map[string]*db.ResultSet       // table name -> what a query FROM `app`.`name` returns
 	blockData  bool                           // data queries wait until their context ends
 	dropAt     int                            // the next Stream fails with ErrConnLost after this many rows
+	noDBs      bool                           // Databases returns none, as on Oracle
+	schemaList []string                       // returned by Schemas
 }
 
 func (c *fakeConn) setNoKey(v bool) {
@@ -249,8 +251,21 @@ func (c *fakeConn) Close() error        { return nil }
 
 type fakeMeta struct{ c *fakeConn }
 
-func (fakeMeta) Databases(context.Context) ([]string, error)       { return []string{"app"}, nil }
-func (fakeMeta) Schemas(context.Context, string) ([]string, error) { return nil, nil }
+func (m fakeMeta) Databases(context.Context) ([]string, error) {
+	m.c.mu.Lock()
+	defer m.c.mu.Unlock()
+	if m.c.noDBs {
+		return nil, nil
+	}
+	return []string{"app"}, nil
+}
+
+func (m fakeMeta) Schemas(context.Context, string) ([]string, error) {
+	m.c.mu.Lock()
+	defer m.c.mu.Unlock()
+	return m.c.schemaList, nil
+}
+
 func (m fakeMeta) Tables(context.Context, db.Namespace) ([]db.Table, error) {
 	m.c.mu.Lock()
 	defer m.c.mu.Unlock()

@@ -95,3 +95,14 @@ func TestFetchChildrenOfTableAndView(t *testing.T) {
 		t.Fatalf("view: %v %s", err, render(nodes))
 	}
 }
+
+func TestFetchChildrenNoDatabases(t *testing.T) {
+	c := &fakeConn{noDBs: true, schemaList: []string{"HR", "SCOTT"}}
+	nodes, err := fetchChildren(context.Background(), c, tree.KindConn, "ora", db.Namespace{}, "")
+	if err != nil || len(nodes) != 2 {
+		t.Fatalf("%v %s", err, render(nodes))
+	}
+	if n := nodes[0]; n.Kind != tree.KindSchema || n.Name != "HR" || n.NS != (db.Namespace{Schema: "HR"}) || n.Conn != "ora" {
+		t.Fatalf("node = %+v", n)
+	}
+}

@@ -14,6 +14,7 @@ require (
 	github.com/microsoft/go-mssqldb v1.11.2
 	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/sahilm/fuzzy v0.1.3
+	github.com/sijms/go-ora/v2 v2.9.0
 	github.com/testcontainers/testcontainers-go v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/mssql v0.44.0
 	github.com/testcontainers/testcontainers-go/modules/mysql v0.44.0

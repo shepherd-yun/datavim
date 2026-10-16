@@ -40,6 +40,9 @@ type Fixture struct {
 	// TextType is a column type for short text in any script; "" means
 	// varchar(50).
 	TextType string
+	// FoldsUpper is set when unquoted column names are stored in upper
+	// case (Oracle): the fixture's columns are then ID, NAME, …
+	FoldsUpper bool
 	// NVarcharSQL creates the table uni: id (int primary key) and name, a
 	// column that stores any Unicode text.
 	NVarcharSQL []string
@@ -91,6 +94,20 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 	if text == "" {
 		text = "varchar(50)"
 	}
+	// col is a fixture column's name as the catalog stores it.
+	col := func(name string) string {
+		if f.FoldsUpper {
+			return strings.ToUpper(name)
+		}
+		return name
+	}
+	cols := func(names ...string) []string {
+		out := make([]string, len(names))
+		for i, n := range names {
+			out[i] = col(n)
+		}
+		return out
+	}
 	needSchemaTools := func(t *testing.T) {
 		t.Helper()
 		if !feat.SchemaTools {
@@ -110,7 +127,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 				t.Errorf("column %s has empty DatabaseType", c.Name)
 			}
 		}
-		if diff := cmp.Diff([]string{"id", "name", "email", "note"}, names); diff != "" {
+		if diff := cmp.Diff(cols("id", "name", "email", "note"), names); diff != "" {
 			t.Fatalf("columns (-want +got):\n%s", diff)
 		}
 		want := [][]db.Value{
@@ -187,7 +204,10 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !slices.Contains(dbs, ns.Database) {
+		if !feat.Databases && len(dbs) != 0 {
+			t.Fatalf("Databases = %v, want none on %s", dbs, sd.Driver())
+		}
+		if feat.Databases && !slices.Contains(dbs, ns.Database) {
 			t.Fatalf("Databases = %v, want it to contain %q", dbs, ns.Database)
 		}
 		schemas, err := conn.Meta().Schemas(ctx, ns.Database)
@@ -237,13 +257,13 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			t.Fatalf("got %d columns: %+v", len(cols), cols)
 		}
 		id, name, email, note := cols[0], cols[1], cols[2], cols[3]
-		if id.Name != "id" || !id.PrimaryKey || id.Nullable {
+		if id.Name != col("id") || !id.PrimaryKey || id.Nullable {
 			t.Errorf("id = %+v", id)
 		}
-		if name.Name != "name" || name.Nullable || name.Comment != "display name" || name.PrimaryKey {
+		if name.Name != col("name") || name.Nullable || name.Comment != "display name" || name.PrimaryKey {
 			t.Errorf("name = %+v", name)
 		}
-		if email.Name != "email" || !email.Nullable {
+		if email.Name != col("email") || !email.Nullable {
 			t.Errorf("email = %+v", email)
 		}
 		if note.Default == nil || !strings.Contains(*note.Default, "hi") {
@@ -263,10 +283,10 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		var sawPK, sawEmail bool
 		for _, i := range idx {
 			if i.Primary {
-				sawPK = i.Unique && cmp.Equal(i.Columns, []string{"id"})
+				sawPK = i.Unique && cmp.Equal(i.Columns, cols("id"))
 			}
 			if i.Name == "users_email_key" {
-				sawEmail = i.Unique && !i.Primary && cmp.Equal(i.Columns, []string{"email"})
+				sawEmail = i.Unique && !i.Primary && cmp.Equal(i.Columns, cols("email"))
 			}
 		}
 		if !sawPK || !sawEmail {
@@ -280,8 +300,8 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			t.Fatal(err)
 		}
 		want := []db.ForeignKey{{
-			Name: "orders_user_fk", Columns: []string{"user_id"},
-			RefTable: ref("users"), RefColumns: []string{"id"},
+			Name: "orders_user_fk", Columns: cols("user_id"),
+			RefTable: ref("users"), RefColumns: cols("id"),
 		}}
 		if diff := cmp.Diff(want, fks); diff != "" {
 			t.Fatalf("fks (-want +got):\n%s", diff)
@@ -293,7 +313,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		for _, want := range []string{"CREATE TABLE", "users", "email"} {
+		for _, want := range []string{"CREATE TABLE", "users", col("email")} {
 			if !strings.Contains(ddl, want) {
 				t.Errorf("DDL missing %q:\n%s", want, ddl)
 			}
@@ -396,7 +416,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if !slices.Contains(c.Databases, ns.Database) {
+		if feat.Databases && !slices.Contains(c.Databases, ns.Database) {
 			t.Errorf("Databases = %v, want %q", c.Databases, ns.Database)
 		}
 		if !slices.Contains(c.Namespaces, ns) {
@@ -430,7 +450,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 				}
 			}
 		}
-		if diff := cmp.Diff([]string{"id", "name", "email", "note"}, userCols); diff != "" {
+		if diff := cmp.Diff(cols("id", "name", "email", "note"), userCols); diff != "" {
 			t.Errorf("users columns (-want +got):\n%s", diff)
 		}
 		var fn *db.Routine
@@ -466,7 +486,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if len(cols) != 1 || cols[0].Name != "id" || len(rows) != 1 || rows[0][0].Text != "1" {
+		if len(cols) != 1 || cols[0].Name != col("id") || len(rows) != 1 || rows[0][0].Text != "1" {
 			t.Fatalf("cols=%v rows=%v", cols, rows)
 		}
 		if _, err := conn.Query(ctx, "SELECT 1"); err != nil {
