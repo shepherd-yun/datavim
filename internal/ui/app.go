@@ -110,6 +110,8 @@ type Model struct {
 	searchPicks []func(bool) tea.Cmd // opens each row; the flag asks for the structure
 	revealing   *revealTarget
 	scans       map[redisDBKey]*keyScan // the key scans behind the redis db nodes
+	bulk        *bulkDelete             // the running pattern delete, or nil
+	bulkGen     int
 }
 
 // connNode is the tree root of connection c.
@@ -218,6 +220,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case keyOpInputMsg:
 		return m, m.keyOpInput(msg)
+	case bulkStepMsg:
+		return m, m.bulkStepped(msg)
+	case bulkConfirmedMsg:
+		return m, m.bulkConfirmed(msg)
 	case newKeyTypeMsg:
 		m.newKeyType(msg)
 	case newKeyNameMsg:
@@ -463,8 +469,13 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		if c, ok := m.activeTab().(canceler); ok && m.focus == focusTabs {
 			return c.cancelRun()
 		}
-		if m.focus == focusTree && m.stopScans() {
-			return nil
+		if m.focus == focusTree {
+			if cmd, ok := m.stopBulk(); ok {
+				return cmd
+			}
+			if m.stopScans() {
+				return nil
+			}
 		}
 		m.setStatus("no query is running · :qa quits", false)
 	case keymap.OpenConsole:
@@ -648,7 +659,10 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 // sqlOnlyTreeAction reports whether a on n is about tables (so refused on
 // redis); editing and deleting a connection node are not.
 func sqlOnlyTreeAction(a keymap.Action, n *tree.Node) bool {
-	if n != nil && n.Kind == tree.KindRedisKey && (a == keymap.RenameTable || a == keymap.DeleteNode) {
+	if n != nil && n.Kind == tree.KindRedisKey && a == keymap.RenameTable {
+		return false
+	}
+	if n != nil && a == keymap.DeleteNode && (n.Kind == tree.KindRedisKey || n.Kind == tree.KindRedisDB || n.Kind == tree.KindKeyFolder) {
 		return false
 	}
 	if a == keymap.NodeActions && n != nil && (n.Kind == tree.KindConn || isRedisNode(n)) {

@@ -161,8 +161,9 @@ func (c *fakeRedisClient) Scan(ctx context.Context, cursor uint64, match string,
 	end := min(int(cursor)+int(count), len(keys))
 	var page rdb.ScanPage
 	for _, k := range keys[min(int(cursor), len(keys)):end] {
-		if ok, _ := path.Match(match, k); match == "" || ok {
-			page.Keys = append(page.Keys, rdb.KeyEntry{Key: k, Type: c.r.dbs[c.db][k].typ})
+		v, exists := c.r.dbs[c.db][k] // Unlink keeps the order, so cursors stay valid
+		if ok, _ := path.Match(match, k); exists && (match == "" || ok) {
+			page.Keys = append(page.Keys, rdb.KeyEntry{Key: k, Type: v.typ})
 		}
 	}
 	if end < len(keys) {
@@ -335,7 +336,6 @@ func (c *fakeRedisClient) Unlink(_ context.Context, keys ...string) (int64, erro
 			n++
 		}
 	}
-	delete(c.r.sorted, c.db)
 	return n, nil
 }
 
