@@ -44,13 +44,18 @@ func Guard(stmts []sqlx.Statement, d sqlx.Dialect, p Policy) Check {
 	var missing *Check
 	var writes []string
 	firstWrite := ""
+	// Without a server-side read-only mode the client is the only guard:
+	// it reads every statement of a batch and blocks what it cannot tell
+	// apart from a write (spec: SQL Server and Oracle).
+	strict := !d.Features().ServerReadOnly
 	for _, s := range stmts {
-		info := sqlx.Analyze(s.Text, d)
-		write := info.Kind == sqlx.Write || info.Kind == sqlx.DDL
-		if p.ReadOnly && write {
-			return Check{
-				Verdict: Reject, SQL: s.Text,
-				Reason: fmt.Sprintf("read-only connection: %s statements are blocked (:set noreadonly allows them for this session)", info.Kind),
+		infos := []sqlx.Info{sqlx.Analyze(s.Text, d)}
+		if strict {
+			infos = sqlx.AnalyzeBatch(s.Text, d)
+		}
+		for _, info := range infos {
+			if c, blocked := readOnlyCheck(s.Text, info, strict, d, p); blocked {
+				return c
 			}
 		}
 		if p.ReadOnly && sqlx.UnlocksReadOnly(s.Text, d) {
@@ -59,22 +64,29 @@ func Guard(stmts []sqlx.Statement, d sqlx.Dialect, p Policy) Check {
 				Reason: "read-only connection: switching the session to read-write is blocked (use :set noreadonly)",
 			}
 		}
-		if info.MissingWhere && missing == nil {
-			target, expect := info.Target, info.Target
-			if target == "" {
-				target, expect = "the table", "yes"
+		for _, info := range infos {
+			write := info.Kind == sqlx.Write || info.Kind == sqlx.DDL
+			if info.MissingWhere && missing == nil {
+				target, expect := info.Target, info.Target
+				if target == "" {
+					target, expect = "the table", "yes"
+				}
+				reason := fmt.Sprintf("This statement has no WHERE clause and changes every row of %s.", target)
+				missing = &Check{
+					Verdict: Confirm, SQL: s.Text, Expect: expect, Reason: reason,
+					Title: "Statement has no WHERE clause", Body: []string{reason, "", s.Text},
+				}
 			}
-			reason := fmt.Sprintf("This statement has no WHERE clause and changes every row of %s.", target)
-			missing = &Check{
-				Verdict: Confirm, SQL: s.Text, Expect: expect, Reason: reason,
-				Title: "Statement has no WHERE clause", Body: []string{reason, "", s.Text},
+			if p.Prod && write {
+				if firstWrite == "" {
+					firstWrite = s.Text
+				}
+				text := s.Text
+				if info.SQL != "" {
+					text = info.SQL
+				}
+				writes = append(writes, summary(text, info))
 			}
-		}
-		if p.Prod && write {
-			if firstWrite == "" {
-				firstWrite = s.Text
-			}
-			writes = append(writes, summary(s.Text, info))
 		}
 	}
 	switch {
@@ -92,6 +104,36 @@ func Guard(stmts []sqlx.Statement, d sqlx.Dialect, p Policy) Check {
 		}
 	}
 	return Check{Verdict: Allow}
+}
+
+// readOnlyCheck rejects a write on a read-only connection and, when strict,
+// any statement the dialect's allowlist does not know to be harmless.
+func readOnlyCheck(stmt string, info sqlx.Info, strict bool, d sqlx.Dialect, p Policy) (Check, bool) {
+	if !p.ReadOnly {
+		return Check{}, false
+	}
+	write := info.Kind == sqlx.Write || info.Kind == sqlx.DDL
+	text := stmt
+	if info.SQL != "" {
+		text = info.SQL
+	}
+	switch {
+	case write && !strict:
+		return Check{
+			Verdict: Reject, SQL: stmt,
+			Reason: fmt.Sprintf("read-only connection: %s statements are blocked (:set noreadonly allows them for this session)", info.Kind),
+		}, true
+	case write || strict && info.Kind == sqlx.Other && !sqlx.SafeOther(text, d):
+		word := strings.ToUpper(sqlx.FirstWord(text, d))
+		if write {
+			word = info.Kind.String()
+		}
+		return Check{
+			Verdict: Reject, SQL: stmt,
+			Reason: fmt.Sprintf("read-only connection: %s statements are blocked on %s (:set noreadonly allows them for this session)", word, d.Driver()),
+		}, true
+	}
+	return Check{}, false
 }
 
 // summary is one line of the prod confirmation: kind, table and statement.

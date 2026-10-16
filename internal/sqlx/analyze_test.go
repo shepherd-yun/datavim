@@ -1,6 +1,10 @@
 package sqlx
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/google/go-cmp/cmp"
+)
 
 func TestAnalyze(t *testing.T) {
 	cases := []struct {
@@ -91,5 +95,51 @@ func TestUnlocksReadOnly(t *testing.T) {
 		if got := UnlocksReadOnly(c.sql, c.d); got != c.want {
 			t.Errorf("UnlocksReadOnly(%q) = %v, want %v", c.sql, got, c.want)
 		}
+	}
+}
+
+func TestAnalyzeBatch(t *testing.T) {
+	kinds := func(sql string) []string {
+		var out []string
+		for _, in := range AnalyzeBatch(sql, SQLServer) {
+			s := in.Kind.String()
+			if in.MissingWhere {
+				s += "!"
+			}
+			out = append(out, s+":"+in.SQL)
+		}
+		return out
+	}
+	for _, tc := range []struct {
+		sql  string
+		want []string
+	}{
+		{"select 1", []string{"read:select 1"}},
+		{"SELECT 1 DELETE FROM t WHERE id=1", []string{"read:SELECT 1", "write:DELETE FROM t WHERE id=1"}},
+		{"select 'delete from t' /* update t */", []string{"read:select 'delete from t' /* update t */"}},
+		{"BEGIN UPDATE t SET a=1 END", []string{"transaction:BEGIN", "write!:UPDATE t SET a=1 END"}},
+		{"select * from t for update", []string{"read:select * from t for update"}},
+		{"EXEC p DELETE t", []string{"other:EXEC p", "write!:DELETE t"}},
+		{"select x.delete from t x", []string{"read:select x.delete from t x"}},
+	} {
+		if diff := cmp.Diff(tc.want, kinds(tc.sql)); diff != "" {
+			t.Errorf("AnalyzeBatch(%q) (-want +got):\n%s", tc.sql, diff)
+		}
+	}
+}
+
+func TestSafeOtherSQLServer(t *testing.T) {
+	for sql, want := range map[string]bool{
+		"USE crm": true, "SET NOCOUNT ON": true, "set @a = 1": true, "DECLARE @a int = 1": true, "PRINT 1": true,
+		"EXEC sp_helptext 'v'": true, "EXEC sys.sp_spaceused": true, "EXECUTE sp_databases": true,
+		"EXEC dbo.sp_help": false, "EXEC usp_x": false, "EXEC('select 1')": false, "DBCC CHECKDB": false,
+		"IF 1=1 PRINT 1": false, "WAITFOR DELAY '00:00:01'": false,
+	} {
+		if got := SafeOther(sql, SQLServer); got != want {
+			t.Errorf("SafeOther(%q) = %v, want %v", sql, got, want)
+		}
+	}
+	if SafeOther("SET NOCOUNT ON", MySQL) {
+		t.Error("MySQL has no allowlist")
 	}
 }

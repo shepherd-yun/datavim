@@ -23,6 +23,7 @@ type Info struct {
 	ReturnsRows  bool   // run it as a query rather than an exec
 	MissingWhere bool   // an UPDATE or DELETE without a WHERE clause
 	Target       string // the table written to (or read by a single-table SELECT)
+	SQL          string // AnalyzeBatch: the statement's text within the batch
 }
 
 func wordSet(ws ...string) map[string]bool {
@@ -272,6 +273,102 @@ func UnlocksReadOnly(stmt string, d Dialect) bool {
 			strings.EqualFold(toks[i-1].text, "read") && strings.EqualFold(toks[i].text, "write") {
 			return true
 		}
+	}
+	return false
+}
+
+var (
+	// batchStart are the words that start a statement inside a batch, where
+	// a statement needs no semicolon (T-SQL) or sits in a block (PL/SQL).
+	batchStart = wordSet("INSERT", "UPDATE", "DELETE", "MERGE", "REPLACE",
+		"CREATE", "ALTER", "DROP", "TRUNCATE", "RENAME", "GRANT", "REVOKE", "DENY",
+		"EXEC", "EXECUTE", "CALL", "KILL", "SHUTDOWN", "DBCC", "BACKUP", "RESTORE", "RECONFIGURE", "BULK")
+	// notBatchPrev are words after which those words continue a statement:
+	// FOR UPDATE, ON DELETE, GRANT INSERT, AFTER INSERT, …
+	notBatchPrev = wordSet("FOR", "ON", "KEY", "OF", "AFTER", "BEFORE", "INSTEAD", "GRANT", "REVOKE", "DENY", "BULK")
+)
+
+// AnalyzeBatch classifies every statement in a T-SQL batch or PL/SQL block:
+// stmt may hold several statements without semicolons. It cuts stmt before
+// each top-level word that starts a write, a DDL statement or a procedure
+// call (outside strings and comments) and after each semicolon, and
+// returns one Info per part, with SQL set to the part's text. A MERGE keeps
+// its WHEN … THEN UPDATE/INSERT/DELETE.
+func AnalyzeBatch(stmt string, d Dialect) []Info {
+	toks := codeTokens(stmt, d)
+	if len(toks) == 0 {
+		return []Info{{SQL: stmt}}
+	}
+	var out []Info
+	from := 0
+	cut := func(to int) {
+		if from >= to {
+			return
+		}
+		end := len(stmt)
+		if to < len(toks) {
+			end = toks[to].pos
+		}
+		text := strings.TrimSpace(stmt[toks[from].pos:end])
+		info := Analyze(text, d)
+		info.SQL = text
+		out = append(out, info)
+		from = to
+	}
+	depth := 0
+	for j, t := range toks {
+		depth += depthDelta(t)
+		switch {
+		case j > 0 && isPunct(toks[j-1], ";"):
+			cut(j)
+		case depth != 0 || j == from || t.kind != tokWord || !batchStart[upper(t)]:
+		case toks[j-1].kind == tokPunct && (toks[j-1].text == "." || toks[j-1].text == ","):
+		case toks[j-1].kind == tokWord && notBatchPrev[upper(toks[j-1])]:
+		case isWord(toks[j-1], "THEN") && isWord(toks[from], "MERGE"):
+		default:
+			cut(j)
+		}
+	}
+	cut(len(toks))
+	return out
+}
+
+// FirstWord is the first token of stmt, comments aside.
+func FirstWord(stmt string, d Dialect) string {
+	if toks := codeTokens(stmt, d); len(toks) > 0 {
+		return toks[0].text
+	}
+	return ""
+}
+
+// tsqlSafeProcs are the system procedures a read-only SQL Server
+// connection may call: they only read.
+var tsqlSafeProcs = wordSet("SP_HELP", "SP_HELPTEXT", "SP_HELPINDEX", "SP_COLUMNS", "SP_TABLES", "SP_WHO",
+	"SP_WHO2", "SP_SPACEUSED", "SP_DATABASES", "SP_SERVER_INFO")
+
+// SafeOther reports a statement of Kind Other that cannot write: the
+// dialect's allowlist for engines without a server-side read-only mode.
+// MySQL and PostgreSQL have none.
+func SafeOther(stmt string, d Dialect) bool {
+	toks := codeTokens(stmt, d)
+	if len(toks) == 0 {
+		return true
+	}
+	//exhaustive:enforce
+	switch d {
+	case SQLServer:
+		switch upper(toks[0]) {
+		case "USE", "SET", "DECLARE", "PRINT":
+			return true
+		case "EXEC", "EXECUTE":
+			name, next := identPath(toks, 1)
+			qualified := next > 2
+			if qualified && (next != 4 || !isWord(toks[1], "sys")) {
+				return false
+			}
+			return tsqlSafeProcs[strings.ToUpper(name)]
+		}
+	case MySQL, Postgres, Oracle:
 	}
 	return false
 }
