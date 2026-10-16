@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -106,7 +107,7 @@ type settingsFile struct {
 	Theme map[string]string `toml:"theme"`
 }
 
-var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432, "sqlserver": 1433, "oracle": 1521}
+var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432, "sqlserver": 1433, "oracle": 1521, "redis": 6379}
 
 type connectionsFile struct {
 	Connections []Connection `toml:"connection"`
@@ -190,13 +191,18 @@ func Normalize(c Connection) (Connection, error) {
 	}
 	port, ok := defaultPorts[c.Driver]
 	if !ok {
-		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql, postgres, sqlserver or oracle)", c.Name, c.Driver)
+		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql, postgres, sqlserver, oracle or redis)", c.Name, c.Driver)
 	}
 	if c.Port == 0 {
 		c.Port = port
 	}
 	if c.Host == "" {
 		c.Host = "localhost"
+	}
+	if c.Driver == "redis" && c.Database != "" {
+		if n, err := strconv.Atoi(c.Database); err != nil || n < 0 {
+			return c, fmt.Errorf("connection %q: redis database must be a number (0, 1, …), got %q", c.Name, c.Database)
+		}
 	}
 	c.SSH = strings.TrimSpace(c.SSH)
 	if strings.ContainsAny(c.SSH, " \t") {
@@ -210,6 +216,13 @@ func Normalize(c Connection) (Connection, error) {
 		return c, fmt.Errorf("connection %q: unknown env %q (want dev, staging or prod)", c.Name, c.Env)
 	}
 	return c, nil
+}
+
+// RedisDB is a redis connection's default db number; Normalize has
+// checked it, so an empty or bad value is 0.
+func RedisDB(c Connection) int {
+	n, _ := strconv.Atoi(c.Database)
+	return max(n, 0)
 }
 
 func normalize(in []Connection) ([]Connection, error) {

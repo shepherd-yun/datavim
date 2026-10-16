@@ -455,3 +455,23 @@ func TestLoadInReadsConnectionsFromWorkspace(t *testing.T) {
 		t.Fatalf("settings/keymap come from the root: %+v, %+v", cfg.Settings, cfg.Keymap)
 	}
 }
+
+func TestNormalizeRedis(t *testing.T) {
+	c, err := Normalize(Connection{Name: "r", Driver: "redis"})
+	if err != nil || c.Port != 6379 || c.Host != "localhost" || RedisDB(c) != 0 {
+		t.Fatalf("c = %+v, err = %v", c, err)
+	}
+	c, err = Normalize(Connection{Name: "r", Driver: "redis", Database: "3"})
+	if err != nil || RedisDB(c) != 3 {
+		t.Fatalf("c = %+v, err = %v", c, err)
+	}
+	for _, bad := range []string{"-1", "abc"} {
+		_, err := Normalize(Connection{Name: "r", Driver: "redis", Database: bad})
+		if err == nil || !strings.Contains(err.Error(), "redis database must be a number") {
+			t.Errorf("Database %q: err = %v", bad, err)
+		}
+	}
+	if _, err := Normalize(Connection{Name: "x", Driver: "sqlite"}); err == nil || !strings.Contains(err.Error(), "oracle or redis") {
+		t.Errorf("unknown driver err = %v", err)
+	}
+}

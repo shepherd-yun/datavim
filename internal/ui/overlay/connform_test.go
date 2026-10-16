@@ -182,7 +182,7 @@ func TestEditConnFormKeepsHiddenSettings(t *testing.T) {
 
 func TestConnFormOracleServiceLabel(t *testing.T) {
 	f := NewConnForm(keymap.Default())
-	o, msg := send(t, f, "o", "tab", "left", "tab") // driver: mysql -> oracle (last)
+	o, msg := send(t, f, "o", "tab", "left", "left", "tab") // driver: mysql -> oracle (before redis)
 	if o == nil || msg != nil {
 		t.Fatal("form closed")
 	}
@@ -199,5 +199,22 @@ func TestConnFormOracleServiceLabel(t *testing.T) {
 	}
 	if v := ansi.Strip(NewConnForm(keymap.Default()).View(80, 30)); !strings.Contains(v, "Database") || strings.Contains(v, "FREEPDB1") {
 		t.Fatalf("mysql form:\n%s", v)
+	}
+}
+
+func TestConnFormRedis(t *testing.T) {
+	f := NewConnForm(keymap.Default())
+	o, msg := send(t, f, "r", "tab", "left", "tab") // driver: mysql -> redis (last)
+	if o == nil || msg != nil {
+		t.Fatal("form closed")
+	}
+	v := ansi.Strip(f.View(80, 30))
+	if !strings.Contains(v, "DB ") || strings.Contains(v, "Database") || strings.Contains(v, "Encrypt") {
+		t.Fatalf("redis form:\n%s", v)
+	}
+	_, msg = send(t, f, "tab", "tab", "tab", "tab", "2", "ctrl+s") // port, user, password -> DB
+	c := msg.(ConnFormMsg).Conn
+	if c.Driver != "redis" || c.Port != 6379 || c.Database != "2" {
+		t.Fatalf("conn = %+v", c)
 	}
 }

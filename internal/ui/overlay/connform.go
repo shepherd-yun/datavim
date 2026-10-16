@@ -68,7 +68,7 @@ var encryptChoices = []string{"default", "true", "false", "disable"}
 func NewConnForm(keys *keymap.Keymap) *ConnForm {
 	return &ConnForm{keys: keys, fields: []formField{
 		ffName:     {label: "Name"},
-		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver", "oracle"}},
+		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver", "oracle", "redis"}},
 		ffHost:     {label: "Host", input: newField("localhost")},
 		ffPort:     {label: "Port"},
 		ffUser:     {label: "User"},
@@ -244,6 +244,9 @@ func (f *ConnForm) View(width, _ int) string {
 		oracleService := i == ffDatabase && f.value(ffDriver) == "oracle"
 		if oracleService {
 			name = "Service" // Oracle connects to a service; the field keeps the name
+		}
+		if i == ffDatabase && f.value(ffDriver) == "redis" {
+			name = "DB" // a db number; empty is 0
 		}
 		label := fmt.Sprintf("%-14s", name)
 		switch {
