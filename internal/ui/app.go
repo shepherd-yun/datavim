@@ -39,7 +39,7 @@ func welcomeText(k *keymap.Keymap) string {
 		a     keymap.Action
 		label string
 	}{
-		{keymap.OpenConsole, "SQL console"},
+		{keymap.OpenConsole, "console (SQL or Redis)"},
 		{keymap.OpenStructure, "table columns and structure"},
 		{keymap.NewConnection, "new connection"},
 		{keymap.Help, "help"},

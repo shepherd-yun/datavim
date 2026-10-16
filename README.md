@@ -1,6 +1,6 @@
 # sqlvim
 
-A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows. It also browses Redis.
+A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows. It also browses and queries Redis.
 
 [中文说明](README.zh-CN.md)
 
@@ -69,7 +69,7 @@ ends with a line holding only `/`, as in SQL*Plus. Statements commit on their ow
 `SET TRANSACTION` keeps a transaction open until `COMMIT` or `ROLLBACK`. Modify Table, compare
 and import are not available on Oracle yet.
 
-**Redis** (5.0 and later, standalone servers; read-only browsing for now): `driver = "redis"`,
+**Redis** (5.0 and later, standalone servers): `driver = "redis"`,
 port 6379, and `database` is the default db number (0 when empty; the form calls it `DB`). A
 password is optional: sqlvim connects without one and asks only when the server answers
 `NOAUTH`. `params`: `separator` groups the keys into folders (default `:`), `tls = "true"` and
@@ -82,8 +82,24 @@ completes the keys scanned so far). `Enter` on a key opens its tab: type, TTL, l
 encoding, then the value — a string (only the first 1 MB of a bigger one; `v` cycles auto /
 text / JSON / hex) or the fields, items or members of a hash, list, set, sorted set or stream,
 a page at a time (`]` loads more, `F` filters hash fields and set members, `K` shows a value).
-Binary key names show as `\xNN`; `yy` in the tree copies a key name as redis-cli takes it. The
-console, structure, compare and import are not available for Redis yet.
+Binary key names show as `\xNN`; `yy` in the tree copies a key name as redis-cli takes it.
+
+The Redis console (`<Space>c` on a Redis connection, db or key) runs one command a line, quoted
+as in redis-cli (`SET "a b" "line\n"`, `'it\'s'`); `#` and `//` lines are comments. `Enter` runs
+the line under the cursor or the selected lines, `R` everything and `<Space>R` from the cursor
+on; a failed command stops the rest. A reply shows as a value (JSON indented, binary as hex), a
+table (arrays, field / value pairs of `HGETALL` or `CONFIG GET`, member / score pairs of
+`ZRANGE … WITHSCORES`, the keys of a `SCAN`) or redis-cli's indented text; `M` shows the message
+log and `g d` on a table cell opens that key. The console keeps its own connection, so `SELECT`
+(the tab title shows the db) and `MULTI` / `WATCH` last; the status bar shows `TX n` or `WATCH`,
+and closing the tab or quitting asks first. `Ctrl-c` cancels a blocking command such as
+`BLPOP q 0`; that drops the connection, and the next command reconnects on the same db. Inside
+`MULTI` or `WATCH` nothing reconnects: sqlvim says the transaction is lost. Typing completes
+commands, subcommands and keys (the keys the tree scanned, plus a small `SCAN` for the prefix)
+and shows the command's arguments. Known limits: other connection state (`CLIENT SETNAME` …) is
+not restored after a reconnect, `SELECT` inside `MULTI` is refused, `:e` / `:w` do not work in a
+Redis console, and `SUBSCRIBE`, `MONITOR`, `HELLO`, `RESET`, `CLIENT TRACKING` and the like are
+not supported. Structure, compare and import are not available for Redis.
 
 ## Editing table data
 
@@ -222,6 +238,7 @@ picks the workspace by directory.
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
 | `v` | Redis key tab: show a string as auto / text / JSON / hex |
+| `g d` | Redis console results: open the key in the cell |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (`Ctrl-n` / `Ctrl-p` open the popup when closed) |
 | `Enter` / `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes the popup, a second `Esc` leaves insert mode) |
 
@@ -305,8 +322,14 @@ with a syntax error, the cursor jumps to where the server says the error is.
   (`sp_help`, `sp_helptext`, `sp_columns`, `sp_who` …), `IF` blocks, `DBCC`, PL/SQL blocks, `CALL`
   and the like (`ALTER SESSION SET CURRENT_SCHEMA` / `NLS_…` are allowed). For a
   production server also use an account that can only read.
-- Redis has no read-only session either: browsing sends only read commands. For a production
-  instance also use an ACL user that can only read (`+@read`).
+- Redis has no read-only session either: browsing sends only read commands, and in the console
+  sqlvim alone enforces read-only — it refuses write, dangerous and unknown commands (module
+  commands included). On prod, writes and unknown commands ask for `y`; dangerous commands
+  (`FLUSHDB`, `FLUSHALL`, `CONFIG SET`, `CLIENT KILL`, `SHUTDOWN`, `DEBUG` …) ask on every
+  connection and on prod want the connection name typed; `KEYS` is refused on a db of more than
+  10,000 keys (use `SCAN` or the tree filter). Several lines are checked together before any
+  runs, so `MULTI` does not get around these rules. For a production instance also use an ACL
+  user that can only read (`+@read`).
 - `env = "prod"` frames the tab area in red and shows `[PROD]` in the status bar; every
   write or DDL statement on a prod connection asks for `y` first.
 - `UPDATE` / `DELETE` without `WHERE` asks you to type the table name before it runs.

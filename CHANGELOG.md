@@ -19,8 +19,29 @@ All notable changes to this project are documented here. The format follows
   tab shows type, TTL, length, size and encoding, a string (the first 1 MB of a bigger one; `v`
   cycles auto / text / JSON / hex) or the fields, items or members of a hash, list, set, sorted
   set or stream page by page (`]` loads more, `F` filters hash fields and set members). Binary
-  key names are shown as `\xNN` and `yy` copies a key name as redis-cli takes it. Consoles,
-  structure, compare, import and the other SQL features say "not supported for redis yet".
+  key names are shown as `\xNN` and `yy` copies a key name as redis-cli takes it. Structure,
+  compare, import and the other SQL features say "not supported for redis yet".
+- Redis command console: `<Space>c` on a Redis connection, db, folder or key opens
+  `redis:<conn>/db<N>`, one command a line with redis-cli quoting (`"…"` with `\n` `\xNN`
+  escapes, `'…'`), `#` / `//` comment lines, and the SQL console's keys (`Enter` runs the line
+  or the selected lines, `R` all, `<Space>R` from the cursor; a failed command stops the batch).
+  Replies show as a value (JSON indented, binary as hex), a table (arrays; `HGETALL`,
+  `CONFIG GET`, `ZRANGE … WITHSCORES` as field / value or member / score, also over RESP2; `SCAN`
+  replies as a table of the keys with the cursor in the message) or redis-cli's indented text.
+  The console has its own connection, so `SELECT` (the title follows the db) and
+  `MULTI` / `WATCH` stick; `TX n` / `WATCH` show in the status bar and closing or quitting asks
+  first. `Ctrl-c` cancels a blocking command (`BLPOP q 0`); the next command reconnects on the
+  same db (`reconnected (db N)`), except inside `MULTI` / `WATCH`, where the transaction is
+  reported lost and nothing reconnects until you run again. Completion of commands,
+  subcommands and keys (the tree's scanned keys, plus a small `SCAN MATCH prefix*`), the
+  command's arguments as a hint, highlighting, drafts and history (`AUTH` passwords are shown
+  as `***`). `g d` on a result cell opens that key. Safety: read-only connections refuse write,
+  dangerous and unknown commands; prod asks `y` for writes and unknown commands; dangerous
+  commands (`FLUSHDB`, `CONFIG SET`, `CLIENT KILL`, `DEBUG` …) always ask, and on prod want the
+  connection name; `KEYS` is refused on a db of more than 10,000 keys; a batch is checked as a
+  whole, so `MULTI` does not get around it, and `SELECT` inside `MULTI` is refused.
+  `SUBSCRIBE`, `PSUBSCRIBE`, `SSUBSCRIBE`, `MONITOR`, `SYNC`, `PSYNC`, `CLIENT TRACKING`,
+  `CLIENT REPLY`, `RESET`, `HELLO` and `QUIT` are not supported.
 - SQL Server support (2014–2022, user name and password, SSH tunnels): browse databases,
   schemas, tables, views and routines, run T-SQL in the console (`GO` separates batches,
   `BEGIN TRAN` / `COMMIT` / `ROLLBACK` are tracked), filter, sort and edit table data (`N'…'`

@@ -1,6 +1,6 @@
 # sqlvim
 
-一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle，也能浏览 Redis。
+一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle，也能浏览和查询 Redis。
 
 [English](README.md)
 
@@ -60,7 +60,7 @@ icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "pl
 语句以 `;` 结尾；PL/SQL 块（`BEGIN`、`DECLARE`、`CREATE PROCEDURE` 等）和 SQL*Plus 一样，以单独一行的 `/` 结束。
 语句默认自动提交；`<Space>t` 或 `SET TRANSACTION` 会保持事务直到 `COMMIT` 或 `ROLLBACK`。Oracle 上暂不支持修改表结构、对比和导入。
 
-**Redis**（5.0 及以上，单机；目前只能浏览查看）：`driver = "redis"`，端口 6379，`database` 是默认的 db 编号
+**Redis**（5.0 及以上，单机）：`driver = "redis"`，端口 6379，`database` 是默认的 db 编号
 （留空为 0，表单里显示为 `DB`）。密码可选：sqlvim 先不带密码连接，服务器回 `NOAUTH` 时才询问。
 `params`：`separator` 是 key 分组用的分隔符（默认 `:`），`tls = "true"`、`tls_skip_verify = "true"`。
 展开 db 时用 `SCAN` 每批 1,000 个扫描 key（从不用 `KEYS`）：一次加载扫到 10,000 个就停，`↓ load more` 继续
@@ -69,7 +69,19 @@ icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "pl
 `<Space>k` 按名字打开 key（`Tab` 补全已扫描到的 key）。在 key 上按 `Enter` 打开详情页：类型、TTL、长度、大小、编码，
 然后是值——String（超过 1 MB 只显示前 1 MB；`v` 在 auto / text / JSON / hex 之间切换），或 Hash、List、Set、ZSet、
 Stream 的字段、元素、成员，分页显示（`]` 加载更多，`F` 过滤 Hash 字段和 Set 成员，`K` 查看完整值）。
-二进制 key 名显示成 `\xNN`；树上 `yy` 复制的是 redis-cli 能直接使用的 key 名。Redis 暂不支持控制台、结构、对比和导入。
+二进制 key 名显示成 `\xNN`；树上 `yy` 复制的是 redis-cli 能直接使用的 key 名。
+
+Redis 控制台（在 Redis 连接、db 或 key 上按 `<Space>c`）一行一条命令，引号规则和 redis-cli 一样
+（`SET "a b" "line\n"`、`'it\'s'`）；以 `#` 或 `//` 开头的行是注释。`Enter` 执行光标所在行或选中的行，`R` 执行全部，
+`<Space>R` 从光标所在行执行到末尾；有一条失败就停下。结果显示成一个值（JSON 自动缩进，二进制显示为 hex）、
+表格（数组；`HGETALL`、`CONFIG GET` 的 field / value，`ZRANGE … WITHSCORES` 的 member / score，`SCAN` 返回的 key）
+或 redis-cli 那样的缩进文本；`M` 切换到消息日志，在表格单元格上按 `g d` 打开那个 key。控制台有自己的专用连接，
+所以 `SELECT`（标签页标题显示当前 db）和 `MULTI` / `WATCH` 会一直有效；状态栏显示 `TX n` 或 `WATCH`，
+关闭标签页或退出时会先询问。`Ctrl-c` 可以取消 `BLPOP q 0` 这类阻塞命令；取消会断开连接，下一条命令自动重连并回到原来的 db。
+在 `MULTI` 或 `WATCH` 中不会自动重连，sqlvim 会提示事务已丢失。输入时补全命令、子命令和 key
+（树里已扫描到的 key，再加一次小范围的 `SCAN`），并显示命令的参数提示。已知限制：重连后不恢复 `CLIENT SETNAME`
+等其他连接状态；`MULTI` 里不能 `SELECT`；Redis 控制台不支持 `:e` / `:w`；不支持 `SUBSCRIBE`、`MONITOR`、`HELLO`、
+`RESET`、`CLIENT TRACKING` 等命令。Redis 不支持结构、对比和导入。
 
 ## 编辑表数据
 
@@ -188,6 +200,7 @@ sqlvim --list-workspaces
 | `F` / `fx` | 树里 Redis 的 db、文件夹或 key 上：按模式过滤 key / 清除过滤 |
 | `<Space>k` | 按名字打开 Redis key |
 | `v` | Redis key 详情页：String 按 auto / text / JSON / hex 显示 |
+| `g d` | Redis 控制台结果：打开单元格里的 key |
 | `<Space>r` | 刷新树节点或 tab，并重新加载该连接的元数据 |
 | `?` | 当前面板的帮助 |
 | `:q` / `:qa` | 关闭 tab / 退出 |
@@ -271,7 +284,11 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
 - SQL Server 和 Oracle 没有只读会话，所以只有 sqlvim 这一道防线，规则也更严：它检查一个批次里的每条语句（T-SQL 可以不写分号），
   认不出是否安全的一律拦截——除少数只读系统过程（`sp_help`、`sp_helptext`、`sp_columns`、`sp_who` 等）以外的 `EXEC`、
   `IF` 块、`DBCC`、PL/SQL 块、`CALL` 等（允许 `ALTER SESSION SET CURRENT_SCHEMA` / `NLS_…`）。生产库建议再配一个数据库层面只读的账号。
-- Redis 同样没有只读会话：浏览只发送读命令。生产实例建议再配一个只读的 ACL 用户（`+@read`）。
+- Redis 同样没有只读会话：浏览只发送读命令，控制台里的只读完全由 sqlvim 在客户端保证——拒绝写命令、危险命令和
+  认不出的命令（包括模块命令）。prod 上写命令和认不出的命令要按 `y` 确认；危险命令（`FLUSHDB`、`FLUSHALL`、`CONFIG SET`、
+  `CLIENT KILL`、`SHUTDOWN`、`DEBUG` 等）在任何连接上都要确认，prod 上要输入连接名；db 里超过 10,000 个 key 时拒绝 `KEYS`
+  （请用 `SCAN` 或树的过滤）。多行一起执行时先检查全部再执行，所以 `MULTI` 绕不过这些规则。
+  生产实例建议再配一个只读的 ACL 用户（`+@read`）。
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，
