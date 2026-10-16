@@ -18,6 +18,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
+
+	"github.com/shepherd-yun/sqlvim/internal/db"
 )
 
 var images = []string{"redis:7", "redis:5"}
@@ -379,4 +381,177 @@ func TestBinaryKeyRoundTrip(t *testing.T) {
 			t.Fatalf("value = %q, err %v", v, err)
 		}
 	})
+}
+
+func openSession(t *testing.T, s server, cfg Config) Session {
+	t.Helper()
+	cfg.Host, cfg.Port = s.host, s.port
+	sess, err := OpenSession(context.Background(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sess.Close() })
+	return sess
+}
+
+func do(t *testing.T, sess Session, args ...string) Reply {
+	t.Helper()
+	r, err := sess.Do(context.Background(), args...)
+	if err != nil {
+		t.Fatalf("Do(%q): %v", args, err)
+	}
+	return r
+}
+
+func TestSessionSelectSticks(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		s := start(t, image)
+		raw(t, s, 0, "")
+		raw(t, s, 3, "")
+		sess := openSession(t, s, Config{})
+		do(t, sess, "SET", "a", "0")
+		if r := do(t, sess, "SELECT", "3"); r.Str != "OK" || sess.DB() != 3 {
+			t.Fatalf("SELECT 3 = %+v, DB() = %d", r, sess.DB())
+		}
+		do(t, sess, "SET", "a", "3")
+		for range 20 {
+			if r := do(t, sess, "GET", "a"); r.Str != "3" {
+				t.Fatalf("GET a = %+v, want 3", r)
+			}
+		}
+		c := open(t, s, Config{})
+		v, err := c.GetString(context.Background(), "a", 10)
+		if err != nil || v != "0" {
+			t.Fatalf("db0 a = %q, %v", v, err)
+		}
+		if r := do(t, sess, "SELECT", "99999"); r.Kind != KindError || sess.DB() != 3 {
+			t.Fatalf("bad SELECT = %+v, DB() = %d", r, sess.DB())
+		}
+	})
+}
+
+func TestSessionReplyTypes(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		s := start(t, image)
+		raw(t, s, 0, "")
+		sess := openSession(t, s, Config{})
+		resp3 := image != "redis:5"
+		do(t, sess, "HSET", "h", "f", "v")
+		r := do(t, sess, "HGETALL", "h")
+		if resp3 && (r.Kind != KindMap || len(r.Pairs) != 1 || r.Pairs[0][0].Str != "f") ||
+			!resp3 && (r.Kind != KindArray || len(r.Elems) != 2) {
+			t.Fatalf("HGETALL = %+v", r)
+		}
+		do(t, sess, "ZADD", "z", "1.5", "m")
+		r = do(t, sess, "ZSCORE", "z", "m")
+		if resp3 && (r.Kind != KindDouble || r.Float != 1.5) || !resp3 && (r.Kind != KindString || r.Str != "1.5") {
+			t.Fatalf("ZSCORE = %+v", r)
+		}
+		if r := do(t, sess, "GET", "nope"); r.Kind != KindNil {
+			t.Fatalf("GET nope = %+v", r)
+		}
+		if r := do(t, sess, "LPUSH", "h", "x"); r.Kind != KindError || !strings.HasPrefix(r.Str, "WRONGTYPE") {
+			t.Fatalf("LPUSH h = %+v", r)
+		}
+	})
+}
+
+func TestSessionMulti(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		s := start(t, image)
+		other := raw(t, s, 0, "")
+		sess := openSession(t, s, Config{})
+		for _, step := range []struct {
+			args []string
+			want string
+		}{{[]string{"MULTI"}, "OK"}, {[]string{"SET", "a", "1"}, "QUEUED"}, {[]string{"INCR", "a"}, "QUEUED"}} {
+			if r := do(t, sess, step.args...); r.Str != step.want {
+				t.Fatalf("%q = %+v", step.args, r)
+			}
+		}
+		r := do(t, sess, "EXEC")
+		if r.Kind != KindArray || len(r.Elems) != 2 || r.Elems[0].Str != "OK" || r.Elems[1].Int != 2 {
+			t.Fatalf("EXEC = %+v", r)
+		}
+		do(t, sess, "WATCH", "a")
+		other.Set(context.Background(), "a", "9", 0)
+		do(t, sess, "MULTI")
+		do(t, sess, "SET", "a", "1")
+		if r := do(t, sess, "EXEC"); r.Kind != KindNil {
+			t.Fatalf("EXEC after WATCH = %+v", r)
+		}
+	})
+}
+
+func TestSessionBlockingTimeout(t *testing.T) {
+	sess := openSession(t, start(t, "redis:7"), Config{})
+	began := time.Now()
+	r, err := sess.Do(context.Background(), "BLPOP", "empty", "6")
+	if err != nil || r.Kind != KindNil {
+		t.Fatalf("BLPOP = %+v, %v", r, err)
+	}
+	if d := time.Since(began); d < 5*time.Second {
+		t.Fatalf("BLPOP returned after %v", d)
+	}
+}
+
+func TestSessionCancelBlocking(t *testing.T) {
+	sess := openSession(t, start(t, "redis:7"), Config{})
+	do(t, sess, "SELECT", "3")
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := sess.Do(ctx, "BLPOP", "empty", "0")
+		done <- err
+	}()
+	time.Sleep(200 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("canceled BLPOP err = %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("BLPOP not canceled")
+	}
+	if _, err := sess.Do(context.Background(), "PING"); !errors.Is(err, db.ErrConnLost) {
+		t.Fatalf("PING after cancel = %v", err)
+	}
+	if err := sess.Ping(context.Background()); !errors.Is(err, db.ErrConnLost) {
+		t.Fatalf("Ping after cancel = %v", err)
+	}
+}
+
+func TestSessionNoSilentRedial(t *testing.T) {
+	s := start(t, "redis:7")
+	raw(t, s, 3, "")
+	sess := openSession(t, s, Config{})
+	do(t, sess, "SELECT", "3")
+	do(t, sess, "CLIENT", "SETNAME", "victim")
+	killer := raw(t, s, 5, "")
+	if err := killer.Do(context.Background(), "CLIENT", "KILL", "SKIPME", "yes", "TYPE", "normal").Err(); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(100 * time.Millisecond)
+	_, err := sess.Do(context.Background(), "SET", "x", "1")
+	if !errors.Is(err, db.ErrConnLost) {
+		t.Fatalf("Do after kill = %v, want ErrConnLost (no silent redial on db0)", err)
+	}
+}
+
+func TestSessionAuthAndDial(t *testing.T) {
+	s := start(t, "redis:7", "--requirepass", "secret")
+	_, err := OpenSession(context.Background(), Config{Host: s.host, Port: s.port})
+	if !errors.Is(err, ErrAuthRequired) {
+		t.Fatalf("no password: err = %v", err)
+	}
+	var calls atomic.Int32
+	var d net.Dialer
+	openSession(t, s, Config{Password: "secret", Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		calls.Add(1)
+		return d.DialContext(ctx, network, addr)
+	}})
+	if calls.Load() == 0 {
+		t.Fatal("dialer not used")
+	}
 }

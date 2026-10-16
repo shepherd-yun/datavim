@@ -82,24 +82,8 @@ type client struct {
 // Open builds the pool and checks it with PING and INFO server. go-redis
 // falls back to RESP2 by itself when the server rejects HELLO (Redis 5).
 func Open(ctx context.Context, cfg Config) (Client, error) {
-	opt := &redis.Options{
-		Addr:                     net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
-		Username:                 cfg.User,
-		Password:                 cfg.Password,
-		DB:                       cfg.DB,
-		Protocol:                 3,
-		PoolSize:                 4,
-		ContextTimeoutEnabled:    true,
-		DisableIdentity:          true,
-		MaxRetries:               -1,
-		MaintNotificationsConfig: &maintnotifications.Config{Mode: maintnotifications.ModeDisabled},
-	}
-	if cfg.Dial != nil {
-		opt.Dialer = cfg.Dial
-	}
-	if cfg.TLS {
-		opt.TLSConfig = &tls.Config{ServerName: cfg.Host, InsecureSkipVerify: cfg.TLSSkipVerify, MinVersion: tls.VersionTLS12} //nolint:gosec // opt-in via tls_skip_verify
-	}
+	opt := options(cfg)
+	opt.PoolSize = 4
 	c := &client{rc: redis.NewClient(opt), db: cfg.DB}
 	if err := c.rc.Ping(ctx).Err(); err != nil {
 		_ = c.rc.Close()
@@ -112,6 +96,29 @@ func Open(ctx context.Context, cfg Config) (Client, error) {
 	}
 	c.version = infoValue(info, "redis_version")
 	return c, nil
+}
+
+// options are the go-redis settings Open and OpenSession share: RESP3
+// first, ctx deadlines, no retries.
+func options(cfg Config) *redis.Options {
+	opt := &redis.Options{
+		Addr:                     net.JoinHostPort(cfg.Host, strconv.Itoa(cfg.Port)),
+		Username:                 cfg.User,
+		Password:                 cfg.Password,
+		DB:                       cfg.DB,
+		Protocol:                 3,
+		ContextTimeoutEnabled:    true,
+		DisableIdentity:          true,
+		MaxRetries:               -1,
+		MaintNotificationsConfig: &maintnotifications.Config{Mode: maintnotifications.ModeDisabled},
+	}
+	if cfg.Dial != nil {
+		opt.Dialer = cfg.Dial
+	}
+	if cfg.TLS {
+		opt.TLSConfig = &tls.Config{ServerName: cfg.Host, InsecureSkipVerify: cfg.TLSSkipVerify, MinVersion: tls.VersionTLS12} //nolint:gosec // opt-in via tls_skip_verify
+	}
+	return opt
 }
 
 func (c *client) Version() string { return c.version }
