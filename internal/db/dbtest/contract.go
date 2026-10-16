@@ -1123,4 +1123,6 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			t.Fatalf("after\n%s\nstill differ: %+v", strings.Join(stmts, ";\n"), left)
 		}
 	})
+
+	runImportContract(t, conn, f)
 }
