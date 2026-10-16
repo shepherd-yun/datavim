@@ -1,6 +1,6 @@
 # sqlvim
 
-一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL 和 SQL Server。
+一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle。
 
 [English](README.md)
 
@@ -55,12 +55,17 @@ icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "pl
 只支持 TLS 1.0/1.1 的服务器加 `tlsmin = "1.0"`。连接表单（`<space>n`）里有对应的 `Encrypt` 和 `Trust cert` 字段。
 不支持命名实例（`host\instance`），请直接填实例端口。SQL Server 上暂不支持修改表结构、schema 和数据对比、导入。
 
+**Oracle**（12c 及以上，用户名密码登录，不需要 Instant Client）：`driver = "oracle"`，端口 1521，`database` 填 service name
+（留空时为 `FREEPDB1`，表单里显示为 `Service`）。不支持 SID、TNS 名和 wallet。树里 schema 直接列在连接下面。
+语句以 `;` 结尾；PL/SQL 块（`BEGIN`、`DECLARE`、`CREATE PROCEDURE` 等）和 SQL*Plus 一样，以单独一行的 `/` 结束。
+语句默认自动提交；`<Space>t` 或 `SET TRANSACTION` 会保持事务直到 `COMMIT` 或 `ROLLBACK`。Oracle 上暂不支持修改表结构、对比和导入。
+
 ## 编辑表数据
 
 改动会先暂存：改过的单元格变黄，新增行变绿，标记删除的行变红。
 `<Space>w`（或 `:w`）显示将执行的语句；`y` 在一个事务里执行它们，任何一条失败或没有恰好改动一行都会整体回滚。
 行按主键定位，没有主键时用全部列 NOT NULL 的唯一索引；两者都没有的表按所有列的值匹配
-（MySQL 加 `LIMIT 1`，SQL Server 加 `TOP (1)`）或按 `ctid`（PostgreSQL），预览里会注明。
+（MySQL 加 `LIMIT 1`，SQL Server 加 `TOP (1)`）或按 `ctid`（PostgreSQL）、`ROWID`（Oracle），预览里会注明。
 只读连接拒绝改动，PROD 连接在预览中显示 `PROD ·`；有暂存改动时，翻页、刷新、过滤、排序、关闭 tab 或退出都会询问或拒绝。
 控制台里单表 SELECT 的结果也能用同样的按键过滤和编辑。
 
@@ -248,9 +253,9 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
 - `readonly = true`（`env = "prod"` 时默认开启）在控制台中阻止 INSERT/UPDATE/DELETE 和 DDL，
   数据库会话本身也设为只读，作为第二道防线。`:set noreadonly` 在 sqlvim 退出前解锁该连接；
   不会修改 `connections.toml`。
-- SQL Server 没有只读会话，所以只有 sqlvim 这一道防线，规则也更严：它检查一个批次里的每条语句（T-SQL 可以不写分号），
+- SQL Server 和 Oracle 没有只读会话，所以只有 sqlvim 这一道防线，规则也更严：它检查一个批次里的每条语句（T-SQL 可以不写分号），
   认不出是否安全的一律拦截——除少数只读系统过程（`sp_help`、`sp_helptext`、`sp_columns`、`sp_who` 等）以外的 `EXEC`、
-  `IF` 块、`DBCC` 等。生产库建议再配一个数据库层面只读的账号。
+  `IF` 块、`DBCC`、PL/SQL 块、`CALL` 等（允许 `ALTER SESSION SET CURRENT_SCHEMA` / `NLS_…`）。生产库建议再配一个数据库层面只读的账号。
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，

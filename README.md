@@ -1,6 +1,6 @@
 # sqlvim
 
-A terminal SQL client for MySQL, PostgreSQL and SQL Server with vim keys and DataGrip-style workflows.
+A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows.
 
 [中文说明](README.zh-CN.md)
 
@@ -61,14 +61,22 @@ certificate, and `tlsmin = "1.0"` for a server that only speaks TLS 1.0/1.1. The
 (`host\instance`) are not supported: give the instance's port. Modify Table, schema and data
 compare and import are not available on SQL Server yet.
 
+**Oracle** (12c and later, user name and password, no Instant Client needed): `driver = "oracle"`,
+port 1521, and `database` is the service name (`FREEPDB1` when empty; the form calls it
+`Service`). SIDs, TNS names and wallets are not supported. The tree lists schemas right under the
+connection. Statements end with `;`; a PL/SQL block (`BEGIN`, `DECLARE`, `CREATE PROCEDURE` …)
+ends with a line holding only `/`, as in SQL*Plus. Statements commit on their own; `<Space>t` or
+`SET TRANSACTION` keeps a transaction open until `COMMIT` or `ROLLBACK`. Modify Table, compare
+and import are not available on Oracle yet.
+
 ## Editing table data
 
 Changes are staged: edited cells turn yellow, new rows green and rows marked for deletion red.
 `<Space>w` (or `:w`) shows the statements; `y` runs them in one transaction, which is rolled
 back if any statement fails or does not change exactly one row. Rows are located by their
 primary key, else a unique index over NOT NULL columns; tables without one are matched by all
-their values with `LIMIT 1` (MySQL) or `TOP (1)` (SQL Server), or by `ctid` (PostgreSQL), and
-the preview says so.
+their values with `LIMIT 1` (MySQL) or `TOP (1)` (SQL Server), or by `ctid` (PostgreSQL) or
+`ROWID` (Oracle), and the preview says so.
 Read-only connections refuse changes, PROD connections show `PROD ·` in the preview, and
 paging, refreshing, filtering, sorting, closing the tab or quitting ask or refuse while
 changes are staged. The same filter and edit keys work on console results of a single-table SELECT.
@@ -271,10 +279,11 @@ with a syntax error, the cursor jumps to where the server says the error is.
 - `readonly = true` (the default for `env = "prod"`) blocks INSERT/UPDATE/DELETE and DDL
   in the console, and the database session itself is read-only as a second line of defence.
   `:set noreadonly` unlocks the connection until sqlvim exits; `connections.toml` is not changed.
-- SQL Server has no read-only session, so there sqlvim is the only guard, and a stricter one:
+- SQL Server and Oracle have no read-only session, so there sqlvim is the only guard, and a stricter one:
   it reads every statement of a batch (T-SQL needs no semicolons) and blocks anything it does
   not know to be harmless — `EXEC` of any procedure but a few read-only system ones
-  (`sp_help`, `sp_helptext`, `sp_columns`, `sp_who` …), `IF` blocks, `DBCC` and the like. For a
+  (`sp_help`, `sp_helptext`, `sp_columns`, `sp_who` …), `IF` blocks, `DBCC`, PL/SQL blocks, `CALL`
+  and the like (`ALTER SESSION SET CURRENT_SCHEMA` / `NLS_…` are allowed). For a
   production server also use an account that can only read.
 - `env = "prod"` frames the tab area in red and shows `[PROD]` in the status bar; every
   write or DDL statement on a prod connection asks for `y` first.

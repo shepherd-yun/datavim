@@ -179,3 +179,25 @@ func TestEditConnFormKeepsHiddenSettings(t *testing.T) {
 		t.Fatalf("readonly %v, params %v", got.ReadOnly, got.Params)
 	}
 }
+
+func TestConnFormOracleServiceLabel(t *testing.T) {
+	f := NewConnForm(keymap.Default())
+	o, msg := send(t, f, "o", "tab", "left", "tab") // driver: mysql -> oracle (last)
+	if o == nil || msg != nil {
+		t.Fatal("form closed")
+	}
+	v := ansi.Strip(f.View(80, 30))
+	if !strings.Contains(v, "Service") || strings.Contains(v, "Database") || !strings.Contains(v, "FREEPDB1") {
+		t.Fatalf("oracle form:\n%s", v)
+	}
+	if strings.Contains(v, "Encrypt") {
+		t.Fatalf("SQL Server fields on oracle:\n%s", v)
+	}
+	_, msg = send(t, f, "ctrl+s")
+	if c := msg.(ConnFormMsg).Conn; c.Driver != "oracle" || c.Port != 1521 {
+		t.Fatalf("conn = %+v", c)
+	}
+	if v := ansi.Strip(NewConnForm(keymap.Default()).View(80, 30)); !strings.Contains(v, "Database") || strings.Contains(v, "FREEPDB1") {
+		t.Fatalf("mysql form:\n%s", v)
+	}
+}

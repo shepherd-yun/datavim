@@ -237,11 +237,20 @@ func (m *Model) reloadTables(conn string, ns db.Namespace, selectName string) te
 
 // tablePath is the tree path of a table below its connection.
 func tablePath(ns db.Namespace, name string) []string {
-	path := []string{ns.Database}
+	return append(nsPath(ns), name)
+}
+
+// nsPath is the tree path of a namespace: database, schema or both (Oracle
+// has no database level).
+func nsPath(ns db.Namespace) []string {
+	var path []string
+	if ns.Database != "" {
+		path = append(path, ns.Database)
+	}
 	if ns.Schema != "" {
 		path = append(path, ns.Schema)
 	}
-	return append(path, name)
+	return path
 }
 
 // renameEnteredMsg is the new name typed at the rename prompt.

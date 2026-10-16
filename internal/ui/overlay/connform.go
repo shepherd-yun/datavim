@@ -57,6 +57,10 @@ type ConnForm struct {
 	readOnly *bool
 }
 
+// oracleDefaultService is what an empty Service connects to (Oracle
+// Database Free's pluggable database).
+const oracleDefaultService = "FREEPDB1"
+
 // encryptChoices are go-mssqldb's encrypt values; default leaves it out.
 var encryptChoices = []string{"default", "true", "false", "disable"}
 
@@ -64,7 +68,7 @@ var encryptChoices = []string{"default", "true", "false", "disable"}
 func NewConnForm(keys *keymap.Keymap) *ConnForm {
 	return &ConnForm{keys: keys, fields: []formField{
 		ffName:     {label: "Name"},
-		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver"}},
+		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver", "oracle"}},
 		ffHost:     {label: "Host", input: newField("localhost")},
 		ffPort:     {label: "Port"},
 		ffUser:     {label: "User"},
@@ -236,8 +240,15 @@ func (f *ConnForm) View(width, _ int) string {
 			continue
 		}
 		var v string
-		label := fmt.Sprintf("%-14s", fd.label)
+		name := fd.label
+		oracleService := i == ffDatabase && f.value(ffDriver) == "oracle"
+		if oracleService {
+			name = "Service" // Oracle connects to a service; the field keeps the name
+		}
+		label := fmt.Sprintf("%-14s", name)
 		switch {
+		case oracleService && i != f.cur && fd.input.Len() == 0:
+			v = theme.Muted.Render(oracleDefaultService)
 		case fd.choices != nil:
 			v = "‹ " + fd.choices[fd.choice] + " ›"
 		case i == f.cur && fd.secret:

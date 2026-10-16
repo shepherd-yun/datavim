@@ -34,6 +34,7 @@ var sqlLexers = map[sqlx.Dialect]chroma.Lexer{
 	sqlx.MySQL:     lexer("mysql"),
 	sqlx.Postgres:  lexer("postgresql"),
 	sqlx.SQLServer: lexer("tsql"),
+	sqlx.Oracle:    lexer("sql"), // Chroma has no PL/SQL lexer
 }
 
 func lexer(name string) chroma.Lexer {

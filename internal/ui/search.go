@@ -353,7 +353,7 @@ func (m *Model) openHit(h meta.Hit, structure bool) tea.Cmd {
 	case meta.ItemDatabase:
 		return m.reveal(h.Conn, []string{h.NS.Database})
 	case meta.ItemSchema:
-		return m.reveal(h.Conn, []string{h.NS.Database, h.NS.Schema})
+		return m.reveal(h.Conn, nsPath(h.NS))
 	}
 	return nil
 }
@@ -407,12 +407,9 @@ func (m *Model) locate() tea.Cmd {
 		return nil
 	}
 	conn, ref := t.Target()
-	var path []string
-	if ref.Database != "" {
-		path = tablePath(ref.Namespace, ref.Name)
-		if ref.Name == "" {
-			path = path[:len(path)-1]
-		}
+	path := nsPath(ref.Namespace)
+	if ref.Name != "" && len(path) > 0 {
+		path = append(path, ref.Name)
 	}
 	return m.reveal(conn, path)
 }

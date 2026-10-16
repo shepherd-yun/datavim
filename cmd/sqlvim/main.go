@@ -15,6 +15,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db/mysql"
+	"github.com/shepherd-yun/sqlvim/internal/db/oracle"
 	"github.com/shepherd-yun/sqlvim/internal/db/postgres"
 	"github.com/shepherd-yun/sqlvim/internal/db/sqlserver"
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
@@ -170,7 +171,7 @@ func openStore(stateDir string) (*history.Store, error) {
 func newManager(cfg *config.Config, ws config.Workspace, tunnels session.Tunneler) *session.Manager {
 	dir := ws.ConfigDir
 	mgr := session.NewManager(cfg.Connections, secret.Keyring{Prefix: keychainPrefix(ws)},
-		mysql.Driver{}, postgres.Driver{}, sqlserver.Driver{})
+		mysql.Driver{}, postgres.Driver{}, sqlserver.Driver{}, oracle.Driver{})
 	mgr.Persist = func(c config.Connection) error {
 		_, err := config.AppendConnection(dir, c)
 		return err

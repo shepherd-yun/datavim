@@ -16,6 +16,12 @@ All notable changes to this project are documented here. The format follows
   guarded by sqlvim alone and more strictly: every statement of a batch is checked, and
   `EXEC` of anything but a few read-only system procedures is blocked. Modify Table, compare
   and import say "not supported for sqlserver yet".
+- Oracle support (12c and later, user name and password, service name, SSH tunnels; pure Go, no
+  Instant Client): schemas right under the connection, tables, views, functions, procedures and
+  packages, a console that splits PL/SQL blocks at a `/` line and keeps a transaction open after
+  `SET TRANSACTION` or `<Space>t`, data editing (tables without a key are matched by `ROWID`),
+  structure and DDL (`DBMS_METADATA`), export, rename, truncate and drop. Read-only Oracle
+  connections are guarded by sqlvim alone: PL/SQL blocks, `CALL` and `EXEC` are blocked.
 - Typing a space in the console opens what usually comes next, with nothing selected so that
   `Enter` still types a newline (`Tab` or `↓` picks): `*` and the columns after `SELECT`,
   `FROM` after the select list, `WHERE` / `JOIN` / `ORDER BY` … after a table, `ON` after a

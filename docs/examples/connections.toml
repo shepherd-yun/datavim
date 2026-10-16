@@ -46,3 +46,10 @@ user     = "reader"
 database = "crm"
 env      = "prod"          # SQL Server: read-only is enforced by sqlvim only
 params   = { encrypt = "disable" }   # older servers; or TrustServerCertificate = "true", tlsmin = "1.0"
+
+[[connection]]
+name     = "ora"
+driver   = "oracle"
+host     = "10.0.4.2"
+user     = "hr"
+database = "ORCLPDB1"      # the service name; FREEPDB1 when empty

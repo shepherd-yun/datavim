@@ -162,3 +162,18 @@ func TestHighlightTSQL(t *testing.T) {
 		}
 	}
 }
+
+func TestHighlightPLSQL(t *testing.T) {
+	src := "BEGIN UPDATE emp SET sal = 1 WHERE ename = 'x'; END; -- c"
+	spans := SQL(src, sqlx.Oracle)
+	for _, tc := range []struct {
+		text string
+		want Class
+	}{
+		{"BEGIN", Keyword}, {"UPDATE", Keyword}, {"'x'", String}, {"END", Keyword}, {"-- c", Comment},
+	} {
+		if got := classAt(spans, strings.Index(src, tc.text)); got != tc.want {
+			t.Errorf("%q is class %d, want %d", tc.text, got, tc.want)
+		}
+	}
+}

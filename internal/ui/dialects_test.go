@@ -119,3 +119,16 @@ func TestTablePartsBySchemas(t *testing.T) {
 		t.Errorf("mysql: %s", got)
 	}
 }
+
+func TestTreePathsWithoutDatabase(t *testing.T) {
+	ref := db.TableRef{Namespace: db.Namespace{Schema: "HR"}, Name: "EMP"}
+	if got := strings.Join(tablePath(ref.Namespace, ref.Name), "/"); got != "HR/EMP" {
+		t.Errorf("tablePath = %s", got)
+	}
+	if got := strings.Join(nsPath(ref.Namespace), "/"); got != "HR" {
+		t.Errorf("nsPath = %s", got)
+	}
+	if got := strings.Join(tablePath(db.Namespace{Database: "app"}, "t"), "/"); got != "app/t" {
+		t.Errorf("mysql tablePath = %s", got)
+	}
+}
