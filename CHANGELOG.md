@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Full screen: `+` (or `=`) makes the focused pane fill the screen, as in
+  lazygit, and `-` (or `_`) goes back. In a console only the editor or the
+  results is shown. Full screen follows the focus and stays on while you
+  switch tabs.
+
 ## [2.0.1] - 2026-10-17
 
 ### Fixed

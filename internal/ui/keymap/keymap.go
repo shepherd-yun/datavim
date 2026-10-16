@@ -45,6 +45,8 @@ const (
 	FocusLeft         Action = "focus.left"
 	FocusRight        Action = "focus.right"
 	ToggleTree        Action = "tree.toggle"
+	FullScreen        Action = "screen.full"
+	ExitFullScreen    Action = "screen.normal"
 	OpenStructure     Action = "structure.open"
 	OpenFullStructure Action = "structure.full"
 	CopyDDL           Action = "ddl.copy"

@@ -148,7 +148,9 @@ type consoleTab struct {
 	status    string
 	statusErr bool
 
-	width, height, editorH int
+	width, height, editorH, resultsH int
+	full                             bool // only the focused half is shown
+	fitOnResults                     bool // onResults when full screen was laid out
 }
 
 func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn string, ns db.Namespace, s config.Settings, tm timings) *consoleTab {
@@ -273,10 +275,50 @@ func (t *consoleTab) Find(q string, forward bool) bool {
 // that frame itself, split in two (see Framed), so it fills w+2 x h+2.
 func (t *consoleTab) SetSize(w, h int) {
 	t.width, t.height = max(w, 0), max(h, 0)
-	body := max(t.height-3, 0) // the extra frame border pair and the status line
-	t.editorH = min(max(body*2/5, 3), body)
+	t.fit()
+}
+
+// SetFull shows only the focused half, the editor or the results, or both.
+func (t *consoleTab) SetFull(full bool) {
+	if full != t.full || full && t.fitOnResults != t.onResults {
+		t.full = full
+		t.fit()
+	}
+}
+
+func (t *consoleTab) fit() {
+	t.editorH, t.resultsH = splitHeights(t.height, t.full, t.onResults)
+	t.fitOnResults = t.onResults
 	t.editor.SetSize(t.width, t.editorH)
-	t.grid.SetSize(t.width, body-t.editorH)
+	t.grid.SetSize(t.width, t.resultsH)
+}
+
+// splitHeights divides the height h inside a console's frame between the
+// editor and the results: the extra frame border pair and the status line
+// under the results take 3 rows. Full screen, the focused half takes all of
+// it but the status line; the hidden one keeps its size.
+func splitHeights(h int, full, onResults bool) (editorH, resultsH int) {
+	body := max(h-3, 0)
+	editorH = min(max(body*2/5, 3), body)
+	resultsH = body - editorH
+	switch {
+	case full && onResults:
+		resultsH = max(h-1, 0)
+	case full:
+		editorH = max(h-1, 0)
+	}
+	return editorH, resultsH
+}
+
+// framedFull draws the focused half of a full-screen console alone in a
+// frame, under the tab bar.
+func framedFull(title, label, body, status string, w, h int, focused, danger bool) string {
+	if title == "" {
+		title = label
+	} else if label != "" {
+		title += "  " + label
+	}
+	return theme.Frame(title, body+"\n"+status, w+2, h+2, focused, danger)
 }
 
 func (t *consoleTab) setStatus(s string, isErr bool) { t.status, t.statusErr = s, isErr }
@@ -1144,17 +1186,22 @@ func (t *consoleTab) Framed(title string, focused, danger bool) string {
 		return ""
 	}
 	onEditor, onResults := focused && !t.onResults, focused && t.onResults
-	resultsH := max(t.height-3, 0) - t.editorH
 	results := ""
 	if t.showMessages {
-		results = t.messagesView(resultsH)
+		results = t.messagesView(t.resultsH)
 	} else {
-		results = textutil.PadLines(t.grid.View(onResults), resultsH)
+		results = textutil.PadLines(t.grid.View(onResults), t.resultsH)
 	}
 	t.editor.SetFocused(onEditor)
+	switch {
+	case t.full && t.onResults:
+		return framedFull(title, t.resultsTitle(), results, t.statusLine(), t.width, t.height, onResults, danger)
+	case t.full:
+		return t.drawPopup(framedFull(title, "", t.editor.View(), t.statusLine(), t.width, t.height, onEditor, danger))
+	}
 	w := t.width + 2
 	top := theme.Frame(title, t.editor.View(), w, t.editorH+2, onEditor, danger)
-	bottom := theme.Frame(t.resultsTitle(), results+"\n"+t.statusLine(), w, resultsH+3, onResults, danger)
+	bottom := theme.Frame(t.resultsTitle(), results+"\n"+t.statusLine(), w, t.resultsH+3, onResults, danger)
 	return t.drawPopup(top + "\n" + bottom)
 }
 

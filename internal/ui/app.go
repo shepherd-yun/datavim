@@ -81,6 +81,8 @@ type Model struct {
 	width, height int
 	focus         focus
 	showTree      bool
+	full          bool  // + / -: the focused pane fills the screen
+	laidFocus     focus // the focus layout last sized the panes for
 	tree          *tree.Model
 	compareMark   *compareSide // the compare source marked with m
 
@@ -187,6 +189,7 @@ func (m *Model) View() tea.View {
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	_, cmd := m.update(msg)
+	m.syncFull()
 	if shown := m.syncShown(); shown != nil {
 		cmd = tea.Batch(cmd, shown)
 	}
@@ -550,6 +553,9 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		return m.jumpTab(vimedit.TabJump{By: -1})
 	case keymap.ToggleTree:
 		m.toggleTree()
+	case keymap.FullScreen, keymap.ExitFullScreen:
+		m.full = a == keymap.FullScreen
+		m.layout()
 	case keymap.YankCell, keymap.YankRow:
 		return m.yank(a)
 	case keymap.GlobalSearch:
@@ -1578,7 +1584,20 @@ func (m *Model) closeTabsOf(conn string) tea.Cmd {
 
 // ---- layout and rendering ----
 
+// treeWidth is the width the tree is drawn at: all of the screen when it
+// is full screen, none when the tabs are.
 func (m *Model) treeWidth() int {
+	switch {
+	case m.full && m.focus == focusTree:
+		return m.width
+	case m.full:
+		return 0
+	}
+	return m.sideWidth()
+}
+
+// sideWidth is the width of the tree beside the tabs.
+func (m *Model) sideWidth() int {
 	if !m.showTree {
 		return 0
 	}
@@ -1590,9 +1609,32 @@ func (m *Model) bodyHeight() int { return max(m.height-1, 0) }
 func (m *Model) layout() {
 	inner := max(m.bodyHeight()-2, 0)
 	m.tree.SetHeight(inner)
-	tabsWidth := max(m.width-m.treeWidth()-2, 0)
+	side := m.sideWidth() // behind the full-screen tree the tabs keep their size
+	if m.full && m.focus == focusTabs {
+		side = 0
+	}
+	tabsWidth := max(m.width-side-2, 0)
+	m.laidFocus = m.focus
 	for _, t := range m.tabs {
 		t.SetSize(tabsWidth, inner)
+	}
+}
+
+// fuller is a tab split in two panes (a console): full screen, it shows
+// only the focused one.
+type fuller interface {
+	SetFull(full bool)
+}
+
+// syncFull keeps the layout in step with full screen, which follows the
+// focus from the tree to the tabs and, in a console, from the editor to the
+// results.
+func (m *Model) syncFull() {
+	if m.full && m.focus != m.laidFocus {
+		m.layout()
+	}
+	if f, ok := m.activeTab().(fuller); ok {
+		f.SetFull(m.full)
 	}
 }
 
@@ -1675,6 +1717,9 @@ func (m *Model) renderStatus() string {
 	if ok && cfg.IsReadOnly() {
 		parts = append(parts, theme.Muted.Render("RO"))
 	}
+	if m.full {
+		parts = append(parts, theme.Accent.Render("FULL"))
+	}
 	if c, ok := m.activeTab().(txHolder); ok {
 		if tx := c.TxStatus(); tx != "" {
 			parts = append(parts, theme.Accent.Render(tx))
@@ -1694,8 +1739,13 @@ func (m *Model) renderStatus() string {
 		parts = append(parts, style.Render(textutil.Sanitize(m.status)))
 	}
 	left := strings.Join(parts, "  ")
+	fullHint := ""
+	if m.full {
+		fullHint = keyHint(m.keys, keymap.Global, keymap.ExitFullScreen, "leave full screen")
+	}
 	right := theme.Muted.Render(joinHints(
 		m.keys.Display([]string{m.keys.Leader()})+" leader",
+		fullHint,
 		keyHint(m.keys, keymap.Global, keymap.Help, "help"),
 		keyHint(m.keys, keymap.Global, keymap.CommandLine, "command"),
 	))

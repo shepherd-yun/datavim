@@ -139,7 +139,9 @@ type redisConsoleTab struct {
 	status     string
 	statusErr  bool
 
-	width, height, editorH int
+	width, height, editorH, resultsH int
+	full                             bool // only the focused half is shown
+	fitOnResults                     bool // onResults when full screen was laid out
 }
 
 func newRedisConsoleTab(id int, b Backend, st Store, conn string, n int, s config.Settings, tm timings) *redisConsoleTab {
@@ -207,11 +209,23 @@ func (t *redisConsoleTab) exportSource() exportSrc {
 // the tab draws its frames itself.
 func (t *redisConsoleTab) SetSize(w, h int) {
 	t.width, t.height = max(w, 0), max(h, 0)
-	body := max(t.height-3, 0)
-	t.editorH = min(max(body*2/5, 3), body)
+	t.fit()
+}
+
+// SetFull shows only the focused half, the editor or the results, or both.
+func (t *redisConsoleTab) SetFull(full bool) {
+	if full != t.full || full && t.fitOnResults != t.onResults {
+		t.full = full
+		t.fit()
+	}
+}
+
+func (t *redisConsoleTab) fit() {
+	t.editorH, t.resultsH = splitHeights(t.height, t.full, t.onResults)
+	t.fitOnResults = t.onResults
 	t.editor.SetSize(t.width, t.editorH)
-	t.grid.SetSize(t.width, body-t.editorH)
-	t.view.SetSize(t.width, body-t.editorH)
+	t.grid.SetSize(t.width, t.resultsH)
+	t.view.SetSize(t.width, t.resultsH)
 }
 
 func (t *redisConsoleTab) setStatus(s string, isErr bool) { t.status, t.statusErr = s, isErr }
@@ -821,7 +835,7 @@ func (t *redisConsoleTab) Framed(title string, focused, danger bool) string {
 		return ""
 	}
 	onEditor, onResults := focused && !t.onResults, focused && t.onResults
-	resultsH := max(t.height-3, 0) - t.editorH
+	resultsH := t.resultsH
 	var results string
 	switch {
 	case t.showMessages:
@@ -832,10 +846,18 @@ func (t *redisConsoleTab) Framed(title string, focused, danger bool) string {
 		results = textutil.PadLines(t.grid.View(onResults), resultsH)
 	}
 	t.editor.SetFocused(onEditor)
-	w := t.width + 2
-	top := theme.Frame(title, t.editor.View(), w, t.editorH+2, onEditor, danger)
-	bottom := theme.Frame(t.resultsTitle(), results+"\n"+t.statusLine(), w, resultsH+3, onResults, danger)
-	view := top + "\n" + bottom
+	var view string
+	switch {
+	case t.full && t.onResults:
+		return framedFull(title, t.resultsTitle(), results, t.statusLine(), t.width, t.height, onResults, danger)
+	case t.full:
+		view = framedFull(title, "", t.editor.View(), t.statusLine(), t.width, t.height, onEditor, danger)
+	default:
+		w := t.width + 2
+		top := theme.Frame(title, t.editor.View(), w, t.editorH+2, onEditor, danger)
+		bottom := theme.Frame(t.resultsTitle(), results+"\n"+t.statusLine(), w, resultsH+3, onResults, danger)
+		view = top + "\n" + bottom
+	}
 	if !t.CapturesInput() {
 		return view
 	}

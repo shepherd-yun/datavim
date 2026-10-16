@@ -251,6 +251,8 @@ picks the workspace by directory.
 | `<Space>s` | Columns popup: type to filter, `Enter` puts the data tab's cursor on the column (opening the tab if need be), `Ctrl-o` opens the full structure (indexes, foreign keys, DDL). In a console it lists the columns of the result and moves the results cursor |
 | `<Space>S` | Full structure of the table under the cursor, without the popup |
 | `<Space>e` | Toggle tree |
+| `+` / `=` | Full screen: the focused pane fills the screen (in a console, the editor or the results). It follows the focus and stays on while you switch tabs |
+| `-` / `_` | Leave full screen |
 | `<Space>l` | Locate the current tab in the tree: the table, or the database / schema of a console (also `:locate`) |
 | `<Space>r` | Refresh the tree node or tab and reload the connection's metadata |
 | `?` | Help for the focused pane |
