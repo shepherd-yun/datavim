@@ -218,3 +218,31 @@ func TestSearchHistoryInsertsTheStatement(t *testing.T) {
 		t.Fatalf("console = %#v", m.activeTab())
 	}
 }
+
+func TestSearchStartsFromTheVisualSelection(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "l", "j")
+	c := openLocalConsole(t, m)
+	c.editor.SetValue("select *\nfrom users\nwhere 1")
+	c.editor.SetCursor(1, 5)
+	press(t, m, "v", "e", "space", "space")
+	if _, ok := m.overlay.(*overlay.Search); !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	if s := screen(m); !strings.Contains(s, "> users") || !strings.Contains(s, "table    users") {
+		t.Fatalf("search starts with the selection:\n%s", s)
+	}
+	if c.editor.Visual() {
+		t.Fatal("the selection is dropped")
+	}
+	press(t, m, "esc")
+	c.editor.SetCursor(0, 0)
+	press(t, m, "V", "j", "space", "space") // lines: the whitespace is collapsed
+	if s := screen(m); !strings.Contains(s, "> select * from users") {
+		t.Fatalf("multi-line selection:\n%s", s)
+	}
+	press(t, m, "esc", "space", "space") // without a selection the search is empty
+	if s := screen(m); !strings.Contains(s, "> █") {
+		t.Fatalf("empty search:\n%s", s)
+	}
+}

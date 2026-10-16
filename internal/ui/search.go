@@ -67,8 +67,30 @@ func (m *Model) openSearch() tea.Cmd {
 	for _, c := range m.backend.Connections() {
 		cmds = append(cmds, m.ensureMeta(c.Name, ""))
 	}
-	m.overlay = overlay.NewSearch(m.keys, m.searchNote(), conn)
+	query := m.selectionQuery()
+	o := overlay.NewSearch(m.keys, m.searchNote(), conn)
+	m.overlay = o
+	if query != "" {
+		o.Paste(query)
+		cmds = append(cmds, m.runSearch(o.Requery()))
+	}
 	return tea.Batch(cmds...)
+}
+
+// selectionQuery takes the visual selection of the focused console as a
+// search query, on one line, and leaves VISUAL mode; "" without one.
+func (m *Model) selectionQuery() string {
+	c, ok := m.activeTab().(*consoleTab)
+	if !ok || m.focus != focusTabs || c.onResults {
+		return ""
+	}
+	from, to, ok := c.editor.Selection()
+	if !ok {
+		return ""
+	}
+	text := c.editor.Value()[from:to]
+	c.editor.Escape()
+	return strings.Join(strings.Fields(text), " ")
 }
 
 // searchNote explains missing results: metadata loading or failed, of the

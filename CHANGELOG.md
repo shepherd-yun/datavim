@@ -7,6 +7,8 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `<Space><Space>` in the console's VISUAL mode starts the search with the selected text
+  (on one line).
 - `<Space>s` in a console lists the columns of the result on screen, filtered by typing like a
   table's; `Enter` moves the results cursor to the column. When the result comes from one
   table the popup shows its key, types, NULLs, defaults and comments, and `Ctrl-o` opens its
