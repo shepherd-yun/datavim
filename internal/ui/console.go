@@ -307,7 +307,11 @@ func (t *consoleTab) Input(msg tea.Msg) tea.Cmd {
 		t.popup = nil // the cursor moved, or esc left INSERT mode
 		return cmd
 	}
-	t.suggest(false)
+	if k, ok := msg.(tea.KeyPressMsg); ok && k.String() == "space" {
+		t.suggestNext()
+	} else {
+		t.suggest(false)
+	}
 	return tea.Batch(cmd, t.scheduleDraft())
 }
 

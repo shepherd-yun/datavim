@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Typing a space in the console opens what usually comes next, with nothing selected so that
+  `Enter` still types a newline (`Tab` or `↓` picks): `*` and the columns after `SELECT`,
+  `FROM` after the select list, `WHERE` / `JOIN` / `ORDER BY` … after a table, `ON` after a
+  joined table, operators after a column in a condition and `AND` / `OR` after it. While a
+  word is typed the words that fit there come before other keywords (`from users or` offers
+  `ORDER BY`, not `OR`).
 - `<Space><Space>` in the console's VISUAL mode starts the search with the selected text
   (on one line).
 - `<Space>s` in a console lists the columns of the result on screen, filtered by typing like a

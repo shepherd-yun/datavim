@@ -82,7 +82,20 @@ type Model struct {
 // New opens a popup on items with the first one selected.
 func New(items []Candidate) *Model { return &Model{items: items} }
 
+// NewUnselected opens a popup on items with none selected: until Next or
+// Prev picks one there is nothing to accept.
+func NewUnselected(items []Candidate) *Model { return &Model{items: items, sel: -1} }
+
 func (m *Model) Len() int { return len(m.items) }
+
+// Labels lists the candidates as shown.
+func (m *Model) Labels() []string {
+	out := make([]string, len(m.items))
+	for i, c := range m.items {
+		out[i] = c.Label
+	}
+	return out
+}
 
 // Next selects the next candidate, wrapping around.
 func (m *Model) Next() {

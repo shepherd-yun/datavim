@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -164,5 +165,74 @@ func TestConsoleEditorIsHighlighted(t *testing.T) {
 	c.editor.SetValue("SELECT 1")
 	if v := c.View(true); !strings.Contains(v, theme.Syntax(highlight.Keyword).Render("SELECT")) {
 		t.Fatalf("view: %q", v)
+	}
+}
+
+func TestConsoleSuggestsAfterSpace(t *testing.T) {
+	for _, tc := range []struct {
+		typed string
+		want  []string
+	}{
+		{"select ", []string{"*", "distinct"}},
+		{"SELECT ", []string{"*", "DISTINCT"}},
+		{"select * ", []string{"from"}},
+		{"select * from ", []string{"active", "order", "users", "app"}},
+		{"select * from users ", []string{"where", "join", "left join", "inner join", "group by", "order by", "limit", "as"}},
+		{"select * from users where ", []string{"id", "name", "email"}},
+		{"select  from users", nil}, // the space was not typed last
+		{"select * from users where id ", []string{"=", "<>", "in", "like", "is null", "is not null", "between"}},
+		{"select * from users where id = ", nil},
+	} {
+		c := insertConsole(t)
+		typeIn(t, c, tc.typed)
+		var got []string
+		if c.popup != nil {
+			got = c.popup.Labels()
+			if _, ok := c.popup.Selected(); ok {
+				t.Errorf("%q: the popup opened by a space selects nothing", tc.typed)
+			}
+		}
+		if !slices.Equal(got, tc.want) {
+			t.Errorf("%q: popup %q, want %q", tc.typed, got, tc.want)
+		}
+	}
+}
+
+func TestConsoleSpacePopupKeys(t *testing.T) {
+	c := insertConsole(t)
+	typeIn(t, c, "select * ", "enter")
+	if c.popup != nil || c.editor.Value() != "select * \n" {
+		t.Fatalf("enter with nothing selected types a newline: %q", c.editor.Value())
+	}
+
+	c = insertConsole(t)
+	typeIn(t, c, "select * ", "tab", "enter", " ", "down", "down", "enter")
+	if c.editor.Value() != "select * from `order`" {
+		t.Fatalf("tab / down select, enter accepts: %q", c.editor.Value())
+	}
+
+	c = insertConsole(t)
+	typeIn(t, c, "select * from users ", "or", "enter")
+	if c.editor.Value() != "select * from users order by" {
+		t.Fatalf("typing narrows the popup to the words that fit first: %q", c.editor.Value())
+	}
+
+	c = insertConsole(t)
+	typeIn(t, c, "select ", "ctrl+y")
+	if c.popup != nil || c.editor.Value() != "select " {
+		t.Fatalf("ctrl+y with nothing selected closes the popup: %q", c.editor.Value())
+	}
+}
+
+func TestConsoleFittingWordsKeepNames(t *testing.T) {
+	c := insertConsole(t)
+	typeIn(t, c, "select * from users where id = 1 and e")
+	if c.popup == nil || !slices.Contains(c.popup.Labels(), "email") {
+		t.Fatalf("columns are still offered: %v", c.popup)
+	}
+	c = insertConsole(t)
+	typeIn(t, c, "select * from users wh")
+	if c.popup == nil || c.popup.Chosen().Label != "where" || slices.Contains(c.popup.Labels(), "when") {
+		t.Fatalf("only the words that fit: %v", c.popup.Labels())
 	}
 }

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -51,6 +52,10 @@ func (t *consoleTab) popupKey(key string) (cmd tea.Cmd, used bool) {
 	case "up", "ctrl+p", "ctrl+k", "shift+tab":
 		t.popup.Prev()
 	case "enter", "ctrl+y":
+		if _, ok := t.popup.Selected(); !ok { // a popup opened by a space
+			t.popup = nil
+			return nil, key == "ctrl+y" // enter types its newline
+		}
 		return t.acceptCompletion(), true
 	case "esc": // closes the popup; a second esc leaves INSERT mode
 		t.popup = nil
@@ -80,16 +85,65 @@ func (t *consoleTab) suggest(force bool) {
 }
 
 func (t *consoleTab) candidates(c sqlx.Completion) []complete.Candidate {
+	// The words that usually come next replace the keywords once the
+	// prefix starts one of them: "from users or" is completed to ORDER BY,
+	// not OR.
+	var words []complete.Candidate
+	if c.Qualifier == "" && c.Prefix != "" {
+		nx := sqlx.Following(t.editor.Value(), c.Start, t.dialect)
+		words = wordCandidates(nx.Words, strings.ToUpper(c.Prefix) != c.Prefix)
+		if !slices.ContainsFunc(words, func(w complete.Candidate) bool {
+			return strings.HasPrefix(strings.ToLower(w.Label), strings.ToLower(c.Prefix))
+		}) {
+			words = nil
+		}
+	}
 	snap, _ := t.catalogs.Get(t.metaKey)
-	var out []complete.Candidate
+	out := words
 	switch c.Kind {
 	case sqlx.CompleteTable:
-		out = t.tableCandidates(snap, c.Qualifier)
+		out = append(out, t.tableCandidates(snap, c.Qualifier)...)
 	case sqlx.CompleteColumn:
-		out = t.columnCandidates(snap, c)
+		out = append(out, t.columnCandidates(snap, c)...)
 	}
-	if c.Qualifier == "" && c.Kind != sqlx.CompleteTable {
+	if c.Qualifier == "" && c.Kind != sqlx.CompleteTable && words == nil {
 		out = append(out, keywordCandidates(c.Prefix, t.dialect)...)
+	}
+	return out
+}
+
+// suggestNext opens the popup a typed space asks for: what usually comes
+// next in the statement, with nothing selected so that enter still types
+// a newline.
+func (t *consoleTab) suggestNext() {
+	t.popup = nil
+	src, off := t.editor.Value(), t.editor.Offset()
+	nx := sqlx.Following(src, off, t.dialect)
+	out := wordCandidates(nx.Words, nx.Lower)
+	if nx.Names {
+		snap, _ := t.catalogs.Get(t.metaKey)
+		switch c := sqlx.Complete(src, off, t.dialect); c.Kind {
+		case sqlx.CompleteTable:
+			out = append(out, t.tableCandidates(snap, "")...)
+		case sqlx.CompleteColumn:
+			out = append(out, t.columnCandidates(snap, c)...)
+		}
+	}
+	if len(out) == 0 {
+		return
+	}
+	t.popup, t.popStart = complete.NewUnselected(out[:min(len(out), maxCandidates)]), off
+}
+
+// wordCandidates offers the keywords (and operators) words, in lower case
+// when lower is set.
+func wordCandidates(words []string, lower bool) []complete.Candidate {
+	out := make([]complete.Candidate, len(words))
+	for i, w := range words {
+		if lower {
+			w = strings.ToLower(w)
+		}
+		out[i] = complete.Candidate{Text: w, Label: w, Kind: complete.Keyword}
 	}
 	return out
 }

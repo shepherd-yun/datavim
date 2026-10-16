@@ -170,7 +170,7 @@ picks the workspace by directory.
 | `x` / `]c` `[c` / `~` | Diff tab: include or skip a change in the script / next, previous change / swap source and target |
 | `<Space>w` | Diff tab: write the picked changes as a script into a new console on the target (nothing runs until you run it there) |
 | `D` / `F` | Diff tab: compare the rows of the tables by their key, or go back to the structure / in the data view, a WHERE both sides are read with |
-| `<Space>s` | Columns popup: type to filter, `Enter` puts the data tab's cursor on the column (opening the tab if need be), `Ctrl-o` opens the full structure (indexes, foreign keys, DDL) |
+| `<Space>s` | Columns popup: type to filter, `Enter` puts the data tab's cursor on the column (opening the tab if need be), `Ctrl-o` opens the full structure (indexes, foreign keys, DDL). In a console it lists the columns of the result and moves the results cursor |
 | `<Space>S` | Full structure of the table under the cursor, without the popup |
 | `<Space>e` | Toggle tree |
 | `<Space>l` | Locate the current tab in the tree: the table, or the database / schema of a console (also `:locate`) |
@@ -225,7 +225,8 @@ accent = "14"
 
 ## Console editor
 
-The console is a vim editor: NORMAL, INSERT, VISUAL (`v`) and V-LINE (`V`) modes;
+The console is a vim editor that opens in INSERT mode, ready to type (`Esc` for NORMAL
+mode, the leader and tab switching): NORMAL, INSERT, VISUAL (`v`) and V-LINE (`V`) modes;
 motions `h j k l w b e W B E 0 ^ $ gg G f F t T % { }` and `Ctrl-d` `Ctrl-u`; operators
 `d c y > <` with a motion, a text object (`iw aw i" a" i' a' i( a( i[ a[ i{ a{`) or doubled
 (`dd` `cc` `yy` `>>` `<<`); `x D C p P o O i a I A`; `u` / `Ctrl-r` undo and redo; `.`
@@ -233,7 +234,8 @@ repeats the last change; counts (`3dd`, `2dw`); registers `"a`–`"z`, and `"+` 
 system clipboard. A plain `y` (no register) also copies to the system clipboard, while `x`,
 `d` and `c` leave it alone; `"+p` pastes from it. In the editor the digits are counts, so `gt` / `gT` / `{n}gt` or `H` / `L`
 switch tabs. `Enter` in VISUAL mode runs the selected statements. `>` and `<` indent by four
-spaces; `Tab` in INSERT mode types four spaces.
+spaces; `Tab` in INSERT mode types four spaces, `Ctrl-a` / `Ctrl-e` move to the start / end
+of the line. `<Space><Space>` in VISUAL mode searches for the selected text.
 
 Not built in: macros, ex ranges, windows, `/` search — `<Space>v` opens the console in
 `$EDITOR` for those.
@@ -246,7 +248,11 @@ for PostgreSQL — and keeps it in memory. `<Space>r` reloads it; running DDL in
 reloads it automatically.
 
 In the console, completion pops up as you type: tables after `FROM`/`JOIN`/`UPDATE`/`INTO`,
-columns of the statement's tables (and of `alias.`), keywords elsewhere. Names that need
+columns of the statement's tables (and of `alias.`), keywords elsewhere. A space opens what
+usually comes next, with nothing selected (`Tab` or `↓` picks, `Enter` still types a newline):
+`*` and the columns after `SELECT`, `FROM` after the select list, `WHERE` / `JOIN` /
+`ORDER BY` … after a table, operators after a column in a condition, `AND` / `OR` after it.
+Typing narrows it, and the words that fit come before other keywords. Names that need
 quoting (`order`, `MixedCase` on PostgreSQL) are inserted quoted. When a statement fails
 with a syntax error, the cursor jumps to where the server says the error is.
 

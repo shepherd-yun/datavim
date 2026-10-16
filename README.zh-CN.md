@@ -159,7 +159,7 @@ sqlvim --list-workspaces
 | `x` / `]c` `[c` / `~` | Diff 标签页：变更纳入或不纳入脚本 / 下一处、上一处变更 / 交换源与目标 |
 | `<Space>w` | Diff 标签页：把勾选的变更写成脚本，放进目标连接的新 console（在那里运行才会执行） |
 | `D` / `F` | Diff 标签页：按键列对比两张表的数据，或回到结构 / 数据视图里设置两边共用的 WHERE |
-| `<Space>s` | 列弹窗：输入即过滤，`Enter` 让数据 tab 的光标跳到该列（必要时先打开 tab），`Ctrl-o` 打开完整结构（索引、外键、DDL） |
+| `<Space>s` | 列弹窗：输入即过滤，`Enter` 让数据 tab 的光标跳到该列（必要时先打开 tab），`Ctrl-o` 打开完整结构（索引、外键、DDL）。在控制台中列出结果的列，并移动结果光标 |
 | `<Space>S` | 直接打开光标所在表的完整结构，不经过列弹窗 |
 | `<Space>e` | 显示 / 隐藏树 |
 | `<Space>l` | 在树中定位当前 tab：表，或 console 所在的数据库 / schema（也可用 `:locate`） |
@@ -213,14 +213,16 @@ accent = "14"
 
 ## 控制台编辑器
 
-控制台是一个 vim 编辑器：NORMAL、INSERT、VISUAL（`v`）和 V-LINE（`V`）模式；
+控制台是一个 vim 编辑器，打开时处于 INSERT 模式，可以直接输入（`Esc` 进入 NORMAL 模式，使用 leader 键和切换 tab）：
+NORMAL、INSERT、VISUAL（`v`）和 V-LINE（`V`）模式；
 移动 `h j k l w b e W B E 0 ^ $ gg G f F t T % { }` 与 `Ctrl-d` `Ctrl-u`；操作符
 `d c y > <` 搭配移动、文本对象（`iw aw i" a" i' a' i( a( i[ a[ i{ a{`）或重复一次
 （`dd` `cc` `yy` `>>` `<<`）；`x D C p P o O i a I A`；`u` / `Ctrl-r` 撤销与重做；`.`
 重复上一次修改；计数（`3dd`、`2dw`）；寄存器 `"a`–`"z`，`"+` 为系统剪贴板。
 不带寄存器的 `y` 也会复制到系统剪贴板，`x`、`d`、`c` 则不会覆盖它；`"+p` 从系统剪贴板粘贴。编辑器里数字是计数，
 所以用 `gt` / `gT` / `{n}gt` 或 `H` / `L` 切换 tab。VISUAL 模式下 `Enter` 执行选中的语句。
-`>` 和 `<` 缩进四个空格；INSERT 模式下 `Tab` 输入四个空格。
+`>` 和 `<` 缩进四个空格；INSERT 模式下 `Tab` 输入四个空格，`Ctrl-a` / `Ctrl-e` 移到行首 / 行尾。
+VISUAL 模式下 `<Space><Space>` 用选中的文本搜索。
 
 不支持：宏、ex 范围、窗口、`/` 搜索——需要时用 `<Space>v` 在 `$EDITOR` 中打开控制台。
 
@@ -230,7 +232,9 @@ sqlvim 在你第一次使用某个连接时于后台读取其目录（表、视�
 PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新加载；在控制台执行 DDL 会自动重新加载。
 
 在控制台中，补全随输入弹出：`FROM`/`JOIN`/`UPDATE`/`INTO` 之后是表，语句中各表（及 `alias.`）的列，
-其他位置是关键字。需要引号的名字（`order`，PostgreSQL 上的 `MixedCase`）会带引号插入。
+其他位置是关键字。输入空格会弹出接下来常用的内容，默认不选中（`Tab` 或 `↓` 选择，`Enter` 仍然换行）：
+`SELECT` 之后是 `*` 和列，选择列表之后是 `FROM`，表之后是 `WHERE` / `JOIN` / `ORDER BY` 等，
+条件里的列之后是运算符，条件之后是 `AND` / `OR`。继续输入会缩小范围，合适的词排在其他关键字前面。需要引号的名字（`order`，PostgreSQL 上的 `MixedCase`）会带引号插入。
 语句因语法错误失败时，光标会跳到服务器报告的出错位置。
 
 ## 安全

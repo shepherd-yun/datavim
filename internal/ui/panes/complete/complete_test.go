@@ -97,3 +97,23 @@ func TestView(t *testing.T) {
 		t.Fatalf("the selection scrolls into view:\n%s", v)
 	}
 }
+
+func TestUnselected(t *testing.T) {
+	m := NewUnselected([]Candidate{{Label: "a"}, {Label: "b"}})
+	if _, ok := m.Selected(); ok {
+		t.Fatal("nothing is selected at first")
+	}
+	if got := m.Labels(); len(got) != 2 || got[0] != "a" || got[1] != "b" {
+		t.Fatalf("labels %q", got)
+	}
+	m.Next()
+	if c, _ := m.Selected(); c.Label != "a" {
+		t.Fatalf("Next selects the first: %q", c.Label)
+	}
+	m = NewUnselected([]Candidate{{Label: "a"}, {Label: "b"}})
+	m.Prev()
+	if c, _ := m.Selected(); c.Label != "b" {
+		t.Fatalf("Prev selects the last: %q", c.Label)
+	}
+	_ = NewUnselected([]Candidate{{Label: "a"}}).View(40, 10)
+}
