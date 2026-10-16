@@ -144,3 +144,25 @@ func TestUndoIsBounded(t *testing.T) {
 		t.Fatalf("undo steps = %d, want %d", n, maxUndo)
 	}
 }
+
+func TestTableAppend(t *testing.T) {
+	tb := New(cols(), [][]db.Value{
+		{{Text: "1"}, {Text: "a"}}, {{Text: "2"}, {Text: "b"}}, {{Text: "3"}, {Text: "c"}},
+	}, nil)
+	_ = tb.SetCell(0, 1, db.Value{Text: "z"})
+	tb.Append([][]db.Value{{{Text: "4"}, {Text: "d"}}, {{Text: "5"}, {Text: "e"}}}, nil)
+	if tb.Len() != 5 || tb.Changes() != 1 {
+		t.Fatalf("len = %d, changes = %d", tb.Len(), tb.Changes())
+	}
+	if r := tb.Row(3); r.State != Unchanged || r.Values[1].Text != "d" || r.Orig[1].Text != "d" {
+		t.Fatalf("appended row = %+v", r)
+	}
+	if at, ok := tb.Undo(); !ok || at != 0 || tb.Row(0).Values[1].Text != "a" {
+		t.Fatalf("undo = %d %v, row 0 = %+v", at, ok, tb.Row(0))
+	}
+	_ = tb.SetCell(4, 1, db.Value{Text: "q"})
+	tb.Reset()
+	if tb.Len() != 5 || tb.Changes() != 0 || tb.Row(4).Values[1].Text != "e" {
+		t.Fatalf("reset: len = %d, changes = %d, row 4 = %+v", tb.Len(), tb.Changes(), tb.Row(4))
+	}
+}

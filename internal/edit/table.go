@@ -83,6 +83,25 @@ func (t *Table) Reset() {
 	t.undo = nil
 }
 
+// Append adds rows read from the server after the current ones, keeping
+// staged changes and undo; ids, when not nil, holds each row's row id.
+func (t *Table) Append(rows [][]db.Value, ids []string) {
+	for i, vals := range rows {
+		r := &Row{Orig: vals, Values: slices.Clone(vals), Set: make([]bool, len(t.cols))}
+		if i < len(ids) {
+			r.ID = ids[i]
+		}
+		if t.ids != nil || ids != nil {
+			for len(t.ids) < len(t.orig) {
+				t.ids = append(t.ids, "")
+			}
+			t.ids = append(t.ids, r.ID)
+		}
+		t.orig = append(t.orig, vals)
+		t.rows = append(t.rows, r)
+	}
+}
+
 func (t *Table) Columns() []db.ColumnInfo { return t.cols }
 func (t *Table) Len() int                 { return len(t.rows) }
 func (t *Table) Row(i int) *Row           { return t.rows[i] }
