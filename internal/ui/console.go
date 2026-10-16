@@ -41,9 +41,11 @@ const (
 type timings struct {
 	tick  time.Duration // spinner refresh while a query runs
 	draft time.Duration // idle time before a draft is saved
+	// server is the Redis server tab's sampling interval.
+	server time.Duration
 }
 
-var defaultTimings = timings{tick: 100 * time.Millisecond, draft: time.Second}
+var defaultTimings = timings{tick: 100 * time.Millisecond, draft: time.Second, server: statusInterval}
 
 var spinner = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 

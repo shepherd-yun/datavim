@@ -27,6 +27,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(LeaderToken, "f"), Recent, "Recent tabs and files"},
 		{Global, keys(LeaderToken, "l"), Locate, "Locate the current tab in the tree"},
 		{Global, keys(LeaderToken, "k"), OpenKey, "Open a Redis key by name"},
+		{Global, keys(LeaderToken, "i"), ServerInfo, "Redis server: status, slow log, clients"},
 	}
 	for _, c := range []struct{ key, format, desc string }{
 		{"t", "tsv", "Copy as TSV"},
@@ -176,6 +177,12 @@ func DefaultBindings() []Binding {
 		Binding{RedisResults, keys("g", "d"), OpenCellKey, "Open the Redis key in this cell"},
 		Binding{RedisResults, keys("ctrl+k"), FocusEditor, "Focus editor"},
 		Binding{RedisResults, keys("ctrl+j"), FocusEditor, "Focus editor (wraps)"},
+	)
+
+	b = append(b, gridBindings(RedisServer)...)
+	b = append(b,
+		Binding{RedisServer, keys("["), PrevSection, "Previous section"},
+		Binding{RedisServer, keys("]"), NextSection, "Next section"},
 	)
 
 	b = append(b, vertical(Import)...)

@@ -24,6 +24,8 @@ const (
 	RedisKey  Context = "redis_key"
 	// RedisResults is the result pane of a redis console.
 	RedisResults Context = "redis_results"
+	// RedisServer is a redis connection's server tab (status, slow log, clients).
+	RedisServer Context = "redis_server"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
 	// only one-key bindings count there.
 	Popup Context = "popup"
@@ -113,6 +115,8 @@ const (
 	OpenKey           Action = "redis.openkey"
 	ValueFormat       Action = "redis.format"
 	OpenCellKey       Action = "redis.open_cell_key"
+	ServerInfo        Action = "redis.server"
+	KillClient        Action = "redis.killclient"
 	FilterEqual       Action = "filter.eq"
 	FilterNotEqual    Action = "filter.ne"
 	FilterContains    Action = "filter.contains"

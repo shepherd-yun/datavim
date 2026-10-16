@@ -32,6 +32,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 	case tree.KindRedisDB:
 		entries = []entry{
 			{keymap.OpenConsole, "Open console"},
+			{keymap.ServerInfo, "Server status"},
 			{keymap.NewKey, "New key"},
 			{keymap.FilterPrompt, "Filter keys"},
 			{keymap.Refresh, "Refresh"},
@@ -55,6 +56,9 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			{keymap.Password, "Enter password"},
 			{keymap.Refresh, "Refresh"},
 			{keymap.DeleteNode, "Delete connection"},
+		}
+		if isRedis(m.backend, n.Conn) {
+			entries = append(entries[:1], append([]entry{{keymap.ServerInfo, "Server status"}}, entries[1:]...)...)
 		}
 	case tree.KindDatabase, tree.KindSchema:
 		entries = []entry{

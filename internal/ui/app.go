@@ -102,6 +102,7 @@ type Model struct {
 	statusErr bool
 
 	timings     timings
+	shownTab    int // the ID of the tab syncShown last saw on screen; 0: none
 	lastSearch  string
 	searchConn  string // connection the global search is scoped to
 	searchKey   meta.Key
@@ -184,6 +185,14 @@ func (m *Model) View() tea.View {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	_, cmd := m.update(msg)
+	if shown := m.syncShown(); shown != nil {
+		cmd = tea.Batch(cmd, shown)
+	}
+	return m, cmd
+}
+
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if f, ok := msg.(connFailure); ok {
 		conn, err := f.failure()
 		defer m.noteConn(conn, err)
@@ -529,6 +538,13 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		m.overlay = overlay.NewConnForm(m.keys)
 	case keymap.OpenKey:
 		return m.openKeyPrompt()
+	case keymap.ServerInfo:
+		conn := m.contextConn()
+		if conn == "" || !isRedis(m.backend, conn) {
+			m.setStatus("select a Redis connection", true)
+			return nil
+		}
+		return m.openServer(conn)
 	case keymap.Refresh:
 		var cmd tea.Cmd
 		if conn, ns := m.contextNamespace(); conn != "" {
@@ -781,6 +797,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 	case keyLoadedMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case keyAppliedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
+	case serverInfoMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	default:
 		return

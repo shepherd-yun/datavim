@@ -153,7 +153,7 @@ func menuDescs(m *Model) []string {
 
 func TestRedisNodeMenu(t *testing.T) {
 	m, _ := newKeyModel(t, "user:1", "solo")
-	if got := menuDescs(m); !slices.Equal(got, []string{"Open console", "New key", "Filter keys", "Refresh", "Delete keys…", "Copy name"}) {
+	if got := menuDescs(m); !slices.Equal(got, []string{"Open console", "Server status", "New key", "Filter keys", "Refresh", "Delete keys…", "Copy name"}) {
 		t.Fatalf("db: %q", got)
 	}
 	pressAll(t, m, "j")
@@ -170,7 +170,7 @@ func TestRedisNodeMenu(t *testing.T) {
 	}
 	pressAll(t, m, "esc")
 	pressAll(t, m, "g", "g")
-	if got := menuDescs(m); !slices.Contains(got, "Open console") || !slices.Contains(got, "Delete connection") {
+	if got := menuDescs(m); !slices.Contains(got, "Open console") || !slices.Contains(got, "Server status") || !slices.Contains(got, "Delete connection") {
 		t.Fatalf("connection: %q", got)
 	}
 }
