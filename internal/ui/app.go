@@ -214,6 +214,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.routineLoaded(msg)
 	case columnsLoadedMsg:
 		m.columnsLoaded(msg)
+	case resultColumnPickedMsg:
+		return m, m.resultColumnPicked(msg)
 	case columnPickedMsg:
 		return m, m.columnPicked(msg)
 	case ddlLoadedMsg:
@@ -953,6 +955,9 @@ func (m *Model) openStructure(conn string, ref db.TableRef) tea.Cmd {
 }
 
 func (m *Model) openColumnsFromContext() tea.Cmd {
+	if c, ok := m.activeTab().(*consoleTab); ok && m.focus == focusTabs {
+		return m.openResultColumns(c)
+	}
 	conn, ref, ok := m.contextTable()
 	if !ok {
 		return nil

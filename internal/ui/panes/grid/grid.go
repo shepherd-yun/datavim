@@ -369,6 +369,16 @@ func (m *Model) SelectColumn(name string) bool {
 	return true
 }
 
+// SelectColumnAt moves the cursor to column i and reports whether there is one.
+func (m *Model) SelectColumnAt(i int) bool {
+	if m.rs == nil || i < 0 || i >= len(m.rs.Columns) {
+		return false
+	}
+	m.col = i
+	m.scrollIntoView()
+	return true
+}
+
 // Find moves to the next cell (row-major, wrapping) whose text contains q,
 // ignoring case; backwards when forward is false. NULL cells never match.
 func (m *Model) Find(q string, forward bool) bool {

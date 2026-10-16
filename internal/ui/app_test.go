@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
@@ -489,11 +490,54 @@ func TestLateRunResultForClosedTabClosesSession(t *testing.T) {
 	}
 }
 
-func TestStructureFromConsoleNeedsATable(t *testing.T) {
+func TestColumnsFromConsoleNeedARunQuery(t *testing.T) {
 	m, _ := newTestModel(t)
 	press(t, m, "l", "j", "space", "c", "esc", "space", "s")
-	if !strings.Contains(screen(m), "select a table first") {
+	if !strings.Contains(screen(m), "run a query first") {
 		t.Fatalf("screen:\n%s", screen(m))
+	}
+}
+
+func TestColumnsPopupOnConsoleResult(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "l", "j")
+	c := openLocalConsole(t, m)
+	runInConsole(t, m, c, "select * from users")
+	press(t, m, "space", "s")
+	if _, ok := m.overlay.(*overlay.Columns); !ok {
+		t.Fatalf("overlay = %T\n%s", m.overlay, screen(m))
+	}
+	if s := screen(m); !strings.Contains(s, "PK") || !strings.Contains(s, "2 columns") {
+		t.Fatalf("the result's table details are shown:\n%s", s)
+	}
+	press(t, m, "n", "a", "m", "e", "enter")
+	if col, _ := c.grid.Column(); !c.onResults || col.Name != "name" {
+		t.Fatalf("onResults %v, cursor on %q", c.onResults, col.Name)
+	}
+	press(t, m, "space", "s", "ctrl+o") // the table behind the result
+	if s := screen(m); !strings.Contains(s, "users:struct") {
+		t.Fatalf("structure tab:\n%s", s)
+	}
+}
+
+func TestColumnsPopupOnJoinedResult(t *testing.T) {
+	m, b := newTestModel(t)
+	b.conn.setData("pair", []db.ColumnInfo{{Name: "id", DatabaseType: "INT"}, {Name: "id", DatabaseType: "INT"}, {Name: "n", DatabaseType: "TEXT"}},
+		[]db.Value{{Text: "1"}, {Text: "2"}, {Text: "x"}})
+	press(t, m, "l", "j")
+	c := openLocalConsole(t, m)
+	runInConsole(t, m, c, "select a.id, b.id, n FROM `app`.`pair` a join users b on 1=1")
+	press(t, m, "space", "s")
+	if s := screen(m); !strings.Contains(s, "3 columns") || !strings.Contains(s, "int") {
+		t.Fatalf("result columns:\n%s", s)
+	}
+	press(t, m, "down", "enter") // the second id
+	if _, col := c.grid.Position(); col != 1 || !c.onResults {
+		t.Fatalf("cursor on column %d, onResults %v", col, c.onResults)
+	}
+	press(t, m, "space", "s", "ctrl+o")
+	if len(m.tabs) != 1 || !strings.Contains(screen(m), "not come from one table") {
+		t.Fatalf("tabs %d:\n%s", len(m.tabs), screen(m))
 	}
 }
 

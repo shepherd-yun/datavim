@@ -109,3 +109,37 @@ func TestColumnsWithoutAStructureKey(t *testing.T) {
 		t.Fatalf("no hint for an unbound key (not even the global <space>S):\n%s", v)
 	}
 }
+
+func TestResultColumnsPickByIndex(t *testing.T) {
+	cols := []db.Column{
+		{Name: "id", Type: "bigint", PrimaryKey: true},
+		{Name: "id", Type: "int4"},
+		{Name: "total", Type: "numeric"},
+	}
+	type picked struct {
+		i         int
+		structure bool
+	}
+	c := NewResultColumns(keymap.Default(), "result", cols, []bool{true, false, false}, 1, func(i int, structure bool) tea.Msg {
+		return picked{i, structure}
+	})
+	v := ansi.Strip(c.View(100, 30))
+	if strings.Count(v, "NOT NULL") != 1 {
+		t.Fatalf("only the catalog column shows its nullability:\n%s", v)
+	}
+	if _, msg := send(t, c, "enter"); msg != (picked{i: 1}) {
+		t.Fatalf("starts on the current column: %v", msg)
+	}
+	c = NewResultColumns(keymap.Default(), "result", cols, nil, 0, func(i int, structure bool) tea.Msg {
+		return picked{i, structure}
+	})
+	if _, msg := send(t, c, "t", "o", "enter"); msg != (picked{i: 2}) {
+		t.Fatalf("filtered pick: %v", msg)
+	}
+	c = NewResultColumns(keymap.Default(), "result", cols, nil, 0, func(i int, structure bool) tea.Msg {
+		return picked{i, structure}
+	})
+	if _, msg := send(t, c, "z", "z", "ctrl+o"); msg != (picked{i: -1, structure: true}) {
+		t.Fatalf("no match: %v", msg)
+	}
+}

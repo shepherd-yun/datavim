@@ -26,34 +26,62 @@ type Columns struct {
 	matches []int
 	cur     int
 	offset  int
-	pick    func(name string, structure bool) tea.Msg
+	pick    func(i int, structure bool) tea.Msg // i is -1 when nothing matches
 }
 
 // NewColumns builds the popup with the cursor on the column called current,
 // if there is one.
 func NewColumns(keys *keymap.Keymap, title string, cols []db.Column, current string, pick func(name string, structure bool) tea.Msg) *Columns {
-	rows := make([][]string, len(cols))
-	for i, c := range cols {
-		key, null, def := "", "NOT NULL", ""
-		if c.PrimaryKey {
-			key = "PK"
+	c := newColumns(keys, title, cols, nil, func(i int, structure bool) tea.Msg {
+		if pick == nil {
+			return nil
 		}
-		if c.Nullable {
-			null = "NULL"
+		if i < 0 {
+			return pick("", structure)
 		}
-		if c.Default != nil {
-			def = *c.Default
-		}
-		rows[i] = []string{key, c.Name, c.Type, null, def, c.Comment}
-	}
-	lines := textutil.Table([]string{"", "Name", "Type", "Null", "Default", "Comment"}, rows)
-	c := &Columns{keys: keys, title: title, cols: cols, header: lines[:2], rows: lines[2 : 2+len(cols)], pick: pick}
-	c.refilter()
+		return pick(cols[i].Name, structure)
+	})
 	for i, col := range cols {
 		if col.Name == current {
 			c.cur = i
 		}
 	}
+	return c
+}
+
+// NewResultColumns builds the popup for the columns of a query result,
+// which may repeat a name: pick gets the index of the column. known tells
+// the columns read from the catalog from those only the result describes
+// (no nullability); nil means all are known.
+func NewResultColumns(keys *keymap.Keymap, title string, cols []db.Column, known []bool, current int, pick func(i int, structure bool) tea.Msg) *Columns {
+	c := newColumns(keys, title, cols, known, pick)
+	if current >= 0 && current < len(cols) {
+		c.cur = current
+	}
+	return c
+}
+
+func newColumns(keys *keymap.Keymap, title string, cols []db.Column, known []bool, pick func(i int, structure bool) tea.Msg) *Columns {
+	rows := make([][]string, len(cols))
+	for i, col := range cols {
+		key, null, def := "", "NOT NULL", ""
+		if col.PrimaryKey {
+			key = "PK"
+		}
+		if col.Nullable {
+			null = "NULL"
+		}
+		if known != nil && !known[i] {
+			null = ""
+		}
+		if col.Default != nil {
+			def = *col.Default
+		}
+		rows[i] = []string{key, col.Name, col.Type, null, def, col.Comment}
+	}
+	lines := textutil.Table([]string{"", "Name", "Type", "Null", "Default", "Comment"}, rows)
+	c := &Columns{keys: keys, title: title, cols: cols, header: lines[:2], rows: lines[2 : 2+len(cols)], pick: pick}
+	c.refilter()
 	return c
 }
 
@@ -68,11 +96,11 @@ func (c *Columns) refilter() {
 	c.cur, c.offset = 0, 0
 }
 
-func (c *Columns) selected() string {
+func (c *Columns) selected() int {
 	if len(c.matches) == 0 {
-		return ""
+		return -1
 	}
-	return c.cols[c.matches[c.cur]].Name
+	return c.matches[c.cur]
 }
 
 func (c *Columns) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {

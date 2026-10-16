@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -79,4 +80,82 @@ func (m *Model) columnPicked(msg columnPickedMsg) tea.Cmd {
 		t.focusColumn(msg.name)
 	}
 	return cmd
+}
+
+// resultColumnPickedMsg is a column picked in the columns popup of a
+// console's result: col is its index in the result, -1 for none.
+type resultColumnPickedMsg struct {
+	tabID     int
+	col       int
+	structure bool
+}
+
+// openResultColumns is <space>s in a console: the columns of the result on
+// screen, described by the catalog where the result comes from one table.
+func (m *Model) openResultColumns(c *consoleTab) tea.Cmd {
+	rs := c.grid.Result()
+	if rs == nil || len(rs.Columns) == 0 {
+		m.setStatus("run a query first", true)
+		return nil
+	}
+	cols, known := c.resultColumns(rs)
+	title := "result"
+	if c.res.ref.Name != "" {
+		title = c.res.ref.Name
+	}
+	current := -1
+	if c.onResults {
+		_, current = c.grid.Position()
+	}
+	id := c.id
+	m.overlay = overlay.NewResultColumns(m.keys, title, cols, known, current, func(i int, structure bool) tea.Msg {
+		return resultColumnPickedMsg{tabID: id, col: i, structure: structure}
+	})
+	return nil
+}
+
+// resultColumnPicked puts the console's results cursor on the column, or
+// opens the structure of the table behind the result.
+func (m *Model) resultColumnPicked(msg resultColumnPickedMsg) tea.Cmd {
+	c, ok := m.tabByID(msg.tabID).(*consoleTab)
+	if !ok {
+		return nil
+	}
+	if msg.structure {
+		if c.res.ref.Name == "" {
+			m.setStatus("the result does not come from one table: no structure to open", true)
+			return nil
+		}
+		return m.openStructure(c.conn, c.res.ref)
+	}
+	if msg.col >= 0 && c.grid.SelectColumnAt(msg.col) {
+		c.onResults = true
+	}
+	return nil
+}
+
+// resultColumns describes the columns of rs: a column of the table behind
+// the result as the catalog does (known), any other by its result type.
+func (t *consoleTab) resultColumns(rs *db.ResultSet) ([]db.Column, []bool) {
+	var table []db.Column
+	if tm, ok := t.metas[t.res.ref]; ok && t.res.ref.Name != "" {
+		table = tm.cols
+	}
+	cols := make([]db.Column, len(rs.Columns))
+	known := make([]bool, len(rs.Columns))
+	for i, rc := range rs.Columns {
+		name := rc.Name
+		if i < len(t.res.mapping) {
+			name = t.res.mapping[i]
+		}
+		cols[i] = db.Column{Name: rc.Name, Type: strings.ToLower(rc.DatabaseType)}
+		for _, tc := range table {
+			if strings.EqualFold(tc.Name, name) {
+				tc.Name = rc.Name
+				cols[i], known[i] = tc, true
+				break
+			}
+		}
+	}
+	return cols, known
 }
