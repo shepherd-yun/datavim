@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-10-17
+
 ### Fixed
 - An unreachable Redis server no longer garbles the screen: go-redis's own
   messages (such as `failed to dial after 5 attempts`) now go to the log file
@@ -404,7 +406,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/sqlvim/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/sqlvim/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/shepherd-yun/sqlvim/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/shepherd-yun/sqlvim/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/shepherd-yun/sqlvim/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/shepherd-yun/sqlvim/releases/tag/v1.0.0
