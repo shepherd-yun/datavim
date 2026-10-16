@@ -596,7 +596,7 @@ func (t *keyTab) headerLines() []string {
 		lines = append(lines, theme.Muted.Render("showing first 1 MB of "+strconv.FormatInt(t.info.Len, 10)))
 	}
 	if t.loaded && t.info.Exists && !t.isString() && t.grid.Result() == nil {
-		lines = append(lines, theme.Muted.Render(t.info.Type+" keys can be read in the console (coming in a later version)"))
+		lines = append(lines, theme.Muted.Render(t.info.Type+" keys can be read and changed in the console"))
 	}
 	return lines
 }

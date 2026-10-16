@@ -7,7 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- Redis connections (read-only browsing for now): `driver = "redis"`, port 6379, `database` is
+- Redis connections: `driver = "redis"`, port 6379, `database` is
   the db number (0 when empty), password optional (sqlvim connects without one and asks only
   when the server says `NOAUTH`), SSH tunnels, and `params` `tls` / `tls_skip_verify`. The tree
   lists the dbs with their key counts, and expanding a db scans its keys in batches with `SCAN`
@@ -42,6 +42,26 @@ All notable changes to this project are documented here. The format follows
   whole, so `MULTI` does not get around it, and `SELECT` inside `MULTI` is refused.
   `SUBSCRIBE`, `PSUBSCRIBE`, `SSUBSCRIBE`, `MONITOR`, `SYNC`, `PSYNC`, `CLIENT TRACKING`,
   `CLIENT REPLY`, `RESET`, `HELLO` and `QUIT` are not supported.
+- Redis key editing. The key tab stages changes like table data: `i` / `Enter` edits a cell,
+  `o` adds a row, `dd` deletes one, `u` / `U` undo, and `<Space>w` previews the checks and
+  commands, then submits. A string is edited in the cell editor, or in `$EDITOR` with
+  `<Space>v` (long values, values with newlines; JSON gets a `.json` file); a hash can change
+  values, add, delete and rename fields; a list can change and delete elements (deleting
+  removes exactly that position, even among equal values) and push at the `head` or `tail`; a
+  set and a sorted set can add, delete and rename members (and change scores); a stream can add
+  and delete entries. A submit `WATCH`es the key and first compares the values the changes
+  depend on with what was loaded: when anything differs, or the key is written meanwhile,
+  nothing is written (`key changed since loaded; refresh and retry`). A command failing inside
+  `EXEC` is reported (`command N of M failed: … · the others were applied`), as Redis does not
+  roll back. `t` sets or removes the TTL, `r` renames (`RENAMENX`; an existing target asks
+  before it is overwritten), `D` (or `dd` on a key in the tree) deletes with `UNLINK`, `o` in
+  the tree creates a key (pick the type, the name and the first values), and `dd` on a folder
+  or db deletes the keys matching its prefix or filter: counted first, previewed with the first
+  20 keys, unlinked 500 at a time, and stopped with `Ctrl-c`. The node menu (`a`) now works on
+  Redis nodes. Read-only connections refuse every edit; prod asks `y` for TTL, rename and new
+  keys and wants the connection name for deleting, the submit preview is titled `PROD · …`. A
+  string loaded only in part (over 1 MB) and binary values are not edited in place (use the
+  console); Redis has no NULL. On Redis 5, changing a string keeps its TTL.
 - SQL Server support (2014–2022, user name and password, SSH tunnels): browse databases,
   schemas, tables, views and routines, run T-SQL in the console (`GO` separates batches,
   `BEGIN TRAN` / `COMMIT` / `ROLLBACK` are tracked), filter, sort and edit table data (`N'…'`

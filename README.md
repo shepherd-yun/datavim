@@ -101,6 +101,21 @@ not restored after a reconnect, `SELECT` inside `MULTI` is refused, `:e` / `:w` 
 Redis console, and `SUBSCRIBE`, `MONITOR`, `HELLO`, `RESET`, `CLIENT TRACKING` and the like are
 not supported. Structure, compare and import are not available for Redis.
 
+Redis keys are edited in their tab the way table data is: `i` / `Enter` edits a cell (a string
+value: the cell editor, or `$EDITOR` for long values and values with newlines; `<Space>v` always
+opens `$EDITOR`), `o` adds a field, element (`head` or `tail` in the index column says where it
+goes), member or stream entry, `dd` deletes one, `u` / `U` undo, and `<Space>w` shows the checks
+and commands before it submits. sqlvim `WATCH`es the key and checks that every value the
+changes rely on (a field's value, the element at an index, a member's score) is still what was
+loaded; if not, or if the key is written before `EXEC`, nothing is written. Redis does not roll
+back: when a command fails inside `EXEC`, the ones before and after it are still applied, and
+sqlvim says which one failed. Strings over 1 MB (only partly loaded) and binary values are not
+edited in place; use the console. On a key tab `t` sets or removes the TTL, `r` renames
+(`RENAMENX`, confirming before it overwrites an existing key) and `D` deletes (`UNLINK`); in the
+tree `r` / `dd` on a key do the same, `o` creates a key, and `dd` on a folder or db deletes the
+keys matching it (the prefix, or the db's filter): sqlvim counts them, lists the first 20 and
+deletes them 500 at a time; `Ctrl-c` stops it. Keys written while it runs may be missed.
+
 ## Editing table data
 
 Changes are staged: edited cells turn yellow, new rows green and rows marked for deletion red.
@@ -238,6 +253,9 @@ picks the workspace by directory.
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
 | `v` | Redis key tab: show a string as auto / text / JSON / hex |
+| `<Space>v` | Redis key tab: edit the value under the cursor in `$EDITOR` |
+| `t` / `r` / `D` | Redis key tab: set or remove the TTL / rename the key / delete it |
+| `o` | Tree, on a Redis db, folder or key: new key |
 | `g d` | Redis console results: open the key in the cell |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (`Ctrl-n` / `Ctrl-p` open the popup when closed) |
 | `Enter` / `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes the popup, a second `Esc` leaves insert mode) |
@@ -328,8 +346,9 @@ with a syntax error, the cursor jumps to where the server says the error is.
   (`FLUSHDB`, `FLUSHALL`, `CONFIG SET`, `CLIENT KILL`, `SHUTDOWN`, `DEBUG` …) ask on every
   connection and on prod want the connection name typed; `KEYS` is refused on a db of more than
   10,000 keys (use `SCAN` or the tree filter). Several lines are checked together before any
-  runs, so `MULTI` does not get around these rules. For a production instance also use an ACL
-  user that can only read (`+@read`).
+  runs, so `MULTI` does not get around these rules. Edits, TTL changes, renames and deletes from
+  the key tab and the tree go through the same checks. For a production instance also use an
+  ACL user that can only read (`+@read`).
 - `env = "prod"` frames the tab area in red and shows `[PROD]` in the status bar; every
   write or DDL statement on a prod connection asks for `y` first.
 - `UPDATE` / `DELETE` without `WHERE` asks you to type the table name before it runs.

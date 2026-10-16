@@ -82,7 +82,7 @@ func TestKeyTabCollections(t *testing.T) {
 		{fakeValue{typ: "set", set: []string{"x", "y"}}, []string{"member", "2 members"}},
 		{fakeValue{typ: "zset", zset: []rdb.ZMember{{Member: "m", Score: 1.5}}}, []string{"rank", "score", "1.5", "1 items"}},
 		{fakeValue{typ: "stream", stream: []rdb.StreamEntry{{ID: "1-0", Fields: [][2]string{{"a", "1"}, {"b", "2"}}}}}, []string{"1-0", "a=1 b=2"}},
-		{fakeValue{typ: "ReJSON-RL"}, []string{"ReJSON-RL keys can be read in the console"}},
+		{fakeValue{typ: "ReJSON-RL"}, []string{"ReJSON-RL keys can be read and changed in the console"}},
 	}
 	for _, c := range cases {
 		m, _ := openTestKey(t, "k", c.v)

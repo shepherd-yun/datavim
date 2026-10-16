@@ -83,6 +83,15 @@ Redis 控制台（在 Redis 连接、db 或 key 上按 `<Space>c`）一行一条
 等其他连接状态；`MULTI` 里不能 `SELECT`；Redis 控制台不支持 `:e` / `:w`；不支持 `SUBSCRIBE`、`MONITOR`、`HELLO`、
 `RESET`、`CLIENT TRACKING` 等命令。Redis 不支持结构、对比和导入。
 
+Redis key 在详情页里像表数据一样编辑：`i` / `Enter` 改单元格（String 的值用单元格编辑框，值很长或含换行时用 `$EDITOR`；
+`<Space>v` 总是打开 `$EDITOR`），`o` 加一个 field、元素（index 列写 `head` 或 `tail` 决定加在哪头）、成员或 Stream 条目，
+`dd` 删除一行，`u` / `U` 撤销，`<Space>w` 先显示要做的检查和命令再提交。sqlvim 会 `WATCH` 这个 key，并检查修改所依赖的值
+（field 的值、某个下标上的元素、成员的 score）是否仍和加载时一样；不一样，或者 `EXEC` 之前 key 被别人改了，就一条都不写。
+Redis 不会回滚：`EXEC` 里某条命令失败时，它前后的命令仍然生效，sqlvim 会指出是哪一条。超过 1 MB（只加载了一部分）的 String
+和二进制值不能在这里改，请用控制台。详情页上 `t` 设置或去掉 TTL，`r` 重命名（`RENAMENX`，目标已存在时先确认再覆盖），
+`D` 删除（`UNLINK`）；树上对 key 按 `r` / `dd` 效果一样，`o` 新建 key，在文件夹或 db 上按 `dd` 删除匹配的 key（文件夹的前缀，
+或 db 的过滤条件）：sqlvim 先数出数量、列出前 20 个，再每批 500 个删除，`Ctrl-c` 可以停止。删除过程中新写入的 key 可能删不到。
+
 ## 编辑表数据
 
 改动会先暂存：改过的单元格变黄，新增行变绿，标记删除的行变红。
@@ -200,6 +209,9 @@ sqlvim --list-workspaces
 | `F` / `fx` | 树里 Redis 的 db、文件夹或 key 上：按模式过滤 key / 清除过滤 |
 | `<Space>k` | 按名字打开 Redis key |
 | `v` | Redis key 详情页：String 按 auto / text / JSON / hex 显示 |
+| `<Space>v` | Redis key 详情页：用 `$EDITOR` 编辑光标处的值 |
+| `t` / `r` / `D` | Redis key 详情页：设置或去掉 TTL / 重命名 / 删除 key |
+| `o` | 树里 Redis 的 db、文件夹或 key 上：新建 key |
 | `g d` | Redis 控制台结果：打开单元格里的 key |
 | `<Space>r` | 刷新树节点或 tab，并重新加载该连接的元数据 |
 | `?` | 当前面板的帮助 |
@@ -288,7 +300,7 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
   认不出的命令（包括模块命令）。prod 上写命令和认不出的命令要按 `y` 确认；危险命令（`FLUSHDB`、`FLUSHALL`、`CONFIG SET`、
   `CLIENT KILL`、`SHUTDOWN`、`DEBUG` 等）在任何连接上都要确认，prod 上要输入连接名；db 里超过 10,000 个 key 时拒绝 `KEYS`
   （请用 `SCAN` 或树的过滤）。多行一起执行时先检查全部再执行，所以 `MULTI` 绕不过这些规则。
-  生产实例建议再配一个只读的 ACL 用户（`+@read`）。
+  在详情页和树上做的编辑、TTL、重命名和删除同样要过这些检查。生产实例建议再配一个只读的 ACL 用户（`+@read`）。
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，
