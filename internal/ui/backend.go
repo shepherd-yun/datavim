@@ -7,6 +7,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
+	"github.com/shepherd-yun/sqlvim/internal/rdb"
 )
 
 // Backend is what the UI needs from the session layer.
@@ -14,6 +15,9 @@ type Backend interface {
 	Connections() []config.Connection
 	Connection(name string) (config.Connection, bool)
 	Conn(ctx context.Context, name, database string) (db.Conn, error)
+	// Redis returns a client for db number n of a redis connection; n < 0
+	// is the configured default.
+	Redis(ctx context.Context, name string, n int) (rdb.Client, error)
 	SetPassword(name, password string, save bool) error
 	// Reset drops the open connections of name so the next Conn reconnects.
 	Reset(name string)

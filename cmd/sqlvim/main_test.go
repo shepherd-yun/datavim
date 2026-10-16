@@ -209,3 +209,10 @@ func TestNewManagerPersistsToWorkspace(t *testing.T) {
 		t.Fatalf("keychain personal/home = %q, %v", got, err)
 	}
 }
+
+func TestNewManagerOpensRedis(t *testing.T) {
+	mgr := newManager(&config.Config{}, config.Workspace{Name: config.DefaultWorkspace, ConfigDir: t.TempDir()}, nil)
+	if mgr.RedisOpen == nil {
+		t.Fatal("redis connections need an opener")
+	}
+}

@@ -401,6 +401,9 @@ type fakeBackend struct {
 	passphrases  []string
 	trusted      []string
 	others       map[string]*fakeConn // connections with their own fakeConn; the rest share conn
+	redis        *fakeRedis           // backs the redis connections addRedis added
+	redisOpens   []string
+	connCalls    int
 }
 
 func newFakeBackend() *fakeBackend {
@@ -454,6 +457,7 @@ func (f *fakeBackend) AddConnection(c config.Connection, _ string, _ bool) error
 func (f *fakeBackend) Conn(_ context.Context, name, _ string) (db.Conn, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	f.connCalls++
 	if f.lostConns > 0 {
 		f.lostConns--
 		return nil, fmt.Errorf("%w: connection reset by peer", db.ErrConnLost)

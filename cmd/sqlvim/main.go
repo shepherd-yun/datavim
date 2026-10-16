@@ -21,6 +21,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/secret"
+	"github.com/shepherd-yun/sqlvim/internal/rdb"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
@@ -182,6 +183,7 @@ func newManager(cfg *config.Config, ws config.Workspace, tunnels session.Tunnele
 	}
 	mgr.PersistRemove = func(name string) error { return config.RemoveConnection(dir, name) }
 	mgr.Tunnels = tunnels
+	mgr.RedisOpen = rdb.Open
 	return mgr
 }
 

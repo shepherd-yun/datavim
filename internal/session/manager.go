@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"sync"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
+	"github.com/shepherd-yun/sqlvim/internal/rdb"
 	"github.com/shepherd-yun/sqlvim/internal/secret"
 )
 
@@ -27,6 +29,9 @@ type Tunneler interface {
 	SetPassphrase(path, passphrase string)
 	TrustHost(e *tunnel.UnknownHostError) error
 }
+
+// RedisOpener opens a Redis client; rdb.Open implements it.
+type RedisOpener func(ctx context.Context, cfg rdb.Config) (rdb.Client, error)
 
 type connKey struct {
 	conn     string
@@ -46,11 +51,14 @@ type Manager struct {
 	PersistRemove func(name string) error
 	// Tunnels, if set, opens the SSH tunnels of connections with ssh set.
 	Tunnels Tunneler
+	// RedisOpen, if set, opens redis connections; nil makes them unavailable.
+	RedisOpen RedisOpener
 
 	mu        sync.Mutex
 	conns     []config.Connection
 	passwords map[string]string
 	open      map[connKey]db.Conn
+	redis     map[connKey]rdb.Client
 }
 
 // NewManager builds a Manager for the configured connections.
@@ -61,6 +69,7 @@ func NewManager(conns []config.Connection, secrets secret.Store, drivers ...db.D
 		secrets:   secrets,
 		passwords: map[string]string{},
 		open:      map[connKey]db.Conn{},
+		redis:     map[connKey]rdb.Client{},
 	}
 	for _, d := range drivers {
 		m.drivers[d.Name()] = d
@@ -94,7 +103,7 @@ func (m *Manager) AddConnection(c config.Connection, password string, save bool)
 	if err != nil {
 		return err
 	}
-	if _, ok := m.drivers[c.Driver]; !ok {
+	if !m.driverAvailable(c.Driver) {
 		return fmt.Errorf("connection %q: driver %q not available", c.Name, c.Driver)
 	}
 	if _, ok := m.Connection(c.Name); ok {
@@ -123,7 +132,7 @@ func (m *Manager) UpdateConnection(old string, c config.Connection, password str
 	if err != nil {
 		return err
 	}
-	if _, ok := m.drivers[c.Driver]; !ok {
+	if !m.driverAvailable(c.Driver) {
 		return fmt.Errorf("connection %q: driver %q not available", c.Name, c.Driver)
 	}
 	cur, ok := m.Connection(old)
@@ -237,6 +246,12 @@ func (m *Manager) resetLocked(name string) {
 			go func() { _ = c.Close() }()
 		}
 	}
+	for k, c := range m.redis {
+		if k.conn == name {
+			delete(m.redis, k)
+			go func() { _ = c.Close() }()
+		}
+	}
 }
 
 // Conn returns an open connection to database ("" means the configured default).
@@ -264,14 +279,9 @@ func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, err
 	if err != nil {
 		return nil, err
 	}
-	var dial db.DialFunc
-	if cfg.SSH != "" {
-		if m.Tunnels == nil {
-			return nil, fmt.Errorf("connection %q: ssh tunnels are not available", name)
-		}
-		if dial, err = m.Tunnels.Connect(ctx, cfg.SSH); err != nil {
-			return nil, fmt.Errorf("connect %s via ssh %s: %w", name, cfg.SSH, err)
-		}
+	dial, err := m.dial(ctx, cfg)
+	if err != nil {
+		return nil, err
 	}
 	c, err = drv.Open(ctx, db.ConnConfig{
 		Host: cfg.Host, Port: cfg.Port, User: cfg.User, Password: pw,
@@ -289,6 +299,81 @@ func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, err
 	}
 	m.open[key] = c
 	return c, nil
+}
+
+// Redis returns an open client for db number n (n < 0 means the configured
+// default). With no known password it connects without one and asks for a
+// password (ErrPasswordRequired) only when the server answers NOAUTH.
+func (m *Manager) Redis(ctx context.Context, name string, n int) (rdb.Client, error) {
+	cfg, ok := m.Connection(name)
+	if !ok {
+		return nil, fmt.Errorf("unknown connection %q", name)
+	}
+	if cfg.Driver != "redis" {
+		return nil, fmt.Errorf("connection %q is not a redis connection", name)
+	}
+	if m.RedisOpen == nil {
+		return nil, fmt.Errorf("connection %q: driver %q not available", name, cfg.Driver)
+	}
+	if n < 0 {
+		n = config.RedisDB(cfg)
+	}
+	key := connKey{conn: name, database: strconv.Itoa(n)}
+	m.mu.Lock()
+	c, ok := m.redis[key]
+	m.mu.Unlock()
+	if ok {
+		return c, nil
+	}
+
+	pw, err := m.password(name)
+	if errors.Is(err, ErrPasswordRequired) {
+		pw, err = "", nil // try without one; NOAUTH asks below
+	}
+	if err != nil {
+		return nil, err
+	}
+	dial, err := m.dial(ctx, cfg)
+	if err != nil {
+		return nil, err
+	}
+	c, err = m.RedisOpen(ctx, rdb.Config{
+		Host: cfg.Host, Port: cfg.Port, User: cfg.User, Password: pw, DB: n,
+		TLS: param(cfg, "tls"), TLSSkipVerify: param(cfg, "tls_skip_verify"), Dial: dial,
+	})
+	if errors.Is(err, rdb.ErrAuthRequired) {
+		return nil, ErrPasswordRequired
+	}
+	if err != nil {
+		return nil, fmt.Errorf("connect %s: %w", name, err)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if existing, ok := m.redis[key]; ok {
+		_ = c.Close() // lost a race with another opener
+		return existing, nil
+	}
+	m.redis[key] = c
+	return c, nil
+}
+
+// param reports whether params[key] is "true".
+func param(c config.Connection, key string) bool { return c.Params[key] == "true" }
+
+// dial opens the connection's SSH tunnel, or returns nil without ssh.
+func (m *Manager) dial(ctx context.Context, cfg config.Connection) (db.DialFunc, error) {
+	if cfg.SSH == "" {
+		return nil, nil
+	}
+	if m.Tunnels == nil {
+		return nil, fmt.Errorf("connection %q: ssh tunnels are not available", cfg.Name)
+	}
+	dial, err := m.Tunnels.Connect(ctx, cfg.SSH)
+	if err != nil {
+		return nil, fmt.Errorf("connect %s via ssh %s: %w", cfg.Name, cfg.SSH, err)
+	}
+	return dial, nil
 }
 
 // SetPassword remembers a password for this run and optionally saves it to
@@ -312,12 +397,27 @@ func (m *Manager) CloseAll() {
 		_ = c.Close()
 		delete(m.open, k)
 	}
+	for k, c := range m.redis {
+		_ = c.Close()
+		delete(m.redis, k)
+	}
+}
+
+func (m *Manager) driverAvailable(name string) bool {
+	if name == "redis" {
+		return m.RedisOpen != nil
+	}
+	_, ok := m.drivers[name]
+	return ok
 }
 
 func (m *Manager) lookup(name string) (config.Connection, db.Driver, error) {
 	c, ok := m.Connection(name)
 	if !ok {
 		return config.Connection{}, nil, fmt.Errorf("unknown connection %q", name)
+	}
+	if c.Driver == "redis" {
+		return c, nil, fmt.Errorf("connection %q is a redis connection", name)
 	}
 	drv, ok := m.drivers[c.Driver]
 	if !ok {
