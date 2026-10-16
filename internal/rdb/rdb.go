@@ -11,11 +11,13 @@ import (
 	"net"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 	"github.com/redis/go-redis/v9/maintnotifications"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
 )
 
 // Config is what Open needs.
@@ -69,6 +71,20 @@ type Client interface {
 	SetPage(ctx context.Context, key string, cursor uint64, match string, count int64) ([]string, uint64, error)
 	ZSetPage(ctx context.Context, key string, start, count int64) ([]ZMember, error)
 	StreamPage(ctx context.Context, key, after string, count int64) ([]StreamEntry, error)
+
+	// Apply runs p on a dedicated connection: WATCH p.Key, the checks (one
+	// pipeline), MULTI, p.Cmds, EXEC. A check that does not hold or fails,
+	// or an aborted EXEC, is *ChangedError and nothing is written. A
+	// command failing inside EXEC is *ExecError.
+	Apply(ctx context.Context, p redit.Plan) error
+	// Expire sets the TTL (ttl < 0: PERSIST); false when the key is gone.
+	Expire(ctx context.Context, key string, ttl time.Duration) (bool, error)
+	// Rename is RENAMENX, or RENAME when overwrite; false when to exists
+	// and !overwrite. A missing from is the server's error ("ERR no such key").
+	Rename(ctx context.Context, from, to string, overwrite bool) (bool, error)
+	Unlink(ctx context.Context, keys ...string) (int64, error)
+	// ScanKeys is one SCAN without the TYPE lookups.
+	ScanKeys(ctx context.Context, cursor uint64, match string, count int64) ([]string, uint64, error)
 
 	Close() error
 }

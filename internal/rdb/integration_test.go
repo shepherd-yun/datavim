@@ -20,6 +20,8 @@ import (
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/edit"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
 )
 
 var images = []string{"redis:7", "redis:5"}
@@ -554,4 +556,294 @@ func TestSessionAuthAndDial(t *testing.T) {
 	if calls.Load() == 0 {
 		t.Fatal("dialer not used")
 	}
+}
+
+func hashPlan(t *testing.T, key string, rows [][2]string, change func(tb *edit.Table)) redit.Plan {
+	t.Helper()
+	cols := []db.ColumnInfo{{Name: "field"}, {Name: "value"}}
+	var vals [][]db.Value
+	for _, r := range rows {
+		vals = append(vals, []db.Value{{Text: r[0]}, {Text: r[1]}})
+	}
+	tb := edit.New(cols, vals, nil)
+	change(tb)
+	p, err := redit.Build(tb, redit.Target{Key: key, Type: "hash"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return p
+}
+
+func TestApplyHash(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		r.HSet(ctx, "h", "a", "1", "b", "2")
+		c := open(t, s, Config{})
+		p := hashPlan(t, "h", [][2]string{{"a", "1"}, {"b", "2"}}, func(tb *edit.Table) {
+			_ = tb.SetCell(0, 1, db.Value{Text: "9"})
+			_ = tb.SetCell(1, 0, db.Value{Text: "bb"})
+		})
+		if err := c.Apply(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		got := r.HGetAll(ctx, "h").Val()
+		if len(got) != 2 || got["a"] != "9" || got["bb"] != "2" {
+			t.Fatalf("hash = %v", got)
+		}
+	})
+}
+
+func TestApplyConflict(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		r.RPush(ctx, "l", "x", "y")
+		c := open(t, s, Config{})
+		p := redit.Plan{Key: "l", Checks: []redit.Check{
+			{Args: []string{"LLEN", "l"}, Expect: redit.ExpectInt, Int: 2},
+			{Args: []string{"LINDEX", "l", "0"}, Expect: redit.ExpectValue, Value: "x", What: "element 0 changed"},
+		}, Cmds: [][]string{{"LSET", "l", "0", "z"}}}
+		r.LSet(ctx, "l", 0, "w")
+		err := c.Apply(ctx, p)
+		var ce *ChangedError
+		if !errors.As(err, &ce) || ce.What != "element 0 changed" {
+			t.Fatalf("err = %v", err)
+		}
+		if v := r.LIndex(ctx, "l", 0).Val(); v != "w" {
+			t.Fatalf("LINDEX 0 = %q", v)
+		}
+	})
+}
+
+func TestApplyCheckError(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		r.Set(ctx, "h", "now a string", 0)
+		c := open(t, s, Config{})
+		p := redit.Plan{Key: "h", Checks: []redit.Check{
+			{Args: []string{"HGET", "h", "a"}, Expect: redit.ExpectValue, Value: "1", What: `field "a" changed`},
+		}, Cmds: [][]string{{"HSET", "h", "a", "2"}}}
+		var ce *ChangedError
+		if err := c.Apply(ctx, p); !errors.As(err, &ce) {
+			t.Fatalf("a failing check (WRONGTYPE) is a change: %v", err)
+		}
+	})
+}
+
+func TestApplyWatchAbort(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		r.HSet(ctx, "h", "a", "1")
+		c := open(t, s, Config{})
+		p := hashPlan(t, "h", [][2]string{{"a", "1"}}, func(tb *edit.Table) { _ = tb.SetCell(0, 1, db.Value{Text: "9"}) })
+		applyHook = func() { r.HSet(ctx, "h", "a", "5") }
+		defer func() { applyHook = nil }()
+		var ce *ChangedError
+		if err := c.Apply(ctx, p); !errors.As(err, &ce) {
+			t.Fatalf("err = %v", err)
+		}
+		if v := r.HGet(ctx, "h", "a").Val(); v != "5" {
+			t.Fatalf("HGET a = %q", v)
+		}
+	})
+}
+
+func TestApplyListDeleteDuplicates(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		r.RPush(ctx, "l", "a", "a", "a")
+		c := open(t, s, Config{})
+		cols := []db.ColumnInfo{{Name: "index"}, {Name: "value"}}
+		tb := edit.New(cols, [][]db.Value{
+			{{Text: "0"}, {Text: "a"}}, {{Text: "1"}, {Text: "a"}}, {{Text: "2"}, {Text: "a"}},
+		}, nil)
+		tb.Delete(0)
+		tb.Delete(2)
+		p, err := redit.Build(tb, redit.Target{Key: "l", Type: "list", Len: 3, Tomb: fmt.Sprintf("sqlvim:deleted:%016x", time.Now().UnixNano())})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := c.Apply(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		if got := r.LRange(ctx, "l", 0, -1).Val(); len(got) != 1 || got[0] != "a" {
+			t.Fatalf("list = %q", got)
+		}
+	})
+}
+
+func TestApplyStringKeepsTTL(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		r.Set(ctx, "s", "v", 100*time.Second)
+		r.Set(ctx, "p", "v", 0)
+		c := open(t, s, Config{})
+		caps := redit.CapsFor(c.Version())
+		if err := c.Apply(ctx, redit.String("s", "v", "w", caps)); err != nil {
+			t.Fatal(err)
+		}
+		if v := r.Get(ctx, "s").Val(); v != "w" {
+			t.Fatalf("GET s = %q", v)
+		}
+		if ttl := r.TTL(ctx, "s").Val(); ttl < 90*time.Second || ttl > 100*time.Second {
+			t.Fatalf("TTL s = %v", ttl)
+		}
+		if err := c.Apply(ctx, redit.String("p", "v", "w", caps)); err != nil {
+			t.Fatal(err)
+		}
+		if ttl := r.TTL(ctx, "p").Val(); ttl != -1 {
+			t.Fatalf("TTL p = %v", ttl)
+		}
+	})
+}
+
+func TestApplyExecError(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		c := open(t, s, Config{})
+		err := c.Apply(ctx, redit.Plan{Key: "k", Cmds: [][]string{{"SET", "k", "v"}, {"HSET", "k", "f", "v"}}})
+		var ee *ExecError
+		if !errors.As(err, &ee) || ee.Index != 1 || ee.Total != 2 {
+			t.Fatalf("err = %v", err)
+		}
+		if v := r.Get(ctx, "k").Val(); v != "v" {
+			t.Fatalf("GET k = %q", v)
+		}
+	})
+}
+
+func TestApplyBinary(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		c := open(t, s, Config{})
+		const key, field = "b\xff k", "\x00f"
+		p := hashPlan(t, key, nil, func(tb *edit.Table) {
+			at := tb.InsertAfter(-1)
+			_ = tb.SetCell(at, 0, db.Value{Text: field})
+			_ = tb.SetCell(at, 1, db.Value{Text: "\xfe"})
+		})
+		if err := c.Apply(ctx, p); err != nil {
+			t.Fatal(err)
+		}
+		if v := r.HGet(ctx, key, field).Val(); v != "\xfe" {
+			t.Fatalf("HGET = %q", v)
+		}
+	})
+}
+
+func TestRename(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		c := open(t, s, Config{})
+		r.Set(ctx, "a", "1", 0)
+		if ok, err := c.Rename(ctx, "a", "b", false); err != nil || !ok {
+			t.Fatalf("rename = %v %v", ok, err)
+		}
+		r.Set(ctx, "a", "2", 0)
+		if ok, err := c.Rename(ctx, "a", "b", false); err != nil || ok {
+			t.Fatalf("rename onto an existing key = %v %v", ok, err)
+		}
+		if r.Get(ctx, "a").Val() != "2" || r.Get(ctx, "b").Val() != "1" {
+			t.Fatal("a refused rename changes nothing")
+		}
+		if ok, err := c.Rename(ctx, "a", "b", true); err != nil || !ok {
+			t.Fatalf("overwrite = %v %v", ok, err)
+		}
+		if r.Exists(ctx, "a").Val() != 0 || r.Get(ctx, "b").Val() != "2" {
+			t.Fatal("overwrite moves a onto b")
+		}
+		if _, err := c.Rename(ctx, "nope", "x", false); err == nil {
+			t.Fatal("renaming a missing key is an error")
+		}
+	})
+}
+
+func TestExpire(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		c := open(t, s, Config{})
+		r.Set(ctx, "k", "v", 0)
+		if ok, err := c.Expire(ctx, "k", 50*time.Second); err != nil || !ok {
+			t.Fatalf("expire = %v %v", ok, err)
+		}
+		if ttl := r.TTL(ctx, "k").Val(); ttl < 45*time.Second || ttl > 50*time.Second {
+			t.Fatalf("TTL = %v", ttl)
+		}
+		if ok, err := c.Expire(ctx, "k", -1); err != nil || !ok {
+			t.Fatalf("persist = %v %v", ok, err)
+		}
+		if ttl := r.TTL(ctx, "k").Val(); ttl != -1 {
+			t.Fatalf("TTL = %v", ttl)
+		}
+		if ok, err := c.Expire(ctx, "k", -1); err != nil || !ok {
+			t.Fatalf("persist without a TTL = %v %v", ok, err)
+		}
+		if ok, err := c.Expire(ctx, "gone", 5*time.Second); err != nil || ok {
+			t.Fatalf("expire a missing key = %v %v", ok, err)
+		}
+		if ok, err := c.Expire(ctx, "gone", -1); err != nil || ok {
+			t.Fatalf("persist a missing key = %v %v", ok, err)
+		}
+	})
+}
+
+func TestUnlinkScanKeys(t *testing.T) {
+	eachImage(t, func(t *testing.T, image string) {
+		ctx := context.Background()
+		s := start(t, image)
+		r := raw(t, s, 0, "")
+		c := open(t, s, Config{})
+		for i := range 30 {
+			r.Set(ctx, fmt.Sprintf("del:%d", i), "v", 0)
+		}
+		for i := range 5 {
+			r.Set(ctx, fmt.Sprintf("keep:%d", i), "v", 0)
+		}
+		seen := map[string]bool{}
+		var cursor uint64
+		for {
+			keys, next, err := c.ScanKeys(ctx, cursor, "del:*", 10)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, k := range keys {
+				seen[k] = true
+			}
+			if cursor = next; cursor == 0 {
+				break
+			}
+		}
+		var keys []string
+		for k := range seen {
+			keys = append(keys, k)
+		}
+		if n, err := c.Unlink(ctx, keys...); err != nil || n != 30 {
+			t.Fatalf("unlink = %d %v", n, err)
+		}
+		if n := r.DBSize(ctx).Val(); n != 5 {
+			t.Fatalf("DBSIZE = %d", n)
+		}
+		if n, err := c.Unlink(ctx); err != nil || n != 0 {
+			t.Fatalf("unlink nothing = %d %v", n, err)
+		}
+	})
 }

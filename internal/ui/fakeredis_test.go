@@ -14,6 +14,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
 	"github.com/shepherd-yun/sqlvim/internal/session"
 )
 
@@ -47,6 +48,10 @@ type fakeRedis struct {
 	getMax []int64
 	match  []string // HashPage / SetPage match arguments
 	block  chan struct{}
+
+	applied  []redit.Plan // every Apply, in order
+	applyErr error        // what Apply returns
+	unlinks  [][]string   // the keys of every Unlink
 }
 
 func newFakeRedis() *fakeRedis {
@@ -259,6 +264,69 @@ func (c *fakeRedisClient) StreamPage(_ context.Context, key, after string, count
 		i = slices.IndexFunc(v.stream, func(e rdb.StreamEntry) bool { return e.ID == after }) + 1
 	}
 	return v.stream[i:min(i+int(count), len(v.stream))], nil
+}
+
+func (c *fakeRedisClient) Apply(_ context.Context, p redit.Plan) error {
+	c.r.mu.Lock()
+	defer c.r.mu.Unlock()
+	c.r.applied = append(c.r.applied, p)
+	c.r.calls = append(c.r.calls, "Apply "+p.Key)
+	return c.r.applyErr
+}
+
+func (c *fakeRedisClient) Expire(_ context.Context, key string, ttl time.Duration) (bool, error) {
+	c.r.mu.Lock()
+	defer c.r.mu.Unlock()
+	c.r.calls = append(c.r.calls, fmt.Sprintf("Expire %s %v", key, ttl))
+	v, ok := c.r.dbs[c.db][key]
+	if !ok {
+		return false, nil
+	}
+	v.ttl = max(ttl, 0)
+	c.r.dbs[c.db][key] = v
+	return true, nil
+}
+
+func (c *fakeRedisClient) Rename(_ context.Context, from, to string, overwrite bool) (bool, error) {
+	c.r.mu.Lock()
+	defer c.r.mu.Unlock()
+	c.r.calls = append(c.r.calls, fmt.Sprintf("Rename %s %s %v", from, to, overwrite))
+	data := c.r.dbs[c.db]
+	v, ok := data[from]
+	if !ok {
+		return false, fmt.Errorf("ERR no such key")
+	}
+	if _, exists := data[to]; exists && !overwrite {
+		return false, nil
+	}
+	delete(data, from)
+	data[to] = v
+	delete(c.r.sorted, c.db)
+	return true, nil
+}
+
+func (c *fakeRedisClient) Unlink(_ context.Context, keys ...string) (int64, error) {
+	c.r.mu.Lock()
+	defer c.r.mu.Unlock()
+	c.r.unlinks = append(c.r.unlinks, slices.Clone(keys))
+	n := int64(0)
+	for _, k := range keys {
+		if _, ok := c.r.dbs[c.db][k]; ok {
+			delete(c.r.dbs[c.db], k)
+			n++
+		}
+	}
+	delete(c.r.sorted, c.db)
+	return n, nil
+}
+
+func (c *fakeRedisClient) ScanKeys(ctx context.Context, cursor uint64, match string, count int64) ([]string, uint64, error) {
+	page, err := c.Scan(ctx, cursor, match, count)
+	keys := make([]string, len(page.Keys))
+	for i, k := range page.Keys {
+		keys[i] = k.Key
+	}
+	return keys, page.Cursor, err
 }
 
 // addRedis adds a redis connection backed by f.redis (created on first use).
