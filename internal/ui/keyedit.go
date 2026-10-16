@@ -555,6 +555,21 @@ func (t *keyTab) handleEdit(a keymap.Action) (cmd tea.Cmd, ok bool) {
 			return nil, true
 		}
 		return nil, false
+	case keymap.SetTTL, keymap.RenameTable, keymap.DeleteNode:
+		if !t.loaded || !t.info.Exists {
+			t.setStatus(t.header(), true)
+			return nil, true
+		}
+		req := keyOpReq{conn: t.conn, db: t.db, key: t.key, typ: t.info.Type, ttl: t.info.TTL}
+		switch a {
+		case keymap.SetTTL:
+			req.op = keyOpTTL
+		case keymap.RenameTable:
+			req.op = keyOpRename
+		default:
+			req.op = keyOpDelete
+		}
+		return func() tea.Msg { return keyOpAskMsg{req: req} }, true
 	case keymap.EditCell:
 		if t.isString() {
 			return t.editString(false), true

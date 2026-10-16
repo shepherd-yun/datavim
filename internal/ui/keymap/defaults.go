@@ -65,8 +65,8 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("left"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("p"), Password, "Enter password"},
 		Binding{Tree, keys("e"), EditNode, "Edit connection / modify table"},
-		Binding{Tree, keys("d", "d"), DeleteNode, "Delete connection / drop table or view"},
-		Binding{Tree, keys("r"), RenameTable, "Rename table or view"},
+		Binding{Tree, keys("d", "d"), DeleteNode, "Delete connection / drop table or view / delete Redis keys"},
+		Binding{Tree, keys("r"), RenameTable, "Rename table, view or Redis key"},
 		Binding{Tree, keys("T"), TruncateTable, "Truncate table"},
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
 		Binding{Tree, keys("m"), MarkCompare, "Mark as the compare source"},
@@ -164,6 +164,9 @@ func DefaultBindings() []Binding {
 		Binding{RedisKey, keys("U"), UndoAllEdits, "Discard every change"},
 		Binding{RedisKey, keys(LeaderToken, "w"), SubmitEdits, "Submit changes (:w)"},
 		Binding{RedisKey, keys(LeaderToken, "v"), ExternalEdit, "Edit the value in $EDITOR"},
+		Binding{RedisKey, keys("t"), SetTTL, "Set or remove the TTL"},
+		Binding{RedisKey, keys("r"), RenameTable, "Rename the key"},
+		Binding{RedisKey, keys("D"), DeleteNode, "Delete the key"},
 	)
 
 	b = append(b, gridBindings(RedisResults)...)

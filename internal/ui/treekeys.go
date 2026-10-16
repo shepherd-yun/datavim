@@ -163,6 +163,10 @@ func (m *Model) deleteNode() tea.Cmd {
 	if n == nil {
 		return nil
 	}
+	if n.Kind == tree.KindRedisKey {
+		k, _ := redisKeyOf(n)
+		return m.askDeleteKey(k.conn, k.db, n.Key, n.KeyType)
+	}
 	if f, ok := leafFocus(n); ok {
 		tbl := n.Table()
 		if tbl.Kind == tree.KindView {

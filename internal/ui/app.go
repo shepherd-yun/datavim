@@ -206,6 +206,22 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.scanned(msg)
 	case redisKeyChangedMsg:
 		m.keyChanged(msg)
+	case keyOpAskMsg:
+		r := msg.req
+		switch r.op {
+		case keyOpTTL:
+			return m, m.askTTL(r.conn, r.db, r.key, r.ttl)
+		case keyOpRename:
+			return m, m.askRenameKey(r.conn, r.db, r.key, r.typ)
+		case keyOpDelete:
+			return m, m.askDeleteKey(r.conn, r.db, r.key, r.typ)
+		}
+	case keyOpInputMsg:
+		return m, m.keyOpInput(msg)
+	case keyOpRunMsg:
+		return m, m.runKeyOp(msg.req)
+	case keyOpMsg:
+		return m, m.keyOpDone(msg)
 	case redisFilterMsg:
 		return m, m.filterKeys(msg.key, msg.text)
 	case openKeyMsg:
@@ -597,6 +613,10 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 		}
 		m.setStatus("only tables can be truncated", true)
 	case keymap.RenameTable:
+		if n := t.Selected(); n != nil && n.Kind == tree.KindRedisKey {
+			k, _ := redisKeyOf(n)
+			return m.askRenameKey(k.conn, k.db, n.Key, n.KeyType)
+		}
 		if n := t.Selected(); n != nil && n.Table() != nil {
 			tbl := n.Table()
 			m.askRename(tableOp{kind: opRename, conn: tbl.Conn, ref: tbl.TableRef(), view: tbl.Kind == tree.KindView})
@@ -620,6 +640,9 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 // sqlOnlyTreeAction reports whether a on n is about tables (so refused on
 // redis); editing and deleting a connection node are not.
 func sqlOnlyTreeAction(a keymap.Action, n *tree.Node) bool {
+	if n != nil && n.Kind == tree.KindRedisKey && (a == keymap.RenameTable || a == keymap.DeleteNode) {
+		return false
+	}
 	switch a {
 	case keymap.ImportData, keymap.MarkCompare, keymap.Compare, keymap.NodeActions,
 		keymap.TruncateTable, keymap.RenameTable:
