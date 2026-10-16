@@ -22,6 +22,9 @@ type childrenLoadedMsg struct {
 // fields the UI goroutine may be writing.
 func loadChildren(b Backend, n *tree.Node) tea.Cmd {
 	kind, connName, ns, name := n.Kind, n.Conn, n.NS, n.Name
+	if kind == tree.KindConn && isRedis(b, connName) {
+		return loadRedisDBs(b, n)
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 		defer cancel()

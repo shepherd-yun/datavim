@@ -210,6 +210,18 @@ func (m *Model) Expand() bool {
 	return true
 }
 
+// SelectWhere selects the first visible node match accepts and reports
+// whether there was one.
+func (m *Model) SelectWhere(match func(*Node) bool) bool {
+	for _, r := range m.visible() {
+		if match(r.node) {
+			m.selected = r.node
+			return true
+		}
+	}
+	return false
+}
+
 // Collapse closes the selected node, or selects its parent if already closed.
 func (m *Model) Collapse() {
 	n := m.Selected()

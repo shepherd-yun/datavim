@@ -24,6 +24,9 @@ func (m *Model) expandNode() tea.Cmd {
 		t.ResetConn(n.Conn)
 	}
 	if t.Expand() {
+		if n.Kind == tree.KindRedisDB {
+			return m.startScan(n)
+		}
 		return loadChildren(m.backend, n)
 	}
 	return nil
@@ -38,11 +41,16 @@ func (m *Model) openNode() tea.Cmd {
 	switch n.Kind {
 	case tree.KindTable, tree.KindView:
 		return m.openData(n.Conn, n.TableRef())
-	case tree.KindGroup:
+	case tree.KindGroup, tree.KindKeyFolder:
 		if n.Expanded {
 			n.Expanded = false
 			return nil
 		}
+	case tree.KindRedisKey:
+		k, _ := redisKeyOf(n)
+		return m.openKey(k.conn, k.db, n.Key)
+	case tree.KindMore:
+		return m.loadMore(n)
 	case tree.KindColumn, tree.KindKey, tree.KindIndex:
 		f, _ := leafFocus(n)
 		tbl := n.Table()
@@ -68,7 +76,13 @@ func (m *Model) toggleNode() tea.Cmd {
 func (m *Model) refreshNode() tea.Cmd {
 	t := m.tree
 	n := t.Selected()
-	if n == nil || n.Loading {
+	if n == nil {
+		return nil
+	}
+	if _, ok := redisKeyOf(n); ok {
+		return m.refreshKeys(n)
+	}
+	if n.Loading {
 		return nil
 	}
 	if tbl := n.Table(); tbl != nil {

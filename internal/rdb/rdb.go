@@ -212,5 +212,5 @@ func wrap(ctx context.Context, err error) error {
 		}
 		return err
 	}
-	return fmt.Errorf("%w: %v", db.ErrConnLost, err)
+	return fmt.Errorf("%w: %w", db.ErrConnLost, err)
 }

@@ -31,8 +31,8 @@ type metaStaleMsg struct{ conn, database string }
 // database, an Oracle one the connection's service.
 func metaKeyFor(b Backend, conn, database string) (meta.Key, bool) {
 	cfg, ok := b.Connection(conn)
-	if !ok {
-		return meta.Key{}, false
+	if !ok || cfg.Driver == "redis" {
+		return meta.Key{}, false // redis keys have no catalog
 	}
 	f := sqlx.DialectOf(cfg.Driver).Features()
 	if !f.Databases || !f.Schemas {

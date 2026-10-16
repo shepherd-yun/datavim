@@ -109,6 +109,7 @@ type Model struct {
 	searchHits  []meta.Hit           // the catalog rows the search popup shows
 	searchPicks []func(bool) tea.Cmd // opens each row; the flag asks for the structure
 	revealing   *revealTarget
+	scans       map[redisDBKey]*keyScan // the key scans behind the redis db nodes
 }
 
 // connNode is the tree root of connection c.
@@ -144,6 +145,7 @@ func New(b Backend, st Store, settings config.Settings) *Model {
 		tree:          newTree(roots, settings),
 		whichKeyDelay: defaultWhichKeyDelay,
 		timings:       defaultTimings,
+		scans:         map[redisDBKey]*keyScan{},
 	}
 }
 
@@ -200,6 +202,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case childrenLoadedMsg:
 		return m, m.childrenLoaded(msg)
+	case redisScanMsg:
+		return m, m.scanned(msg)
 	case metaLoadedMsg:
 		return m, m.metaLoaded(msg)
 	case metaStaleMsg:
@@ -410,6 +414,9 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	case keymap.Quit:
 		return m.requestQuit(false)
 	case keymap.ToggleTx:
+		if m.refuseRedis(m.contextConn()) {
+			return nil
+		}
 		if c, ok := m.activeTab().(*consoleTab); ok {
 			return c.toggleTx()
 		}
@@ -418,11 +425,17 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		if c, ok := m.activeTab().(canceler); ok && m.focus == focusTabs {
 			return c.cancelRun()
 		}
+		if m.focus == focusTree && m.stopScans() {
+			return nil
+		}
 		m.setStatus("no query is running · :qa quits", false)
 	case keymap.OpenConsole:
 		conn, ns := m.contextNamespace()
 		if conn == "" {
 			m.setStatus("select a connection first", true)
+			return nil
+		}
+		if m.refuseRedis(conn) {
 			return nil
 		}
 		return m.openConsole(conn, ns)
@@ -477,11 +490,16 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 			return tea.Batch(cmd, t.Handle(a))
 		}
 		return cmd
-	case keymap.OpenStructure:
-		return m.openColumnsFromContext()
-	case keymap.OpenFullStructure:
-		return m.openFullStructure()
-	case keymap.CopyDDL:
+	case keymap.OpenStructure, keymap.OpenFullStructure, keymap.CopyDDL:
+		if m.refuseRedis(m.contextConn()) {
+			return nil
+		}
+		switch a {
+		case keymap.OpenStructure:
+			return m.openColumnsFromContext()
+		case keymap.OpenFullStructure:
+			return m.openFullStructure()
+		}
 		return m.copyDDL()
 	default:
 		if m.focus == focusTree {
@@ -496,6 +514,11 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 
 func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 	t := m.tree
+	if sqlOnlyTreeAction(a, t.Selected()) {
+		if n := t.Selected(); n != nil && m.refuseRedis(n.Conn) {
+			return nil
+		}
+	}
 	switch a {
 	case keymap.Down:
 		t.Move(1)
@@ -568,6 +591,19 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 	return nil
 }
 
+// sqlOnlyTreeAction reports whether a on n is about tables (so refused on
+// redis); editing and deleting a connection node are not.
+func sqlOnlyTreeAction(a keymap.Action, n *tree.Node) bool {
+	switch a {
+	case keymap.ImportData, keymap.MarkCompare, keymap.Compare, keymap.NodeActions,
+		keymap.TruncateTable, keymap.RenameTable:
+		return true
+	case keymap.EditNode, keymap.DeleteNode:
+		return n != nil && n.Kind != tree.KindConn
+	}
+	return false
+}
+
 // canChange reports whether conn may be edited or deleted: not while a
 // console on it holds an open transaction or a table on it has unsaved
 // changes.
@@ -602,6 +638,9 @@ func (m *Model) childrenLoaded(msg childrenLoadedMsg) tea.Cmd {
 		m.retryNode = msg.node
 		return nil
 	}
+	if msg.node.Kind == tree.KindConn && msg.err == nil {
+		m.dropScans(msg.node.Conn) // its db nodes are new
+	}
 	m.tree.SetChildren(msg.node, msg.children, msg.err)
 	if msg.err != nil {
 		m.setStatus(msg.err.Error(), true)
@@ -625,6 +664,9 @@ func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
 	if node == nil || node.Conn != msg.Conn {
 		m.tree.ResetConn(msg.Conn)
 		return retry
+	}
+	if node.Kind == tree.KindRedisDB {
+		return tea.Batch(retry, m.refreshKeys(node))
 	}
 	m.tree.StartLoad(node)
 	return tea.Batch(retry, loadChildren(m.backend, node))
