@@ -199,3 +199,83 @@ func TestBuildZSet(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestBuildListDelete(t *testing.T) {
+	tb := table([]string{"index", "value"}, []string{"0", "a"}, []string{"1", "a"}, []string{"2", "a"})
+	tb.Delete(0)
+	tb.Delete(2)
+	p, err := Build(tb, Target{Key: "k", Type: "list", Len: 3, Tomb: "T"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, "checks", checks(p), []checkWant{
+		{args: []string{"LLEN", "k"}, expect: ExpectInt, int: 3},
+		{args: []string{"LINDEX", "k", "0"}, expect: ExpectValue, value: "a"},
+		{args: []string{"LINDEX", "k", "2"}, expect: ExpectValue, value: "a"},
+	})
+	eq(t, "cmds", p.Cmds, [][]string{{"LSET", "k", "0", "T"}, {"LSET", "k", "2", "T"}, {"LREM", "k", "0", "T"}})
+	if p.N != 2 {
+		t.Fatalf("N = %d", p.N)
+	}
+	if _, err := Build(tb, Target{Key: "k", Type: "list", Len: 3}); err == nil {
+		t.Fatal("an empty Tomb is an error")
+	}
+}
+
+func TestBuildListPush(t *testing.T) {
+	tb := table([]string{"index", "value"}, []string{"0", "a"})
+	set(t, tb, 0, 1, "b")
+	insert(t, tb, "head", "x")
+	insert(t, tb, "head", "y")
+	insert(t, tb, "tail", "z\xff ")
+	p, err := Build(tb, Target{Key: bk, Type: "list", Len: 1, Tomb: "T"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, "cmds", p.Cmds, [][]string{{"LSET", bk, "0", "b"}, {"LPUSH", bk, "y", "x"}, {"RPUSH", bk, "z\xff "}})
+	if p.N != 4 {
+		t.Fatalf("N = %d", p.N)
+	}
+
+	tb = table([]string{"index", "value"}, []string{"0", "a"})
+	insert(t, tb, "tail", "z")
+	p, err = Build(tb, Target{Key: "k", Type: "list", Len: 1, Tomb: "T"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Checks) != 0 {
+		t.Fatalf("only pushes: no checks, got %+v", p.Checks)
+	}
+	insert(t, tb, "middle", "q")
+	if _, err := Build(tb, Target{Key: "k", Type: "list", Len: 1, Tomb: "T"}); err == nil || err.Error() != `new elements go to "head" or "tail"` {
+		t.Fatalf("err = %v", err)
+	}
+	tb = table([]string{"index", "value"}, []string{"0", "a"})
+	set(t, tb, 0, 0, "5")
+	if _, err := Build(tb, Target{Key: "k", Type: "list", Len: 1, Tomb: "T"}); err == nil || err.Error() != "the index column cannot be edited" {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestBuildStream(t *testing.T) {
+	tb := table([]string{"id", "fields"}, []string{"1-0", "a 1"}, []string{"2-0", "b 2"})
+	tb.Delete(0)
+	insert(t, tb, "*", `name "Al ice" age 3`)
+	p, err := Build(tb, Target{Key: "k", Type: "stream"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	eq(t, "checks", checks(p), []checkWant{{args: []string{"XRANGE", "k", "1-0", "1-0"}, expect: ExpectLen, int: 1}})
+	eq(t, "cmds", p.Cmds, [][]string{{"XDEL", "k", "1-0"}, {"XADD", "k", "*", "name", "Al ice", "age", "3"}})
+
+	tb = table([]string{"id", "fields"}, []string{"1-0", "a 1"})
+	insert(t, tb, "*", "name")
+	if _, err := Build(tb, Target{Key: "k", Type: "stream"}); err == nil || err.Error() != `fields need name value pairs, e.g. name "Alice" age 3` {
+		t.Fatalf("err = %v", err)
+	}
+	tb = table([]string{"id", "fields"}, []string{"1-0", "a 1"})
+	set(t, tb, 0, 1, "a 2")
+	if _, err := Build(tb, Target{Key: "k", Type: "stream"}); err == nil || err.Error() != "stream entries cannot be changed · delete one and add a new one" {
+		t.Fatalf("err = %v", err)
+	}
+}

@@ -31,6 +31,10 @@ func Build(t *edit.Table, tg Target) (Plan, error) {
 	switch tg.Type {
 	case "hash", "set", "zset":
 		err = buildMembers(t, tg, &p)
+	case "list":
+		err = buildList(t, tg, &p)
+	case "stream":
+		err = buildStream(t, tg, &p)
 	default:
 		return Plan{}, fmt.Errorf("%s keys cannot be changed here", tg.Type)
 	}
@@ -200,5 +204,106 @@ func nulls(r *edit.Row, skip int) error {
 			return ErrNull
 		}
 	}
+	return nil
+}
+
+// buildList plans a list: LSET changed elements and a placeholder over
+// deleted ones, LREM the placeholder, then push new elements.
+func buildList(t *edit.Table, tg Target, p *Plan) error {
+	if tg.Tomb == "" {
+		return errors.New("redit: a list plan needs a Tomb")
+	}
+	key := tg.Key
+	var sets [][]string
+	var heads, tails []string
+	deleted := false
+	for i := range t.Len() {
+		r := t.Row(i)
+		switch r.State {
+		case edit.Unchanged:
+			continue
+		case edit.Inserted:
+			if err := nulls(r, -1); err != nil {
+				return err
+			}
+			switch r.Values[0].Text {
+			case "head":
+				heads = append(heads, r.Values[1].Text)
+			case "tail":
+				tails = append(tails, r.Values[1].Text)
+			default:
+				return errors.New(`new elements go to "head" or "tail"`)
+			}
+			continue
+		case edit.Modified:
+			if r.Set[0] {
+				return errors.New("the index column cannot be edited")
+			}
+			if err := nulls(r, -1); err != nil {
+				return err
+			}
+		}
+		idx := r.Orig[0].Text
+		p.Checks = append(p.Checks, Check{
+			Args: []string{"LINDEX", key, idx}, Expect: ExpectValue, Value: r.Orig[1].Text,
+			What: "element " + idx + " changed",
+		})
+		val := r.Values[1].Text
+		if r.State == edit.Deleted {
+			val, deleted = tg.Tomb, true
+		}
+		sets = append(sets, []string{"LSET", key, idx, val})
+	}
+	if len(sets) > 0 {
+		p.Checks = slices.Insert(p.Checks, 0, Check{
+			Args: []string{"LLEN", key}, Expect: ExpectInt, Int: tg.Len, What: "its length changed",
+		})
+	}
+	p.Cmds = sets
+	if deleted {
+		p.Cmds = append(p.Cmds, []string{"LREM", key, "0", tg.Tomb})
+	}
+	if len(heads) > 0 {
+		slices.Reverse(heads)
+		p.Cmds = append(p.Cmds, append([]string{"LPUSH", key}, heads...))
+	}
+	if len(tails) > 0 {
+		p.Cmds = append(p.Cmds, append([]string{"RPUSH", key}, tails...))
+	}
+	return nil
+}
+
+var errPairs = errors.New(`fields need name value pairs, e.g. name "Alice" age 3`)
+
+// buildStream plans a stream: XDEL deleted entries, then XADD new ones.
+func buildStream(t *edit.Table, tg Target, p *Plan) error {
+	key := tg.Key
+	var adds [][]string
+	for i := range t.Len() {
+		r := t.Row(i)
+		switch r.State {
+		case edit.Modified:
+			return errors.New("stream entries cannot be changed · delete one and add a new one")
+		case edit.Deleted:
+			id := r.Orig[0].Text
+			p.Checks = append(p.Checks, Check{
+				Args: []string{"XRANGE", key, id, id}, Expect: ExpectLen, Int: 1, What: "entry " + id + " is gone",
+			})
+			p.Cmds = append(p.Cmds, []string{"XDEL", key, id})
+		case edit.Inserted:
+			if err := nulls(r, -1); err != nil {
+				return err
+			}
+			fields, err := rcmd.Split(r.Values[1].Text)
+			if err != nil {
+				return err
+			}
+			if len(fields) == 0 || len(fields)%2 != 0 {
+				return errPairs
+			}
+			adds = append(adds, append([]string{"XADD", key, r.Values[0].Text}, fields...))
+		}
+	}
+	p.Cmds = append(p.Cmds, adds...)
 	return nil
 }
