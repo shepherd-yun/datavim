@@ -53,3 +53,12 @@ driver   = "oracle"
 host     = "10.0.4.2"
 user     = "hr"
 database = "ORCLPDB1"      # the service name; FREEPDB1 when empty
+
+[[connection]]
+name     = "cache"
+driver   = "redis"
+host     = "127.0.0.1"
+port     = 6379
+database = "0"             # the default db number
+env      = "prod"
+params   = { separator = ":" }   # groups keys into folders; tls = "true" for TLS

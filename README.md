@@ -1,6 +1,6 @@
 # sqlvim
 
-A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows.
+A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows. It also browses Redis.
 
 [中文说明](README.zh-CN.md)
 
@@ -47,7 +47,7 @@ export_dir       = "~/Downloads"
 icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "plain"
 ```
 
-The tree draws [Nerd Font](https://www.nerdfonts.com) icons (v3): the MySQL / PostgreSQL logo
+The tree draws [Nerd Font](https://www.nerdfonts.com) icons (v3): the MySQL / PostgreSQL / Redis logo
 before each connection, and database, schema, table, folder and key icons below it. Without a
 Nerd Font they show as boxes: set `icons = "plain"`.
 
@@ -68,6 +68,22 @@ connection. Statements end with `;`; a PL/SQL block (`BEGIN`, `DECLARE`, `CREATE
 ends with a line holding only `/`, as in SQL*Plus. Statements commit on their own; `<Space>t` or
 `SET TRANSACTION` keeps a transaction open until `COMMIT` or `ROLLBACK`. Modify Table, compare
 and import are not available on Oracle yet.
+
+**Redis** (5.0 and later, standalone servers; read-only browsing for now): `driver = "redis"`,
+port 6379, and `database` is the default db number (0 when empty; the form calls it `DB`). A
+password is optional: sqlvim connects without one and asks only when the server answers
+`NOAUTH`. `params`: `separator` groups the keys into folders (default `:`), `tls = "true"` and
+`tls_skip_verify = "true"`. Expanding a db scans its keys with `SCAN` in batches of 1,000 (never
+`KEYS`): a load stops after 10,000 keys, `↓ load more` goes on (at most 100,000 keys per db),
+`Ctrl-c` stops it, and on prod connections sqlvim pauses between batches. `F` on a db, folder or
+key filters with a pattern (`user:*:sess`; text without `*` `?` `[` matches anywhere) and stops
+at 500 matches or 100,000 keys scanned; `fx` clears it. `<Space>k` opens a key by name (`Tab`
+completes the keys scanned so far). `Enter` on a key opens its tab: type, TTL, length, size and
+encoding, then the value — a string (only the first 1 MB of a bigger one; `v` cycles auto /
+text / JSON / hex) or the fields, items or members of a hash, list, set, sorted set or stream,
+a page at a time (`]` loads more, `F` filters hash fields and set members, `K` shows a value).
+Binary key names show as `\xNN`; `yy` in the tree copies a key name as redis-cli takes it. The
+console, structure, compare and import are not available for Redis yet.
 
 ## Editing table data
 
@@ -203,6 +219,9 @@ picks the workspace by directory.
 | `:q!` / `:qa!` | Close / quit without asking about open transactions |
 | `<Space><Space>` | Search tables, views, columns, routines, schemas and databases in every connection, loading the metadata of those not opened yet (`db.table.column`, `table.column` or any part of it narrows by parent, fuzzily, and opening a column puts the cursor on it; `@` searches only the connection in context; `Enter` opens, `Ctrl-o` opens the structure). `Tab` / `Shift-Tab` switch to the lines of the open consoles (`Enter` jumps to the line) or the SQL history (an empty query lists the recent statements, `Enter` inserts one as `<Space>h` does) |
 | `<Space>f` | Recently opened tables, structures, consoles and files |
+| `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
+| `<Space>k` | Open a Redis key by name |
+| `v` | Redis key tab: show a string as auto / text / JSON / hex |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | Console, insert mode: next / previous completion (`Ctrl-n` / `Ctrl-p` open the popup when closed) |
 | `Enter` / `Ctrl-y` | Console, insert mode: accept the completion (`Esc` closes the popup, a second `Esc` leaves insert mode) |
 
@@ -230,7 +249,8 @@ inputs and popup lists keep their keys.
 
 **Colors** — a `[theme]` table in `config.toml`; values are ANSI indexes `"0"`–`"255"` or
 `"#rrggbb"`. Slots: `border` `focus` `error` `accent` `on_error` `visual_bg` `visual_fg`
-`changed` `inserted` `view` `builtin` `string` `number` `operator`.
+`changed` `inserted` `view` `builtin` `string` `number` `operator`, and the Redis type badges
+`key_string` `key_hash` `key_list` `key_set` `key_zset` `key_stream` `key_other`.
 
 ```toml
 [theme]
@@ -285,6 +305,8 @@ with a syntax error, the cursor jumps to where the server says the error is.
   (`sp_help`, `sp_helptext`, `sp_columns`, `sp_who` …), `IF` blocks, `DBCC`, PL/SQL blocks, `CALL`
   and the like (`ALTER SESSION SET CURRENT_SCHEMA` / `NLS_…` are allowed). For a
   production server also use an account that can only read.
+- Redis has no read-only session either: browsing sends only read commands. For a production
+  instance also use an ACL user that can only read (`+@read`).
 - `env = "prod"` frames the tab area in red and shows `[PROD]` in the status bar; every
   write or DDL statement on a prod connection asks for `y` first.
 - `UPDATE` / `DELETE` without `WHERE` asks you to type the table name before it runs.

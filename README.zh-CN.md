@@ -1,6 +1,6 @@
 # sqlvim
 
-一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle。
+一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle，也能浏览 Redis。
 
 [English](README.md)
 
@@ -45,7 +45,7 @@ export_dir       = "~/Downloads"
 icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "plain"
 ```
 
-树使用 [Nerd Font](https://www.nerdfonts.com)（v3）图标：连接前显示 MySQL / PostgreSQL 的标志，
+树使用 [Nerd Font](https://www.nerdfonts.com)（v3）图标：连接前显示 MySQL / PostgreSQL / Redis 的标志，
 下面的库、schema、表、文件夹、键也各有图标。终端没有 Nerd Font 时会显示成方框，设置 `icons = "plain"` 即可。
 
 还没有配置？启动 sqlvim 后按 `<space>n` 添加连接。
@@ -59,6 +59,17 @@ icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "pl
 （留空时为 `FREEPDB1`，表单里显示为 `Service`）。不支持 SID、TNS 名和 wallet。树里 schema 直接列在连接下面。
 语句以 `;` 结尾；PL/SQL 块（`BEGIN`、`DECLARE`、`CREATE PROCEDURE` 等）和 SQL*Plus 一样，以单独一行的 `/` 结束。
 语句默认自动提交；`<Space>t` 或 `SET TRANSACTION` 会保持事务直到 `COMMIT` 或 `ROLLBACK`。Oracle 上暂不支持修改表结构、对比和导入。
+
+**Redis**（5.0 及以上，单机；目前只能浏览查看）：`driver = "redis"`，端口 6379，`database` 是默认的 db 编号
+（留空为 0，表单里显示为 `DB`）。密码可选：sqlvim 先不带密码连接，服务器回 `NOAUTH` 时才询问。
+`params`：`separator` 是 key 分组用的分隔符（默认 `:`），`tls = "true"`、`tls_skip_verify = "true"`。
+展开 db 时用 `SCAN` 每批 1,000 个扫描 key（从不用 `KEYS`）：一次加载扫到 10,000 个就停，`↓ load more` 继续
+（每个 db 最多 100,000 个），`Ctrl-c` 停止扫描，prod 连接每批之间会停顿一下。在 db、文件夹或 key 上按 `F`
+按模式过滤（`user:*:sess`；不含 `*` `?` `[` 的文字匹配任意位置），找到 500 个或扫描满 100,000 个就停；`fx` 清除过滤。
+`<Space>k` 按名字打开 key（`Tab` 补全已扫描到的 key）。在 key 上按 `Enter` 打开详情页：类型、TTL、长度、大小、编码，
+然后是值——String（超过 1 MB 只显示前 1 MB；`v` 在 auto / text / JSON / hex 之间切换），或 Hash、List、Set、ZSet、
+Stream 的字段、元素、成员，分页显示（`]` 加载更多，`F` 过滤 Hash 字段和 Set 成员，`K` 查看完整值）。
+二进制 key 名显示成 `\xNN`；树上 `yy` 复制的是 redis-cli 能直接使用的 key 名。Redis 暂不支持控制台、结构、对比和导入。
 
 ## 编辑表数据
 
@@ -174,6 +185,9 @@ sqlvim --list-workspaces
 | `<Space>S` | 直接打开光标所在表的完整结构，不经过列弹窗 |
 | `<Space>e` | 显示 / 隐藏树 |
 | `<Space>l` | 在树中定位当前 tab：表，或 console 所在的数据库 / schema（也可用 `:locate`） |
+| `F` / `fx` | 树里 Redis 的 db、文件夹或 key 上：按模式过滤 key / 清除过滤 |
+| `<Space>k` | 按名字打开 Redis key |
+| `v` | Redis key 详情页：String 按 auto / text / JSON / hex 显示 |
 | `<Space>r` | 刷新树节点或 tab，并重新加载该连接的元数据 |
 | `?` | 当前面板的帮助 |
 | `:q` / `:qa` | 关闭 tab / 退出 |
@@ -211,7 +225,8 @@ sqlvim 启动时检查该文件，指出未知或冲突的绑定。帮助（`?`�
 
 **颜色** —— `config.toml` 中的 `[theme]` 表；值为 ANSI 色号 `"0"`–`"255"` 或 `"#rrggbb"`。
 槽位：`border` `focus` `error` `accent` `on_error` `visual_bg` `visual_fg`
-`changed` `inserted` `view` `builtin` `string` `number` `operator`。
+`changed` `inserted` `view` `builtin` `string` `number` `operator`，以及 Redis 类型徽标
+`key_string` `key_hash` `key_list` `key_set` `key_zset` `key_stream` `key_other`。
 
 ```toml
 [theme]
@@ -256,6 +271,7 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
 - SQL Server 和 Oracle 没有只读会话，所以只有 sqlvim 这一道防线，规则也更严：它检查一个批次里的每条语句（T-SQL 可以不写分号），
   认不出是否安全的一律拦截——除少数只读系统过程（`sp_help`、`sp_helptext`、`sp_columns`、`sp_who` 等）以外的 `EXEC`、
   `IF` 块、`DBCC`、PL/SQL 块、`CALL` 等（允许 `ALTER SESSION SET CURRENT_SCHEMA` / `NLS_…`）。生产库建议再配一个数据库层面只读的账号。
+- Redis 同样没有只读会话：浏览只发送读命令。生产实例建议再配一个只读的 ACL 用户（`+@read`）。
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，

@@ -7,6 +7,20 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Redis connections (read-only browsing for now): `driver = "redis"`, port 6379, `database` is
+  the db number (0 when empty), password optional (sqlvim connects without one and asks only
+  when the server says `NOAUTH`), SSH tunnels, and `params` `tls` / `tls_skip_verify`. The tree
+  lists the dbs with their key counts, and expanding a db scans its keys in batches with `SCAN`
+  (never `KEYS`), grouped into folders by `params.separator` (default `:`), with a type badge
+  per key. A load stops after 10,000 keys (`↓ load more` continues, up to 100,000 per db),
+  `Ctrl-c` stops a scan, and prod connections pause between batches. `F` filters the keys with a
+  pattern (`*` `?` `[` as in `SCAN MATCH`, plain text matches anywhere; a filter stops at 500
+  matches or 100,000 keys scanned), `fx` clears it, and `<Space>k` opens a key by name. The key
+  tab shows type, TTL, length, size and encoding, a string (the first 1 MB of a bigger one; `v`
+  cycles auto / text / JSON / hex) or the fields, items or members of a hash, list, set, sorted
+  set or stream page by page (`]` loads more, `F` filters hash fields and set members). Binary
+  key names are shown as `\xNN` and `yy` copies a key name as redis-cli takes it. Consoles,
+  structure, compare, import and the other SQL features say "not supported for redis yet".
 - SQL Server support (2014–2022, user name and password, SSH tunnels): browse databases,
   schemas, tables, views and routines, run T-SQL in the console (`GO` separates batches,
   `BEGIN TRAN` / `COMMIT` / `ROLLBACK` are tracked), filter, sort and edit table data (`N'…'`

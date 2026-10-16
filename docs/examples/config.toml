@@ -10,6 +10,7 @@ icons            = "nerd"         # tree icons: "nerd" needs a Nerd Font (v3); "
 # Colors: ANSI indexes "0"–"255" (follow your terminal's palette) or "#rrggbb".
 # Slots: border focus error accent on_error visual_bg visual_fg changed
 #        inserted view builtin string number operator
+#        key_string key_hash key_list key_set key_zset key_stream key_other (Redis type badges)
 [theme]
 # focus  = "#7aa2f7"
 # accent = "14"
