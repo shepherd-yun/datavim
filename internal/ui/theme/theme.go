@@ -23,6 +23,8 @@ var defaults = map[string]string{
 	"border": "8", "focus": "12", "error": "9", "accent": "14", "on_error": "15",
 	"visual_bg": "8", "visual_fg": "15", "changed": "11", "inserted": "10", "view": "13",
 	"builtin": "6", "string": "2", "number": "3", "operator": "5",
+	"key_string": "2", "key_hash": "12", "key_list": "3", "key_set": "13", "key_zset": "5",
+	"key_stream": "14", "key_other": "8",
 }
 
 var (
@@ -33,6 +35,7 @@ var (
 
 	syntax   map[highlight.Class]lipgloss.Style
 	kindTags map[string]lipgloss.Style
+	keyTypes map[string]lipgloss.Style
 )
 
 func init() {
@@ -106,6 +109,10 @@ func build(c map[string]color.Color) {
 		highlight.Number:   lipgloss.NewStyle().Foreground(c["number"]),
 		highlight.Comment:  lipgloss.NewStyle().Italic(true).Foreground(ColorBorder),
 		highlight.Operator: lipgloss.NewStyle().Foreground(c["operator"]),
+	}
+	keyTypes = map[string]lipgloss.Style{}
+	for _, t := range []string{"string", "hash", "list", "set", "zset", "stream", "other"} {
+		keyTypes[t] = lipgloss.NewStyle().Bold(true).Foreground(c["key_"+t])
 	}
 	kindTags = map[string]lipgloss.Style{
 		"table":    lipgloss.NewStyle().Foreground(ColorAccent),
@@ -185,6 +192,14 @@ func HighlightLines(src string, spans []highlight.Span) []string {
 		}
 	}
 	return append(lines, b.String())
+}
+
+// KeyType colors a redis key's type badge; module types use key_other.
+func KeyType(typ string) lipgloss.Style {
+	if s, ok := keyTypes[typ]; ok && typ != "other" {
+		return s
+	}
+	return keyTypes["other"]
 }
 
 // KindTag colors the kind tag of a search result.

@@ -414,3 +414,36 @@ func TestNerdConnectionIconIsAccented(t *testing.T) {
 		t.Fatalf("an unselected connection's logo is drawn in the accent color:\n%q", view)
 	}
 }
+
+func TestRedisNodes(t *testing.T) {
+	conn := &Node{Kind: KindConn, Name: "cache", Conn: "cache", Driver: "redis", Expanded: true, Loaded: true}
+	dbn := &Node{Kind: KindRedisDB, Name: "db0", Conn: "cache", NS: db.Namespace{Database: "0"}, Detail: "3", Expanded: true, Loaded: true}
+	folder := &Node{Kind: KindKeyFolder, Name: "user", Conn: "cache", Key: "user:", Detail: "≥2", Expanded: true, Loaded: true}
+	k1 := &Node{Kind: KindRedisKey, Name: "user:1", Conn: "cache", Key: "user:1", KeyType: "hash"}
+	k2 := &Node{Kind: KindRedisKey, Name: "user:2", Conn: "cache", Key: "user:2", KeyType: "ReJSON-RL"}
+	more := &Node{Kind: KindMore, Name: "↓ load more (scanned 1,000 / 3)", Conn: "cache"}
+	Adopt(folder, []*Node{k1, k2})
+	Adopt(dbn, []*Node{folder, more})
+	Adopt(conn, []*Node{dbn})
+	m := New([]*Node{conn})
+	m.SetHeight(10)
+	m.SetIcons(IconsPlain)
+	v := ansi.Strip(m.View(60, true))
+	lines := strings.Split(v, "\n")
+	if len(lines) != 6 {
+		t.Fatalf("view:\n%s", v)
+	}
+	if !strings.Contains(lines[3], "H user:1") || !strings.Contains(lines[4], "? user:2") {
+		t.Fatalf("key badges:\n%s", v)
+	}
+	if !strings.Contains(lines[2], "≥2") || !strings.Contains(lines[5], "load more") || strings.Contains(lines[5], "▸") {
+		t.Fatalf("view:\n%s", v)
+	}
+	if !dbn.Expandable() || !folder.Expandable() || k1.Expandable() || more.Expandable() {
+		t.Fatal("Expandable")
+	}
+	m.SetIcons(IconsNerd)
+	if v := ansi.Strip(m.View(60, true)); !strings.Contains(v, "") || !strings.Contains(v, "H user:1") {
+		t.Fatalf("nerd view:\n%s", v)
+	}
+}

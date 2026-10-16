@@ -23,6 +23,10 @@ const (
 	KindKey        // a primary or unique key
 	KindForeignKey // Ref is the referenced table
 	KindIndex
+	KindRedisDB   // a redis db; NS.Database is its number
+	KindKeyFolder // keys grouped by a prefix; Key is the raw prefix with its separator
+	KindRedisKey  // Key is the raw key, KeyType its TYPE
+	KindMore      // a "load more" / progress line at the end of a redis db
 )
 
 // Group tells the groups under a table apart.
@@ -45,6 +49,8 @@ type Node struct {
 	Group    Group       // a KindGroup node's group
 	Detail   string      // shown muted after the name: a column's type, an index's columns
 	Ref      db.TableRef // a foreign key's referenced table
+	Key      string      // redis: the raw key (KindRedisKey) or prefix (KindKeyFolder); Name is its escaped form
+	KeyType  string      // a KindRedisKey's TYPE
 	Prod     bool
 	Expanded bool
 	Loaded   bool
@@ -57,7 +63,9 @@ type Node struct {
 }
 
 func (n *Node) Parent() *Node         { return n.parent }
-func (n *Node) Expandable() bool      { return n.Kind <= KindView || n.Kind == KindGroup }
+func (n *Node) Expandable() bool {
+	return n.Kind <= KindView || n.Kind == KindGroup || n.Kind == KindRedisDB || n.Kind == KindKeyFolder
+}
 func (n *Node) IsTable() bool         { return n.Kind == KindTable || n.Kind == KindView }
 func (n *Node) TableRef() db.TableRef { return db.TableRef{Namespace: n.NS, Name: n.Name} }
 
@@ -404,7 +412,16 @@ func (m *Model) View(width int, focused bool) string {
 			g := nerdGlyph(n) // the selection style would end at an inner color
 			ic = strings.Replace(ic, g, theme.Accent.Render(g), 1)
 		}
+		switch {
+		case n.Kind == KindRedisKey && i != cur:
+			ic = theme.KeyType(n.KeyType).Render(ic)
+		case n.Kind == KindMore:
+			ic, name = "", theme.Muted.Render(name)
+		}
 		label := strings.Repeat("  ", rows[i].depth) + ic + " " + name
+		if n.Kind == KindMore {
+			label = strings.Repeat("  ", rows[i].depth) + name
+		}
 		if i == cur {
 			if focused {
 				label = theme.Selected.Render(label)
@@ -437,6 +454,12 @@ func icon(n *Node, style IconStyle) string {
 	if n.Expanded {
 		arrow = "▾"
 	}
+	switch n.Kind {
+	case KindRedisKey:
+		return KeyBadge(n.KeyType)
+	case KindMore:
+		return ""
+	}
 	if style == IconsNerd {
 		if !n.Expandable() {
 			return nerdGlyph(n)
@@ -463,9 +486,11 @@ func nerdGlyph(n *Node) string {
 			return "\ue704" // dev-mysql
 		case "postgres":
 			return "\ue76e" // dev-postgresql
+		case "redis":
+			return "\ue76d" // dev-redis
 		}
 		return "\U000f01bc" // md-database
-	case KindDatabase:
+	case KindDatabase, KindRedisDB:
 		return "\U000f01bc" // md-database
 	case KindSchema:
 		return "\uf0e8" // fa-sitemap
@@ -473,7 +498,7 @@ func nerdGlyph(n *Node) string {
 		return "\U000f04eb" // md-table
 	case KindView:
 		return "\U000f1094" // md-table_eye
-	case KindGroup:
+	case KindGroup, KindKeyFolder:
 		if n.Expanded {
 			return "\U000f0770" // md-folder_open
 		}
@@ -488,6 +513,26 @@ func nerdGlyph(n *Node) string {
 		return "\U000f04bc" // md-sort_ascending
 	}
 	return ""
+}
+
+// KeyBadge is the one-letter tag of a redis key type; T is a set, X a
+// stream and ? any other (module) type.
+func KeyBadge(typ string) string {
+	switch typ {
+	case "string":
+		return "S"
+	case "hash":
+		return "H"
+	case "list":
+		return "L"
+	case "set":
+		return "T"
+	case "zset":
+		return "Z"
+	case "stream":
+		return "X"
+	}
+	return "?"
 }
 
 // RevealResult says how far Reveal got.
