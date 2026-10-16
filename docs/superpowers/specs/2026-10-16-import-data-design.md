@@ -60,22 +60,23 @@
  └─────────────────────────────────────────────────────────────────────────┘
 ```
 
-- 三块区域用 `tab` / `shift+tab` 切换焦点，块内 `j` / `k` / `gg` / `G` 移动。新增 keymap 上下文 `Import`，底部提示用 `keyHint` 生成。
+- 三块区域用 `[` / `]` 切换焦点（和结构 tab 的 section 一致；`tab` 是全局的切换窗格），块内 `j` / `k` / `gg` / `G` 移动。新增 keymap 上下文 `Import`，底部提示用 `keyHint` 生成。
+- `<Space>r`（Refresh）重新读取文件。
 - 勾选框复用 `difftab.go` 的 `box`（`[✓]` / `[ ]`）。
 
 ### 4.1 Source
 
-每行一个设置，`enter` 循环切换取值或弹出输入框：
+每行一个设置，`i` / `enter` 循环切换取值或弹出输入框：
 
 | 设置 | 取值 | 适用 |
 |---|---|---|
 | format | CSV / TSV / XLSX | 全部 |
-| delimiter | `,` `;` `\t` `|` 或自定义单字符 | CSV |
+| delimiter | `,` `;` `|` 循环切换 | CSV |
 | encoding | UTF-8 / GBK | CSV、TSV |
 | header | 无 / 第 N 行（默认第 1 行） | 全部 |
 | sheet | 文件里的 sheet 列表 | XLSX |
 | null | 视为 NULL 的文本，默认空字符串，可设为 `NULL`、`\N` 等 | 全部 |
-| table name | 新表名，默认取文件名（去掉扩展名，非标识符字符换成 `_`） | 新建表 |
+| table name | 新表名，默认取文件名（去掉扩展名；字母（含中文）、数字、`_` 以外的字符换成 `_`） | 新建表 |
 
 - UTF-8 文件开头的 BOM 会被去掉。
 - 没有表头时，文件列名为 `column_1`、`column_2`…
@@ -85,23 +86,23 @@
 
 每个文件列一行：`[✓] 文件列 → 目标列 类型`。
 
-- `space` 勾选 / 取消勾选该行（取消即跳过），`a` 全选，`A` 全不选。
+- `x` 勾选 / 取消勾选该行（取消即跳过；`<Space>` 是 leader，和 diff tab 一样用 `x`），`a` 全选，`A` 全不选。
 - **导入已有表**：
   - 打开时按列名自动匹配：不区分大小写，`_`、空格、`-` 视为相同。没匹配上的文件列默认不勾选。
-  - `e` 弹出 picker，从表的列里选目标列。两个文件列不能映射到同一个表列，冲突时在状态栏提示，且不改变映射。
-  - 表里没有被映射、NOT NULL、没有默认值且不是自增的列，在 Mapping 区底部用 error 色列出。存在这样的列时不能执行。
+  - `i` / `enter` 弹出 picker，从表的列里选目标列（生成列不在其中）。两个文件列不能映射到同一个表列，冲突时在状态栏提示，且不改变映射。
+  - 表里没有被映射、NOT NULL、没有默认值、不是自增也不是生成列的列，在 Mapping 区底部用 error 色列出。存在这样的列时不能执行。
 - **新建表**：
-  - 每行是 `文件列 → 新列名 推断类型`。`e` 改列名（默认值为文件列名，规则同表名），`t` 改类型（输入框，预填推断的类型，用 `DDL().NormalizeType` 规范化）。
+  - 每行是 `文件列 → 新列名 推断类型`。`i` / `enter` 改列名（默认值为文件列名，规则同表名），`t` 改类型（输入框，预填推断的类型）。
   - 新表不设主键。所有列可为 NULL，除非该列在整个文件里没有空值，这时设为 NOT NULL。
   - 列名重复或为空时不能执行。
 
 ### 4.3 Preview
 
-显示前 20 行转换后的值（§6）。转换失败的单元格用 error 色显示原值，光标移上去时在状态栏显示原因。
+显示前 20 行转换后的值（§6）。转换失败的单元格用 error 色显示原值，光标所在行的第一个错误显示在状态栏。dry-run 发现错误后，这一块改为显示错误列表（§7.1）。
 
 ## 5. 包结构
 
-依赖方向不变：`ui` → `importer` → `db`。
+依赖方向不变：`ui` → `importer` → `sqlx` / `db`。执行逻辑（dry-run 和写入）也在 `importer` 里，和 `edit.Apply` 一样只依赖 `db.Querier`，UI 只负责连接、确认和显示。
 
 ### 5.1 `internal/importer`（新增，纯逻辑，不依赖终端）
 
@@ -111,23 +112,25 @@
   - `Source` 接口：`Header() []string`、`Next() ([]string, error)`（结束返回 `io.EOF`）、`Line() int`（当前行在文件里的行号，从 1 开始，供报错使用）、`Close() error`
   - `Sheets(path string) ([]string, error)`：列出 xlsx 的 sheet
   - CSV / TSV：`encoding/csv`，设置 `Comma`、`LazyQuotes = true`、`FieldsPerRecord = -1`；GBK 用 `golang.org/x/text/encoding/simplifiedchinese` 解码（已是间接依赖，改为直接依赖）。
-  - XLSX：excelize `Rows()` 流式读取。日期格式的单元格读出原始序列号并标记为日期，交给 §6 转换；其他单元格用格式化后的文本。
+  - XLSX：excelize `Rows()` 流式读取格式化后的文本。打开时设 `ShortDatePattern: "yyyy-mm-dd"`、`LongTimePattern: "hh:mm:ss"`，日期单元格读出来就是 `2026-01-02` / `2026-01-02 12:00`，不需要处理日期序列号。超过 15 位的数字在 Excel 里已经变成浮点（读出来是 `1.23456789012346E+17`），转整数列时报错并提示把这一列设为文本。
 - `convert.go`
   - `Kind`：Integer / Decimal / Bool / Date / DateTime / Time / String / Other
   - `KindOf(driver string, c db.Column) Kind`：按类型名归类（含 unsigned、长度、精度）
   - `Convert(col Target, cell string) (Value, error)`：按 §6 转换和校验，返回给 INSERT 的参数（或 `Default` 标记、NULL）
   - `RowError{Line int; Column, Value, Reason string}`
 - `infer.go`
-  - `Infer(driver string, header []string, rows func(yield func([]string) bool)) db.TableSchema`：扫描全部行推断每列类型，规则见 §6.3。
+  - `Inferrer`：逐行 `Add`，最后 `Schema(ref, names)` 得到 `db.TableSchema`，规则见 §6.3。
 - `plan.go`
-  - `Mapping []Target`：每个文件列对应一个目标列，或跳过
+  - `Plan{Driver, Table, Columns []Column, Width, Null}`：选中的文件列及其目标列
   - `BatchSize(cols int) int = min(500, 65535/cols)`
-  - `Insert(d db.Dialect, ref db.TableRef, cols []string, rows [][]Value) (sql string, args []any)`：一条多行 INSERT，值用 `Placeholder` 参数化；`Default` 标记的格写 `DEFAULT`，不占参数。
+  - `Plan.Insert(rows) (sql string, args []any)`：一条多行 INSERT，值参数化（MySQL `?`，PostgreSQL `$n`，由 `sqlx.Dialect` 决定）；NULL 写 `NULL`、`Default` 标记的格写 `DEFAULT`，都不占参数。
+- `run.go`
+  - `Check`：§7.1 的 dry-run。
+  - `Run`：§7.3、§7.4 的写入、定位坏行、回滚和 MySQL 的 DROP。
 
 ### 5.2 `internal/db`
 
-- `Dialect` 加 `Placeholder(n int) string`：MySQL 返回 `?`，PostgreSQL 返回 `$n`（n 从 1 开始）。
-- `dbtest/contract.go` 加用例：参数化多行 INSERT（含 NULL、`DEFAULT`、中文、长文本）；事务回滚后表里没有残留数据；`CreateTable` 后导入并读回。
+- 驱动不变。`dbtest/contract.go`（它已经直接使用 `edit`、`schemadiff` 等包）加用例，直接调用 `importer.Run`：参数化多行 INSERT（含 NULL、`DEFAULT`、中文、长文本、字符串参数写入整数 / 日期 / 布尔列）；失败后回滚、表里没有残留；定位到坏行；新建表后导入并读回；MySQL 新建表失败后表被删掉。
 
 ### 5.3 `internal/ui`
 
@@ -144,8 +147,8 @@
 | Integer（tinyint…bigint、serial 等） | `-12`、`1,234`（去掉千分位）、`3.0`（小数部分为 0） | 十进制字符串，检查类型范围（含 unsigned） |
 | Decimal（decimal、numeric、float、double、real） | `1.5`、`1e3`、`1,234.5` | 规范化后的字符串；decimal(p,s) 检查整数位数，小数位超出时报错，不四舍五入 |
 | Bool（PG `boolean`、MySQL `tinyint(1)` / `bool`） | `true/false`、`t/f`、`yes/no`、`y/n`、`1/0`，不区分大小写 | PG `true/false`，MySQL `1/0` |
-| Date | `2026-01-02`、`2026/1/2`、xlsx 日期序列号 | `YYYY-MM-DD` |
-| DateTime（datetime、timestamp、timestamptz） | `2026-01-02 10:00`、`…:00`、`….fff`、`T` 分隔、`2026/1/2 10:00`、xlsx 日期序列号；带时区的值原样保留时区 | `YYYY-MM-DD HH:MM:SS[.ffffff]`，或带时区的原值 |
+| Date | `2026-01-02`、`2026/1/2`、时间部分为 0 的日期时间（`2026-01-02 00:00:00`） | `YYYY-MM-DD` |
+| DateTime（datetime、timestamp、timestamptz） | `2026-01-02 10:00`、`…:00`、`….fff`、`T` 分隔、`2026/1/2 10:00`、只有日期（补 `00:00:00`）；timestamptz 接受 `Z` 或 `±hh:mm` 时区并保留 | `YYYY-MM-DD HH:MM:SS[.ffffff]`，或带时区的原值 |
 | Time | `10:00`、`10:00:00[.fff]` | `HH:MM:SS[.ffffff]` |
 | String（char、varchar、text、enum、set 等） | 原样 | 原样；char/varchar 按 rune 检查长度 |
 | Other（json、uuid、bytea、geometry 等） | 原样 | 原样，由数据库校验 |
@@ -158,7 +161,7 @@
   - 列可为 NULL：NULL；
   - 列 NOT NULL 且有默认值或是自增：`DEFAULT`；
   - 否则报错 `cannot be empty`。
-- 某行列数少于表头：缺失的列视为空值；多于表头：报错 `N cells, header has M`。
+- 某行列数少于表头：缺失的列视为空值；多于表头且多出的格不全为空：报错 `N cells, header has M`（行尾多一个逗号这种全空的多余格忽略）。
 - 全部单元格为空的行跳过，不算错误。
 
 ### 6.3 推断（新建表）
@@ -190,7 +193,7 @@ Bool 不推断（`0/1` 会推断为 `bigint`），用户可以用 `t` 修改。
 ### 7.2 确认
 
 - 导入已有表：`Insert 48,213 rows into app.users`。
-- 新建表：显示 `CreateTable` 生成的 DDL 和 `Insert 48,213 rows`。新表在确认前已存在时拒绝：`table app.orders already exists`。
+- 新建表：显示 `CreateTable` 生成的 DDL 和 `Insert 48,213 rows`。新表在确认前已存在（`Meta().Tables` 里有同名表）时拒绝：`table app.orders already exists`。
 - prod 连接：沿用 `runner.Policy` 的危险确认样式（`WithDanger`）。
 - 确认时重新检查 §3 的拒绝条件，这期间状态可能已经变化。
 
@@ -227,7 +230,7 @@ Bool 不推断（`0/1` 会推断为 `bigint`），用户可以用 `t` 修改。
 - `dbtest/contract.go`：§5.2 的用例，MySQL 8 和 PG 16 都跑。
 - UI（fake backend，驱动 `Model.Update`）：
   - 入口：`I` 和 `a` 菜单在各种节点上的行为；只读、console 有事务、有 staged 修改时拒绝。
-  - Mapping：自动匹配、`space` / `a` / `A`、`e` 选目标列和冲突提示、缺少必填列时不能执行、新建表的列名和类型修改。
+  - Mapping：自动匹配、`x` / `a` / `A`、`i` 选目标列和冲突提示、缺少必填列时不能执行、新建表的列名和类型修改。
   - 执行：dry-run 有错误时不执行；prod 确认；进度消息；取消后 ROLLBACK；某批失败时报具体行；MySQL 新建表失败后 DROP；完成后刷新树。
 
 ## 9. 文档
