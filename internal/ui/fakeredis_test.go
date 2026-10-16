@@ -53,6 +53,7 @@ type fakeRedis struct {
 	applyErr error              // what Apply returns
 	onApply  func(p redit.Plan) // runs after an Apply is recorded, unlocked
 	unlinks  [][]string         // the keys of every Unlink
+	version  string             // Version(); "" is 7.2.0
 }
 
 func newFakeRedis() *fakeRedis {
@@ -107,8 +108,15 @@ type fakeRedisClient struct {
 	db int
 }
 
-func (c *fakeRedisClient) Version() string { return "7.2.0" }
-func (c *fakeRedisClient) Close() error    { return nil }
+func (c *fakeRedisClient) Version() string {
+	c.r.mu.Lock()
+	defer c.r.mu.Unlock()
+	if c.r.version != "" {
+		return c.r.version
+	}
+	return "7.2.0"
+}
+func (c *fakeRedisClient) Close() error { return nil }
 
 func (c *fakeRedisClient) DBSize(context.Context) (int64, error) {
 	c.r.mu.Lock()

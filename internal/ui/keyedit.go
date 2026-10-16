@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"strconv"
+	"strings"
 	"unicode/utf8"
 
 	tea "charm.land/bubbletea/v2"
@@ -27,12 +28,139 @@ const (
 	errStreamEdit = "stream entries cannot be changed · delete one and add a new one"
 )
 
-// changes counts the staged rows.
+// changes counts the staged rows, or 1 for a staged string.
 func (t *keyTab) changes() int {
-	if t.table == nil {
-		return 0
+	n := 0
+	if t.table != nil {
+		n = t.table.Changes()
 	}
-	return t.table.Changes()
+	if t.staged != nil {
+		n++
+	}
+	return n
+}
+
+// value is the string as shown: staged, or as read.
+func (t *keyTab) value() string {
+	if t.staged != nil {
+		return *t.staged
+	}
+	return t.text
+}
+
+// keyValueEditedMsg is a string's value saved in the cell editor.
+type keyValueEditedMsg struct {
+	tabID int
+	text  string
+	null  bool // ctrl+n: Redis has no NULL
+}
+
+func (m keyValueEditedMsg) TabID() int { return m.tabID }
+
+// maxInlineValue is the longest string the cell editor takes; longer
+// ones, and ones with newlines, go to $EDITOR.
+const maxInlineValue = 1024
+
+// trimEditorNewline drops the newline an editor adds at the end, unless
+// old ended with one.
+func trimEditorNewline(old, edited string) string {
+	if strings.HasSuffix(old, "\n") {
+		return edited
+	}
+	if s, ok := strings.CutSuffix(edited, "\r\n"); ok {
+		return s
+	}
+	s, _ := strings.CutSuffix(edited, "\n")
+	return s
+}
+
+// stringBlocked says why the string's value cannot be edited ("" when it can).
+func (t *keyTab) stringBlocked() string {
+	switch v := t.value(); {
+	case t.editBlocked() != "":
+		return t.editBlocked()
+	case t.truncated():
+		return "only the first 1 MB was loaded · edit this value in the console"
+	case !editable(db.Value{Text: v}):
+		return errBinaryEdit
+	}
+	return ""
+}
+
+// stageValue stages v as the string's value; the value as read unstages it.
+func (t *keyTab) stageValue(v string) {
+	if !t.isString() {
+		return
+	}
+	if v == t.text {
+		t.staged = nil
+	} else {
+		t.staged = &v
+	}
+	t.render()
+}
+
+// editString opens the cell editor on a short one-line value, $EDITOR on
+// anything else.
+func (t *keyTab) editString(external bool) tea.Cmd {
+	if msg := t.stringBlocked(); msg != "" {
+		t.setStatus(msg, true)
+		return nil
+	}
+	v := t.value()
+	if !external && len(v) <= maxInlineValue && !strings.Contains(v, "\n") {
+		id := t.id
+		return openOverlay(overlay.NewCellEditor("value", db.Value{Text: v}, func(nv db.Value) tea.Msg {
+			return keyValueEditedMsg{tabID: id, text: nv.Text, null: nv.Null}
+		}))
+	}
+	t.editingAt, t.editTable = [2]int{-1, -1}, nil
+	pattern := "sqlvim-*.txt"
+	if isJSON(v) {
+		pattern = "sqlvim-*.json"
+	}
+	return writeTempEdit(t.id, v, pattern)
+}
+
+// externalCell opens $EDITOR on the grid cell under the cursor.
+func (t *keyTab) externalCell() tea.Cmd {
+	row, col, ok := t.editableCell()
+	if !ok {
+		return nil
+	}
+	v := t.table.Row(row).Values[col]
+	t.editingAt, t.editTable = [2]int{row, col}, t.table
+	pattern := "sqlvim-*.txt"
+	if isJSON(v.Text) {
+		pattern = "sqlvim-*.json"
+	}
+	return writeTempEdit(t.id, v.Text, pattern)
+}
+
+// externalEdited stages what $EDITOR saved.
+func (t *keyTab) externalEdited(m editTextMsg) {
+	if m.err != nil {
+		t.setStatus("editor: "+m.err.Error()+" · value unchanged", true)
+		return
+	}
+	if t.editingAt[0] < 0 {
+		t.stageValue(trimEditorNewline(t.value(), m.text))
+		return
+	}
+	row, col := t.editingAt[0], t.editingAt[1]
+	if t.editTable != t.table || t.table == nil || row >= t.table.Len() {
+		return // the key was reloaded meanwhile
+	}
+	old := t.table.Row(row).Values[col]
+	v := db.Value{Text: trimEditorNewline(old.Text, m.text)}
+	if v == old {
+		return
+	}
+	if err := t.table.SetCell(row, col, v); err != nil {
+		t.setStatus(err.Error(), true)
+		return
+	}
+	t.showChanges()
 }
 
 // unsavedHint is "<space>w submits · U discards" with the keymap's keys.
@@ -121,29 +249,39 @@ func editable(v db.Value) bool {
 	return v.Null || utf8.ValidString(v.Text) && !hasControl(v.Text)
 }
 
-func (t *keyTab) editCell() tea.Cmd {
+// editableCell is the cursor's cell when it can go through an editor;
+// otherwise it says why not in the status.
+func (t *keyTab) editableCell() (row, col int, ok bool) {
 	if msg := t.editBlocked(); msg != "" {
 		t.setStatus(msg, true)
-		return nil
+		return 0, 0, false
 	}
 	if t.table.Len() == 0 {
 		t.setStatus("nothing here · "+keyHint(t.keys, keymap.RedisKey, keymap.InsertRow, "adds one"), true)
-		return nil
+		return 0, 0, false
 	}
-	row, col := t.grid.Position()
+	row, col = t.grid.Position()
 	rw := t.table.Row(row)
-	if rw.State == edit.Deleted {
-		t.setStatus(edit.ErrDeleted.Error(), true)
-		return nil
+	msg := t.fixedCell(row, col)
+	switch {
+	case rw.State == edit.Deleted:
+		msg = edit.ErrDeleted.Error()
+	case msg == "" && !editable(rw.Values[col]):
+		msg = errBinaryEdit
 	}
-	if msg := t.fixedCell(row, col); msg != "" {
+	if msg != "" {
 		t.setStatus(msg, true)
+		return 0, 0, false
+	}
+	return row, col, true
+}
+
+func (t *keyTab) editCell() tea.Cmd {
+	row, col, ok := t.editableCell()
+	if !ok {
 		return nil
 	}
-	if !editable(rw.Values[col]) {
-		t.setStatus(errBinaryEdit, true)
-		return nil
-	}
+	rw := t.table.Row(row)
 	id, table := t.id, t.table
 	return openOverlay(overlay.NewCellEditor(t.table.Columns()[col].Name, rw.Values[col], func(v db.Value) tea.Msg {
 		return cellEditedMsg{tabID: id, table: table, row: row, col: col, value: v}
@@ -200,6 +338,11 @@ func (t *keyTab) deleteRow() {
 }
 
 func (t *keyTab) undoEdit() {
+	if t.isString() && t.staged != nil {
+		t.staged = nil
+		t.render()
+		return
+	}
 	if t.table == nil {
 		t.setStatus("no changes to undo", false)
 		return
@@ -220,8 +363,14 @@ func (t *keyTab) undoAll() {
 		t.setStatus("no changes to discard", false)
 		return
 	}
-	t.table.Reset()
-	t.showChanges()
+	if t.table != nil {
+		t.table.Reset()
+		t.showChanges()
+	}
+	if t.staged != nil {
+		t.staged = nil
+		t.render()
+	}
 	t.setStatus("discarded "+plural(n, "change"), false)
 }
 
@@ -283,6 +432,12 @@ func tomb() string {
 
 // plan turns the staged changes into a redit.Plan.
 func (t *keyTab) plan() (redit.Plan, error) {
+	if t.isString() {
+		if t.truncated() {
+			return redit.Plan{}, errors.New("only the first 1 MB was loaded · edit this value in the console")
+		}
+		return redit.String(t.key, t.text, *t.staged, redit.CapsFor(t.version)), nil
+	}
 	return redit.Build(t.table, redit.Target{Key: t.key, Type: t.info.Type, Len: t.info.Len, Tomb: tomb()})
 }
 
@@ -401,7 +556,22 @@ func (t *keyTab) handleEdit(a keymap.Action) (cmd tea.Cmd, ok bool) {
 		}
 		return nil, false
 	case keymap.EditCell:
+		if t.isString() {
+			return t.editString(false), true
+		}
 		return t.editCell(), true
+	case keymap.ExternalEdit:
+		if t.isString() {
+			return t.editString(true), true
+		}
+		return t.externalCell(), true
+	case keymap.InsertRow, keymap.DeleteRow:
+		if t.isString() {
+			t.setStatus("a string has one value · "+keyHint(t.keys, keymap.RedisKey, keymap.EditCell, "edits it"), true)
+			return nil, true
+		}
+	}
+	switch a {
 	case keymap.InsertRow:
 		t.insertRow()
 	case keymap.DeleteRow:

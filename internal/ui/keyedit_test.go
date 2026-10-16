@@ -2,15 +2,16 @@ package ui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
 	"github.com/shepherd-yun/sqlvim/internal/redit"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
 )
@@ -20,21 +21,19 @@ func testHash() fakeValue {
 }
 
 // editTo presses i on the cursor's cell, checks the cell editor opened and
-// saves v in it.
+// replaces the text in it with v.
 func editTo(t *testing.T, m *Model, v string) {
 	t.Helper()
 	pressAll(t, m, "i")
-	ed, ok := m.overlay.(*overlay.CellEditor)
-	if !ok {
+	if _, ok := m.overlay.(*overlay.CellEditor); !ok {
 		t.Fatalf("overlay = %T, status %q", m.overlay, m.activeTab().(*keyTab).status)
 	}
-	_ = ed
-	m.overlay = nil
-	kt := m.activeTab().(*keyTab)
-	row, col := kt.grid.Position()
-	drainAll(t, m, func() tea.Msg {
-		return cellEditedMsg{tabID: kt.id, table: kt.table, row: row, col: col, value: db.Value{Text: v}}
-	})
+	pressAll(t, m, "esc", "c", "c")
+	typeText(t, m, v)
+	pressAll(t, m, "enter")
+	if m.overlay != nil {
+		t.Fatalf("the cell editor stays open: %T", m.overlay)
+	}
 }
 
 func shown(kt *keyTab, row, col int) string {
@@ -294,5 +293,137 @@ func TestKeySubmitTreeUpdate(t *testing.T) {
 	pressAll(t, m, "d", "d", "space", "w", "y")
 	if countKeys(db0) != 1 || db0.Children[0].Key != "other" {
 		t.Fatalf("tree:\n%s", screen(m))
+	}
+}
+
+func TestTrimEditorNewline(t *testing.T) {
+	for _, c := range []struct{ old, edited, want string }{
+		{"abc", "abd\n", "abd"},
+		{"abc\n", "abd\n", "abd\n"},
+		{"abc", "abd\n\n", "abd\n"},
+		{"abc", "abd", "abd"},
+		{"abc", "abd\r\n", "abd"},
+	} {
+		if got := trimEditorNewline(c.old, c.edited); got != c.want {
+			t.Errorf("trimEditorNewline(%q, %q) = %q", c.old, c.edited, got)
+		}
+	}
+}
+
+func TestKeyEditString(t *testing.T) {
+	m, r := openTestKey(t, "s", fakeValue{typ: "string", str: "hello"})
+	kt := m.activeTab().(*keyTab)
+	editTo(t, m, "world")
+	if kt.changes() != 1 || !strings.Contains(screen(m), "world") || !strings.Contains(screen(m), "1 unsaved change") {
+		t.Fatalf("changes %d:\n%s", kt.changes(), screen(m))
+	}
+	pressAll(t, m, "space", "w")
+	s := screen(m)
+	for _, want := range []string{"Submit 1 change to s", `check: GET s == "hello"`, "SET s world KEEPTTL"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("preview misses %q:\n%s", want, s)
+		}
+	}
+	pressAll(t, m, "y")
+	if p := r.appliedPlans(); len(p) != 1 || p[0].RestoreTTL || kt.changes() != 0 {
+		t.Fatalf("applied %+v, changes %d", p, kt.changes())
+	}
+	editTo(t, m, "again")
+	pressAll(t, m, "u")
+	if kt.changes() != 0 || strings.Contains(screen(m), "again") {
+		t.Fatalf("u drops the staged value:\n%s", screen(m))
+	}
+}
+
+func TestKeyEditStringRedis5(t *testing.T) {
+	m, r := openTestKey(t, "s", fakeValue{typ: "string", str: "hello"})
+	r.mu.Lock()
+	r.version = "5.0.14"
+	r.mu.Unlock()
+	pressAll(t, m, "space", "r") // the version is read with the key
+	editTo(t, m, "world")
+	pressAll(t, m, "space", "w")
+	if s := screen(m); !strings.Contains(s, "SET s world") || strings.Contains(s, "KEEPTTL") {
+		t.Fatalf("preview:\n%s", s)
+	}
+	pressAll(t, m, "y")
+	if p := r.appliedPlans(); len(p) != 1 || !p[0].RestoreTTL {
+		t.Fatalf("applied %+v", p)
+	}
+}
+
+// externalEdit presses <space>v, checks a temp file was written with want,
+// and answers as if the editor saved text.
+func externalEdit(t *testing.T, m *Model, want, text string) {
+	t.Helper()
+	kt := m.activeTab().(*keyTab)
+	file, ok := run(kt.Handle(keymap.ExternalEdit)).(editFileMsg)
+	if !ok || file.err != nil {
+		t.Fatalf("msg = %#v, status %q", file, kt.status)
+	}
+	if data, _ := os.ReadFile(file.path); string(data) != want {
+		t.Fatalf("temp file = %q", data)
+	}
+	_ = os.Remove(file.path)
+	drainAll(t, m, func() tea.Msg { return editTextMsg{tabID: kt.id, text: text} })
+}
+
+func TestKeyEditExternalTrailingNewline(t *testing.T) {
+	m, _ := openTestKey(t, "s", fakeValue{typ: "string", str: "hello"})
+	kt := m.activeTab().(*keyTab)
+	externalEdit(t, m, "hello", "world\n")
+	if kt.staged == nil || *kt.staged != "world" {
+		t.Fatalf("staged = %v", kt.staged)
+	}
+	externalEdit(t, m, "world", "hello\n")
+	if kt.staged != nil || kt.changes() != 0 {
+		t.Fatalf("the original value again is no change: %v", *kt.staged)
+	}
+}
+
+func TestKeyEditLongStringUsesEditor(t *testing.T) {
+	m, _ := openTestKey(t, "s", fakeValue{typ: "string", str: "a\nb"})
+	kt := m.activeTab().(*keyTab)
+	msg, ok := run(kt.Handle(keymap.EditCell)).(editFileMsg)
+	if !ok || !strings.HasSuffix(msg.path, ".txt") {
+		t.Fatalf("msg %#v", msg)
+	}
+	_ = os.Remove(msg.path)
+	m2, _ := openTestKey(t, "j", fakeValue{typ: "string", str: `{"a":` + strings.Repeat("1", 2000) + `}`})
+	msg, ok = run(m2.activeTab().(*keyTab).Handle(keymap.EditCell)).(editFileMsg)
+	if !ok || !strings.HasSuffix(msg.path, ".json") {
+		t.Fatalf("msg %#v", msg)
+	}
+	_ = os.Remove(msg.path)
+}
+
+func TestKeyEditStringRefused(t *testing.T) {
+	m, _ := openTestKey(t, "big", fakeValue{typ: "string", str: strings.Repeat("x", 2<<20)})
+	kt := m.activeTab().(*keyTab)
+	for _, a := range []keymap.Action{keymap.EditCell, keymap.ExternalEdit} {
+		if cmd := kt.Handle(a); cmd != nil || kt.status != "only the first 1 MB was loaded · edit this value in the console" {
+			t.Fatalf("%s: status %q", a, kt.status)
+		}
+	}
+	m, _ = openTestKey(t, "bin", fakeValue{typ: "string", str: "\x00\x01"})
+	kt = m.activeTab().(*keyTab)
+	for _, a := range []keymap.Action{keymap.EditCell, keymap.ExternalEdit} {
+		if cmd := kt.Handle(a); cmd != nil || kt.status != errBinaryEdit {
+			t.Fatalf("%s: status %q", a, kt.status)
+		}
+	}
+}
+
+func TestKeyEditExternalCell(t *testing.T) {
+	m, _ := openTestKey(t, "h", testHash())
+	kt := m.activeTab().(*keyTab)
+	pressAll(t, m, "l")
+	externalEdit(t, m, "1", "{\"a\":1}\n")
+	if kt.changes() != 1 || kt.table.Row(0).Values[1].Text != `{"a":1}` {
+		t.Fatalf("changes %d, row %+v", kt.changes(), kt.table.Row(0))
+	}
+	pressAll(t, m, "j")
+	if cmd := kt.Handle(keymap.ExternalEdit); cmd != nil || kt.status != errBinaryEdit {
+		t.Fatalf("binary cell: status %q", kt.status)
 	}
 }

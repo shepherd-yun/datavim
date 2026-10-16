@@ -163,6 +163,7 @@ func DefaultBindings() []Binding {
 		Binding{RedisKey, keys("u"), UndoEdit, "Undo the last change"},
 		Binding{RedisKey, keys("U"), UndoAllEdits, "Discard every change"},
 		Binding{RedisKey, keys(LeaderToken, "w"), SubmitEdits, "Submit changes (:w)"},
+		Binding{RedisKey, keys(LeaderToken, "v"), ExternalEdit, "Edit the value in $EDITOR"},
 	)
 
 	b = append(b, gridBindings(RedisResults)...)

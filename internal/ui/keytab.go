@@ -4,6 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -114,6 +117,7 @@ type keyLoadedMsg struct {
 	tabID     int
 	conn      string
 	info      rdb.KeyInfo // with the first page only
+	version   string      // redis_version, with the first page
 	first     bool
 	text      string        // a string's value (what was read of it)
 	rs        *db.ResultSet // raw cells: the tab escapes them for the grid
@@ -163,7 +167,12 @@ type keyTab struct {
 	submitting bool
 	previewGen int         // tells the current preview from stale ones
 	pending    *redit.Plan // the previewed plan, until confirmed
-	notifyTree bool        // the next load tells the tree what the key is now
+	staged     *string     // a string's staged value; nil when unchanged
+	editingAt  [2]int      // the grid cell $EDITOR is editing; {-1, -1} for the string value
+	editTable  *edit.Table // the rows editingAt belongs to
+	editorCmd  []string
+	version    string // redis_version, for how a string is written
+	notifyTree bool   // the next load tells the tree what the key is now
 	match      string
 	next       uint64
 	nextStart  int64
@@ -179,6 +188,7 @@ func newKeyTab(id int, b Backend, keys *keymap.Keymap, conn string, n int, key s
 		view: textview.New(), grid: grid.New(nil, s.MaxColumnWidth),
 	}
 	t.grid.SetMarks(t.mark)
+	t.editorCmd = s.EditorCommand(os.Getenv)
 	return t
 }
 
@@ -230,7 +240,7 @@ func (t *keyTab) load(first bool) tea.Cmd {
 				if info, err = c.KeyInfo(ctx, key); err != nil {
 					return err
 				}
-				msg.info = info
+				msg.info, msg.version = info, c.Version()
 				if !info.Exists {
 					return nil
 				}
@@ -351,6 +361,26 @@ func (t *keyTab) Update(msg tea.Msg) tea.Cmd {
 		}
 	case keyAppliedMsg:
 		return t.applied(m)
+	case keyValueEditedMsg:
+		if m.null {
+			t.setStatus(redit.ErrNull.Error(), true)
+			return nil
+		}
+		t.stageValue(m.text)
+	case editFileMsg:
+		if m.err != nil {
+			t.setStatus("cannot create temp file: "+m.err.Error(), true)
+			return nil
+		}
+		argv := append(slices.Clone(t.editorCmd), m.path)
+		id, path := t.id, m.path
+		return tea.ExecProcess(exec.Command(argv[0], argv[1:]...), func(err error) tea.Msg {
+			return editDoneMsg{tabID: id, path: path, err: err}
+		})
+	case editDoneMsg:
+		return readEditedFile(t.id, m)
+	case editTextMsg:
+		t.externalEdited(m)
 	case keyFilterMsg:
 		t.match = rcmd.Pattern(m.text)
 		return t.load(true)
@@ -366,8 +396,8 @@ func (t *keyTab) apply(m keyLoadedMsg) {
 	}
 	t.err = ""
 	if m.first {
-		t.info, t.loaded = m.info, true
-		t.table, t.text, t.more = nil, "", false
+		t.info, t.loaded, t.version = m.info, true, m.version
+		t.table, t.text, t.more, t.staged = nil, "", false, nil
 		t.grid.SetResult(nil)
 	}
 	if !t.info.Exists {
@@ -416,7 +446,7 @@ func (t *keyTab) unseen(rows [][]db.Value) [][]db.Value {
 }
 
 func (t *keyTab) render() {
-	lines, used := renderValue(t.text, t.format)
+	lines, used := renderValue(t.value(), t.format)
 	t.used = used
 	t.view.SetLines(lines)
 }
@@ -434,6 +464,9 @@ func (t *keyTab) Find(q string, forward bool) bool {
 func (t *keyTab) Handle(a keymap.Action) tea.Cmd {
 	t.status = ""
 	if t.isString() {
+		if cmd, ok := t.handleEdit(a); ok {
+			return cmd
+		}
 		switch a {
 		case keymap.Down:
 			t.view.Move(1)
@@ -513,6 +546,9 @@ func (t *keyTab) header() string {
 		return "key no longer exists"
 	}
 	parts := []string{i.Type}
+	if n := t.changes(); n > 0 {
+		parts = append(parts, plural(n, "unsaved change")) // early: the header is cut to the width
+	}
 	if i.TTL < 0 {
 		parts = append(parts, "no expiry")
 	} else {
@@ -540,9 +576,6 @@ func (t *keyTab) header() string {
 	}
 	if t.match != "" {
 		parts = append(parts, "filter "+rcmd.Escape(t.match))
-	}
-	if n := t.changes(); n > 0 {
-		parts = append(parts, plural(n, "unsaved change"))
 	}
 	return strings.Join(parts, " · ")
 }
