@@ -93,7 +93,7 @@ func TestEditSameFileOnAnotherConnection(t *testing.T) {
 	m, _ := newTestModel(t)
 	p := writeSQL(t, "a.sql", "")
 	ex(t, m, "e "+p)
-	press(t, m, "ctrl+h", "g", "g", "j") // tree: prod
+	press(t, m, "esc", "ctrl+h", "g", "g", "j") // tree: prod
 	ex(t, m, "e "+p)
 	if len(m.tabs) != 2 || fileConsole(t, m).conn != "prod" {
 		t.Fatalf("tabs = %d", len(m.tabs))
@@ -286,6 +286,7 @@ func TestWriteAsAPathOpenElsewhereFails(t *testing.T) {
 	m, _ := newTestModel(t)
 	p := writeSQL(t, "a.sql", "")
 	ex(t, m, "e "+p)
+	press(t, m, "esc")
 	openLocalConsole(t, m)
 	ex(t, m, "w "+p)
 	if !strings.Contains(m.status, "is open in another tab") {

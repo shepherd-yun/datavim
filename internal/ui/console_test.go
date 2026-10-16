@@ -33,6 +33,7 @@ func newConsoleWithStore(t *testing.T, b *fakeBackend, conn string) (*consoleTab
 	st := newFakeStore()
 	c := newConsoleTab(1, b, st, meta.NewCache(), conn, db.Namespace{Database: "app"}, config.Settings{MaxRows: 2, MaxColumnWidth: 40}, timings{})
 	c.SetSize(80, 24)
+	c.editor.Escape() // the tests start in NORMAL mode
 	return c, st
 }
 
@@ -689,7 +690,7 @@ func TestConsoleDoesNotJumpWhenTextChanged(t *testing.T) {
 func TestConsoleAsksForThePasswordAndRunsAgain(t *testing.T) {
 	m, b := newTestModel(t)
 	b.needPassword = true
-	press(t, m, "space", "c") // a console on local, never connected
+	press(t, m, "space", "c", "esc") // a console on local, never connected
 	c := m.activeTab().(*consoleTab)
 	c.editor.SetValue("select 42")
 	press(t, m, "enter")

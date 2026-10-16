@@ -22,13 +22,12 @@ func readyCatalogs() *meta.Cache {
 	return c
 }
 
-// insertConsole is a local console on app with the catalog loaded, in INSERT mode.
+// insertConsole is a local console on app with the catalog loaded; it opens in INSERT mode.
 func insertConsole(t *testing.T) *consoleTab {
 	t.Helper()
 	c := newConsoleTab(1, newFakeBackend(), newFakeStore(), readyCatalogs(), "local",
 		db.Namespace{Database: "app"}, config.Settings{MaxRows: 2, MaxColumnWidth: 40}, timings{})
 	c.SetSize(80, 24)
-	c.editor.EnterInsert()
 	return c
 }
 
@@ -150,7 +149,6 @@ func TestConsoleWithoutCatalogOffersKeywords(t *testing.T) {
 	c := newConsoleTab(1, newFakeBackend(), newFakeStore(), meta.NewCache(), "local",
 		db.Namespace{Database: "app"}, config.Settings{MaxRows: 2, MaxColumnWidth: 40}, timings{})
 	c.SetSize(80, 24)
-	c.editor.EnterInsert()
 	typeIn(t, c, "select * from us")
 	if c.popup != nil {
 		t.Fatalf("no tables known yet: %+v", c.popup)

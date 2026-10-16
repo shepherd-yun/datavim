@@ -7,6 +7,7 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- `Ctrl-a` / `Ctrl-e` in the console's INSERT mode move to the start / end of the line.
 - Import data from CSV, TSV or XLSX files, like DataGrip's Import Data from File: `I` on a
   table (or "Import data from file…" in its `a` menu) opens an Import tab with the file's
   settings (delimiter, UTF-8 or GBK, header row, sheet, NULL text), the column mapping (`x`
@@ -106,6 +107,8 @@ All notable changes to this project are documented here. The format follows
   `compare_max_rows` rows (`config.toml`, default 100000); `D` goes back to the structure.
 
 ### Changed
+- A console opens in INSERT mode, ready to type; `Esc` goes to NORMAL mode for the vim keys,
+  the leader and tab switching.
 - In the tree, `l` and `→` on a table or view expand it; `Enter` opens its data. Rebind
   `tree.open` in `keymap.toml` to change it.
 - `<Space>e` toggles the tree (was `<Space>b`) and `<Space>f` opens the recent tabs (was

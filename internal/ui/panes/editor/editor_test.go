@@ -237,7 +237,7 @@ func TestViewHighlightsAndMemoizes(t *testing.T) {
 func TestPlaceholderAndCells(t *testing.T) {
 	m := New()
 	m.SetSize(40, 2)
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "i to write SQL") {
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "type SQL") {
 		t.Fatalf("placeholder:\n%s", v)
 	}
 	for r, want := range map[rune]cell{
@@ -306,7 +306,7 @@ func TestPlaceholderAndAppendAtEnd(t *testing.T) {
 	m := New()
 	m.SetSize(40, 3)
 	m.SetPlaceholder("")
-	if v := ansi.Strip(m.View()); strings.Contains(v, "i to write SQL") {
+	if v := ansi.Strip(m.View()); strings.Contains(v, "type SQL") {
 		t.Fatalf("placeholder still shown:\n%s", v)
 	}
 	m.SetValue("ab\ncd")

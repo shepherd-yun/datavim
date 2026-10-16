@@ -111,7 +111,7 @@ func TestExportFromConsoleUsesStatementTarget(t *testing.T) {
 	m, _ := newTestModel(t)
 	dir := t.TempDir()
 	m.settings.ExportDir = dir
-	press(t, m, "l", "j", "space", "c")
+	press(t, m, "l", "j", "space", "c", "esc")
 	m.activeTab().(*consoleTab).editor.SetValue("select * from users")
 	press(t, m, "enter", "space", "x", "s", "enter")
 	if got := exportedFile(t, filepath.Join(dir, "users-*.sql")); !strings.HasPrefix(got, "INSERT INTO `users` (`id`, `name`)") {

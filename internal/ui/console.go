@@ -160,6 +160,7 @@ func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn strin
 		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), keys: keymap.Default(),
 	}
 	t.editor.SetHighlighter(highlight.NewHighlighter(d).Spans)
+	t.editor.EnterInsert() // a console opens ready to type
 	t.res = &editableResult{
 		id: id, backend: b, conn: conn, dialect: d, keys: t.keys, keyCtx: keymap.Results,
 		grid: t.grid, host: t, readOnly: "run a query first",

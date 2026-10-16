@@ -83,7 +83,7 @@ func TestFailedCatalogWaitsForRefresh(t *testing.T) {
 
 func TestConsoleDDLReloadsCatalog(t *testing.T) {
 	m, b := newTestModel(t)
-	press(t, m, "l", "j", "space", "c")
+	press(t, m, "l", "j", "space", "c", "esc")
 	c := m.activeTab().(*consoleTab)
 	c.editor.SetValue("create table t2 (id int)")
 	press(t, m, "enter")

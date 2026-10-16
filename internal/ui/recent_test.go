@@ -26,7 +26,7 @@ func TestRecentListsWhatWasOpened(t *testing.T) {
 
 func TestRecentConsoleAndMissingConnection(t *testing.T) {
 	m, b := newTestModel(t)
-	press(t, m, "l", "j", "space", "c", "ctrl+h")
+	press(t, m, "l", "j", "space", "c", "esc", "ctrl+h")
 	press(t, m, "space", "f")
 	if s := screen(m); !strings.Contains(s, "console  local/app") {
 		t.Fatalf("screen:\n%s", s)

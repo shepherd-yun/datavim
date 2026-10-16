@@ -10,6 +10,7 @@ func Help() []HelpLine {
 		{"0 ^ $ gg G f F t T % { }", "Move in the line / text"},
 		{"<ctrl+d> <ctrl+u>", "Half page down / up"},
 		{"i a I A o O", "Insert"},
+		{"<ctrl+a> <ctrl+e> <ctrl+w> <ctrl+u>", "In INSERT: line start / end, delete a word / to line start"},
 		{"v V", "Visual / visual line; enter runs the selection"},
 		{"d c y > <", "Operators, with a motion, iw aw i\" a\" i' a' i( a( or doubled"},
 		{"x D C p P", "Delete rune / to line end, change to line end, put"},

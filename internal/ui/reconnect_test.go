@@ -84,7 +84,7 @@ func TestDataTabReconnectsOnRefresh(t *testing.T) {
 func TestConsoleConnectionLossMarksTree(t *testing.T) {
 	m, b := newTestModel(t)
 	b.conn.setFail("select 1", fmt.Errorf("%w: broken pipe", db.ErrConnLost))
-	press(t, m, "l", "j", "space", "c")
+	press(t, m, "l", "j", "space", "c", "esc")
 	m.activeTab().(*consoleTab).editor.SetValue("select 1")
 	press(t, m, "enter")
 	if !strings.Contains(screen(m), "disconnected") {

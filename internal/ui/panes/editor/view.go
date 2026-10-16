@@ -15,7 +15,7 @@ import (
 
 const (
 	tabWidth           = 4
-	defaultPlaceholder = "i to write SQL · enter runs the statement under the cursor"
+	defaultPlaceholder = "type SQL · ctrl+j (enter in NORMAL mode) runs the statement under the cursor"
 )
 
 // cell is one rune as drawn.

@@ -94,7 +94,7 @@ func TestSelectedStatementsPointIntoTheText(t *testing.T) {
 func TestGtSwitchesTabs(t *testing.T) {
 	m, _ := newTestModel(t)
 	openUsers(t, m) // tab 1: users data
-	press(t, m, "ctrl+h", "space", "c")
+	press(t, m, "ctrl+h", "space", "c", "esc")
 	if m.active != 1 {
 		t.Fatalf("console is tab 2, active %d", m.active)
 	}
@@ -121,7 +121,7 @@ func TestTabCyclingFromEveryTab(t *testing.T) {
 	m, _ := newTestModel(t)
 	openUsers(t, m)                     // tab 1: users data
 	press(t, m, "ctrl+h", "j", "enter") // tab 2: view "active"
-	press(t, m, "ctrl+h", "space", "c") // tab 3: console
+	press(t, m, "ctrl+h", "space", "c", "esc") // tab 3: console
 	if len(m.tabs) != 3 || m.active != 2 {
 		t.Fatalf("tabs=%d active=%d", len(m.tabs), m.active)
 	}

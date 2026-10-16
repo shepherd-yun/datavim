@@ -122,6 +122,9 @@ func TestInsertMode(t *testing.T) {
 		{"|a", "i李 <esc>", "李| a", Normal},
 		{"a|b", "i<left><left>x", "x|ab", Insert},
 		{"ab\n|cd", "i<up><end>x", "abx|\ncd", Insert},
+		{"  ab|cd", "i<c-a>x", "x|  abcd", Insert}, // emacs keys: line start and end
+		{"a\nb|cd", "i<c-e>x", "a\nbcdx|", Insert},
+		{"a|b", "i<c-e><esc>", "a|b", Normal},
 		{"|", "i<esc>", "|", Normal},
 	})
 }

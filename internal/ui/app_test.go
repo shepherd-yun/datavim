@@ -333,7 +333,7 @@ func typeKeys(t *testing.T, m *Model, s string) {
 
 func TestConsoleFocusWraps(t *testing.T) {
 	m, _ := newTestModel(t)
-	press(t, m, "l", "j", "space", "c")
+	press(t, m, "l", "j", "space", "c", "esc")
 	c := m.activeTab().(*consoleTab)
 	press(t, m, "ctrl+k")
 	if !c.onResults {
@@ -360,9 +360,8 @@ func TestOpenConsoleTypeAndRun(t *testing.T) {
 	if s := screen(m); !strings.Contains(s, "[1]console:app") {
 		t.Fatalf("console tab:\n%s", s)
 	}
-	press(t, m, "i")
 	if !strings.Contains(screen(m), " INSERT ") {
-		t.Fatalf("status shows INSERT:\n%s", screen(m))
+		t.Fatalf("a new console opens in INSERT mode:\n%s", screen(m))
 	}
 	typeKeys(t, m, "select 1")
 	press(t, m, "1") // digits are text in INSERT, not "go to tab"
@@ -373,7 +372,7 @@ func TestOpenConsoleTypeAndRun(t *testing.T) {
 	if s := screen(m); !strings.Contains(s, "user1") || !strings.Contains(s, " NORMAL ") {
 		t.Fatalf("result:\n%s", s)
 	}
-	press(t, m, "ctrl+h", "space", "c")
+	press(t, m, "ctrl+h", "space", "c", "esc")
 	if len(m.tabs) != 1 {
 		t.Fatal("<space>c on the same database reuses the console")
 	}
@@ -381,7 +380,7 @@ func TestOpenConsoleTypeAndRun(t *testing.T) {
 
 func TestPasteGoesToTheEditorInInsertMode(t *testing.T) {
 	m, _ := newTestModel(t)
-	press(t, m, "l", "j", "space", "c", "i")
+	press(t, m, "l", "j", "space", "c")
 	m.Update(tea.PasteMsg{Content: "select 42"})
 	c := m.activeTab().(*consoleTab)
 	if c.editor.Value() != "select 42" {
@@ -391,7 +390,7 @@ func TestPasteGoesToTheEditorInInsertMode(t *testing.T) {
 
 func TestPasteGoesToTheEditorInNormalMode(t *testing.T) {
 	m, _ := newTestModel(t)
-	press(t, m, "l", "j", "space", "c")
+	press(t, m, "l", "j", "space", "c", "esc")
 	m.Update(tea.PasteMsg{Content: "select 42"})
 	c := m.activeTab().(*consoleTab)
 	if c.editor.Value() != "select 42" || c.editor.Insert() {
@@ -455,7 +454,7 @@ func TestSearchTreeAndGrid(t *testing.T) {
 
 func TestQuitClosesConsoleSessions(t *testing.T) {
 	m, b := newTestModel(t)
-	press(t, m, "l", "j", "space", "c", "enter") // empty editor: nothing runs
+	press(t, m, "l", "j", "space", "c", "esc", "enter") // empty editor: nothing runs
 	c := m.activeTab().(*consoleTab)
 	c.editor.SetValue("select 1")
 	press(t, m, "enter")
@@ -472,7 +471,7 @@ func TestQuitClosesConsoleSessions(t *testing.T) {
 
 func TestCloseTabClosesItsSession(t *testing.T) {
 	m, b := newTestModel(t)
-	press(t, m, "l", "j", "space", "c")
+	press(t, m, "l", "j", "space", "c", "esc")
 	m.activeTab().(*consoleTab).editor.SetValue("select 1")
 	press(t, m, "enter", ":", "q", "enter")
 	if len(m.tabs) != 0 || !b.conn.sessions[0].closed {
@@ -492,7 +491,7 @@ func TestLateRunResultForClosedTabClosesSession(t *testing.T) {
 
 func TestStructureFromConsoleNeedsATable(t *testing.T) {
 	m, _ := newTestModel(t)
-	press(t, m, "l", "j", "space", "c", "space", "s")
+	press(t, m, "l", "j", "space", "c", "esc", "space", "s")
 	if !strings.Contains(screen(m), "select a table first") {
 		t.Fatalf("screen:\n%s", screen(m))
 	}
@@ -511,7 +510,7 @@ func TestHistoryPicker(t *testing.T) {
 	if !ok || c.editor.Value() != "select 7" || c.ns.Database != "app" {
 		t.Fatalf("console = %#v", m.activeTab())
 	}
-	press(t, m, "space", "h", "enter")
+	press(t, m, "esc", "space", "h", "enter")
 	if c.editor.Value() != "select 7\nselect 7" {
 		t.Fatalf("appended to the open console: %q", c.editor.Value())
 	}
@@ -629,7 +628,7 @@ func command(t *testing.T, m *Model, text string) (quit bool) {
 // openLocalConsole opens a console on the local connection from the tree.
 func openLocalConsole(t *testing.T, m *Model) *consoleTab {
 	t.Helper()
-	press(t, m, "space", "c")
+	press(t, m, "space", "c", "esc") // to NORMAL mode
 	c, ok := m.activeTab().(*consoleTab)
 	if !ok {
 		t.Fatalf("console not opened:\n%s", screen(m))

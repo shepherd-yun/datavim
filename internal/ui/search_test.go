@@ -171,6 +171,7 @@ func TestSearchConsolesJumpsToTheLine(t *testing.T) {
 	first.editor.SetValue("select *\nfrom users\nwhere name = 'x'")
 	drain(t, m, m.openConsole("prod", db.Namespace{Database: "app"}))
 	m.activeTab().(*consoleTab).editor.SetValue("update users set NAME = 1")
+	press(t, m, "esc")
 	search(t, m, "name")
 	press(t, m, "tab")
 	if len(m.searchPicks) != 2 {

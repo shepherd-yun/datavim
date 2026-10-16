@@ -53,7 +53,7 @@ func TestConsoleHintFollowsKeymap(t *testing.T) {
 
 func TestConsoleLeaderIsNotTakenByEditor(t *testing.T) {
 	m, _ := commaModel(t)
-	press(t, m, "l", "j", ",", "c") // console opens focused, NORMAL mode
+	press(t, m, "l", "j", ",", "c", "esc") // console opens focused, INSERT mode
 	press(t, m, ",")
 	if len(m.pending) != 1 || m.pending[0] != "," {
 		t.Fatalf("pending = %q, want the leader", m.pending)
@@ -80,7 +80,7 @@ func TestKeyHintOmitsUnboundActions(t *testing.T) {
 
 func TestConsoleLeaderIsTextInInsertMode(t *testing.T) {
 	m, _ := commaModel(t)
-	press(t, m, "l", "j", ",", "c", "i", "a", ",", "b")
+	press(t, m, "l", "j", ",", "c", "a", ",", "b") // console opens in INSERT mode
 	if got := m.activeTab().(*consoleTab).editor.Value(); got != "a,b" {
 		t.Fatalf("editor = %q, want the leader typed as text", got)
 	}

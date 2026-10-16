@@ -43,7 +43,7 @@ func (e *Editor) insertKey(k Key) {
 		}
 	case "tab":
 		e.typeText(strings.Repeat(" ", shiftWidth))
-	case "left", "right", "up", "down", "home", "end":
+	case "left", "right", "up", "down", "home", "end", "ctrl+a", "ctrl+e":
 		switch k.Name {
 		case "left":
 			e.cur.Col = max(col-1, 0)
@@ -55,9 +55,9 @@ func (e *Editor) insertKey(k Key) {
 				nl = l + 1
 			}
 			e.cur = b.clamp(Pos{nl, col})
-		case "home":
+		case "home", "ctrl+a":
 			e.cur.Col = 0
-		case "end":
+		case "end", "ctrl+e":
 			e.cur.Col = b.lineLen(l)
 		}
 		// moving starts a new undo step; . repeats what is typed from here
