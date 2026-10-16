@@ -160,4 +160,3 @@ func (m *Model) keyChecked(msg keyCheckedMsg) tea.Cmd {
 	}
 	return nil
 }
-
