@@ -5,7 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
 )
 
 func TestActionMenuOnTable(t *testing.T) {
@@ -153,15 +155,24 @@ func menuDescs(m *Model) []string {
 
 func TestRedisNodeMenu(t *testing.T) {
 	m, _ := newKeyModel(t, "user:1", "solo")
-	if got := menuDescs(m); !slices.Equal(got, []string{"Open console", "Server status", "New key", "Filter keys", "Analyze big keys…", "Refresh", "Delete keys…", "Copy name"}) {
+	if got := menuDescs(m); !slices.Equal(got, []string{
+		"Open console", "New key", "Open key by name…", "Filter keys…", "Analyze big keys…",
+		"Starred keys", "Server status", "Refresh", "Delete keys…", "Copy name",
+	}) {
 		t.Fatalf("db: %q", got)
 	}
 	pressAll(t, m, "j")
-	if got := menuDescs(m); !slices.Equal(got, []string{"New key", "Analyze big keys…", "Delete keys under user:…", "Copy name"}) {
+	if got := menuDescs(m); !slices.Equal(got, []string{
+		"Expand / collapse", "Open console", "New key", "Open key by name…", "Filter keys…",
+		"Analyze big keys…", "Starred keys", "Server status", "Refresh", "Delete keys under user:…", "Copy name",
+	}) {
 		t.Fatalf("folder: %q", got)
 	}
 	pressAll(t, m, "j")
-	if got := menuDescs(m); !slices.Equal(got, []string{"Open", "Star / unstar", "Rename key", "Delete key", "Copy name"}) {
+	if got := menuDescs(m); !slices.Equal(got, []string{
+		"Open", "Star / unstar", "Rename key", "Open console", "New key", "Open key by name…",
+		"Filter keys…", "Analyze big keys…", "Starred keys", "Server status", "Refresh", "Delete key", "Copy name",
+	}) {
 		t.Fatalf("key: %q", got)
 	}
 	pressAll(t, m, "a")
@@ -170,7 +181,38 @@ func TestRedisNodeMenu(t *testing.T) {
 	}
 	pressAll(t, m, "esc")
 	pressAll(t, m, "g", "g")
-	if got := menuDescs(m); !slices.Contains(got, "Open console") || !slices.Contains(got, "Server status") || !slices.Contains(got, "Delete connection") {
+	if got := menuDescs(m); !slices.Equal(got, []string{
+		"Open console", "Server status", "Open key by name…", "Starred keys", "Edit connection",
+		"Enter password", "Refresh", "Delete connection", "Copy name",
+	}) {
 		t.Fatalf("connection: %q", got)
+	}
+}
+
+func TestRedisNodeMenuFilter(t *testing.T) {
+	m, _ := newKeyModel(t, "user:1", "solo")
+	pressAll(t, m, "a")
+	pressAll(t, m, "F") // the menu runs an entry by its keys
+	answer(t, m, "user:*")
+	if got := menuDescs(m); !slices.Contains(got, "Clear the filter (user:*)") {
+		t.Fatalf("filtered db: %q", got)
+	}
+	pressAll(t, m, "a", "f", "x")
+	if got := menuDescs(m); slices.ContainsFunc(got, func(d string) bool { return strings.HasPrefix(d, "Clear the filter") }) {
+		t.Fatalf("filter not cleared: %q", got)
+	}
+}
+
+func TestRedisNodeMenuOnLoadMore(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.fill(0, "k", 25_000)
+	dbn := expandDB0(t, m)
+	m.tree.SelectWhere(func(n *tree.Node) bool { return n.Kind == tree.KindMore })
+	if got := menuDescs(m); !slices.Equal(got, []string{"Load more keys", "Filter keys…", "Refresh"}) {
+		t.Fatalf("load more: %q", got)
+	}
+	pressAll(t, m, "a", "enter")
+	if got := countKeys(dbn); got != 20_000 {
+		t.Fatalf("after load more = %d keys", got)
 	}
 }

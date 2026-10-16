@@ -18,40 +18,74 @@ type menuItem struct {
 	seq    []string // the keys as key events read; nil when unbound
 }
 
+// menuEntry is an action of the actions menu before its keys are looked up.
+type menuEntry struct {
+	a    keymap.Action
+	desc string
+}
+
 // menuPickedMsg runs the action picked in the actions menu.
 type menuPickedMsg struct{ action keymap.Action }
 
 // nodeMenu lists what can be done with n, the tree's right-click menu.
 func (m *Model) nodeMenu(n *tree.Node) []menuItem {
-	type entry struct {
-		a    keymap.Action
-		desc string
-	}
+	type entry = menuEntry
 	var entries []entry
 	switch n.Kind {
 	case tree.KindRedisDB:
 		entries = []entry{
 			{keymap.OpenConsole, "Open console"},
-			{keymap.ServerInfo, "Server status"},
 			{keymap.NewKey, "New key"},
-			{keymap.FilterPrompt, "Filter keys"},
-			{keymap.BigKeys, "Analyze big keys…"},
-			{keymap.Refresh, "Refresh"},
-			{keymap.DeleteNode, "Delete keys…"},
+			{keymap.OpenKey, "Open key by name…"},
 		}
+		entries = append(entries, m.redisFilterEntries(n)...)
+		entries = append(entries,
+			entry{keymap.BigKeys, "Analyze big keys…"},
+			entry{keymap.Favorites, "Starred keys"},
+			entry{keymap.ServerInfo, "Server status"},
+			entry{keymap.Refresh, "Refresh"},
+			entry{keymap.DeleteNode, "Delete keys…"},
+		)
 	case tree.KindKeyFolder:
 		entries = []entry{
+			{keymap.Open, "Expand / collapse"},
+			{keymap.OpenConsole, "Open console"},
 			{keymap.NewKey, "New key"},
-			{keymap.BigKeys, "Analyze big keys…"},
-			{keymap.DeleteNode, "Delete keys under " + rcmd.Escape(n.Key) + "…"},
+			{keymap.OpenKey, "Open key by name…"},
 		}
+		entries = append(entries, m.redisFilterEntries(n)...)
+		entries = append(entries,
+			entry{keymap.BigKeys, "Analyze big keys…"},
+			entry{keymap.Favorites, "Starred keys"},
+			entry{keymap.ServerInfo, "Server status"},
+			entry{keymap.Refresh, "Refresh"},
+			entry{keymap.DeleteNode, "Delete keys under " + rcmd.Escape(n.Key) + "…"},
+		)
 	case tree.KindRedisKey:
 		entries = []entry{
 			{keymap.Open, "Open"},
 			{keymap.ToggleFavorite, "Star / unstar"},
 			{keymap.RenameTable, "Rename key"},
-			{keymap.DeleteNode, "Delete key"},
+			{keymap.OpenConsole, "Open console"},
+			{keymap.NewKey, "New key"},
+			{keymap.OpenKey, "Open key by name…"},
 		}
+		entries = append(entries, m.redisFilterEntries(n)...)
+		entries = append(entries,
+			entry{keymap.BigKeys, "Analyze big keys…"},
+			entry{keymap.Favorites, "Starred keys"},
+			entry{keymap.ServerInfo, "Server status"},
+			entry{keymap.Refresh, "Refresh"},
+			entry{keymap.DeleteNode, "Delete key"},
+		)
+	case tree.KindMore:
+		if k, ok := redisKeyOf(n); ok {
+			if sc := m.scans[k]; sc != nil && !sc.running && !sc.capped && !sc.done {
+				entries = append(entries, entry{keymap.Open, "Load more keys"})
+			}
+		}
+		entries = append(entries, m.redisFilterEntries(n)...)
+		entries = append(entries, entry{keymap.Refresh, "Refresh"})
 	case tree.KindConn:
 		entries = []entry{
 			{keymap.OpenConsole, "Open console"},
@@ -61,7 +95,11 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			{keymap.DeleteNode, "Delete connection"},
 		}
 		if isRedis(m.backend, n.Conn) {
-			entries = append(entries[:1], append([]entry{{keymap.ServerInfo, "Server status"}}, entries[1:]...)...)
+			entries = append(entries[:1], append([]entry{
+				{keymap.ServerInfo, "Server status"},
+				{keymap.OpenKey, "Open key by name…"},
+				{keymap.Favorites, "Starred keys"},
+			}, entries[1:]...)...)
 		}
 	case tree.KindDatabase, tree.KindSchema:
 		entries = []entry{
@@ -117,7 +155,9 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 	case tree.KindForeignKey:
 		entries = []entry{{keymap.Open, "Go to " + n.Ref.Name}, {keymap.Refresh, "Refresh"}}
 	}
-	entries = append(entries, entry{keymap.YankName, "Copy name"})
+	if n.Kind != tree.KindMore {
+		entries = append(entries, entry{keymap.YankName, "Copy name"})
+	}
 	if n.Kind != tree.KindConn && !isRedisNode(n) {
 		entries = append(entries, entry{keymap.YankQualified, "Copy qualified name"})
 	}
@@ -127,6 +167,18 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 		items[i] = menuItem{action: e.a, desc: e.desc, keys: m.keys.Display(seq), seq: seq}
 	}
 	return items
+}
+
+// redisFilterEntries are the key filter's entries for a node of a redis db:
+// clearing it only while one is set.
+func (m *Model) redisFilterEntries(n *tree.Node) []menuEntry {
+	out := []menuEntry{{keymap.FilterPrompt, "Filter keys…"}}
+	if k, ok := redisKeyOf(n); ok {
+		if s := m.scans[k]; s != nil && s.pattern != "" {
+			out = append(out, menuEntry{keymap.FilterClear, "Clear the filter (" + rcmd.Escape(s.pattern) + ")"})
+		}
+	}
+	return out
 }
 
 // openNodeMenu shows the actions menu of the selected node: an entry's
