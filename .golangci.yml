@@ -16,7 +16,7 @@ linters:
       # Only switches marked //exhaustive:enforce are checked: every switch
       # on sqlx.Dialect carries the mark, so a new engine cannot fall
       # through to another engine's behaviour.
-      explicit-exhaustive-switch: true
+      explicit-exhaustive: true
   exclusions:
     rules:
       # Everything lives under internal/ (spec §11); doc comments on every
