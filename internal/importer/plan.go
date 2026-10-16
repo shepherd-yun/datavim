@@ -15,6 +15,9 @@ type Column struct {
 	Source int    // index in the file's rows
 	Header string // the file's name for it, for messages
 	Target Target
+	// Generate: the column has no file column (Source is -1); the import
+	// numbers the rows from the table's largest value + 1.
+	Generate bool
 }
 
 // Plan says how file rows become table rows.
@@ -38,6 +41,9 @@ func (p Plan) Row(line int, cells []string) (out []Cell, ok bool, err error) {
 	}
 	out = make([]Cell, len(p.Columns))
 	for i, c := range p.Columns {
+		if c.Generate {
+			continue // numbered by Run
+		}
 		text := ""
 		if c.Source < len(cells) {
 			text = cells[c.Source]

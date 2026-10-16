@@ -100,3 +100,14 @@ func TestNames(t *testing.T) {
 		t.Fatalf("UniqueIdents (-want +got):\n%s", diff)
 	}
 }
+
+func TestPlanRowLeavesGeneratedColumns(t *testing.T) {
+	p := Plan{Driver: "mysql", Width: 1, Columns: []Column{
+		{Source: 0, Header: "name", Target: TargetOf("mysql", db.Column{Name: "name", Type: "text"})},
+		{Source: -1, Generate: true, Target: TargetOf("mysql", db.Column{Name: "id", Type: "int"})},
+	}}
+	got, ok, err := p.Row(2, []string{"a"})
+	if err != nil || !ok || len(got) != 2 || got[0].Text != "a" || got[1] != (Cell{}) {
+		t.Fatalf("Row = %+v, %v, %v", got, ok, err)
+	}
+}

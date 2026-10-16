@@ -79,6 +79,7 @@ type importTab struct {
 	cols    []db.Column        // the table's columns
 	infer   *importer.Inferrer // create: what the file's values look like
 	rows    []mapRow
+	autoID  bool // number genCol from the table's largest value + 1
 
 	phase    importPhase
 	progress *atomic.Int64
@@ -103,7 +104,7 @@ func newImportTab(id int, b Backend, home, conn, driver string, ref db.TableRef,
 	return &importTab{
 		id: id, key: importTabKey(conn, ref, path), keys: keymap.Default(), backend: b, home: home,
 		conn: conn, driver: driver, ref: ref, create: create, path: path,
-		opts: importer.DefaultOptions(path), tick: importTick, section: secMapping,
+		opts: importer.DefaultOptions(path), tick: importTick, section: secMapping, autoID: true,
 	}
 }
 
@@ -207,6 +208,7 @@ func (t *importTab) loaded(m importLoadedMsg) {
 	} else {
 		t.mapByName()
 	}
+	t.autoID = true
 	// The Source cursor stays on the setting just changed.
 	for _, s := range []int{secMapping, secPreview} {
 		t.cursor[s], t.offset[s] = 0, 0
@@ -259,7 +261,42 @@ func (t *importTab) columns() []importer.Column {
 		}
 		out = append(out, importer.Column{Source: i, Header: t.sample.Header[i], Target: importer.TargetOf(t.driver, c)})
 	}
+	if g := t.genCol(); g >= 0 && t.autoID {
+		out = append(out, importer.Column{Source: -1, Header: "(generate)", Generate: true, Target: importer.TargetOf(t.driver, t.cols[g])})
+	}
 	return out
+}
+
+// genCol is the table column the import can number itself (-1 when none):
+// the table's only key column, an integer that needs a value and gets none
+// from the file.
+func (t *importTab) genCol() int {
+	if t.create {
+		return -1
+	}
+	key := -1
+	for j, c := range t.cols {
+		if !c.PrimaryKey {
+			continue
+		}
+		if key >= 0 {
+			return -1
+		}
+		key = j
+	}
+	if key < 0 {
+		return -1
+	}
+	c := t.cols[key]
+	if c.Nullable || c.Default != nil || c.AutoIncrement || c.Generated != "" || importer.TargetOf(t.driver, c).Kind != importer.KindInteger {
+		return -1
+	}
+	for _, r := range t.rows {
+		if r.picked && r.target == key {
+			return -1
+		}
+	}
+	return key
 }
 
 // newNullable says whether column i of a new table allows NULL: when some
@@ -282,6 +319,9 @@ func (t *importTab) missing() []string {
 		if r.picked && r.target >= 0 {
 			used[r.target] = true
 		}
+	}
+	if g := t.genCol(); g >= 0 && t.autoID {
+		used[g] = true
 	}
 	var out []string
 	for j, c := range t.cols {
@@ -358,6 +398,9 @@ func (t *importTab) sectionLen(s int) int {
 	case secSource:
 		return len(t.settings())
 	case secMapping:
+		if t.genCol() >= 0 {
+			return len(t.rows) + 1
+		}
 		return len(t.rows)
 	}
 	if t.problems != nil {
@@ -445,6 +488,14 @@ func (t *importTab) mappingLines() []string {
 		}
 		out = append(out, textutil.Sanitize(fmt.Sprintf("  %s %-*s  → %s", box, width, string(h), target)))
 	}
+	if g := t.genCol(); g >= 0 {
+		box := "[ ]"
+		if t.autoID {
+			box = "[✓]"
+		}
+		c := t.cols[g]
+		out = append(out, textutil.Sanitize(fmt.Sprintf("  %s %-*s  → %s  %s  MAX(%s)+1…", box, width, "(generate)", c.Name, c.Type, c.Name)))
+	}
 	return out
 }
 
@@ -465,6 +516,10 @@ func (t *importTab) previewLines() (head, rows []string) {
 	for r, row := range t.sample.Rows {
 		cells[r] = make([]string, len(cols))
 		for i, c := range cols {
+			if c.Generate {
+				cells[r][i] = "auto"
+				continue
+			}
 			text := ""
 			if c.Source < len(row) {
 				text = row[c.Source]
@@ -539,7 +594,7 @@ func (t *importTab) View(bool) string {
 		lines = append(lines, theme.Error.Render(textutil.Fit("  the file is not UTF-8 · try encoding GBK", t.width)))
 	}
 	rest := avail - len(lines)
-	mapH := max(min(len(t.rows), (rest-4)/2), 1)
+	mapH := max(min(t.sectionLen(secMapping), (rest-4)/2), 1)
 	lines = append(lines, t.sectionTitle(secMapping, "Mapping"))
 	switch {
 	case t.loading:
@@ -646,15 +701,20 @@ func (t *importTab) mapCursor() (int, bool) {
 		t.setStatus(joinHints("this works in the mapping", keyHint(t.keys, keymap.Import, keymap.NextSection, "moves between sections")), true)
 		return 0, false
 	}
-	if len(t.rows) == 0 {
+	n := t.sectionLen(secMapping)
+	if n == 0 {
 		return 0, false
 	}
-	return textutil.Clamp(t.cursor[secMapping], 0, len(t.rows)-1), true
+	return textutil.Clamp(t.cursor[secMapping], 0, n-1), true
 }
 
 func (t *importTab) toggle() {
 	i, ok := t.mapCursor()
 	if !ok {
+		return
+	}
+	if i == len(t.rows) { // the generated key
+		t.autoID = !t.autoID
 		return
 	}
 	if !t.create && t.rows[i].target < 0 {
@@ -673,6 +733,7 @@ func (t *importTab) pickAll(on bool) {
 			t.rows[i].picked = on
 		}
 	}
+	t.autoID = on
 }
 
 // setTarget maps file column i to table column target (-1: skip). A target
@@ -787,6 +848,11 @@ func (t *importTab) editSetting(s importSetting) tea.Cmd {
 func (t *importTab) editMapping() tea.Cmd {
 	i, ok := t.mapCursor()
 	if !ok {
+		return nil
+	}
+	if i == len(t.rows) {
+		name := t.cols[t.genCol()].Name
+		t.setStatus(joinHints(name+" is numbered from MAX("+name+")+1 in file order", keyHint(t.keys, keymap.Import, keymap.ImportToggle, "skips it")), false)
 		return nil
 	}
 	id, header := t.id, t.sample.Header[i]
@@ -957,6 +1023,7 @@ func (t *importTab) checked(m importCheckedMsg) tea.Cmd {
 	default:
 		t.total = m.result.Rows
 		job := m.job
+		job.Rows = m.result.Rows
 		t.job = &job
 		return openOverlay(t.confirmation())
 	}
@@ -975,6 +1042,11 @@ func (t *importTab) confirmation() overlay.Overlay {
 	}
 	insert := len(lines)
 	lines = append(lines, fmt.Sprintf("Insert %s into %s in one transaction.", plural(t.total, "row"), t.refName()))
+	for _, c := range t.job.Plan.Columns {
+		if c.Generate {
+			lines = append(lines, fmt.Sprintf("%s = MAX(%s)+1, +2… in file order.", c.Target.Name, c.Target.Name))
+		}
+	}
 	ok := importConfirmedMsg{tabID: t.id}
 	if cfg.Env != config.EnvProd {
 		return overlay.NewPreview(title, lines, ok)

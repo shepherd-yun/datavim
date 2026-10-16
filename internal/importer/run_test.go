@@ -18,10 +18,12 @@ type call struct {
 	args []any
 }
 
-// fakeQuerier records Exec calls; fail decides which ones fail.
+// fakeQuerier records Exec and Query calls; fail decides which Execs fail.
+// Query answers max, the table's largest id.
 type fakeQuerier struct {
 	calls []call
 	fail  func(sql string, args []any) error
+	max   string
 }
 
 func (f *fakeQuerier) Exec(ctx context.Context, q string, args ...any) (db.ExecResult, error) {
@@ -37,8 +39,9 @@ func (f *fakeQuerier) Exec(ctx context.Context, q string, args ...any) (db.ExecR
 	return db.ExecResult{RowsAffected: 1}, nil
 }
 
-func (f *fakeQuerier) Query(context.Context, string, ...any) (*db.ResultSet, error) {
-	return &db.ResultSet{}, nil
+func (f *fakeQuerier) Query(_ context.Context, q string, args ...any) (*db.ResultSet, error) {
+	f.calls = append(f.calls, call{q, args})
+	return &db.ResultSet{Rows: [][]db.Value{{{Text: f.max}}}}, nil
 }
 
 func (f *fakeQuerier) Stream(context.Context, string, func([]db.ColumnInfo), func([]db.Value) error) error {
@@ -246,5 +249,55 @@ func TestRunCancelAndConnLost(t *testing.T) {
 	_, err = Run(context.Background(), q, Job{Path: idsFile(t, 2), Options: DefaultOptions("ids.csv"), Plan: idsPlan("mysql")}, new(atomic.Int64))
 	if !db.IsConnLost(err) || slices.Contains(q.statements(), "ROLLBACK TO SAVEPOINT sqlvim_import") {
 		t.Fatalf("conn lost: %v, %v", err, q.statements())
+	}
+}
+
+// namesPlan maps a one-column file "name" to app.t and generates its id.
+func namesPlan(driver, idType string) Plan {
+	return Plan{
+		Driver: driver, Width: 1,
+		Table: db.TableRef{Namespace: db.Namespace{Database: "app", Schema: "public"}, Name: "t"},
+		Columns: []Column{
+			{Source: 0, Header: "name", Target: TargetOf(driver, db.Column{Name: "name", Type: "text"})},
+			{Source: -1, Header: "(generate)", Generate: true, Target: TargetOf(driver, db.Column{Name: "id", Type: idType, PrimaryKey: true})},
+		},
+	}
+}
+
+func TestRunGeneratesIDs(t *testing.T) {
+	p := writeFile(t, "a.csv", "name\na\n\nb\n")
+	q := &fakeQuerier{max: "41"}
+	n, err := Run(context.Background(), q, Job{Path: p, Options: DefaultOptions(p), Plan: namesPlan("mysql", "int"), Rows: 2}, new(atomic.Int64))
+	if err != nil || n != 2 {
+		t.Fatalf("n = %d, err = %v", n, err)
+	}
+	want := []string{"START TRANSACTION", "SELECT COALESCE(MAX(`id`), 0) FROM `app`.`t` FOR UPDATE", "SAVEPOINT sqlvim_import", "INSERT 2 rows", "RELEASE SAVEPOINT sqlvim_import", "COMMIT"}
+	if got := q.statements(); !slices.Equal(got, want) {
+		t.Fatalf("statements:\n%v\nwant\n%v", got, want)
+	}
+	ins := q.calls[3]
+	if !strings.Contains(ins.sql, "(`name`, `id`)") || !slices.Equal(ins.args, []any{"a", "42", "b", "43"}) {
+		t.Fatalf("insert %s %v", ins.sql, ins.args)
+	}
+
+	q = &fakeQuerier{max: "0"} // an empty table: MAX is NULL, COALESCE gives 0
+	if _, err := Run(context.Background(), q, Job{Path: p, Options: DefaultOptions(p), Plan: namesPlan("postgres", "integer"), Rows: 2}, new(atomic.Int64)); err != nil {
+		t.Fatal(err)
+	}
+	want = []string{"BEGIN", `LOCK TABLE "public"."t" IN SHARE ROW EXCLUSIVE MODE`, `SELECT COALESCE(MAX("id"), 0) FROM "public"."t"`, "SAVEPOINT sqlvim_import"}
+	if got := q.statements(); !slices.Equal(got[:4], want) || !slices.Equal(q.calls[4].args, []any{"a", "1", "b", "2"}) {
+		t.Fatalf("postgres: %v %v", got, q.calls[4].args)
+	}
+}
+
+func TestRunRefusesIDsOutOfRange(t *testing.T) {
+	p := writeFile(t, "a.csv", "name\na\nb\n")
+	q := &fakeQuerier{max: "126"}
+	_, err := Run(context.Background(), q, Job{Path: p, Options: DefaultOptions(p), Plan: namesPlan("mysql", "tinyint"), Rows: 2}, new(atomic.Int64))
+	if err == nil || !strings.Contains(err.Error(), "out of range for tinyint") {
+		t.Fatalf("err = %v", err)
+	}
+	if got := q.statements(); slices.ContainsFunc(got, func(s string) bool { return strings.HasPrefix(s, "INSERT") }) || got[len(got)-1] != "ROLLBACK" {
+		t.Fatalf("statements %v", got)
 	}
 }

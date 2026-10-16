@@ -106,6 +106,29 @@ func runImportContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 	})
 
+	t.Run("importer numbers a generated key after the table's largest value", func(t *testing.T) {
+		table := ref("imp_gen")
+		name := d.QualifiedName(table)
+		exec(t, "DROP TABLE IF EXISTS "+name)
+		exec(t, "CREATE TABLE "+name+" (id int PRIMARY KEY, name varchar(10))")
+		exec(t, "INSERT INTO "+name+" (id, name) VALUES (5, 'x')")
+		cols, err := conn.Meta().Columns(ctx, table)
+		if err != nil {
+			t.Fatal(err)
+		}
+		p := importer.Plan{Driver: f.Driver, Table: table, Width: 1, Columns: []importer.Column{
+			{Source: 0, Header: "name", Target: importer.TargetOf(f.Driver, cols[1])},
+			{Source: -1, Header: "(generate)", Generate: true, Target: importer.TargetOf(f.Driver, cols[0])},
+		}}
+		src := file(t, "name\na\nb\n")
+		if n, err := run(t, importer.Job{Path: src, Options: importer.DefaultOptions(src), Plan: p, Rows: 2}); err != nil || n != 2 {
+			t.Fatalf("n = %d, err = %v", n, err)
+		}
+		if got := count(t, "SELECT COUNT(*) FROM "+name+" WHERE (id = 6 AND name = 'a') OR (id = 7 AND name = 'b')"); got != "2" {
+			t.Fatalf("%s rows numbered 6 and 7", got)
+		}
+	})
+
 	t.Run("importer creates a table from the file, and leaves none when it fails", func(t *testing.T) {
 		for _, tc := range []struct {
 			table, data string

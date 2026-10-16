@@ -248,3 +248,4 @@ Bool 不推断（`0/1` 会推断为 `bigint`），用户可以用 `t` 修改。
 - MySQL 上值带小数秒的日期时间列推断为 `datetime(6)`。
 - 重新读取文件时，表头不变就保留映射（改 NULL 文本或编码不会丢掉已选的映射）；表头变了就重新映射。
 - Source 区多一行 `file`，路径输错时可以在 tab 里直接改。
+- 导入已有表时，如果表的主键只有一列、是整数、NOT NULL、没有默认值也不是自增，而文件里没有映射到它的列，Mapping 区会多一行 `[✓] (generate) → id … MAX(id)+1…`（默认勾选，`x` 取消）。写入时在事务里先锁表（MySQL `SELECT COALESCE(MAX(id), 0) … FOR UPDATE`，PostgreSQL `LOCK TABLE … IN SHARE ROW EXCLUSIVE MODE` 后再取 MAX），再按文件顺序从 MAX+1 编号；最后一个号超出列类型范围时，在写入任何一行之前报错。预览里这一列显示 `auto`。

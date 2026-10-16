@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/big"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -130,6 +132,9 @@ type Job struct {
 	// Drop removes the created table again after a failure on MySQL, whose
 	// CREATE TABLE commits at once.
 	Drop string
+	// Rows is how many rows Check counted. With a generated column the last
+	// number is checked against the column's type before anything is written.
+	Rows int
 }
 
 // LineError is a batch the server rejected: at Line when replaying the
@@ -209,6 +214,14 @@ func insertAll(ctx context.Context, s db.Querier, d sqlx.Dialect, job Job, done 
 			}
 		}
 	}
+	gen := slices.IndexFunc(job.Plan.Columns, func(c Column) bool { return c.Generate })
+	var next *big.Int
+	if gen >= 0 {
+		var err error
+		if next, err = firstID(ctx, s, d, job.Plan, gen, job.Rows); err != nil {
+			return 0, err
+		}
+	}
 	src, err := Open(job.Path, job.Options)
 	if err != nil {
 		return 0, err
@@ -245,6 +258,13 @@ func insertAll(ctx context.Context, s db.Querier, d sqlx.Dialect, job Job, done 
 		if !ok {
 			continue
 		}
+		if gen >= 0 {
+			c := job.Plan.Columns[gen]
+			if cells[gen], err = Convert(c.Target, next.String(), ""); err != nil {
+				return 0, &RowError{Line: src.Line(), Column: c.Target.Name, Value: next.String(), Reason: err.Error()}
+			}
+			next.Add(next, big.NewInt(1))
+		}
 		rows, lines = append(rows, cells), append(lines, src.Line())
 		if len(rows) == size {
 			if err := flush(); err != nil {
@@ -253,6 +273,38 @@ func insertAll(ctx context.Context, s db.Querier, d sqlx.Dialect, job Job, done 
 		}
 	}
 	return n, flush()
+}
+
+// firstID locks the table against other inserts until the transaction ends
+// and returns the generated column's largest value + 1. The last of rows
+// numbers must fit the column's type.
+func firstID(ctx context.Context, s db.Querier, d sqlx.Dialect, p Plan, gen, rows int) (*big.Int, error) {
+	c := p.Columns[gen].Target
+	table := sqlx.QualifiedName(d, p.Table)
+	q := "SELECT COALESCE(MAX(" + sqlx.QuoteIdent(d, c.Name) + "), 0) FROM " + table
+	if d == sqlx.Postgres {
+		if _, err := s.Exec(ctx, "LOCK TABLE "+table+" IN SHARE ROW EXCLUSIVE MODE"); err != nil {
+			return nil, err
+		}
+	} else {
+		q += " FOR UPDATE"
+	}
+	rs, err := s.Query(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	top, ok := new(big.Int), false
+	if len(rs.Rows) == 1 && len(rs.Rows[0]) == 1 {
+		top, ok = top.SetString(strings.TrimSpace(rs.Rows[0][0].Text), 10)
+	}
+	if !ok {
+		return nil, fmt.Errorf("cannot read the largest %s of %s", c.Name, displayName(d, p.Table))
+	}
+	last := new(big.Int).Add(top, big.NewInt(int64(max(rows, 1))))
+	if _, err := Convert(c, last.String(), ""); err != nil {
+		return nil, fmt.Errorf("generated %s would reach %s, which %w", c.Name, last, err)
+	}
+	return top.Add(top, big.NewInt(1)), nil
 }
 
 // insertBatch inserts rows behind a savepoint. When the server rejects

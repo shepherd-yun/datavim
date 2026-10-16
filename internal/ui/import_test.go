@@ -152,10 +152,15 @@ func TestImportMappingKeys(t *testing.T) {
 	if it.rows[0].picked {
 		t.Fatal("x did not skip ID")
 	}
+	// id is a plain integer key: the import offers to number it
+	if !strings.Contains(screen(m), "[✓] (generate)") || strings.Contains(screen(m), "needs values for") {
+		t.Fatalf("generated id not offered:\n%s", screen(m))
+	}
+	press(t, m, "j", "j", "j", "x") // skip the generated id too
 	if !strings.Contains(screen(m), "app.users needs values for id") {
 		t.Fatalf("missing id not shown:\n%s", screen(m))
 	}
-	press(t, m, "x")
+	press(t, m, "g", "g", "x")
 	press(t, m, "j", "j", "x") // note has no target
 	if it.rows[2].picked || !strings.Contains(screen(m), "no target column") {
 		t.Fatalf("note: %+v\n%s", it.rows[2], screen(m))
@@ -302,7 +307,7 @@ func TestImportRefusesWithoutRequiredColumns(t *testing.T) {
 	m, _ := newTestModel(t)
 	importFixture(t, m, "orders.csv", ordersCSV)
 	openImportOn(t, m, "orders.csv", "local", "app", "users")
-	press(t, m, "x", "space", "w") // skip ID
+	press(t, m, "x", "j", "j", "j", "x", "space", "w") // skip ID and the generated id
 	if !strings.Contains(screen(m), "needs values for id") || m.overlay != nil {
 		t.Fatalf("screen:\n%s", screen(m))
 	}
@@ -426,5 +431,77 @@ func TestImportErrorText(t *testing.T) {
 		if got := importErrorText(err); got != want {
 			t.Errorf("importErrorText(%v) = %q, want %q", err, got, want)
 		}
+	}
+}
+
+// keyedUsers gives app.users a plain int primary key: no default, not
+// auto-increment, so a file without ids needs them generated.
+func keyedUsers(b *fakeBackend) {
+	b.conn.setColumns([]db.Column{
+		{Name: "id", Type: "int", PrimaryKey: true},
+		{Name: "name", Type: "text", Nullable: true},
+	})
+	b.conn.setData("users", []db.ColumnInfo{{Name: "max"}}, []db.Value{{Text: "41"}})
+}
+
+func TestImportGeneratesTheKey(t *testing.T) {
+	m, b := newTestModel(t)
+	keyedUsers(b)
+	importFixture(t, m, "names.csv", "Name\na\nb\n")
+	it := openImportOn(t, m, "names.csv", "local", "app", "users")
+	fastTicks(it)
+	s := screen(m)
+	for _, want := range []string{"[✓] (generate)", "→ id  int  MAX(id)+1…", "auto"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("missing %q:\n%s", want, s)
+		}
+	}
+	if strings.Contains(s, "needs values for") {
+		t.Fatalf("id reported missing:\n%s", s)
+	}
+	press(t, m, "space", "w")
+	if !strings.Contains(screen(m), "id = MAX(id)+1, +2… in file order") {
+		t.Fatalf("confirmation:\n%s", screen(m))
+	}
+	press(t, m, "y")
+	if !slices.Contains(b.conn.execList(), "INSERT INTO `app`.`users` (`name`, `id`) VALUES (?, ?), (?, ?)") {
+		t.Fatalf("execs %v", b.conn.execList())
+	}
+	if !strings.Contains(screen(m), "imported 2 rows into app.users") {
+		t.Fatalf("status:\n%s", screen(m))
+	}
+}
+
+func TestImportGeneratedKeyCanBeSkipped(t *testing.T) {
+	m, b := newTestModel(t)
+	keyedUsers(b)
+	importFixture(t, m, "names.csv", "Name\na\n")
+	it := openImportOn(t, m, "names.csv", "local", "app", "users")
+	press(t, m, "j", "x") // the (generate) row
+	if it.autoID || !strings.Contains(screen(m), "needs values for id") {
+		t.Fatalf("x did not skip it:\n%s", screen(m))
+	}
+	press(t, m, "a")
+	if !it.autoID {
+		t.Fatal("a did not pick it again")
+	}
+	// mapping a file column to id drops the generated row
+	importFixture(t, m, "ids.csv", "ID,Name\n7,a\n")
+	it = openImportOn(t, m, "ids.csv", "local", "app", "users")
+	if strings.Contains(screen(m), "(generate)") || len(it.columns()) != 2 {
+		t.Fatalf("generate offered with id in the file:\n%s", screen(m))
+	}
+}
+
+func TestImportGeneratesOnlyIntegerKeys(t *testing.T) {
+	m, b := newTestModel(t)
+	b.conn.setColumns([]db.Column{
+		{Name: "code", Type: "varchar(10)", PrimaryKey: true},
+		{Name: "name", Type: "text", Nullable: true},
+	})
+	importFixture(t, m, "names.csv", "Name\na\n")
+	openImportOn(t, m, "names.csv", "local", "app", "users")
+	if s := screen(m); strings.Contains(s, "(generate)") || !strings.Contains(s, "needs values for code") {
+		t.Fatalf("screen:\n%s", s)
 	}
 }

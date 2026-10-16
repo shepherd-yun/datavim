@@ -15,7 +15,9 @@ All notable changes to this project are documented here. The format follows
   then inserts everything in one transaction: any failure, `Ctrl-c` or a lost connection
   writes nothing, and a rejected row is named by its line. On a database or schema `I`
   creates a new table with column types inferred from the file (`t` changes a type).
-  Read-only connections refuse; prod asks for the table name.
+  Read-only connections refuse; prod asks for the table name. When the file has no value
+  for the table's integer primary key (and it is not auto-increment), the import numbers
+  the rows from `MAX(id)+1` inside the transaction, with the table locked; `x` turns it off.
 - Open `.sql` files in a console: `:e <file>` opens one on the connection and database in
   context (`~` and relative paths work; files up to 2 MB). It runs like any console, the tab
   shows `[+]` while it has unsaved changes, and `:w` saves it (`:w <file>` saves as, `:wq`
