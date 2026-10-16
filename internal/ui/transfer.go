@@ -37,6 +37,13 @@ type exportSrc struct {
 	ref   db.TableRef
 	query tableQuery // data tabs: the filter and order of a whole-table export
 	whole bool       // the whole table can be streamed (data tabs)
+
+	// stream writes the whole source, page by page; nil when there is none
+	// beyond rs. It counts the rows and the cells it wrote escaped.
+	stream     func(ctx context.Context, w export.Writer, rows, escaped *int) error
+	wholeLabel string // the scope choice's second option, e.g. "Whole key (12,345 fields)"
+	escaped    int    // cells of rs written escaped, for the status
+	note       string // added to the status, e.g. " · includes unsaved changes"
 }
 
 type (
@@ -58,10 +65,12 @@ type exportPathMsg struct {
 }
 
 type exportDoneMsg struct {
-	path string
-	conn string
-	rows int
-	err  error
+	path    string
+	conn    string
+	rows    int
+	escaped int    // binary cells written escaped
+	note    string // exportSrc.note
+	err     error
 }
 
 // tableParts is the INSERT target: database.table on engines without
@@ -191,6 +200,12 @@ func (m *Model) exportAs(f export.Format) tea.Cmd {
 			func(i int) tea.Msg { return exportScopeMsg{tabID: id, format: f, whole: i == 1} })
 		return nil
 	}
+	if src.stream != nil {
+		m.overlay = overlay.NewChoice("Export "+f.Label(),
+			[]string{fmt.Sprintf("Loaded rows (%d)", len(src.rs.Rows)), src.wholeLabel},
+			func(i int) tea.Msg { return exportScopeMsg{tabID: id, format: f, whole: i == 1} })
+		return nil
+	}
 
 	m.askExportPath(id, f, false, src.name)
 	return nil
@@ -227,11 +242,16 @@ func exportCmd(b Backend, src exportSrc, f export.Format, whole bool, path strin
 		}
 		if !whole {
 			err := export.ToFile(path, f, src.opts, func(w export.Writer) error { return export.WriteRows(w, src.rs) })
-			return exportDoneMsg{path: path, rows: len(src.rs.Rows), err: err}
+			return exportDoneMsg{path: path, rows: len(src.rs.Rows), escaped: src.escaped, note: src.note, err: err}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), exportTimeout)
 		defer cancel()
 		rows := 0
+		if src.stream != nil {
+			escaped := 0
+			err := export.ToFile(path, f, src.opts, func(w export.Writer) error { return src.stream(ctx, w, &rows, &escaped) })
+			return exportDoneMsg{path: path, conn: src.conn, rows: rows, escaped: escaped, err: err}
+		}
 		err := withConn(ctx, b, src.conn, src.ref.Database, func(c db.Conn) error {
 			return streamTable(ctx, c, src, f, path, &rows)
 		})
@@ -262,5 +282,9 @@ func (m *Model) exportDone(msg exportDoneMsg) {
 		m.setStatus("export failed: "+msg.err.Error(), true)
 		return
 	}
-	m.setStatus(fmt.Sprintf("exported %d rows to %s", msg.rows, msg.path), false)
+	s := fmt.Sprintf("exported %d rows to %s", msg.rows, msg.path) + msg.note
+	if msg.escaped > 0 {
+		s += fmt.Sprintf(` · %d binary values written escaped (\xNN)`, msg.escaped)
+	}
+	m.setStatus(s, false)
 }
