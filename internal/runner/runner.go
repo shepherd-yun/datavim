@@ -65,7 +65,8 @@ func Guard(stmts []sqlx.Statement, d sqlx.Dialect, p Policy) Check {
 			}
 		}
 		for _, info := range infos {
-			write := info.Kind == sqlx.Write || info.Kind == sqlx.DDL
+			write := info.Kind == sqlx.Write || info.Kind == sqlx.DDL ||
+				strict && info.Kind == sqlx.Other && !sqlx.SafeOther(info.SQL, d) // may write: confirm on prod
 			if info.MissingWhere && missing == nil {
 				target, expect := info.Target, info.Target
 				if target == "" {

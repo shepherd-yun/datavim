@@ -49,8 +49,13 @@ var (
 // Analyze classifies one statement (as produced by Split).
 func Analyze(stmt string, d Dialect) Info {
 	toks := codeTokens(stmt, d)
+	if d == SQLServer && len(toks) > 0 && (isWord(toks[0], "EXEC") || isWord(toks[0], "EXECUTE")) {
+		return Info{ReturnsRows: true} // procedures such as sp_help answer with result sets
+	}
 	if d == Oracle && len(toks) > 0 {
 		switch {
+		case isWord(toks[0], "CALL"):
+			return Info{Kind: Write} // Oracle's CALL returns no result set
 		case isWord(toks[0], "BEGIN"), isWord(toks[0], "DECLARE"):
 			return Info{} // an anonymous PL/SQL block
 		case isWord(toks[0], "ALTER") && len(toks) > 1 && (isWord(toks[1], "SESSION") || isWord(toks[1], "SYSTEM")):

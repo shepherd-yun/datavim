@@ -143,3 +143,21 @@ func TestSafeOtherSQLServer(t *testing.T) {
 		t.Error("MySQL has no allowlist")
 	}
 }
+
+func TestAnalyzeProcedureCallsReturnRows(t *testing.T) {
+	for _, tc := range []struct {
+		d    Dialect
+		sql  string
+		rows bool
+	}{
+		{SQLServer, "EXEC sp_help 'dbo.t'", true},
+		{SQLServer, "execute dbo.usp_report", true},
+		{SQLServer, "USE crm", false},
+		{Oracle, "CALL p()", false}, // Oracle's CALL returns no result set
+		{Postgres, "CALL p()", true},
+	} {
+		if got := Analyze(tc.sql, tc.d).ReturnsRows; got != tc.rows {
+			t.Errorf("Analyze(%q).ReturnsRows = %v, want %v", tc.sql, got, tc.rows)
+		}
+	}
+}

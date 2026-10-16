@@ -14,6 +14,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/db/dbtest"
 	"github.com/shepherd-yun/sqlvim/internal/db/sqlserver"
+	"github.com/shepherd-yun/sqlvim/internal/runner"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
@@ -91,5 +92,21 @@ func TestContract(t *testing.T) {
 		},
 		TextType:    "nvarchar(50)",
 		NVarcharSQL: []string{"CREATE TABLE dbo.uni (id int PRIMARY KEY, name nvarchar(50))"},
+	})
+
+	t.Run("the console runs procedures and shows what they return", func(t *testing.T) {
+		s, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = s.Close() }()
+		r := runner.RunOne(ctx, s, "EXEC sp_helpindex 'dbo.users'", sqlx.SQLServer, 100)
+		if r.Err != nil || r.Rows == nil || len(r.Rows.Rows) == 0 {
+			t.Fatalf("sp_helpindex: %+v", r)
+		}
+		r = runner.RunOne(ctx, s, "EXEC sp_executesql N'UPDATE dbo.users SET note = note WHERE id = 1'", sqlx.SQLServer, 100)
+		if r.Err != nil {
+			t.Fatalf("a procedure without a result set: %v", r.Err)
+		}
 	})
 }

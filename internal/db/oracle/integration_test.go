@@ -15,6 +15,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/db/dbtest"
 	"github.com/shepherd-yun/sqlvim/internal/db/oracle"
+	"github.com/shepherd-yun/sqlvim/internal/runner"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
@@ -137,6 +138,22 @@ func TestContract(t *testing.T) {
 			` = 'b' WHERE ` + sqlx.QuoteIfNeeded("Id", sqlx.Oracle) + ` = 1`
 		if res, err := conn.Exec(ctx, up); err != nil || res.RowsAffected != 1 {
 			t.Fatalf("%s: %v %v", up, res, err)
+		}
+	})
+
+	t.Run("the console runs CALL and PL/SQL blocks", func(t *testing.T) {
+		if _, err := conn.Exec(ctx, "CREATE PROCEDURE sqlvim_noop IS BEGIN NULL; END;"); err != nil {
+			t.Fatal(err)
+		}
+		s, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = s.Close() }()
+		for _, st := range sqlx.Split("CALL sqlvim_noop();\nbegin\n  sqlvim_noop;\nend;\n/\n", sqlx.Oracle) {
+			if r := runner.RunOne(ctx, s, st.Text, sqlx.Oracle, 100); r.Err != nil {
+				t.Fatalf("%s: %v", st.Text, r.Err)
+			}
 		}
 	})
 }

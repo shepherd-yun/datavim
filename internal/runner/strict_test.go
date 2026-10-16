@@ -106,3 +106,23 @@ func TestGuardOracleReadOnly(t *testing.T) {
 		t.Fatalf("UPDATE without WHERE inside a block: %+v", c)
 	}
 }
+
+func TestGuardProdConfirmsUnknownStatementsOnStrictDialects(t *testing.T) {
+	prod := Policy{Prod: true}
+	for _, tc := range []struct {
+		d    sqlx.Dialect
+		sql  string
+		want Verdict
+	}{
+		{sqlx.SQLServer, "EXEC dbo.usp_purge", Confirm},
+		{sqlx.SQLServer, "EXEC sp_help 'dbo.t'", Allow},
+		{sqlx.SQLServer, "SET NOCOUNT ON", Allow},
+		{sqlx.Oracle, "begin p; end;", Confirm},
+		{sqlx.Oracle, "ALTER SESSION SET CURRENT_SCHEMA = HR", Allow},
+		{sqlx.MySQL, "FLUSH TABLES", Allow},
+	} {
+		if c := Guard(sqlx.Split(tc.sql, tc.d), tc.d, prod); c.Verdict != tc.want {
+			t.Errorf("%s %q = %v, want %v", tc.d.Driver(), tc.sql, c.Verdict, tc.want)
+		}
+	}
+}
