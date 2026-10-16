@@ -78,3 +78,31 @@ func TestGuardSQLServerMissingWhere(t *testing.T) {
 		t.Fatalf("GRANT lists privileges, not statements: %+v", c)
 	}
 }
+
+func TestGuardOracleReadOnly(t *testing.T) {
+	ro := Policy{ReadOnly: true}
+	for _, tc := range []struct {
+		sql  string
+		want Verdict
+	}{
+		{"ALTER SESSION SET CURRENT_SCHEMA = HR", Allow},
+		{"select * from dual", Allow},
+		{"SET TRANSACTION READ ONLY", Allow},
+		{"explain plan for delete from t", Allow},
+		{"begin delete from t where id=1; end;", Reject},
+		{"begin null; end;", Reject},
+		{"call p()", Reject},
+		{"begin execute immediate 'drop table t'; end;", Reject},
+		{"SET TRANSACTION READ WRITE", Reject},
+		{"ALTER SYSTEM FLUSH SHARED_POOL", Reject},
+	} {
+		c := Guard(sqlx.Split(tc.sql, sqlx.Oracle), sqlx.Oracle, ro)
+		if c.Verdict != tc.want {
+			t.Errorf("Guard(%q) = %v (%s), want %v", tc.sql, c.Verdict, c.Reason, tc.want)
+		}
+	}
+	c := Guard(sqlx.Split("begin update t set a = 1; end;", sqlx.Oracle), sqlx.Oracle, Policy{Prod: true})
+	if c.Verdict != Confirm || c.Expect != "t" {
+		t.Fatalf("UPDATE without WHERE inside a block: %+v", c)
+	}
+}

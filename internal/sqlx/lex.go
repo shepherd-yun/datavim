@@ -75,7 +75,11 @@ func lex(src string, i int, d Dialect) token {
 		t := quoted(src, i+1, '\'', tokString, true)
 		t.pos = i
 		return t
-	case (c == 'N' || c == 'n') && d == SQLServer && i+1 < len(src) && src[i+1] == '\'':
+	case (c == 'q' || c == 'Q') && d == Oracle && i+2 < len(src) && src[i+1] == '\'':
+		return altQuoted(src, i, i+2)
+	case (c == 'N' || c == 'n') && d == Oracle && i+3 < len(src) && (src[i+1] == 'q' || src[i+1] == 'Q') && src[i+2] == '\'':
+		return altQuoted(src, i, i+3)
+	case (c == 'N' || c == 'n') && (d == SQLServer || d == Oracle) && i+1 < len(src) && src[i+1] == '\'':
 		t := quoted(src, i+1, '\'', tokString, false)
 		t.pos, t.text = i, src[i:t.end]
 		return t
@@ -113,6 +117,27 @@ func lex(src string, i int, d Dialect) token {
 	}
 	_, size := utf8.DecodeRuneInString(src[i:])
 	return token{kind: tokPunct, text: src[i : i+size], pos: i, end: i + size}
+}
+
+// altQuoted reads an Oracle q'x…x' string starting at start, whose
+// delimiter is src[open]: brackets close with their partner.
+func altQuoted(src string, start, open int) token {
+	closer := src[open]
+	switch closer {
+	case '[':
+		closer = ']'
+	case '{':
+		closer = '}'
+	case '(':
+		closer = ')'
+	case '<':
+		closer = '>'
+	}
+	if k := strings.Index(src[open+1:], string(closer)+"'"); k >= 0 {
+		end := open + 1 + k + 2
+		return token{kind: tokString, text: src[start:end], pos: start, end: end}
+	}
+	return token{kind: tokString, text: src[start:], pos: start, end: len(src)}
 }
 
 func lineComment(src string, i int) token {

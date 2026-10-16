@@ -49,6 +49,16 @@ var (
 // Analyze classifies one statement (as produced by Split).
 func Analyze(stmt string, d Dialect) Info {
 	toks := codeTokens(stmt, d)
+	if d == Oracle && len(toks) > 0 {
+		switch {
+		case isWord(toks[0], "BEGIN"), isWord(toks[0], "DECLARE"):
+			return Info{} // an anonymous PL/SQL block
+		case isWord(toks[0], "ALTER") && len(toks) > 1 && (isWord(toks[1], "SESSION") || isWord(toks[1], "SYSTEM")):
+			return Info{}
+		case isWord(toks[0], "EXECUTE") && len(toks) > 1 && isWord(toks[1], "IMMEDIATE"):
+			return Info{Kind: DDL} // dynamic SQL may do anything
+		}
+	}
 	i := 0
 	for i < len(toks) && isPunct(toks[i], "(") {
 		i++
@@ -368,7 +378,30 @@ func SafeOther(stmt string, d Dialect) bool {
 			}
 			return tsqlSafeProcs[strings.ToUpper(name)]
 		}
-	case MySQL, Postgres, Oracle:
+	case Oracle:
+		return oracleSafe(toks)
+	case MySQL, Postgres:
+	}
+	return false
+}
+
+// oracleSafe allows ALTER SESSION SET of the current schema, NLS settings
+// and the time zone, and SET TRANSACTION READ ONLY: one statement each.
+func oracleSafe(toks []token) bool {
+	if n := len(toks); isPunct(toks[n-1], ";") {
+		toks = toks[:n-1]
+	}
+	for _, t := range toks {
+		if isPunct(t, ";") {
+			return false
+		}
+	}
+	switch {
+	case len(toks) >= 4 && isWord(toks[0], "ALTER") && isWord(toks[1], "SESSION") && isWord(toks[2], "SET"):
+		p := upper(toks[3])
+		return p == "CURRENT_SCHEMA" || p == "TIME_ZONE" || strings.HasPrefix(p, "NLS_")
+	case len(toks) == 4 && isWord(toks[0], "SET") && isWord(toks[1], "TRANSACTION") && isWord(toks[2], "READ") && isWord(toks[3], "ONLY"):
+		return true
 	}
 	return false
 }

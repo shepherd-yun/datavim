@@ -10,7 +10,19 @@ import (
 var (
 	numericTypes = wordSet("INT", "INTEGER", "TINYINT", "SMALLINT", "MEDIUMINT", "BIGINT", "DECIMAL", "NUMERIC",
 		"FLOAT", "DOUBLE", "REAL", "YEAR", "INT2", "INT4", "INT8", "FLOAT4", "FLOAT8", "OID",
-		"MONEY", "SMALLMONEY")
+		"MONEY", "SMALLMONEY", "NUMBER", "BINARY_FLOAT", "BINARY_DOUBLE", "BFLOAT", "BDOUBLE", "IBFLOAT", "IBDOUBLE")
+	// oracleTypes write Oracle literals that do not depend on the session's
+	// NLS formats; the values are as the driver shows them.
+	oracleRaw  = wordSet("RAW", "LONGRAW", "OCIBLOBLOCATOR", "BLOB")
+	oracleDate = map[string][2]string{
+		"DATE":             {"TO_DATE", "YYYY-MM-DD HH24:MI:SS"},
+		"TIMESTAMP":        {"TO_TIMESTAMP", "YYYY-MM-DD HH24:MI:SS.FF"},
+		"TIMESTAMPDTY":     {"TO_TIMESTAMP", "YYYY-MM-DD HH24:MI:SS.FF"},
+		"TIMESTAMPTZ":      {"TO_TIMESTAMP_TZ", "YYYY-MM-DD HH24:MI:SS.FF TZH:TZM"},
+		"TIMESTAMPTZ_DTY":  {"TO_TIMESTAMP_TZ", "YYYY-MM-DD HH24:MI:SS.FF TZH:TZM"},
+		"TIMESTAMPELTZ":    {"TO_TIMESTAMP_TZ", "YYYY-MM-DD HH24:MI:SS.FF TZH:TZM"},
+		"TIMESTAMPLTZ_DTY": {"TO_TIMESTAMP_TZ", "YYYY-MM-DD HH24:MI:SS.FF TZH:TZM"},
+	}
 	binaryTypes = wordSet("BINARY", "VARBINARY", "BLOB", "TINYBLOB", "MEDIUMBLOB", "LONGBLOB", "BIT", "GEOMETRY", "IMAGE")
 	numberRe    = regexp.MustCompile(`^-?\d+(\.\d+)?([eE][-+]?\d+)?$`)
 )
@@ -76,6 +88,11 @@ func Literal(d Dialect, dbType string, v db.Value) string {
 		return v.Text
 	case (d == MySQL || d == SQLServer) && IsBinaryType(dbType) && strings.HasPrefix(v.Text, "0x"):
 		return v.Text
+	case d == Oracle && oracleRaw[NormType(dbType)]:
+		return "HEXTORAW('" + strings.ReplaceAll(v.Text, "'", "''") + "')"
+	case d == Oracle && oracleDate[NormType(dbType)][0] != "":
+		f := oracleDate[NormType(dbType)]
+		return f[0] + "('" + strings.ReplaceAll(v.Text, "'", "''") + "', '" + f[1] + "')"
 	}
 	s := v.Text
 	if d == MySQL {

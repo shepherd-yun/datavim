@@ -45,6 +45,14 @@ func Split(src string, d Dialect) []Statement {
 				continue
 			}
 		}
+		if d == Oracle && start < 0 {
+			if end, next, ok := plsqlBlock(src, i); ok {
+				start, hasCode = i, true
+				flush(end)
+				i = next
+				continue
+			}
+		}
 		if strings.HasPrefix(src[i:], delim) {
 			flush(i)
 			i += len(delim)
@@ -61,6 +69,83 @@ func Split(src string, d Dialect) []Statement {
 	}
 	flush(len(src))
 	return out
+}
+
+// plsqlBlock reads a PL/SQL block starting at i (BEGIN, DECLARE, CREATE
+// PROCEDURE …), which holds semicolons: like SQL*Plus it runs to a line
+// holding only "/", or to the end. end is where the block's text ends
+// (after its END;), next where scanning goes on.
+func plsqlBlock(src string, i int) (end, next int, ok bool) {
+	var words []string
+	for j := i; j < len(src) && len(words) < 6; {
+		if isSpace(src[j]) {
+			j++
+			continue
+		}
+		t := lex(src, j, Oracle)
+		if t.kind == tokComment {
+			j = t.end
+			continue
+		}
+		if t.kind != tokWord {
+			break
+		}
+		words = append(words, strings.ToUpper(t.text))
+		j = t.end
+	}
+	if !isBlockStart(words) {
+		return 0, 0, false
+	}
+	for j := i; j < len(src); {
+		if isSpace(src[j]) {
+			if src[j] == '\n' {
+				if k, ok := slashLine(src, j+1); ok {
+					return j, k, true
+				}
+			}
+			j++
+			continue
+		}
+		j = lex(src, j, Oracle).end
+	}
+	return len(src), len(src), true
+}
+
+// isBlockStart reports the first words of a PL/SQL block.
+func isBlockStart(w []string) bool {
+	if len(w) == 0 {
+		return false
+	}
+	switch w[0] {
+	case "BEGIN", "DECLARE":
+		return true
+	case "CREATE":
+	default:
+		return false
+	}
+	w = w[1:]
+	if len(w) >= 2 && w[0] == "OR" && w[1] == "REPLACE" {
+		w = w[2:]
+	}
+	if len(w) > 0 && (w[0] == "EDITIONABLE" || w[0] == "NONEDITIONABLE") {
+		w = w[1:]
+	}
+	return len(w) > 0 && (w[0] == "PROCEDURE" || w[0] == "FUNCTION" || w[0] == "PACKAGE" || w[0] == "TRIGGER" || w[0] == "TYPE")
+}
+
+// slashLine reports a line from i holding only "/" and returns where the
+// next line starts.
+func slashLine(src string, i int) (int, bool) {
+	end := strings.IndexByte(src[i:], '\n')
+	if end < 0 {
+		end = len(src)
+	} else {
+		end += i
+	}
+	if strings.TrimSpace(src[i:end]) != "/" {
+		return 0, false
+	}
+	return min(end+1, len(src)), true
 }
 
 // lineStart reports that only blanks precede i on its line.
