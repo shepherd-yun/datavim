@@ -157,11 +157,12 @@ func TestContract(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if len(rs.Rows) > 0 {
+			switch {
+			case len(rs.Rows) > 0:
 				row = rs.Rows[0]
-			} else if time.Now().After(deadline) {
+			case time.Now().After(deadline):
 				t.Fatal("no lock wait")
-			} else {
+			default:
 				time.Sleep(200 * time.Millisecond)
 			}
 		}
