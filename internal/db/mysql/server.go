@@ -22,19 +22,30 @@ func (c *conn) Server() db.ServerReader { return server{c: c} }
 // maxSQL is how much of a statement the server tab keeps.
 const maxSQL = 1024
 
-// version reads (once) whether the server has the 8.0.22 names:
-// performance_schema.processlist, SHOW REPLICA STATUS, SHOW REPLICAS.
-func (s server) version(ctx context.Context) (text string, modern bool, err error) {
+// serverVersion is what the reader branches on, read once per conn.
+type serverVersion struct {
+	text string
+	// modern: the 8.0.22 names (performance_schema.processlist, SHOW
+	// REPLICA STATUS, SHOW REPLICAS); eight: data_locks for lock waits.
+	modern, eight bool
+	perfSchema    bool // performance_schema is on
+}
+
+func (s server) version(ctx context.Context) (serverVersion, error) {
 	s.c.mu.Lock()
 	defer s.c.mu.Unlock()
-	if s.c.version == "" {
-		rs, err := s.c.Query(ctx, "SELECT VERSION()")
+	if s.c.version.text == "" {
+		rs, err := s.c.Query(ctx, "SELECT VERSION(), @@performance_schema")
 		if err != nil {
-			return "", false, unavailable(err)
+			return serverVersion{}, unavailable(err)
 		}
-		s.c.version = rs.Rows[0][0].Text
+		v := rs.Rows[0][0].Text
+		s.c.version = serverVersion{
+			text: v, modern: db.VersionAtLeast(v, 8, 0, 22), eight: db.VersionAtLeast(v, 8, 0, 0),
+			perfSchema: rs.Rows[0][1].Text == "1",
+		}
 	}
-	return s.c.version, db.VersionAtLeast(s.c.version, 8, 0, 22), nil
+	return s.c.version, nil
 }
 
 // unavailable turns a privilege error into db.ErrUnavailable with the
@@ -53,11 +64,11 @@ func unavailable(err error) error {
 }
 
 func (s server) Info(ctx context.Context) (db.ServerInfo, error) {
-	v, _, err := s.version(ctx)
+	v, err := s.version(ctx)
 	if err != nil {
 		return db.ServerInfo{}, err
 	}
-	return db.ServerInfo{Version: v, SettingsTitle: "Variables", CanCancel: true}, nil
+	return db.ServerInfo{Version: v.text, SettingsTitle: "Variables", CanCancel: true}, nil
 }
 
 // named reads a two-column name/value result into a map.
@@ -136,12 +147,12 @@ func field(rs *db.ResultSet, r []db.Value, names ...string) string {
 }
 
 func (s server) replicaStatus(ctx context.Context) (*db.ResultSet, error) {
-	_, modern, err := s.version(ctx)
+	v, err := s.version(ctx)
 	if err != nil {
 		return nil, err
 	}
 	q := "SHOW SLAVE STATUS"
-	if modern {
+	if v.modern {
 		q = "SHOW REPLICA STATUS"
 	}
 	rs, err := s.c.Query(ctx, q)
@@ -180,12 +191,13 @@ func textRows(cols []string, rows [][]string) *db.ResultSet {
 }
 
 func (s server) Sessions(ctx context.Context, includeIdle bool) (db.SessionList, error) {
-	_, modern, err := s.version(ctx)
+	v, err := s.version(ctx)
 	if err != nil {
 		return db.SessionList{}, err
 	}
+	// performance_schema.processlist is empty when performance_schema is off
 	from := "information_schema.PROCESSLIST"
-	if modern {
+	if v.modern && v.perfSchema {
 		from = "performance_schema.processlist"
 	}
 	rs, err := s.c.Query(ctx, "SELECT p.ID, p.USER, p.HOST, p.DB, p.COMMAND, p.TIME, p.STATE, p.INFO, "+
@@ -231,9 +243,13 @@ func (s server) Sessions(ctx context.Context, includeIdle bool) (db.SessionList,
 }
 
 func (s server) Locks(ctx context.Context) (*db.ResultSet, error) {
-	_, modern, err := s.version(ctx)
+	v, err := s.version(ctx)
 	if err != nil {
 		return nil, err
+	}
+	if v.eight && !v.perfSchema {
+		// 8.0 has lock waits only in performance_schema.data_lock_waits
+		return nil, db.Unavailable("performance_schema is off: lock waits are not recorded")
 	}
 	q := "SELECT r.trx_mysql_thread_id, TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()), b.trx_mysql_thread_id, " +
 		"bp.COMMAND, TIMESTAMPDIFF(SECOND, b.trx_started, NOW()), CONCAT(l.lock_mode, ' ', l.lock_type, " +
@@ -243,7 +259,7 @@ func (s server) Locks(ctx context.Context) (*db.ResultSet, error) {
 		"JOIN information_schema.INNODB_TRX b ON b.trx_id = w.blocking_trx_id " +
 		"JOIN information_schema.INNODB_LOCKS l ON l.lock_id = w.requested_lock_id " +
 		"LEFT JOIN information_schema.PROCESSLIST bp ON bp.ID = b.trx_mysql_thread_id"
-	if modern || db.VersionAtLeast(s.c.version, 8, 0, 0) {
+	if v.eight {
 		q = "SELECT r.trx_mysql_thread_id, TIMESTAMPDIFF(SECOND, r.trx_wait_started, NOW()), b.trx_mysql_thread_id, " +
 			"bp.COMMAND, TIMESTAMPDIFF(SECOND, b.trx_started, NOW()), CONCAT(l.LOCK_MODE, ' ', l.LOCK_TYPE, " +
 			"IFNULL(CONCAT(' (', l.INDEX_NAME, ')'), '')), CONCAT(l.OBJECT_SCHEMA, '.', l.OBJECT_NAME), r.trx_query, b.trx_query " +
@@ -281,11 +297,11 @@ func picos(s string) string {
 }
 
 func (s server) TopStatements(ctx context.Context, n int) (*db.ResultSet, error) {
-	on, err := s.c.Query(ctx, "SELECT @@performance_schema")
+	v, err := s.version(ctx)
 	if err != nil {
-		return nil, unavailable(err)
+		return nil, err
 	}
-	if on.Rows[0][0].Text != "1" {
+	if !v.perfSchema {
 		return nil, db.Unavailable("performance_schema is off")
 	}
 	rs, err := s.c.Query(ctx, "SELECT DIGEST_TEXT, COUNT_STAR, SUM_TIMER_WAIT, AVG_TIMER_WAIT, SUM_ROWS_EXAMINED, "+
@@ -311,7 +327,7 @@ func (s server) Settings(ctx context.Context) (*db.ResultSet, error) {
 }
 
 func (s server) Replication(ctx context.Context) (*db.ResultSet, error) {
-	_, modern, err := s.version(ctx)
+	v, err := s.version(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -337,7 +353,7 @@ func (s server) Replication(ctx context.Context) (*db.ResultSet, error) {
 		})
 	}
 	q := "SHOW SLAVE HOSTS"
-	if modern {
+	if v.modern {
 		q = "SHOW REPLICAS"
 	}
 	hosts, err := s.c.Query(ctx, q)

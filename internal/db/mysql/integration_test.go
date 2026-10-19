@@ -4,8 +4,10 @@ package mysql_test
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/testcontainers/testcontainers-go"
@@ -164,4 +166,46 @@ func TestServerMySQL57(t *testing.T) {
 		}
 	}
 	dbtest.RunServerContract(t, conn, serverFixture)
+}
+
+// TestServerNoPerformanceSchema: with performance_schema off, Sessions
+// still lists the sessions (from information_schema) and Locks says why it
+// cannot tell.
+func TestServerNoPerformanceSchema(t *testing.T) {
+	ctx := context.Background()
+	const password = "secret"
+	ctr, err := tcmysql.Run(ctx, "mysql:8.4",
+		tcmysql.WithDatabase("app"),
+		tcmysql.WithUsername("root"),
+		tcmysql.WithPassword(password),
+		testcontainers.WithCmd("mysqld", "--performance-schema=OFF"),
+	)
+	testcontainers.CleanupContainer(t, ctr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := ctr.PortEndpoint(ctx, "3306/tcp", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, portStr, _ := net.SplitHostPort(endpoint)
+	port, _ := strconv.Atoi(portStr)
+	conn, err := mysql.Driver{}.Open(ctx, db.ConnConfig{
+		Host: host, Port: port, User: "root", Password: password, Database: "app",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	srv := conn.Server()
+	list, err := srv.Sessions(ctx, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list.IDs) == 0 || list.Total == 0 {
+		t.Fatalf("no sessions without performance_schema: %+v", list)
+	}
+	if _, err := srv.Locks(ctx); !errors.Is(err, db.ErrUnavailable) || !strings.Contains(err.Error(), "performance_schema") {
+		t.Fatalf("Locks = %v", err)
+	}
 }

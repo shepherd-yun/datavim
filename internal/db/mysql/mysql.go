@@ -166,7 +166,7 @@ type conn struct {
 	db *sql.DB
 
 	mu      sync.Mutex
-	version string // VERSION(), read by the server tab
+	version serverVersion // read by the server tab
 }
 
 func (c *conn) Dialect() db.Dialect { return dialect{} }
