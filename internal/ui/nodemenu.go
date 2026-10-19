@@ -100,10 +100,13 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 				{keymap.OpenKey, "Open key by name…"},
 				{keymap.Favorites, "Starred keys"},
 			}, entries[1:]...)...)
+		} else {
+			entries = append(entries[:1], append([]entry{{keymap.ServerInfo, "Server status"}}, entries[1:]...)...)
 		}
 	case tree.KindDatabase, tree.KindSchema:
 		entries = []entry{
 			{keymap.OpenConsole, "Open console"},
+			{keymap.ServerInfo, "Server status"},
 			{keymap.Refresh, "Refresh"},
 		}
 		if cfg, _ := m.backend.Connection(n.Conn); n.Kind == tree.KindSchema || !sqlx.DialectOf(cfg.Driver).Features().Schemas {

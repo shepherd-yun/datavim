@@ -574,14 +574,19 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		return m.toggleFavoriteHere()
 	case keymap.ServerInfo:
 		conn := m.contextConn()
-		if conn == "" || !isRedis(m.backend, conn) {
-			m.setStatus("select a Redis connection", true)
+		switch {
+		case conn == "":
+			m.setStatus("select a connection", true)
 			return nil
+		case isRedis(m.backend, conn):
+			return m.openServer(conn)
 		}
-		return m.openServer(conn)
+		return m.openSQLServer(conn)
 	case keymap.Refresh:
 		var cmd tea.Cmd
-		if conn, ns := m.contextNamespace(); conn != "" {
+		// the server tab refreshes its own section, not the catalog
+		_, onServer := m.activeTab().(*sqlServerTab)
+		if conn, ns := m.contextNamespace(); conn != "" && (!onServer || m.focus != focusTabs) {
 			cmd = m.reloadMeta(conn, ns.Database)
 		}
 		if m.focus == focusTree {
@@ -837,6 +842,10 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 	case serverInfoMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case serverLoadedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
+	case sqlServerInfoMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
+	case sqlServerSampleMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case bigKeysStepMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID

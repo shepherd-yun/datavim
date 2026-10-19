@@ -50,7 +50,7 @@ func drainHold(t *testing.T, m *Model, cmd tea.Cmd) []tea.Msg {
 		case nil:
 		case tea.BatchMsg:
 			queue = append(queue, msg...)
-		case serverTickMsg:
+		case serverTickMsg, sqlServerTickMsg:
 			held = append(held, msg)
 		default:
 			_, next := m.Update(msg)
@@ -174,9 +174,9 @@ func TestServerTabOpens(t *testing.T) {
 
 	m2, _ := newTestModel(t)
 	m2.setFocus(focusTree)
-	press(t, m2, "space", "i")
-	if !strings.Contains(m2.status, "select a Redis connection") {
-		t.Fatalf("SQL connection: status %q", m2.status)
+	pressHold(t, m2, "space", "i")
+	if _, ok := m2.activeTab().(*sqlServerTab); !ok {
+		t.Fatalf("SQL connection: active tab %T, status %q", m2.activeTab(), m2.status)
 	}
 }
 
