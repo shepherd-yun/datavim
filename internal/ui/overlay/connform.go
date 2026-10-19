@@ -42,6 +42,7 @@ const (
 	ffTrust   // SQL Server only
 	ffSSH
 	ffEnv
+	ffReadOnly
 	ffSave
 )
 
@@ -53,8 +54,7 @@ type ConnForm struct {
 	err      string
 	original string // editing this connection; empty for a new one
 	// kept from the edited connection: the form does not show them
-	params   map[string]string
-	readOnly *bool
+	params map[string]string
 }
 
 // oracleDefaultService is what an empty Service connects to (Oracle
@@ -63,6 +63,9 @@ const oracleDefaultService = "FREEPDB1"
 
 // encryptChoices are go-mssqldb's encrypt values; default leaves it out.
 var encryptChoices = []string{"default", "true", "false", "disable"}
+
+// readOnlyChoices set readonly; auto leaves it out, so env decides.
+var readOnlyChoices = []string{"auto", "yes", "no"}
 
 // NewConnForm builds an empty form.
 func NewConnForm(keys *keymap.Keymap) *ConnForm {
@@ -78,6 +81,7 @@ func NewConnForm(keys *keymap.Keymap) *ConnForm {
 		ffTrust:    {label: "Trust cert", choices: []string{"no", "yes"}},
 		ffSSH:      {label: "SSH host"},
 		ffEnv:      {label: "Env", choices: []string{"dev", "staging", "prod"}},
+		ffReadOnly: {label: "Read-only", choices: readOnlyChoices},
 		ffSave:     {label: "Save password", choices: []string{"yes", "no"}},
 	}}
 }
@@ -86,7 +90,7 @@ func NewConnForm(keys *keymap.Keymap) *ConnForm {
 func NewEditConnForm(keys *keymap.Keymap, c config.Connection) *ConnForm {
 	f := NewConnForm(keys)
 	f.original = c.Name
-	f.params, f.readOnly = maps.Clone(c.Params), c.ReadOnly
+	f.params = maps.Clone(c.Params)
 	set := func(i int, v string) { f.fields[i].input = newField(v) }
 	set(ffName, c.Name)
 	set(ffHost, c.Host)
@@ -105,6 +109,13 @@ func NewEditConnForm(keys *keymap.Keymap, c config.Connection) *ConnForm {
 	}
 	choose(ffDriver, c.Driver)
 	choose(ffEnv, string(c.Env))
+	switch {
+	case c.ReadOnly == nil:
+	case *c.ReadOnly:
+		choose(ffReadOnly, "yes")
+	default:
+		choose(ffReadOnly, "no")
+	}
 	choose(ffEncrypt, strings.ToLower(param(c.Params, "encrypt")))
 	if strings.EqualFold(param(c.Params, "TrustServerCertificate"), "true") {
 		choose(ffTrust, "yes")
@@ -196,7 +207,7 @@ func (f *ConnForm) submit() (Overlay, tea.Cmd) {
 	c, err := config.Normalize(config.Connection{
 		Name: f.text(ffName), Driver: f.value(ffDriver), Host: f.text(ffHost), Port: port,
 		User: f.text(ffUser), Database: f.text(ffDatabase), SSH: f.text(ffSSH), Env: config.Env(f.value(ffEnv)),
-		ReadOnly: f.readOnly, Params: f.submitParams(),
+		ReadOnly: f.submitReadOnly(), Params: f.submitParams(),
 	})
 	if err != nil {
 		f.err = err.Error()
@@ -205,6 +216,15 @@ func (f *ConnForm) submit() (Overlay, tea.Cmd) {
 	return nil, emit(ConnFormMsg{
 		Conn: c, Password: f.fields[ffPassword].input.String(), Save: f.value(ffSave) == "yes", Original: f.original,
 	})
+}
+
+// submitReadOnly is the readonly key: nil for auto.
+func (f *ConnForm) submitReadOnly() *bool {
+	if v := f.value(ffReadOnly); v != "auto" {
+		ro := v == "yes"
+		return &ro
+	}
+	return nil
 }
 
 // submitParams are the edited connection's params with the SQL Server
@@ -252,6 +272,12 @@ func (f *ConnForm) View(width, _ int) string {
 		switch {
 		case oracleService && i != f.cur && fd.input.Len() == 0:
 			v = theme.Muted.Render(oracleDefaultService)
+		case i == ffReadOnly && f.value(ffReadOnly) == "auto":
+			on := "off"
+			if config.Env(f.value(ffEnv)) == config.EnvProd {
+				on = "on"
+			}
+			v = "‹ auto ›" + theme.Muted.Render(" ("+on+")")
 		case fd.choices != nil:
 			v = "‹ " + fd.choices[fd.choice] + " ›"
 		case i == f.cur && fd.secret:
@@ -278,6 +304,7 @@ func (f *ConnForm) View(width, _ int) string {
 		lines = append(lines, theme.Muted.Render("Password: empty keeps the current one"))
 	}
 	lines = append(lines, theme.Muted.Render("SSH host: a Host alias from ~/.ssh/config (optional)"))
+	lines = append(lines, theme.Muted.Render("Read-only: auto is on for prod"))
 	lines = append(lines, theme.Muted.Render(footer("tab next · enter next/save", popupHint(f.keys, keymap.SaveForm, "save"), "esc cancel")))
 	return theme.Box(title, strings.Join(lines, "\n"), w, len(lines)+2, true)
 }

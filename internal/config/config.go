@@ -255,6 +255,7 @@ type connBlock struct {
 	Database string `toml:"database,omitempty"`
 	SSH      string `toml:"ssh,omitempty"`
 	Env      Env    `toml:"env"`
+	ReadOnly *bool  `toml:"readonly,omitempty"`
 }
 
 // AppendConnection validates c and appends it to dir/connections.toml as a new
@@ -277,7 +278,7 @@ func AppendConnection(dir string, c Connection) (Connection, error) {
 		Connection []connBlock `toml:"connection"`
 	}{[]connBlock{{
 		Name: c.Name, Driver: c.Driver, Host: c.Host, Port: c.Port,
-		User: c.User, Database: c.Database, SSH: c.SSH, Env: c.Env,
+		User: c.User, Database: c.Database, SSH: c.SSH, Env: c.Env, ReadOnly: c.ReadOnly,
 	}}})
 	if err != nil {
 		return c, err

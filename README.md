@@ -384,6 +384,7 @@ with a syntax error, the cursor jumps to where the server says the error is.
 - `readonly = true` (the default for `env = "prod"`) blocks INSERT/UPDATE/DELETE and DDL
   in the console, and the database session itself is read-only as a second line of defence.
   `:set noreadonly` unlocks the connection until sqlvim exits; `connections.toml` is not changed.
+  To change it for good, set `Read-only` in the new/edit connection form (`auto` follows `env`).
 - SQL Server and Oracle have no read-only session, so there sqlvim is the only guard, and a stricter one:
   it reads every statement of a batch (T-SQL needs no semicolons) and blocks anything it does
   not know to be harmless — `EXEC` of any procedure but a few read-only system ones

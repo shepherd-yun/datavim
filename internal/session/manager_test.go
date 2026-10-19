@@ -431,7 +431,7 @@ func TestUpdateConnection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	edited := config.Connection{Name: "laptop", Driver: "postgres", Host: "h2", User: "u"}
+	edited := config.Connection{Name: "laptop", Driver: "postgres", Host: "h2", User: "u", ReadOnly: &ro}
 	if err := m.UpdateConnection("local", edited, "", false); err != nil {
 		t.Fatal(err)
 	}
@@ -467,6 +467,41 @@ func TestUpdateConnection(t *testing.T) {
 	m.conns = append(m.conns, config.Connection{Name: "other", Driver: "postgres"})
 	if err := m.UpdateConnection("laptop", config.Connection{Name: "other", Driver: "postgres"}, "", false); err == nil {
 		t.Fatal("renaming onto another connection fails")
+	}
+}
+
+func TestUpdateConnectionReadOnly(t *testing.T) {
+	m, _, _ := setup(true)
+	var persisted []*bool
+	m.PersistUpdate = func(_ string, c config.Connection) error {
+		persisted = append(persisted, c.ReadOnly)
+		return nil
+	}
+	on, off := true, false
+	update := func(name string, ro *bool) config.Connection {
+		t.Helper()
+		if err := m.UpdateConnection(m.conns[0].Name, config.Connection{Name: name, Driver: "postgres", ReadOnly: ro}, "", false); err != nil {
+			t.Fatal(err)
+		}
+		c, _ := m.Connection(name)
+		return c
+	}
+	if c := update("local", &on); !c.IsReadOnly() || persisted[0] == nil || !*persisted[0] {
+		t.Fatalf("the form sets readonly: %+v, persisted %v", c, persisted)
+	}
+	// :set noreadonly for this run, then an edit that leaves the field as shown
+	if err := m.SetReadOnly("local", false); err != nil {
+		t.Fatal(err)
+	}
+	if c := update("renamed", &off); c.IsReadOnly() || persisted[1] == nil || !*persisted[1] {
+		t.Fatalf("the run's switch stays out of the file: %+v, persisted %v", c, persisted[1])
+	}
+	// changing the field saves it and ends the run's switch
+	if c := update("renamed", nil); c.ReadOnly != nil || persisted[2] != nil {
+		t.Fatalf("auto: %+v, persisted %v", c, persisted[2])
+	}
+	if c := update("renamed", nil); c.ReadOnly != nil || persisted[3] != nil {
+		t.Fatalf("auto again: %+v, persisted %v", c, persisted[3])
 	}
 }
 

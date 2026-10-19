@@ -65,6 +65,9 @@ type Manager struct {
 	passwords map[string]string
 	open      map[connKey]db.Conn
 	redis     map[connKey]rdb.Client
+	// savedRO is the readonly in connections.toml of the connections
+	// SetReadOnly switched for this run.
+	savedRO map[string]*bool
 }
 
 // NewManager builds a Manager for the configured connections.
@@ -76,6 +79,7 @@ func NewManager(conns []config.Connection, secrets secret.Store, drivers ...db.D
 		passwords: map[string]string{},
 		open:      map[connKey]db.Conn{},
 		redis:     map[connKey]rdb.Client{},
+		savedRO:   map[string]*bool{},
 	}
 	for _, d := range drivers {
 		m.drivers[d.Name()] = d
@@ -130,7 +134,9 @@ func (m *Manager) AddConnection(c config.Connection, password string, save bool)
 }
 
 // UpdateConnection replaces the connection called old with c (which may be
-// renamed). Keys the form does not edit (readonly, params) are kept. Open
+// renamed). Params, which the form does not edit, are kept. A readonly equal
+// to the current one keeps a SetReadOnly switch for this run and saves the
+// file's value; a different one is saved and ends the switch. Open
 // connections are closed, and a saved password follows a rename. A non-empty
 // password replaces the known one.
 func (m *Manager) UpdateConnection(old string, c config.Connection, password string, save bool) error {
@@ -148,13 +154,24 @@ func (m *Manager) UpdateConnection(old string, c config.Connection, password str
 	if _, taken := m.Connection(c.Name); taken && c.Name != old {
 		return fmt.Errorf("connection %q already exists", c.Name)
 	}
-	c.ReadOnly, c.Params = cur.ReadOnly, cur.Params
+	c.Params = cur.Params
+	saved := c
+	m.mu.Lock()
+	fileRO, switched := m.savedRO[old]
+	m.mu.Unlock()
+	if switched = switched && sameBool(c.ReadOnly, cur.ReadOnly); switched {
+		saved.ReadOnly = fileRO
+	}
 	if m.PersistUpdate != nil {
-		if err := m.PersistUpdate(old, c); err != nil {
+		if err := m.PersistUpdate(old, saved); err != nil {
 			return err
 		}
 	}
 	m.mu.Lock()
+	delete(m.savedRO, old)
+	if switched {
+		m.savedRO[c.Name] = fileRO
+	}
 	for i := range m.conns {
 		if m.conns[i].Name == old {
 			m.conns[i] = c
@@ -195,6 +212,7 @@ func (m *Manager) RemoveConnection(name string) error {
 	}
 	m.mu.Lock()
 	m.conns = slices.DeleteFunc(m.conns, func(c config.Connection) bool { return c.Name == name })
+	delete(m.savedRO, name)
 	m.resetLocked(name)
 	delete(m.passwords, name)
 	m.mu.Unlock()
@@ -212,12 +230,19 @@ func (m *Manager) SetReadOnly(name string, ro bool) error {
 	defer m.mu.Unlock()
 	for i := range m.conns {
 		if m.conns[i].Name == name {
+			if _, ok := m.savedRO[name]; !ok {
+				m.savedRO[name] = m.conns[i].ReadOnly
+			}
 			m.conns[i].ReadOnly = &ro
 			m.resetLocked(name)
 			return nil
 		}
 	}
 	return fmt.Errorf("unknown connection %q", name)
+}
+
+func sameBool(a, b *bool) bool {
+	return a == nil && b == nil || a != nil && b != nil && *a == *b
 }
 
 // SetPassphrase remembers an SSH key passphrase for this run.

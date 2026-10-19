@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- The new/edit connection form has a `Read-only` field: `auto` (on for prod, the default),
+  `yes` or `no`, saved as `readonly` in `connections.toml`. Editing other fields keeps a
+  `:set [no]readonly` switch for the session and leaves it out of the file.
+
 ## [2.1.1] - 2026-10-19
 
 ### Changed

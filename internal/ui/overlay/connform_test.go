@@ -23,6 +23,7 @@ func TestConnFormSubmit(t *testing.T) {
 		"s", "h", "o", "p", "tab", // database
 		"b", "a", "s", "t", "i", "o", "n", "tab", // ssh host
 		"l", "l", "tab", // env -> prod
+		"l", "l", "tab", // read-only: auto -> yes -> no
 		"right", "enter", // save -> no, submit
 	}
 	o, msg := send(t, f, keys...)
@@ -40,6 +41,9 @@ func TestConnFormSubmit(t *testing.T) {
 	}
 	if got.Conn.SSH != "bastion" {
 		t.Fatalf("ssh = %q", got.Conn.SSH)
+	}
+	if got.Conn.ReadOnly == nil || *got.Conn.ReadOnly {
+		t.Fatalf("readonly = %v, want false", got.Conn.ReadOnly)
 	}
 	if got.Password != "s3" || got.Save {
 		t.Fatalf("password=%q save=%v", got.Password, got.Save)
@@ -171,12 +175,43 @@ func TestConnFormSQLServerParamsIgnoreCase(t *testing.T) {
 }
 
 func TestEditConnFormKeepsHiddenSettings(t *testing.T) {
-	off := false
-	orig := config.Connection{Name: "pg", Driver: "postgres", ReadOnly: &off, Params: map[string]string{"sslmode": "disable"}}
+	orig := config.Connection{Name: "pg", Driver: "postgres", Params: map[string]string{"sslmode": "disable"}}
 	_, msg := send(t, NewEditConnForm(keymap.Default(), orig), "ctrl+s")
-	got := msg.(ConnFormMsg).Conn
-	if got.ReadOnly == nil || *got.ReadOnly || !maps.Equal(got.Params, orig.Params) {
-		t.Fatalf("readonly %v, params %v", got.ReadOnly, got.Params)
+	if got := msg.(ConnFormMsg).Conn; !maps.Equal(got.Params, orig.Params) {
+		t.Fatalf("params %v", got.Params)
+	}
+}
+
+func TestConnFormReadOnly(t *testing.T) {
+	on, off := true, false
+	for _, tc := range []struct {
+		name string
+		ro   *bool
+		env  config.Env
+		keys []string
+		show string
+		want *bool
+	}{
+		{"auto stays unset", nil, config.EnvDev, nil, "‹ auto › (off)", nil},
+		{"auto follows prod", nil, config.EnvProd, nil, "‹ auto › (on)", nil},
+		{"explicit off is kept", &off, config.EnvProd, nil, "‹ no ›", &off},
+		{"explicit on is kept", &on, config.EnvDev, nil, "‹ yes ›", &on},
+		{"off back to auto", &off, config.EnvDev, []string{"right"}, "‹ auto ›", nil},
+		{"auto to on", nil, config.EnvDev, []string{"right"}, "‹ yes ›", &on},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			f := NewEditConnForm(keymap.Default(), config.Connection{Name: "pg", Driver: "postgres", Env: tc.env, ReadOnly: tc.ro})
+			f.cur = ffReadOnly
+			send(t, f, tc.keys...)
+			if v := ansi.Strip(f.View(80, 30)); !strings.Contains(v, "Read-only") || !strings.Contains(v, tc.show) {
+				t.Fatalf("want %q:\n%s", tc.show, v)
+			}
+			_, msg := send(t, f, "ctrl+s")
+			got := msg.(ConnFormMsg).Conn.ReadOnly
+			if (got == nil) != (tc.want == nil) || (got != nil && *got != *tc.want) {
+				t.Fatalf("readonly = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 

@@ -253,6 +253,24 @@ func TestAppendConnectionKeepsExistingContent(t *testing.T) {
 	}
 }
 
+func TestAppendConnectionWritesReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	off := false
+	if _, err := AppendConnection(dir, Connection{Name: "prod", Driver: "postgres", Env: EnvProd, ReadOnly: &off}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AppendConnection(dir, Connection{Name: "auto", Driver: "postgres", Env: EnvProd}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Connections[0].IsReadOnly() || cfg.Connections[1].ReadOnly != nil || !cfg.Connections[1].IsReadOnly() {
+		t.Fatalf("connections = %+v", cfg.Connections)
+	}
+}
+
 func TestAppendConnectionCreatesPrivateFile(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "new", "sqlvim")
 	if _, err := AppendConnection(dir, Connection{Name: "a", Driver: "mysql"}); err != nil {
@@ -324,7 +342,8 @@ driver = "postgres"
 func TestUpdateConnectionTouchesOnlyItsBlock(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "connections.toml", editableConns)
-	c := Connection{Name: "prod", Driver: "postgres", Host: "10.0.1.6", Port: 5432, User: "app", SSH: "bastion", Env: EnvProd}
+	on := true
+	c := Connection{Name: "prod", Driver: "postgres", Host: "10.0.1.6", Port: 5432, User: "app", SSH: "bastion", Env: EnvProd, ReadOnly: &on}
 	if _, err := UpdateConnection(dir, "prod-pg", c); err != nil {
 		t.Fatal(err)
 	}
@@ -351,6 +370,40 @@ func TestUpdateConnectionTouchesOnlyItsBlock(t *testing.T) {
 	}
 	if cfg.Connections[0].Name != "local" || cfg.Connections[2].Name != "last" {
 		t.Fatalf("other connections changed: %+v", cfg.Connections)
+	}
+}
+
+func TestUpdateConnectionReadOnly(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "connections.toml", editableConns)
+	off := false
+	prod := Connection{Name: "prod-pg", Driver: "postgres", Host: "10.0.1.5", User: "app", Database: "app", Env: EnvProd, Params: map[string]string{"sslmode": "require"}}
+	local := Connection{Name: "local", Driver: "mysql", User: "root", ReadOnly: &off}
+	read := func() string {
+		data, _ := os.ReadFile(filepath.Join(dir, "connections.toml"))
+		return string(data)
+	}
+	if _, err := UpdateConnection(dir, "prod-pg", prod); err != nil {
+		t.Fatal(err)
+	}
+	if got := read(); strings.Contains(got, "readonly") || !strings.Contains(got, "sslmode") {
+		t.Fatalf("auto removes the readonly key:\n%s", got)
+	}
+	if _, err := UpdateConnection(dir, "local", local); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Connections[1].IsReadOnly() || cfg.Connections[1].ReadOnly != nil {
+		t.Fatalf("prod-pg = %+v: readonly follows env", cfg.Connections[1])
+	}
+	if l := cfg.Connections[0]; l.ReadOnly == nil || *l.ReadOnly {
+		t.Fatalf("local = %+v: readonly = false is written", l)
+	}
+	if got := read(); !strings.Contains(got, `name = "local"   # the laptop`) {
+		t.Fatalf("other lines are kept:\n%s", got)
 	}
 }
 

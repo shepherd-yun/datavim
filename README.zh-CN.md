@@ -330,7 +330,7 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
 
 - `readonly = true`（`env = "prod"` 时默认开启）在控制台中阻止 INSERT/UPDATE/DELETE 和 DDL，
   数据库会话本身也设为只读，作为第二道防线。`:set noreadonly` 在 sqlvim 退出前解锁该连接；
-  不会修改 `connections.toml`。
+  不会修改 `connections.toml`。要长期修改，在新建 / 编辑连接表单里设置 `Read-only`（`auto` 跟随 `env`）。
 - SQL Server 和 Oracle 没有只读会话，所以只有 sqlvim 这一道防线，规则也更严：它检查一个批次里的每条语句（T-SQL 可以不写分号），
   认不出是否安全的一律拦截——除少数只读系统过程（`sp_help`、`sp_helptext`、`sp_columns`、`sp_who` 等）以外的 `EXEC`、
   `IF` 块、`DBCC`、PL/SQL 块、`CALL` 等（允许 `ALTER SESSION SET CURRENT_SCHEMA` / `NLS_…`）。生产库建议再配一个数据库层面只读的账号。
