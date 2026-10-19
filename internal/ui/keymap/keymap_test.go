@@ -490,3 +490,29 @@ func TestKindTablesNameBoundActions(t *testing.T) {
 		}
 	}
 }
+
+func TestDBServerBindings(t *testing.T) {
+	k := Default()
+	for keys, want := range map[string]Action{
+		"c": CancelSessionQuery, "a": ToggleIdle, "d d": KillClient, "[": PrevSection, "]": NextSection,
+		"F": FilterPrompt, "f x": FilterClear, "j": Down, "K": CellDetail,
+	} {
+		if a, r := k.Resolve(DBServer, strings.Fields(keys)); a != want || r != Matched {
+			t.Errorf("%s = %q (%v), want %q", keys, a, r, want)
+		}
+	}
+	if !slices.Contains(Contexts(), DBServer) {
+		t.Fatalf("Contexts() = %v", Contexts())
+	}
+}
+
+func TestServerInfoBothKinds(t *testing.T) {
+	k := Default()
+	for _, kind := range []Kind{KindSQL, KindRedis} {
+		if l := k.Continuations(Tree, kind, []string{"space"}); !slices.ContainsFunc(l, func(h Hint) bool {
+			return h.Keys == "i" && strings.HasPrefix(h.Desc, "Server status")
+		}) {
+			t.Errorf("kind %d: leader lacks i Server status: %v", kind, l)
+		}
+	}
+}

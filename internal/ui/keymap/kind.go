@@ -22,7 +22,6 @@ var kinds = map[Context]map[Action]Kind{
 		CopyAs("sql"):     KindSQL,
 		ExportAs("sql"):   KindSQL,
 		OpenKey:           KindRedis,
-		ServerInfo:        KindRedis,
 		Favorites:         KindRedis,
 	},
 	Tree: {

@@ -31,7 +31,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(LeaderToken, "f"), Recent, "Recent tabs and files"},
 		{Global, keys(LeaderToken, "l"), Locate, "Locate the current tab in the tree"},
 		{Global, keys(LeaderToken, "k"), OpenKey, "Open a Redis key by name"},
-		{Global, keys(LeaderToken, "i"), ServerInfo, "Redis server: status, slow log, clients"},
+		{Global, keys(LeaderToken, "i"), ServerInfo, "Server status: load, sessions, locks, …"},
 		{Global, keys(LeaderToken, "F"), Favorites, "Starred Redis keys"},
 	}
 	for _, c := range []struct{ key, format, desc string }{
@@ -193,6 +193,17 @@ func DefaultBindings() []Binding {
 		Binding{RedisServer, keys("["), PrevSection, "Previous section"},
 		Binding{RedisServer, keys("]"), NextSection, "Next section"},
 		Binding{RedisServer, keys("d", "d"), KillClient, "Kill the client (clients list)"},
+	)
+
+	b = append(b, gridBindings(DBServer)...)
+	b = append(b,
+		Binding{DBServer, keys("["), PrevSection, "Previous section"},
+		Binding{DBServer, keys("]"), NextSection, "Next section"},
+		Binding{DBServer, keys("d", "d"), KillClient, "Disconnect the session (sessions list)"},
+		Binding{DBServer, keys("c"), CancelSessionQuery, "Cancel the session's query (sessions list)"},
+		Binding{DBServer, keys("a"), ToggleIdle, "Show / hide idle sessions"},
+		Binding{DBServer, keys("F"), FilterPrompt, "Filter by name (variables)"},
+		Binding{DBServer, keys("f", "x"), FilterClear, "Clear the filter"},
 	)
 
 	b = append(b, gridBindings(RedisBigKeys)...)
