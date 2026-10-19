@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -18,6 +19,27 @@ import (
 type server struct{ c *conn }
 
 func (c *conn) Server() db.ServerReader { return server{c: c} }
+
+// staleValue is a value read again only once it is a minute old.
+type staleValue struct {
+	mu sync.Mutex
+	at time.Time
+	v  string
+}
+
+func (c *staleValue) get(now time.Time, read func() (string, error)) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.at.IsZero() && now.Sub(c.at) < time.Minute {
+		return c.v, nil
+	}
+	v, err := read()
+	if err != nil {
+		return "", err
+	}
+	c.at, c.v = now, v
+	return v, nil
+}
 
 // maxSQL is how much of a statement the server tab keeps.
 const maxSQL = 1024
@@ -77,7 +99,6 @@ const sampleSQL = `SELECT extract(epoch FROM now() - pg_postmaster_start_time())
 	(SELECT sum(temp_files) || ' (' || pg_size_pretty(sum(temp_bytes)) || ')' FROM pg_stat_database),
 	(SELECT blks_hit::text FROM pg_stat_database WHERE datname = current_database()),
 	(SELECT blks_read::text FROM pg_stat_database WHERE datname = current_database()),
-	pg_database_size(current_database())::text,
 	(SELECT extract(epoch FROM now() - xact_start)::text FROM pg_stat_activity
 		WHERE xact_start IS NOT NULL AND backend_type = 'client backend' ORDER BY xact_start LIMIT 1),
 	(SELECT pid::text FROM pg_stat_activity
@@ -102,8 +123,19 @@ func (s server) Sample(ctx context.Context) (db.ServerSample, error) {
 		role += " · " + n + " replicas"
 	}
 	oldest := "—"
-	if !r[15].Null {
-		oldest = seconds(r[15]) + " (pid " + r[16].Text + ")"
+	if !r[14].Null {
+		oldest = seconds(r[14]) + " (pid " + r[15].Text + ")"
+	}
+	// pg_database_size stats every file of the database: not every sample
+	size, err := s.c.dbSize.get(at, func() (string, error) {
+		rs, err := s.query(ctx, "SELECT pg_database_size(current_database())::text")
+		if err != nil {
+			return "", err
+		}
+		return rs.Rows[0][0].Text, nil
+	})
+	if err != nil {
+		return db.ServerSample{}, err
 	}
 	facts := []db.Fact{
 		{Label: "version", Text: "PostgreSQL " + vs.Rows[0][0].Text},
@@ -117,7 +149,7 @@ func (s server) Sample(ctx context.Context) (db.ServerSample, error) {
 		facts = append(facts, db.Fact{Label: "cache hit", Kind: db.FactPercent, Num: 100 * hit / (hit + read)})
 	}
 	facts = append(facts,
-		db.Fact{Label: "db size", Kind: db.FactBytes, Num: num(r[14])},
+		db.Fact{Label: "db size", Kind: db.FactBytes, Num: num(db.Value{Text: size})},
 		db.Fact{Label: "deadlocks", Kind: db.FactCount, Num: num(r[10])},
 		db.Fact{Label: "temp files", Text: r[11].Text},
 		db.Fact{Label: "oldest tx", Text: oldest},
@@ -190,7 +222,12 @@ func (s server) Sessions(ctx context.Context, includeIdle bool) (db.SessionList,
 func (s server) Locks(ctx context.Context) (*db.ResultSet, error) {
 	rs, err := s.query(ctx, `SELECT w.pid::text, extract(epoch FROM now() - w.query_start)::text, b.pid::text, b.state,
 		extract(epoch FROM now() - coalesce(b.xact_start, b.query_start))::text,
-		l.locktype || ' ' || l.mode, l.relation::regclass::text, w.query, b.query
+		l.locktype || ' ' || l.mode,
+		-- an OID names a relation only in its own database: elsewhere show the database
+		CASE WHEN l.database = (SELECT oid FROM pg_database WHERE datname = current_database())
+			THEN l.relation::regclass::text
+			ELSE (SELECT datname FROM pg_database WHERE oid = l.database) || ' (oid ' || l.relation || ')' END,
+		w.query, b.query
 		FROM pg_stat_activity w
 		CROSS JOIN LATERAL unnest(pg_blocking_pids(w.pid)) AS bp(pid)
 		JOIN pg_stat_activity b ON b.pid = bp.pid

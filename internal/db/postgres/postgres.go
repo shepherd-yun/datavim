@@ -98,6 +98,7 @@ func connString(cfg db.ConnConfig) string {
 type conn struct {
 	pool     *pgxpool.Pool
 	database string
+	dbSize   staleValue // the server tab's database size
 }
 
 func (c *conn) Dialect() db.Dialect { return dialect{} }

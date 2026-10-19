@@ -6,7 +6,9 @@ import (
 	"context"
 	"net"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
@@ -119,5 +121,58 @@ func TestContract(t *testing.T) {
 		Begin:     "BEGIN",
 		SelfIDSQL: "SELECT pg_backend_pid()",
 		Setting:   "max_connections",
+	})
+
+	t.Run("Locks names a relation of another database by that database", func(t *testing.T) {
+		// the server tab of a connection without a database reads from "postgres"
+		other, err := postgres.Driver{}.Open(ctx, db.ConnConfig{
+			Host: host, Port: port, User: "sqlvim", Password: password, Database: "postgres",
+			Params: map[string]string{"sslmode": "disable"},
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = other.Close() }()
+		a, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = a.Close() }()
+		b, err := conn.Session(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = b.Close() }()
+		for _, q := range []string{"BEGIN", "LOCK TABLE app.users IN ACCESS EXCLUSIVE MODE"} {
+			if _, err := a.Exec(ctx, q); err != nil {
+				t.Fatal(err)
+			}
+		}
+		defer func() { _, _ = a.Exec(ctx, "ROLLBACK") }()
+		done := make(chan error, 1)
+		go func() { _, err := b.Query(ctx, "SELECT count(*) FROM app.users"); done <- err }()
+		var row []db.Value
+		for deadline := time.Now().Add(10 * time.Second); row == nil; {
+			rs, err := other.Server().Locks(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(rs.Rows) > 0 {
+				row = rs.Rows[0]
+			} else if time.Now().After(deadline) {
+				t.Fatal("no lock wait")
+			} else {
+				time.Sleep(200 * time.Millisecond)
+			}
+		}
+		if rel := row[5].Text; !strings.HasPrefix(rel, "app ") {
+			t.Errorf("relation = %q, want it named by database app", rel)
+		}
+		if _, err := a.Exec(ctx, "ROLLBACK"); err != nil {
+			t.Fatal(err)
+		}
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
 	})
 }
