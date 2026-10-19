@@ -14,6 +14,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -81,6 +82,13 @@ func dsnConfig(cfg db.ConnConfig) (*gomysql.Config, error) {
 		}
 	}
 	mc.Logger = slogLogger{}
+	// The server tab marks sqlvim's own sessions by this attribute.
+	if !strings.Contains(mc.ConnectionAttributes, "program_name:") {
+		if mc.ConnectionAttributes != "" {
+			mc.ConnectionAttributes += ","
+		}
+		mc.ConnectionAttributes += "program_name:sqlvim"
+	}
 	// Data edits check that every UPDATE found exactly one row; without
 	// this MySQL counts only rows whose values changed.
 	mc.ClientFoundRows = true
@@ -154,7 +162,12 @@ func displayText(s string) string {
 	return "0x" + strings.ToUpper(hex.EncodeToString([]byte(s)))
 }
 
-type conn struct{ db *sql.DB }
+type conn struct {
+	db *sql.DB
+
+	mu      sync.Mutex
+	version string // VERSION(), read by the server tab
+}
 
 func (c *conn) Dialect() db.Dialect { return dialect{} }
 func (c *conn) Meta() db.MetaReader { return meta{c: c} }

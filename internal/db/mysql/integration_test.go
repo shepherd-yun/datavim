@@ -117,4 +117,51 @@ func TestContract(t *testing.T) {
 			}
 		}
 	}
+	dbtest.RunServerContract(t, conn, serverFixture)
+}
+
+var serverFixture = dbtest.ServerFixture{
+	SleepSQL:  "SELECT SLEEP(30) AS sqlvim_contract_sleep",
+	LockSQL:   "UPDATE app.users SET name = CONCAT(name, '') WHERE id = 1",
+	Begin:     "START TRANSACTION",
+	SelfIDSQL: "SELECT CONNECTION_ID()",
+	Setting:   "max_connections",
+}
+
+// TestServerMySQL57 runs the server status contract on MySQL 5.7, the
+// oldest version the server tab supports.
+func TestServerMySQL57(t *testing.T) {
+	ctx := context.Background()
+	const password = "secret"
+	ctr, err := tcmysql.Run(ctx, "mysql:5.7",
+		tcmysql.WithDatabase("app"),
+		tcmysql.WithUsername("root"),
+		tcmysql.WithPassword(password),
+	)
+	testcontainers.CleanupContainer(t, ctr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpoint, err := ctr.PortEndpoint(ctx, "3306/tcp", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	host, portStr, _ := net.SplitHostPort(endpoint)
+	port, _ := strconv.Atoi(portStr)
+	conn, err := mysql.Driver{}.Open(ctx, db.ConnConfig{
+		Host: host, Port: port, User: "root", Password: password, Database: "app",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = conn.Close() })
+	for _, stmt := range []string{
+		"CREATE TABLE users (id BIGINT PRIMARY KEY, name VARCHAR(100) NOT NULL)",
+		"INSERT INTO users VALUES (1, 'alice')",
+	} {
+		if _, err := conn.Exec(ctx, stmt); err != nil {
+			t.Fatalf("fixture %q: %v", stmt, err)
+		}
+	}
+	dbtest.RunServerContract(t, conn, serverFixture)
 }

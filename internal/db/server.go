@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 )
 
@@ -131,4 +133,32 @@ func FormatElapsed(d time.Duration) string {
 		return fmt.Sprintf("%dh%02dm", int(d.Hours()), int(d.Minutes())%60)
 	}
 	return fmt.Sprintf("%dd%02dh", int(d.Hours())/24, int(d.Hours())%24)
+}
+
+// VersionAtLeast reports whether the version string v (as a server reports
+// it: "8.0.21-log", "16.4", "12.0.6024.0") is at least major.minor.patch.
+// An unreadable version is not.
+func VersionAtLeast(v string, major, minor, patch int) bool {
+	var got [3]int
+	parts := strings.SplitN(v, ".", 4)
+	for i := 0; i < 3 && i < len(parts); i++ {
+		end := 0
+		for end < len(parts[i]) && parts[i][end] >= '0' && parts[i][end] <= '9' {
+			end++
+		}
+		n, err := strconv.Atoi(parts[i][:end])
+		if err != nil {
+			if i == 0 {
+				return false
+			}
+			break
+		}
+		got[i] = n
+	}
+	for i, want := range [3]int{major, minor, patch} {
+		if got[i] != want {
+			return got[i] > want
+		}
+	}
+	return true
 }

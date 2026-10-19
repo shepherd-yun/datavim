@@ -59,7 +59,7 @@ func RedactSQL(sql string) string {
 			if isWord(j, "BY") {
 				add(secret(j+1, true))
 			}
-		case isWord(i, "PASSWORD") && !(setPassword && i == 1):
+		case isWord(i, "PASSWORD") && (!setPassword || i != 1):
 			j := i + 1
 			if isPunct(j, "=") {
 				j++
