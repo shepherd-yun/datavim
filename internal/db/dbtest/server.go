@@ -252,6 +252,14 @@ func RunServerContract(t *testing.T, conn db.Conn, f ServerFixture) {
 		if _, err := a.Exec(ctx, f.LockSQL); err != nil {
 			t.Fatal(err)
 		}
+		// Runs before the sessions close, so a failure does not leave B
+		// waiting forever (SQL Server has no lock timeout).
+		rolledBack := false
+		t.Cleanup(func() {
+			if !rolledBack {
+				_, _ = a.Exec(ctx, "ROLLBACK")
+			}
+		})
 		done := make(chan error, 1)
 		go func() {
 			_, err := b.Exec(ctx, f.LockSQL)
@@ -283,6 +291,7 @@ func RunServerContract(t *testing.T, conn db.Conn, f ServerFixture) {
 				time.Sleep(200 * time.Millisecond)
 			}
 		}
+		rolledBack = true
 		if _, err := a.Exec(ctx, "ROLLBACK"); err != nil {
 			t.Fatal(err)
 		}

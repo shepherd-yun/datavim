@@ -109,4 +109,12 @@ func TestContract(t *testing.T) {
 			t.Fatalf("a procedure without a result set: %v", r.Err)
 		}
 	})
+
+	dbtest.RunServerContract(t, conn, dbtest.ServerFixture{
+		SleepSQL:  "/* sqlvim_contract_sleep */ WAITFOR DELAY '00:00:30'",
+		LockSQL:   "UPDATE dbo.users SET name = name WHERE id = 1",
+		Begin:     "BEGIN TRANSACTION",
+		SelfIDSQL: "SELECT @@SPID",
+		Setting:   "max server memory (MB)",
+	})
 }
