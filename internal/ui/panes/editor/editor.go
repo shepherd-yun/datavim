@@ -29,6 +29,9 @@ type Model struct {
 // New returns an empty editor in NORMAL mode.
 func New() *Model { return &Model{vim: vimedit.New(), placeholder: defaultPlaceholder} }
 
+// UseRegisters shares r with the other editors using it.
+func (m *Model) UseRegisters(r vimedit.Registers) { m.vim.UseRegisters(r) }
+
 // SetPlaceholder sets the hint shown in an empty editor ("" for none).
 func (m *Model) SetPlaceholder(s string) { m.placeholder = s }
 

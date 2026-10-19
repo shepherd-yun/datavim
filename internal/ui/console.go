@@ -174,6 +174,8 @@ func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn strin
 }
 
 func (t *consoleTab) ID() int { return t.id }
+
+func (t *consoleTab) UseRegisters(r vimedit.Registers) { t.editor.UseRegisters(r) }
 func (t *consoleTab) Key() string {
 	if t.file != nil {
 		return fileTabKey(t.file.path, t.conn, t.ns)

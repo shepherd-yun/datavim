@@ -136,6 +136,28 @@ func TestClipboardRegister(t *testing.T) {
 	}
 }
 
+func TestSharedRegisters(t *testing.T) {
+	regs := NewRegisters()
+	a, b := newAt(t, "|select 1"), newAt(t, "|x")
+	a.UseRegisters(regs)
+	b.UseRegisters(regs)
+	feed(a, "yw")
+	if feed(b, "p"); show(b) != "xselect| " {
+		t.Fatalf("a yank in one editor puts in another: %q", show(b))
+	}
+	regs.Put("users")
+	if feed(a, "$p"); show(a) != "select 1user|s" {
+		t.Fatalf("text put from outside: %q", show(a))
+	}
+	regs.Put("1\tuser1\r\n")
+	if feed(b, "P"); b.Text() != "1\tuser1\nxselect " {
+		t.Fatalf("a line break at the end puts lines: %q", b.Text())
+	}
+	if c := newAt(t, "|x"); feed(c, "p") != (Result{Handled: true}) || c.Text() != "x" {
+		t.Fatalf("an editor of its own keeps its registers: %q", c.Text())
+	}
+}
+
 func TestVisualYankCopies(t *testing.T) {
 	e := newAt(t, "|select 1\nfrom t")
 	if r := feed(e, "vey"); r.Clipboard == nil || *r.Clipboard != "select" {

@@ -62,6 +62,19 @@ type register struct {
 	linewise bool
 }
 
+// Registers are an editor's registers. Editors given the same Registers
+// share them, like the windows of one vim.
+type Registers struct{ m map[rune]register }
+
+func NewRegisters() Registers { return Registers{m: map[rune]register{}} }
+
+// Put puts text copied outside the editors in the unnamed register, for p;
+// text ending in a line break puts lines, as "+p does.
+func (r Registers) Put(text string) {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	r.m['"'] = register{text: text, linewise: strings.HasSuffix(text, "\n")}
+}
+
 // cmd is one parsed NORMAL / VISUAL command: ["x][count]op(motion).
 type cmd struct {
 	reg    rune   // register; 0 is the unnamed one
@@ -106,6 +119,9 @@ type Editor struct {
 func New() *Editor {
 	return &Editor{buf: newBuffer(""), regs: map[rune]register{}, height: 20}
 }
+
+// UseRegisters makes the editor use r in place of its own registers.
+func (e *Editor) UseRegisters(r Registers) { e.regs = r.m }
 
 func (e *Editor) Text() string { return e.buf.Text() }
 

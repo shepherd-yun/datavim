@@ -56,6 +56,9 @@ func (c *CellEditor) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 	return c, nil
 }
 
+// UseRegisters shares r with the other editors using it.
+func (c *CellEditor) UseRegisters(r vimedit.Registers) { c.ed.UseRegisters(r) }
+
 // Mode is the editor's vim mode, for the status bar.
 func (c *CellEditor) Mode() string { return c.ed.Mode().String() }
 

@@ -76,7 +76,8 @@ type Model struct {
 	home      string
 	settings  config.Settings
 	keys      *keymap.Keymap
-	workspace string // shown when not the default workspace
+	workspace string            // shown when not the default workspace
+	regs      vimedit.Registers // shared by every vim editor; what y copies goes in too
 
 	width, height int
 	focus         focus
@@ -118,6 +119,9 @@ type Model struct {
 	bulkGen     int
 }
 
+// registerUser is a tab or popup with a vim editor.
+type registerUser interface{ UseRegisters(vimedit.Registers) }
+
 // connNode is the tree root of connection c.
 func connNode(c config.Connection) *tree.Node {
 	return &tree.Node{Kind: tree.KindConn, Name: c.Name, Conn: c.Name, Driver: c.Driver, Prod: c.Env == config.EnvProd}
@@ -147,6 +151,7 @@ func New(b Backend, st Store, settings config.Settings) *Model {
 		home:          home,
 		settings:      settings,
 		keys:          keymap.Default(),
+		regs:          vimedit.NewRegisters(),
 		showTree:      true,
 		tree:          newTree(roots, settings),
 		whichKeyDelay: defaultWhichKeyDelay,
@@ -308,6 +313,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 		}
 	case openOverlayMsg:
+		if r, ok := msg.overlay.(registerUser); ok {
+			r.UseRegisters(m.regs)
+		}
 		m.overlay = msg.overlay
 	case tabJumpMsg:
 		return m, m.jumpTab(vimedit.TabJump(msg))
@@ -1130,6 +1138,9 @@ func (m *Model) showTab(key string, create func(id int) tab) tea.Cmd {
 	}
 	m.nextTabID++
 	t := create(m.nextTabID)
+	if r, ok := t.(registerUser); ok {
+		r.UseRegisters(m.regs)
+	}
 	m.tabs = append(m.tabs, t)
 	m.active = len(m.tabs) - 1
 	m.focus = focusTabs

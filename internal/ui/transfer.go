@@ -26,6 +26,13 @@ var (
 	readClipboard   = clipboard.Read
 )
 
+// copy puts text on the clipboard and in the editors' unnamed register,
+// so that p in a console puts what y copied anywhere.
+func (m *Model) copy(text string) tea.Cmd {
+	m.regs.Put(text)
+	return copyToClipboard(text)
+}
+
 const exportTimeout = 10 * time.Minute
 
 // exportSrc is what a tab offers for copy and export.
@@ -142,13 +149,13 @@ func (m *Model) copyAs(f export.Format) tea.Cmd {
 		return nil
 	}
 	m.setStatus(fmt.Sprintf("copied %d rows as %s", len(src.rs.Rows), f.Label()), false)
-	return copyToClipboard(text)
+	return m.copy(text)
 }
 
 func (m *Model) yank(a keymap.Action) tea.Cmd {
 	if k, ok := m.activeTab().(*keyTab); ok && k.isString() && a == keymap.YankCell {
 		m.setStatus("copied "+k.Title(), false)
-		return copyToClipboard(k.text) // what was read of it, unescaped
+		return m.copy(k.text) // what was read of it, unescaped
 	}
 	g, ok := m.activeTab().(gridder)
 	if !ok {
@@ -166,7 +173,7 @@ func (m *Model) yank(a keymap.Action) tea.Cmd {
 			text = "NULL"
 		}
 		m.setStatus("copied "+col.Name, false)
-		return copyToClipboard(text)
+		return m.copy(text)
 	}
 	row, ok := gr.Row()
 	if !ok {
@@ -180,7 +187,7 @@ func (m *Model) yank(a keymap.Action) tea.Cmd {
 		return nil
 	}
 	m.setStatus("copied row", false)
-	return copyToClipboard(text)
+	return m.copy(text)
 }
 
 func (m *Model) exportAs(f export.Format) tea.Cmd {

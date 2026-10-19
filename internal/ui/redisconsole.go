@@ -156,8 +156,10 @@ func newRedisConsoleTab(id int, b Backend, st Store, conn string, n int, s confi
 	return t
 }
 
-func (t *redisConsoleTab) ID() int     { return t.id }
-func (t *redisConsoleTab) Key() string { return rconsoleTabKey(t.conn, t.openDB) }
+func (t *redisConsoleTab) ID() int { return t.id }
+
+func (t *redisConsoleTab) UseRegisters(r vimedit.Registers) { t.editor.UseRegisters(r) }
+func (t *redisConsoleTab) Key() string                      { return rconsoleTabKey(t.conn, t.openDB) }
 
 func (t *redisConsoleTab) Title() string {
 	return "redis:" + t.conn + "/db" + strconv.Itoa(t.db)

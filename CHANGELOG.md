@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- `p` in a console, the Redis console or the cell editor puts what `y` last copied anywhere: a
+  cell, a row, a tree name, a DDL or a result copied as CSV/JSON/INSERT. The editors share one
+  set of registers, so text yanked in one console also puts in another.
+
 ## [2.1.0] - 2026-10-19
 
 ### Added

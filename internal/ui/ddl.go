@@ -75,7 +75,7 @@ func (m *Model) ddlLoaded(msg ddlLoadedMsg) tea.Cmd {
 		m.setStatus(msg.ref.Name+": "+msg.err.Error(), true)
 	default:
 		m.setStatus("copied the DDL of "+msg.ref.Name, false)
-		return copyToClipboard(msg.ddl)
+		return m.copy(msg.ddl)
 	}
 	return nil
 }
@@ -83,5 +83,5 @@ func (m *Model) ddlLoaded(msg ddlLoadedMsg) tea.Cmd {
 // copyText is y in a detail popup.
 func (m *Model) copyText(msg overlay.CopyMsg) tea.Cmd {
 	m.setStatus("copied "+msg.What, false)
-	return copyToClipboard(msg.Text)
+	return m.copy(msg.Text)
 }

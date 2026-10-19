@@ -7,6 +7,8 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+
+	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 )
 
 func captureClipboard(t *testing.T) *string {
@@ -46,6 +48,25 @@ func TestYankCellAndRow(t *testing.T) {
 	press(t, m, "y", "y")
 	if *clip != "1\tuser1\n" {
 		t.Fatalf("row = %q", *clip)
+	}
+}
+
+func TestYankedTextPastesInTheEditors(t *testing.T) {
+	m, _ := newTestModel(t)
+	captureClipboard(t)
+	openUsers(t, m)
+	press(t, m, "l", "y", "l", "space", "c", "esc", "p")
+	c := m.activeTab().(*consoleTab)
+	if c.editor.Value() != "user1" {
+		t.Fatalf("p puts the yanked cell: %q", c.editor.Value())
+	}
+	press(t, m, "g", "t", "y", "y", "i")
+	if _, ok := m.overlay.(*overlay.CellEditor); !ok {
+		t.Fatalf("no cell editor:\n%s", screen(m))
+	}
+	press(t, m, "esc", "0", "P", "enter")
+	if v := m.activeTab().(*dataTab).table.Row(0).Values[1]; v.Text != "1\tuser1\nuser1" {
+		t.Fatalf("the cell editor puts the yanked row: %q", v.Text)
 	}
 }
 
