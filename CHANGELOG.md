@@ -6,6 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Server status for MySQL, PostgreSQL, SQL Server and Oracle connections (`<Space>i`, or
+  `Server status` in the tree menu): version, uptime, role, connections, cache hit rate and
+  more, with sparklines of the load; the sessions with what they run (`c` cancels a query, `dd`
+  disconnects a session, guarded like Redis's client kill), lock waits, the top statements,
+  settings (`F` filters them) and replication. Passwords in the SQL shown are masked.
+
+### Fixed
+- A console whose session the server killed now reports the connection as lost (Oracle and
+  other `database/sql` drivers answered with "connection is already closed").
+
 ## [2.0.3] - 2026-10-19
 
 ### Added

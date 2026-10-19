@@ -109,6 +109,25 @@ Redis 不会回滚：`EXEC` 里某条命令失败时，它前后的命令仍然�
 只读连接拒绝改动，PROD 连接在预览中显示 `PROD ·`；有暂存改动时，翻页、刷新、过滤、排序、关闭 tab 或退出都会询问或拒绝。
 控制台里单表 SELECT 的结果也能用同样的按键过滤和编辑。
 
+## 服务器状态
+
+在 MySQL、PostgreSQL、SQL Server 或 Oracle 连接上按 `<Space>i`（或在连接、数据库节点菜单里选 `Server status`）打开服务器页；
+`[` / `]` 切换分区，`<Space>r` 重新读取当前分区。
+
+- **Status** —— 版本、运行时间、角色、连接数和上限、缓存命中率等，以及负载的 sparkline（QPS / TPS、运行中的会话、
+  每秒读写行数或网络流量）。每 2 秒采样一次，只在显示在屏幕上时采样。
+- **Sessions** —— 谁连着、在跑什么、跑了多久、是否在事务里（默认隐藏空闲会话，`a` 显示；`*` 标出 sqlvim 自己的）。
+  `c` 取消会话正在执行的查询，`dd` 断开会话：只读连接上拒绝，其他连接都要确认，prod 上要输入连接名；
+  执行前 sqlvim 会核对这个 id 还是原来那个会话。SQL Server 不能只取消查询（只能断开），Oracle 18c 以前也不能。
+- **Locks** —— 谁在等锁、谁持有锁，以及双方的语句。
+- **Slow queries** —— 按总耗时排序的语句：MySQL 用 `performance_schema` 的摘要，PostgreSQL 用 `pg_stat_statements`（装了才有），
+  SQL Server 用 `dm_exec_query_stats`，Oracle 用 `v$sql`。
+- **Variables / Settings / Configuration / Parameters** —— 服务器参数；`F` 按名称过滤。
+- **Replication** —— 副本和延迟、PostgreSQL 复制槽、可用性组、Data Guard。
+
+账号没有权限读取的分区（MySQL 的 `PROCESS`、SQL Server 的 `VIEW SERVER STATE`、Oracle 的 `SELECT_CATALOG_ROLE`）
+会说明缺什么，其他分区照常可用。显示的 SQL 里的密码（`IDENTIFIED BY`、`PASSWORD`）会被遮住。
+
 ## SSH 隧道
 
 把 `ssh` 设为 `~/.ssh/config` 里的 `Host` 别名；此时 `host` 由 SSH 服务器解析：
@@ -223,9 +242,12 @@ sqlvim --list-workspaces
 | `t` / `r` / `D` | Redis key 详情页：设置或去掉 TTL / 重命名 / 删除 key |
 | `o` | 树里 Redis 的 db、文件夹或 key 上：新建 key |
 | `g d` | Redis 控制台结果：打开单元格里的 key |
-| `<Space>i` | Redis 服务器页：状态、慢查询、客户端 |
-| `[` / `]` | Redis 服务器页：上一个 / 下一个分区 |
-| `dd` | Redis 服务器页的客户端列表：杀掉客户端 |
+| `<Space>i` | 服务器页：状态、会话、锁等（Redis：状态、慢查询、客户端） |
+| `[` / `]` | 服务器页：上一个 / 下一个分区 |
+| `dd` | 服务器页：断开会话 / 杀掉 Redis 客户端 |
+| `c` | SQL 服务器页的会话列表：取消会话正在执行的查询 |
+| `a` | SQL 服务器页的会话列表：显示 / 隐藏空闲会话 |
+| `F` / `fx` | SQL 服务器页的参数列表：按名称过滤 / 清除过滤 |
 | `*` | 树或 Redis key 详情页：收藏 / 取消收藏 key |
 | `<Space>F` | 收藏的 Redis key |
 | `B` | 树里 Redis 的 db 或文件夹上：找出最大的 key（`Enter` 打开） |

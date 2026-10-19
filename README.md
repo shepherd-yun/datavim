@@ -141,6 +141,32 @@ Read-only connections refuse changes, PROD connections show `PROD ·` in the pre
 paging, refreshing, filtering, sorting, closing the tab or quitting ask or refuse while
 changes are staged. The same filter and edit keys work on console results of a single-table SELECT.
 
+## Server status
+
+`<Space>i` on a MySQL, PostgreSQL, SQL Server or Oracle connection (or `Server status` in the
+node menu of a connection or database) opens its server tab; `[` / `]` switch sections and
+`<Space>r` reloads one.
+
+- **Status** — version, uptime, role, connections against the limit, cache hit rate and the
+  like, with sparklines of the load (QPS / TPS, running sessions, rows or network per second).
+  It samples every 2 seconds, only while it is on screen.
+- **Sessions** — who is connected, what they run and for how long, and whether they are in a
+  transaction (idle sessions hidden; `a` shows them, `*` marks sqlvim's own). `c` cancels the
+  session's query, `dd` disconnects it: refused on read-only connections, confirmed everywhere,
+  with the connection name typed on prod; sqlvim checks that the id still names the same
+  session first. SQL Server cannot cancel a query (only disconnect), nor can Oracle before 18c.
+- **Locks** — who waits for a lock and who holds it, with both statements.
+- **Slow queries** — the top statements by total time: `performance_schema` digests on MySQL,
+  `pg_stat_statements` on PostgreSQL (when installed), `dm_exec_query_stats` on SQL Server,
+  `v$sql` on Oracle.
+- **Variables / Settings / Configuration / Parameters** — the server's settings; `F` filters by
+  name.
+- **Replication** — replicas and lag, PostgreSQL slots, availability groups, Data Guard.
+
+A section the account may not read (MySQL `PROCESS`, SQL Server `VIEW SERVER STATE`, Oracle
+`SELECT_CATALOG_ROLE`) says what is missing; the others still work. Passwords in the SQL shown
+(`IDENTIFIED BY`, `PASSWORD`) are masked.
+
 ## SSH tunnels
 
 Set `ssh` to a `Host` alias from `~/.ssh/config`; `host` is then resolved by the SSH server:
@@ -272,9 +298,12 @@ picks the workspace by directory.
 | `t` / `r` / `D` | Redis key tab: set or remove the TTL / rename the key / delete it |
 | `o` | Tree, on a Redis db, folder or key: new key |
 | `g d` | Redis console results: open the key in the cell |
-| `<Space>i` | Redis server tab: status, slow log, clients |
-| `[` / `]` | Redis server tab: previous / next section |
-| `dd` | Redis server tab, client list: kill the client |
+| `<Space>i` | Server tab: status, sessions, locks, … (Redis: status, slow log, clients) |
+| `[` / `]` | Server tab: previous / next section |
+| `dd` | Server tab: disconnect the session / kill the Redis client |
+| `c` | SQL server tab, sessions: cancel the session's query |
+| `a` | SQL server tab, sessions: show / hide idle sessions |
+| `F` / `fx` | SQL server tab, settings: filter by name / clear the filter |
 | `*` | Tree or Redis key tab: star / unstar the key |
 | `<Space>F` | Starred Redis keys |
 | `B` | Tree, on a Redis db or folder: find the biggest keys (`Enter` opens one) |
