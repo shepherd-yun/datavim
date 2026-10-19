@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"io"
@@ -25,5 +26,8 @@ func IsConnLost(err error) bool {
 	return errors.Is(err, ErrConnLost) || errors.Is(err, driver.ErrBadConn) ||
 		errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, net.ErrClosed) || errors.Is(err, syscall.ECONNRESET) ||
+		// database/sql's answer on a dedicated connection the driver
+		// found dead, e.g. after the server killed the session
+		errors.Is(err, sql.ErrConnDone) ||
 		errors.Is(err, syscall.EPIPE) || errors.As(err, &oe)
 }

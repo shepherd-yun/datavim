@@ -156,4 +156,33 @@ func TestContract(t *testing.T) {
 			}
 		}
 	})
+
+	// The server tab reads v$ views and kills sessions: grant what a DBA
+	// account has, then reconnect so the role applies.
+	sys, err := oracle.Driver{}.Open(ctx, db.ConnConfig{
+		Host: host, Port: port, User: "system", Password: "Sys0racle", Database: "FREEPDB1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range []string{"GRANT SELECT_CATALOG_ROLE TO sqlvim", "GRANT ALTER SYSTEM TO sqlvim"} {
+		if _, err := sys.Exec(ctx, g); err != nil {
+			t.Fatalf("%s: %v", g, err)
+		}
+	}
+	_ = sys.Close()
+	srvConn, err := oracle.Driver{}.Open(ctx, db.ConnConfig{
+		Host: host, Port: port, User: "sqlvim", Password: password, Database: "FREEPDB1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = srvConn.Close() })
+	dbtest.RunServerContract(t, srvConn, dbtest.ServerFixture{
+		SleepSQL:  "SELECT /* sqlvim_contract_sleep */ COUNT(*) FROM all_objects a, all_objects b, all_objects c",
+		LockSQL:   `UPDATE "users" SET name = name WHERE id = 1`,
+		Begin:     "SET TRANSACTION READ WRITE",
+		SelfIDSQL: "SELECT sys_context('USERENV', 'SID') FROM dual",
+		Setting:   "processes",
+	})
 }

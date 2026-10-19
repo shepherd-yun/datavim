@@ -15,6 +15,7 @@ import (
 	"time"
 
 	go_ora "github.com/sijms/go-ora/v2"
+	"github.com/sijms/go-ora/v2/network"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
@@ -73,7 +74,12 @@ func connURL(cfg db.ConnConfig) string {
 		service = defaultService
 	}
 	q := url.Values{}
+	// The server tab marks sqlvim's own sessions by v$session.program.
+	q.Set("PROGRAM", "sqlvim")
 	for k, v := range cfg.Params {
+		if strings.EqualFold(k, "program") {
+			q.Del("PROGRAM")
+		}
 		q.Set(k, v)
 	}
 	u := url.URL{
@@ -95,9 +101,15 @@ func (c *conn) Dialect() db.Dialect { return dialect{} }
 func (c *conn) Meta() db.MetaReader { return meta{c: c} }
 func (c *conn) Close() error        { return c.db.Close() }
 
-// wrap marks dead-connection errors with db.ErrConnLost.
+// wrap marks dead-connection errors with db.ErrConnLost: network errors
+// and the server's own (ORA-00028 your session has been killed, ORA-03113
+// end-of-file on communication channel, …).
 func wrap(err error) error {
-	if err != nil && !errors.Is(err, db.ErrConnLost) && db.IsConnLost(err) {
+	if err == nil || errors.Is(err, db.ErrConnLost) {
+		return err
+	}
+	var oe *network.OracleError
+	if db.IsConnLost(err) || errors.As(err, &oe) && oe.Bad() {
 		return fmt.Errorf("%w: %w", db.ErrConnLost, err)
 	}
 	return err

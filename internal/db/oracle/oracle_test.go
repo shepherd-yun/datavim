@@ -1,9 +1,12 @@
 package oracle
 
 import (
+	"errors"
 	"net/url"
 	"testing"
 	"time"
+
+	"github.com/sijms/go-ora/v2/network"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 )
@@ -82,5 +85,16 @@ func TestDDLWriter(t *testing.T) {
 	}
 	if got := (dialect{}).Paginate("select * from t", 10, 20); got != "select * from t OFFSET 20 ROWS FETCH NEXT 10 ROWS ONLY" {
 		t.Errorf("Paginate = %q", got)
+	}
+}
+
+func TestWrapKilled(t *testing.T) {
+	for _, code := range []int{28, 1012, 3113, 3114} {
+		if err := wrap(&network.OracleError{ErrCode: code}); !errors.Is(err, db.ErrConnLost) {
+			t.Errorf("ORA-%05d: %v is not ErrConnLost", code, err)
+		}
+	}
+	if err := wrap(&network.OracleError{ErrCode: 942}); errors.Is(err, db.ErrConnLost) {
+		t.Errorf("ORA-00942 is ErrConnLost")
 	}
 }

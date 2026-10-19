@@ -18,7 +18,7 @@ type ServerFixture struct {
 	// LockSQL updates one row of the standard fixture, so two sessions
 	// running it inside a transaction block each other.
 	LockSQL string
-	// Begin starts a transaction; "" when the engine opens one implicitly.
+	// Begin starts a transaction on a Session.
 	Begin string
 	// SelfIDSQL returns the session's own id (as the first column of one
 	// row): the sid alone on Oracle.
@@ -181,7 +181,11 @@ func RunServerContract(t *testing.T, conn db.Conn, f ServerFixture) {
 	})
 
 	t.Run("kill", func(t *testing.T) {
-		s, id, _, done := sleeping(t, ctx)
+		// cancelled on a failure, so a query left running cannot hold up
+		// the session's Close
+		qctx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		s, id, _, done := sleeping(t, qctx)
 		ok, err := srv.KillSession(ctx, id)
 		if err != nil || !ok {
 			t.Fatalf("KillSession = %v, %v", ok, err)

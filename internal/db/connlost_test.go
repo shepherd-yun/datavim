@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -23,6 +24,7 @@ func TestIsConnLost(t *testing.T) {
 		{driver.ErrBadConn, true},
 		{fmt.Errorf("read: %w", io.EOF), true},
 		{io.ErrUnexpectedEOF, true},
+		{fmt.Errorf("ping: %w", sql.ErrConnDone), true}, // the server ended the session (a kill)
 		{&net.OpError{Op: "dial", Net: "tcp", Err: syscall.ECONNREFUSED}, true},
 		{fmt.Errorf("write: %w", syscall.EPIPE), true},
 		{context.Canceled, false},
