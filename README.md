@@ -199,7 +199,7 @@ picks the workspace by directory.
 | `Enter` | Open a table's data; on a column, key or index open the structure at it, on a foreign key go to the referenced table |
 | `zo` `zc` `za` | Expand / collapse (on a column, its group) / toggle |
 | `zO` `zC` | Expand everything loaded / collapse everything under the cursor |
-| `zR` `zM` `zx` | Expand everything loaded / collapse everything / collapse all but the path to the cursor |
+| `zR` `zM` (or `Z`) `zx` | Expand everything loaded / collapse everything / collapse all but the path to the cursor |
 | `h` | Collapse / go to parent |
 | `Tab`, `Ctrl-h` `Ctrl-l` | Switch pane |
 | `1`–`9` | Go to tab (in the console editor digits are counts: use `gt` / `gT` / `{n}gt`) |

@@ -92,6 +92,7 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("z", "C"), FoldCloseAll, "Collapse everything under the cursor"},
 		Binding{Tree, keys("z", "R"), FoldOpenTree, "Expand everything loaded"},
 		Binding{Tree, keys("z", "M"), FoldCloseTree, "Collapse everything"},
+		Binding{Tree, keys("Z"), FoldCloseTree, "Collapse everything"},
 		Binding{Tree, keys("z", "x"), FoldFocus, "Collapse all but the path to the cursor"},
 	)
 

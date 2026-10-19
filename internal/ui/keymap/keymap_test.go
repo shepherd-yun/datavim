@@ -33,6 +33,7 @@ func TestResolve(t *testing.T) {
 		{Tree, []string{"3"}, GotoTab(3), Matched},
 		{Tree, []string{"z"}, "", Pending},
 		{Tree, []string{"z", "M"}, FoldCloseTree, Matched},
+		{Tree, []string{"Z"}, FoldCloseTree, Matched},
 		{Tree, []string{"z", "o"}, FoldOpen, Matched},
 		{Tree, []string{"enter"}, Open, Matched},
 		{Tree, []string{"right"}, Expand, Matched},
