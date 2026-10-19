@@ -150,7 +150,7 @@ func (s server) replicaStatus(ctx context.Context) (*db.ResultSet, error) {
 
 // clip redacts a statement for display and keeps its first maxSQL runes.
 func clip(sql string) string {
-	sql = sqlx.RedactSQL(sql)
+	sql = sqlx.RedactSQL(sql, sqlx.MySQL)
 	if r := []rune(sql); len(r) > maxSQL {
 		return string(r[:maxSQL])
 	}

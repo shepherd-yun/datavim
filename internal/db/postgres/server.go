@@ -136,7 +136,7 @@ func (s server) Sample(ctx context.Context) (db.ServerSample, error) {
 
 // clip redacts a statement for display and keeps its first maxSQL runes.
 func clip(sql string) string {
-	sql = sqlx.RedactSQL(sql)
+	sql = sqlx.RedactSQL(sql, sqlx.Postgres)
 	if r := []rune(sql); len(r) > maxSQL {
 		return string(r[:maxSQL])
 	}
