@@ -123,7 +123,9 @@ type sqlServerTab struct {
 	interval time.Duration
 	section  sqlSection
 
-	info db.ServerInfo
+	info     db.ServerInfo
+	haveInfo bool
+	infoErr  error
 
 	visible bool
 	running bool
@@ -330,8 +332,9 @@ func (t *sqlServerTab) sample() tea.Cmd {
 func (t *sqlServerTab) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case sqlServerInfoMsg:
+		t.infoErr = m.err
 		if m.err == nil {
-			t.info = m.info
+			t.info, t.haveInfo = m.info, true
 		}
 	case sqlServerSampleMsg:
 		if m.gen != t.gen || !t.running {
@@ -418,7 +421,7 @@ func (t *sqlServerTab) Handle(a keymap.Action) tea.Cmd {
 			return tea.Batch(t.loadInfo(), t.startSampling())
 		}
 		if !t.loading {
-			return t.load()
+			return tea.Batch(t.loadInfo(), t.load())
 		}
 		return nil
 	case keymap.KillClient:
@@ -469,6 +472,11 @@ func (t *sqlServerTab) ask(a sessionAction) tea.Cmd {
 	l := t.sessions
 	if t.gridSec != sqlSessions || r >= len(l.IDs) || r >= len(l.Info) {
 		t.setStatus("no session selected", true)
+		return nil
+	}
+	if !t.haveInfo {
+		// CanCancel is unknown
+		t.setStatus("server info is not loaded; "+t.keys.KeysFor(keymap.Global, keymap.Refresh)+" reads it again", true)
 		return nil
 	}
 	if a == actCancel && !t.info.CanCancel {
@@ -551,6 +559,9 @@ func (t *sqlServerTab) View(focused bool) string {
 			st = theme.Error
 		}
 		lines = append(lines, st.Render(textutil.Sanitize(t.status)))
+	}
+	if t.infoErr != nil {
+		lines = append(lines, errLine(t.infoErr))
 	}
 	body := ""
 	switch {

@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"math"
 	"slices"
@@ -466,5 +467,31 @@ func TestSQLServerKillSelfWarns(t *testing.T) {
 	pressHold(t, m, "j", "d", "d")
 	if s := screen(m); !strings.Contains(s, "This is a sqlvim connection (maybe this one).") {
 		t.Fatalf("screen:\n%s", s)
+	}
+}
+
+func TestSQLServerInfoError(t *testing.T) {
+	srv := withSections(mysqlServer())
+	srv.infoErr = errors.New("ORA-00942: table or view does not exist")
+	m := openSessions(t, srv, config.Connection{Env: config.EnvDev})
+	if s := screen(m); !strings.Contains(s, "ORA-00942: table or view does not exist") {
+		t.Fatalf("Info error not shown:\n%s", s)
+	}
+	// without Info sqlvim cannot tell whether cancelling works
+	pressHold(t, m, "c")
+	if s := tabStatus(m); strings.Contains(s, "not supported") || !strings.Contains(s, "server info") || m.overlay != nil {
+		t.Fatalf("c without Info: status %q, overlay %T", s, m.overlay)
+	}
+	// Refresh reads Info again
+	srv.mu.Lock()
+	srv.infoErr = nil
+	srv.mu.Unlock()
+	pressHold(t, m, "space", "r")
+	if s := screen(m); strings.Contains(s, "ORA-00942") {
+		t.Fatalf("after Refresh:\n%s", s)
+	}
+	pressHold(t, m, "c")
+	if m.overlay == nil {
+		t.Fatalf("c after Info: status %q", tabStatus(m))
 	}
 }
