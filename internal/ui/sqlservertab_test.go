@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
 
 func TestFormatFact(t *testing.T) {
@@ -221,5 +222,127 @@ func TestSQLServerNoConnection(t *testing.T) {
 	press(t, m, "space", "i")
 	if !strings.Contains(m.status, "select a connection") {
 		t.Fatalf("status %q", m.status)
+	}
+}
+
+// withSections fills srv's table sections.
+func withSections(srv *fakeServer) *fakeServer {
+	srv.sessions = db.SessionList{
+		Rows: textResult([]string{"id", "user", "state", "time", "sql"}, [][]string{
+			{"48211", "app", "executing", "4m12s", "SELECT\n  1"},
+			{"50117", "", "Sleep", "3s", ""},
+		}),
+		IDs: []db.SessionID{{ID: "48211", Since: "t0"}, {ID: "50117"}},
+		Info: []db.SessionSummary{
+			{User: "app", Host: "10.0.3.21", DB: "shop", State: "executing", Elapsed: "4m12s", SQL: "SELECT\n  1"},
+			{State: "Sleep", Elapsed: "3s"},
+		},
+		Self:  []bool{false, true},
+		Total: 2, Active: 1,
+	}
+	srv.sets = map[string]*db.ResultSet{
+		"locks":       textResult([]string{"waiting", "blocked by"}, [][]string{{"48230", "48211"}}),
+		"top":         textResult([]string{"statement", "calls"}, [][]string{{"SELECT ?", "12"}}),
+		"settings":    textResult([]string{"name", "value"}, [][]string{{"max_connections", "500"}, {"Max_Allowed_Packet", "64M"}, {"wait_timeout", "28800"}}),
+		"replication": textResult([]string{"direction", "peer"}, nil),
+	}
+	return srv
+}
+
+func TestSQLServerSections(t *testing.T) {
+	srv := withSections(mysqlServer())
+	srv.info.SettingsTitle = "Parameters"
+	m, _, _ := openSQLServer(t, srv)
+	for i, want := range []string{"Sessions", "Locks", "TopStatements", "Settings", "Replication"} {
+		pressHold(t, m, "]")
+		if calls := srv.callList(); calls[len(calls)-1] != want {
+			t.Fatalf("section %d: calls %v", i+1, calls)
+		}
+	}
+	s := screen(m)
+	if !strings.Contains(s, "Parameters") || !strings.Contains(s, "no replication configured") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	samples := countCalls(srv.callList(), "Sample")
+	if held := pressHold(t, m, "]"); len(held) != 1 || countCalls(srv.callList(), "Sample") != samples+1 {
+		t.Fatalf("back to Status: ticks %d, calls %v", len(held), srv.callList())
+	}
+	// back to Replication reads it again, and so does Refresh
+	pressHold(t, m, "[")
+	pressHold(t, m, "space", "r")
+	if n := countCalls(srv.callList(), "Replication"); n != 3 {
+		t.Fatalf("Replication calls = %d", n)
+	}
+}
+
+func TestSQLServerStaleSectionDropped(t *testing.T) {
+	srv := withSections(mysqlServer())
+	m, _, _ := openSQLServer(t, srv)
+	_, load := m.Update(uitest.Key("]")) // Sessions, not run yet
+	pressHold(t, m, "]")                 // Locks
+	drainHold(t, m, load)
+	tab := m.activeTab().(*sqlServerTab)
+	if tab.section != sqlLocks || tab.gridSec != sqlLocks {
+		t.Fatalf("section %d, grid holds %d", tab.section, tab.gridSec)
+	}
+	if s := screen(m); strings.Contains(s, "48211 ") && !strings.Contains(s, "48230") {
+		t.Fatalf("sessions under Locks:\n%s", s)
+	}
+}
+
+func TestSQLServerUnavailableSection(t *testing.T) {
+	srv := withSections(mysqlServer())
+	srv.errs = map[string]error{"top": db.Unavailable(`pg_stat_statements is not installed in database "shop"`)}
+	m, _, _ := openSQLServer(t, srv)
+	pressHold(t, m, "]", "]", "]")
+	if s := screen(m); !strings.Contains(s, `pg_stat_statements is not installed in database "shop"`) {
+		t.Fatalf("screen:\n%s", s)
+	}
+	pressHold(t, m, "]")
+	if s := screen(m); !strings.Contains(s, "max_connections") {
+		t.Fatalf("settings after an unavailable section:\n%s", s)
+	}
+}
+
+func TestSQLServerSessions(t *testing.T) {
+	srv := withSections(mysqlServer())
+	m, _, _ := openSQLServer(t, srv)
+	pressHold(t, m, "]")
+	s := screen(m)
+	for _, w := range []string{"2 sessions · 1 running · idle hidden (a)", "* sqlvim", "*50117", "SELECT↵  1"} {
+		if !strings.Contains(s, w) {
+			t.Errorf("screen lacks %q:\n%s", w, s)
+		}
+	}
+	pressHold(t, m, "a")
+	if calls := srv.callList(); calls[len(calls)-1] != "Sessions idle" {
+		t.Fatalf("calls %v", calls)
+	}
+	if s := screen(m); !strings.Contains(s, "idle shown (a)") {
+		t.Fatalf("screen:\n%s", s)
+	}
+}
+
+func TestSQLServerSettingsFilter(t *testing.T) {
+	srv := withSections(mysqlServer())
+	m, _, _ := openSQLServer(t, srv)
+	pressHold(t, m, "]", "]", "]", "]")
+	pressHold(t, m, "F", "m", "a", "x", "enter")
+	tab := m.activeTab().(*sqlServerTab)
+	if n := tab.grid.RowCount(); n != 2 {
+		t.Fatalf("filtered rows = %d\n%s", n, screen(m))
+	}
+	if s := screen(m); !strings.Contains(s, "filter: max") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	pressHold(t, m, "f", "x")
+	if n := tab.grid.RowCount(); n != 3 {
+		t.Fatalf("rows after clearing = %d", n)
+	}
+	// the filter is the settings section's only
+	pressHold(t, m, "[")
+	pressHold(t, m, "F")
+	if !strings.Contains(m.activeTab().(*sqlServerTab).status, "variables") {
+		t.Fatalf("F on Slow queries: status %q", m.activeTab().(*sqlServerTab).status)
 	}
 }

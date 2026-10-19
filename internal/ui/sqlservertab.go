@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"math"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/sparkline"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
@@ -63,6 +66,30 @@ type sqlServerTickMsg struct{ tabID, gen int }
 
 func (m sqlServerTickMsg) TabID() int { return m.tabID }
 
+// sqlServerLoadedMsg is one table section; sessions is set for Sessions.
+type sqlServerLoadedMsg struct {
+	tabID    int
+	conn     string
+	sec      sqlSection
+	rs       *db.ResultSet
+	sessions db.SessionList
+	err      error
+}
+
+func (m sqlServerLoadedMsg) TabID() int               { return m.tabID }
+func (m sqlServerLoadedMsg) failure() (string, error) { return m.conn, m.err }
+
+// sqlServerFilterMsg is the text typed to filter the settings by name.
+type sqlServerFilterMsg struct {
+	tabID int
+	text  string
+}
+
+func (m sqlServerFilterMsg) TabID() int { return m.tabID }
+
+// topStatements is how many statements the slow queries section reads.
+const topStatements = 50
+
 // sqlServerTab is a SQL connection's server tab: the status (sampled every
 // interval while it is on screen) and the table sections, which share one
 // grid and are read when shown or refreshed.
@@ -84,11 +111,16 @@ type sqlServerTab struct {
 	samples   []db.ServerSample
 	statusErr error
 
-	grid    *grid.Model
-	gridSec sqlSection // the section the grid holds; sqlSections: none
-	secErr  error
-	status  string
-	statusE bool
+	grid     *grid.Model
+	gridSec  sqlSection // the section the grid holds; sqlSections: none
+	secErr   error
+	loading  bool
+	sessions db.SessionList // as read: the grid's rows, row by row
+	showIdle bool
+	settings *db.ResultSet // as read, before the filter
+	filter   string
+	status   string
+	statusE  bool
 
 	width, height int
 }
@@ -116,6 +148,8 @@ func (t *sqlServerTab) Target() (string, db.TableRef) { return t.conn, db.TableR
 
 func (t *sqlServerTab) activeGrid() *grid.Model { return t.grid }
 
+func (t *sqlServerTab) setStatus(s string, isErr bool) { t.status, t.statusE = s, isErr }
+
 func (t *sqlServerTab) Find(q string, forward bool) bool {
 	return t.section != sqlStatus && t.grid.Find(q, forward)
 }
@@ -131,8 +165,91 @@ func (t *sqlServerTab) Hidden() {
 }
 
 func (t *sqlServerTab) retryAfterPassword() tea.Cmd {
+	if t.section != sqlStatus {
+		return tea.Batch(t.loadInfo(), t.load())
+	}
 	t.stopSampling()
 	return tea.Batch(t.loadInfo(), t.startSampling())
+}
+
+func (t *sqlServerTab) exportSource() exportSrc {
+	if t.section == sqlStatus || t.gridSec != t.section || t.grid.Result() == nil {
+		return exportSrc{}
+	}
+	name := [sqlSections]string{"", "sessions", "locks", "statements", "settings", "replication"}[t.section]
+	return exportSrc{rs: t.grid.Result(), name: name, conn: t.conn}
+}
+
+// load reads the current table section.
+func (t *sqlServerTab) load() tea.Cmd {
+	t.loading = true
+	id, conn, sec, idle := t.id, t.conn, t.section, t.showIdle
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		defer cancel()
+		msg := sqlServerLoadedMsg{tabID: id, conn: conn, sec: sec}
+		msg.err = t.withServer(ctx, func(s db.ServerReader) error {
+			var err error
+			switch sec {
+			case sqlSessions:
+				msg.sessions, err = s.Sessions(ctx, idle)
+				msg.rs = msg.sessions.Rows
+			case sqlLocks:
+				msg.rs, err = s.Locks(ctx)
+			case sqlSlow:
+				msg.rs, err = s.TopStatements(ctx, topStatements)
+			case sqlSettings:
+				msg.rs, err = s.Settings(ctx)
+			case sqlReplication:
+				msg.rs, err = s.Replication(ctx)
+			case sqlStatus, sqlSections:
+			}
+			return err
+		})
+		return msg
+	}
+}
+
+// marked is the sessions with "*" before the first cell of sqlvim's own.
+func marked(l db.SessionList) *db.ResultSet {
+	if l.Rows == nil {
+		return nil
+	}
+	rs := &db.ResultSet{Columns: l.Rows.Columns, Rows: make([][]db.Value, len(l.Rows.Rows))}
+	for i, r := range l.Rows.Rows {
+		rs.Rows[i] = r
+		if i < len(l.Self) && l.Self[i] && len(r) > 0 {
+			rs.Rows[i] = append([]db.Value{{Text: "*" + r[0].Text}}, r[1:]...)
+		}
+	}
+	return rs
+}
+
+// filtered is the settings whose name (first column) contains t.filter,
+// ignoring case.
+func (t *sqlServerTab) filtered() *db.ResultSet {
+	if t.filter == "" || t.settings == nil {
+		return t.settings
+	}
+	want := strings.ToLower(t.filter)
+	rs := &db.ResultSet{Columns: t.settings.Columns}
+	for _, r := range t.settings.Rows {
+		if len(r) > 0 && strings.Contains(strings.ToLower(r[0].Text), want) {
+			rs.Rows = append(rs.Rows, r)
+		}
+	}
+	return rs
+}
+
+// show puts rs in the grid for the current section, keeping the cursor
+// when the grid already held it.
+func (t *sqlServerTab) show(rs *db.ResultSet) {
+	if t.gridSec == t.section {
+		t.grid.ReplaceResult(rs)
+	} else {
+		t.grid.SetResult(rs)
+	}
+	t.gridSec = t.section
 }
 
 // withServer runs fn on the connection's server reader.
@@ -215,6 +332,34 @@ func (t *sqlServerTab) Update(msg tea.Msg) tea.Cmd {
 		if m.gen == t.gen && t.running {
 			return t.sample()
 		}
+	case sqlServerLoadedMsg:
+		if m.sec != t.section {
+			return nil
+		}
+		t.loading = false
+		if m.err != nil {
+			t.secErr = m.err
+			t.grid.SetResult(nil)
+			t.gridSec, t.sessions = sqlSections, db.SessionList{}
+			return nil
+		}
+		t.secErr = nil
+		rs := m.rs
+		switch m.sec {
+		case sqlSessions:
+			t.sessions = m.sessions
+			rs = marked(m.sessions)
+		case sqlSettings:
+			t.settings = m.rs
+			rs = t.filtered()
+		case sqlStatus, sqlLocks, sqlSlow, sqlReplication, sqlSections:
+		}
+		t.show(rs)
+	case sqlServerFilterMsg:
+		t.filter = strings.TrimSpace(m.text)
+		if t.section == sqlSettings && t.gridSec == sqlSettings {
+			t.show(t.filtered())
+		}
 	}
 	return nil
 }
@@ -232,6 +377,33 @@ func (t *sqlServerTab) Handle(a keymap.Action) tea.Cmd {
 			t.stopSampling()
 			return tea.Batch(t.loadInfo(), t.startSampling())
 		}
+		if !t.loading {
+			return t.load()
+		}
+		return nil
+	case keymap.ToggleIdle:
+		if t.section != sqlSessions {
+			t.setStatus("works in the sessions list", true)
+			return nil
+		}
+		t.showIdle = !t.showIdle
+		return t.load()
+	case keymap.FilterPrompt:
+		if t.section != sqlSettings {
+			t.setStatus("filter works in the "+strings.ToLower(t.sectionNames()[sqlSettings])+" list", true)
+			return nil
+		}
+		id := t.id
+		return openOverlay(overlay.NewPrompt("Filter "+strings.ToLower(t.sectionNames()[sqlSettings]), "Name contains", t.filter, func(s string) tea.Msg {
+			return sqlServerFilterMsg{tabID: id, text: s}
+		}))
+	case keymap.FilterClear:
+		if t.section == sqlSettings && t.filter != "" {
+			t.filter = ""
+			if t.gridSec == sqlSettings {
+				t.show(t.filtered())
+			}
+		}
 		return nil
 	}
 	if t.section != sqlStatus {
@@ -248,10 +420,10 @@ func (t *sqlServerTab) setSection(s sqlSection) tea.Cmd {
 	}
 	t.section = s
 	t.grid.SetResult(nil)
-	t.gridSec, t.secErr = sqlSections, nil
+	t.gridSec, t.secErr, t.sessions = sqlSections, nil, db.SessionList{}
 	if s != sqlStatus {
 		t.stopSampling()
-		return nil
+		return t.load()
 	}
 	return t.startSampling()
 }
@@ -273,7 +445,7 @@ func errLine(err error) string {
 	return theme.Error.Render(textutil.Sanitize(err.Error()))
 }
 
-func (t *sqlServerTab) View(_ bool) string {
+func (t *sqlServerTab) View(focused bool) string {
 	lines := []string{sectionBar(t.sectionNames(), int(t.section), t.width)}
 	if t.status != "" {
 		st := theme.Muted
@@ -282,13 +454,78 @@ func (t *sqlServerTab) View(_ bool) string {
 		}
 		lines = append(lines, st.Render(textutil.Sanitize(t.status)))
 	}
-	if t.section == sqlStatus {
+	body := ""
+	switch {
+	case t.section == sqlStatus:
 		lines = append(lines, t.statusLines()...)
+	case t.secErr != nil:
+		lines = append(lines, errLine(t.secErr))
+	case t.gridSec != t.section:
+		lines = append(lines, theme.Muted.Render("loading…"))
+	default:
+		if l := t.summary(); l != "" {
+			lines = append(lines, theme.Muted.Render(l))
+		}
+		if t.grid.RowCount() == 0 {
+			lines = append(lines, theme.Muted.Render(t.emptyText()))
+			break
+		}
+		t.grid.SetSize(t.width, max(t.height-len(lines), 0))
+		body = t.grid.View(focused)
 	}
 	for i, l := range lines {
 		lines[i] = textutil.Fit(l, t.width)
 	}
+	if body != "" {
+		lines = append(lines, body)
+	}
 	return strings.Join(lines, "\n")
+}
+
+// summary is the line above a section's table.
+func (t *sqlServerTab) summary() string {
+	switch t.section {
+	case sqlSessions:
+		l := t.sessions
+		idle := "idle hidden"
+		if t.showIdle {
+			idle = "idle shown"
+		}
+		if k := t.keys.KeysFor(keymap.DBServer, keymap.ToggleIdle); k != "" {
+			idle += " (" + k + ")"
+		}
+		s := plural(l.Total, "session") + " · " + strconv.Itoa(l.Active) + " running · " + idle
+		if slices.Contains(l.Self, true) {
+			s += " · * sqlvim"
+		}
+		return s
+	case sqlSettings:
+		if t.filter != "" {
+			return "filter: " + t.filter
+		}
+	case sqlStatus, sqlLocks, sqlSlow, sqlReplication, sqlSections:
+	}
+	return ""
+}
+
+func (t *sqlServerTab) emptyText() string {
+	switch t.section {
+	case sqlSessions:
+		return "no sessions"
+	case sqlLocks:
+		return "no lock waits"
+	case sqlSlow:
+		return "no statements recorded"
+	case sqlSettings:
+		if t.filter != "" {
+			return "no match for " + t.filter
+		}
+		return "no settings"
+	case sqlReplication:
+		return "no replication configured"
+	case sqlStatus, sqlSections:
+	}
+	return ""
 }
 
 func (t *sqlServerTab) statusLines() []string {
