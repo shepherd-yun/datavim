@@ -80,6 +80,8 @@ func connString(cfg db.ConnConfig) string {
 	}
 	q := url.Values{}
 	q.Set("connect_timeout", "10")
+	// The server tab marks sqlvim's own sessions by their application name.
+	q.Set("application_name", "sqlvim")
 	for k, v := range cfg.Params {
 		q.Set(k, v)
 	}

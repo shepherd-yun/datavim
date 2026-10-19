@@ -113,4 +113,11 @@ func TestContract(t *testing.T) {
 				(3, 'its', 'back\slash', 2.00, '2026-01-02 03:04:06'), (4, 'gone', NULL, NULL, NULL)`,
 		},
 	})
+	dbtest.RunServerContract(t, conn, dbtest.ServerFixture{
+		SleepSQL:  "SELECT pg_sleep(30) AS sqlvim_contract_sleep",
+		LockSQL:   "UPDATE app.users SET name = name WHERE id = 1",
+		Begin:     "BEGIN",
+		SelfIDSQL: "SELECT pg_backend_pid()",
+		Setting:   "max_connections",
+	})
 }
