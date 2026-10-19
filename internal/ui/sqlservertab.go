@@ -87,6 +87,27 @@ type sqlServerFilterMsg struct {
 
 func (m sqlServerFilterMsg) TabID() int { return m.tabID }
 
+// sessionConfirmedMsg is a confirmed cancel or disconnect.
+type sessionConfirmedMsg struct {
+	tabID int
+	act   sessionAction
+	id    db.SessionID
+}
+
+func (m sessionConfirmedMsg) TabID() int { return m.tabID }
+
+type sessionActedMsg struct {
+	tabID int
+	conn  string
+	act   sessionAction
+	id    db.SessionID
+	ok    bool
+	err   error
+}
+
+func (m sessionActedMsg) TabID() int               { return m.tabID }
+func (m sessionActedMsg) failure() (string, error) { return m.conn, m.err }
+
 // topStatements is how many statements the slow queries section reads.
 const topStatements = 50
 
@@ -355,6 +376,25 @@ func (t *sqlServerTab) Update(msg tea.Msg) tea.Cmd {
 		case sqlStatus, sqlLocks, sqlSlow, sqlReplication, sqlSections:
 		}
 		t.show(rs)
+	case sessionConfirmedMsg:
+		return t.act(m.act, m.id)
+	case sessionActedMsg:
+		switch {
+		case errors.Is(m.err, db.ErrSessionChanged):
+			t.setStatus("session "+m.id.ID+" changed since the list was read; refreshed", true)
+		case m.err != nil:
+			t.setStatus(m.err.Error(), true)
+			return nil
+		case !m.ok:
+			t.setStatus("session "+m.id.ID+" is already gone", false)
+		case m.act == actCancel:
+			t.setStatus("cancelled the query of session "+m.id.ID, false)
+		default:
+			t.setStatus("disconnected session "+m.id.ID, false)
+		}
+		if t.section == sqlSessions {
+			return t.load()
+		}
 	case sqlServerFilterMsg:
 		t.filter = strings.TrimSpace(m.text)
 		if t.section == sqlSettings && t.gridSec == sqlSettings {
@@ -381,6 +421,10 @@ func (t *sqlServerTab) Handle(a keymap.Action) tea.Cmd {
 			return t.load()
 		}
 		return nil
+	case keymap.KillClient:
+		return t.ask(actDisconnect)
+	case keymap.CancelSessionQuery:
+		return t.ask(actCancel)
 	case keymap.ToggleIdle:
 		if t.section != sqlSessions {
 			t.setStatus("works in the sessions list", true)
@@ -412,6 +456,60 @@ func (t *sqlServerTab) Handle(a keymap.Action) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// ask checks a cancel or disconnect of the session under the cursor with
+// guardSession and asks for it.
+func (t *sqlServerTab) ask(a sessionAction) tea.Cmd {
+	if t.section != sqlSessions {
+		t.setStatus("works in the sessions list", true)
+		return nil
+	}
+	r, _ := t.grid.Position()
+	l := t.sessions
+	if t.gridSec != sqlSessions || r >= len(l.IDs) || r >= len(l.Info) {
+		t.setStatus("no session selected", true)
+		return nil
+	}
+	if a == actCancel && !t.info.CanCancel {
+		alt := "disconnect instead"
+		if k := t.keys.KeysFor(keymap.DBServer, keymap.KillClient); k != "" {
+			alt = "use " + k + " to disconnect"
+		}
+		t.setStatus("cancelling a query is not supported here; "+alt, true)
+		return nil
+	}
+	in := l.Info[r]
+	target := sessionTarget{
+		ID: l.IDs[r].ID, User: in.User, Host: in.Host, DB: in.DB, State: in.State, Elapsed: in.Elapsed, SQL: in.SQL,
+		Self: r < len(l.Self) && l.Self[r],
+	}
+	cfg, _ := t.backend.Connection(t.conn)
+	chk := guardSession(cfg, a, target, max(min(t.width, 80)-8, 20))
+	if chk.Refuse != "" {
+		t.setStatus(chk.Refuse, true)
+		return nil
+	}
+	return openOverlay(overlay.NewConfirm(chk.Title, chk.Body, chk.Expect, sessionConfirmedMsg{tabID: t.id, act: a, id: l.IDs[r]}))
+}
+
+func (t *sqlServerTab) act(a sessionAction, id db.SessionID) tea.Cmd {
+	tabID, conn := t.id, t.conn
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), queryTimeout)
+		defer cancel()
+		msg := sessionActedMsg{tabID: tabID, conn: conn, act: a, id: id}
+		msg.err = t.withServer(ctx, func(s db.ServerReader) error {
+			var err error
+			if a == actCancel {
+				msg.ok, err = s.CancelQuery(ctx, id)
+			} else {
+				msg.ok, err = s.KillSession(ctx, id)
+			}
+			return err
+		})
+		return msg
+	}
 }
 
 func (t *sqlServerTab) setSection(s sqlSection) tea.Cmd {

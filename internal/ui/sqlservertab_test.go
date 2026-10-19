@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 )
@@ -344,5 +345,126 @@ func TestSQLServerSettingsFilter(t *testing.T) {
 	pressHold(t, m, "F")
 	if !strings.Contains(m.activeTab().(*sqlServerTab).status, "variables") {
 		t.Fatalf("F on Slow queries: status %q", m.activeTab().(*sqlServerTab).status)
+	}
+}
+
+// openSessions opens the server tab of "local" configured as cfg (name and
+// driver kept) on its Sessions section.
+func openSessions(t *testing.T, srv *fakeServer, cfg config.Connection) *Model {
+	t.Helper()
+	m, b := newTestModel(t)
+	b.mu.Lock()
+	cfg.Name, cfg.Driver = "local", "mysql"
+	b.conns[0] = cfg
+	b.mu.Unlock()
+	b.conn.server = srv
+	m.setFocus(focusTree)
+	pressHold(t, m, "space", "i")
+	pressHold(t, m, "]")
+	return m
+}
+
+func tabStatus(m *Model) string { return m.activeTab().(*sqlServerTab).status }
+
+func TestSQLServerKillReadOnly(t *testing.T) {
+	srv := withSections(mysqlServer())
+	m := openSessions(t, srv, config.Connection{ReadOnly: boolPtr(true)})
+	pressHold(t, m, "d", "d")
+	if s := tabStatus(m); s != "read-only connection: cannot cancel or disconnect sessions" || m.overlay != nil {
+		t.Fatalf("status %q, overlay %T", s, m.overlay)
+	}
+	pressHold(t, m, "c")
+	if len(srv.killed)+len(srv.cancelled) != 0 {
+		t.Fatalf("killed %v, cancelled %v", srv.killed, srv.cancelled)
+	}
+}
+
+func TestSQLServerKillConfirm(t *testing.T) {
+	srv := withSections(mysqlServer())
+	m := openSessions(t, srv, config.Connection{Env: config.EnvDev})
+	pressHold(t, m, "d", "d")
+	if s := screen(m); !strings.Contains(s, "Disconnect session 48211?") || !strings.Contains(s, "user app · host 10.0.3.21 · db shop") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	pressHold(t, m, "y")
+	if !slices.Equal(srv.killed, []db.SessionID{{ID: "48211", Since: "t0"}}) {
+		t.Fatalf("killed %v", srv.killed)
+	}
+	if s := tabStatus(m); s != "disconnected session 48211" {
+		t.Fatalf("status %q", s)
+	}
+	if calls := srv.callList(); calls[len(calls)-1] != "Sessions" {
+		t.Fatalf("not reloaded: %v", calls)
+	}
+	// cancel on the same row
+	pressHold(t, m, "c", "y")
+	if len(srv.cancelled) != 1 || tabStatus(m) != "cancelled the query of session 48211" {
+		t.Fatalf("cancelled %v, status %q", srv.cancelled, tabStatus(m))
+	}
+}
+
+func TestSQLServerKillProdTypesName(t *testing.T) {
+	srv := withSections(mysqlServer())
+	m := openSessions(t, srv, config.Connection{Env: config.EnvProd, ReadOnly: boolPtr(false)})
+	pressHold(t, m, "d", "d", "y")
+	if len(srv.killed) != 0 {
+		t.Fatalf("y killed on prod: %v", srv.killed)
+	}
+	pressHold(t, m, "backspace", "l", "o", "c", "a", "l", "enter")
+	if len(srv.killed) != 1 {
+		t.Fatalf("killed %v\n%s", srv.killed, screen(m))
+	}
+}
+
+func TestSQLServerCancelUnsupported(t *testing.T) {
+	srv := withSections(mysqlServer())
+	srv.info.CanCancel = false
+	m := openSessions(t, srv, config.Connection{Env: config.EnvDev})
+	pressHold(t, m, "c")
+	if s := tabStatus(m); !strings.Contains(s, "not supported") || !strings.Contains(s, "dd to disconnect") || m.overlay != nil {
+		t.Fatalf("status %q, overlay %T", s, m.overlay)
+	}
+}
+
+func TestSQLServerKillChanged(t *testing.T) {
+	srv := withSections(mysqlServer())
+	srv.errs = map[string]error{"kill": db.ErrSessionChanged}
+	m := openSessions(t, srv, config.Connection{Env: config.EnvDev})
+	n := countCalls(srv.callList(), "Sessions")
+	pressHold(t, m, "d", "d", "y")
+	if s := tabStatus(m); s != "session 48211 changed since the list was read; refreshed" {
+		t.Fatalf("status %q", s)
+	}
+	if countCalls(srv.callList(), "Sessions") != n+1 {
+		t.Fatalf("not reloaded: %v", srv.callList())
+	}
+}
+
+func TestSQLServerKillGone(t *testing.T) {
+	srv := withSections(mysqlServer())
+	srv.gone = true
+	m := openSessions(t, srv, config.Connection{Env: config.EnvDev})
+	pressHold(t, m, "d", "d", "y")
+	if s := tabStatus(m); s != "session 48211 is already gone" {
+		t.Fatalf("status %q", s)
+	}
+}
+
+func TestSQLServerKillOutsideSessions(t *testing.T) {
+	srv := withSections(mysqlServer())
+	m := openSessions(t, srv, config.Connection{Env: config.EnvDev})
+	pressHold(t, m, "]") // Locks
+	pressHold(t, m, "d", "d")
+	if s := tabStatus(m); s != "works in the sessions list" || m.overlay != nil {
+		t.Fatalf("status %q", s)
+	}
+}
+
+func TestSQLServerKillSelfWarns(t *testing.T) {
+	srv := withSections(mysqlServer())
+	m := openSessions(t, srv, config.Connection{Env: config.EnvDev})
+	pressHold(t, m, "j", "d", "d")
+	if s := screen(m); !strings.Contains(s, "This is a sqlvim connection (maybe this one).") {
+		t.Fatalf("screen:\n%s", s)
 	}
 }

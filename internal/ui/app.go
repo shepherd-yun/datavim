@@ -849,6 +849,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case sqlServerLoadedMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
+	case sessionActedMsg:
+		m.retryNode, m.retryTab = nil, msg.tabID
 	case bigKeysStepMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
 	default:
