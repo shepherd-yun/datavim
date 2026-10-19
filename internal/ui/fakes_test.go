@@ -21,6 +21,7 @@ import (
 
 type fakeConn struct {
 	mu         sync.Mutex
+	server     *fakeServer
 	queries    []string
 	execs      []string
 	rows       int              // rows returned by every Query
@@ -240,6 +241,17 @@ func (c *fakeConn) sessionCount() int {
 	return len(c.sessions)
 }
 func (c *fakeConn) Meta() db.MetaReader { return fakeMeta{c: c} }
+
+// Server is the fake server reader; a conn without one reports every part
+// unavailable.
+func (c *fakeConn) Server() db.ServerReader {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.server == nil {
+		c.server = &fakeServer{}
+	}
+	return c.server
+}
 
 func (c *fakeConn) catalogCount() int {
 	c.mu.Lock()

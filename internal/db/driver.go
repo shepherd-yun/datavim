@@ -57,6 +57,8 @@ type Conn interface {
 	// Session reserves a dedicated server connection (see Session).
 	Session(ctx context.Context) (Session, error)
 	Meta() MetaReader
+	// Server reads server-wide status for the server tab.
+	Server() ServerReader
 	Dialect() Dialect
 	Close() error
 }
