@@ -744,3 +744,32 @@ func TestMessagesDetailStepsAfterLoad(t *testing.T) {
 		t.Fatalf("N went to %d (cursor %d)", d.rec.Offset, cursorRec(t, tt).Offset)
 	}
 }
+
+func TestTailSeekGoneDeclinedKeepsTail(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 100, 10)
+	tt := openMessages(t, m, "orders")
+	_, cmd := m.Update(uitest.Key("T"))
+	step(t, m, cmd)
+	n := k.lastReader().pollCount()
+	pressAll(t, m, "t")
+	typeText(t, m, "p0:5")
+	_, cmd = m.Update(uitest.Key("enter"))
+	cmds := []tea.Cmd{cmd}
+	for range 4 { // step by step: live tail polls for ever
+		cmds = stepAll(t, m, cmds)
+	}
+	if _, ok := m.overlay.(*overlay.Confirm); !ok {
+		t.Fatalf("overlay %T", m.overlay)
+	}
+	pressAll(t, m, "n")
+	if tt.msgs.tail == nil || tt.msgs.tail.paused || k.lastReader().pollCount() == n {
+		t.Fatalf("declining the jump keeps live tail going: %+v, %d polls", tt.msgs.tail, k.lastReader().pollCount()-n)
+	}
+	pressAll(t, m, "T") // paused, so the helpers can run every command
+	seek(t, m, "p0:5")
+	pressAll(t, m, "y")
+	if tt.msgs.tail != nil {
+		t.Fatal("the jump made ends live tail")
+	}
+}

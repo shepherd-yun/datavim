@@ -321,11 +321,17 @@ func (t *topicTab) msgsLoaded(m msgsLoadedMsg) tea.Cmd {
 	if m.gone != nil {
 		g := *m.gone
 		id := t.id
-		return openOverlay(overlay.NewConfirm("Offset gone", []string{g.Error() + " · jump to earliest?"}, "",
-			seekEarliestMsg{tabID: id, partition: g.Partition, earliest: g.Earliest}))
+		var resume tea.Cmd
+		if v.tail != nil && v.tail.resume {
+			v.tail.paused, v.tail.resume = false, false
+			resume = t.startTail(v.edges(false))
+		}
+		return tea.Batch(resume, openOverlay(overlay.NewConfirm("Offset gone", []string{g.Error() + " · jump to earliest?"}, "",
+			seekEarliestMsg{tabID: id, partition: g.Partition, earliest: g.Earliest})))
 	}
 	v.bounds = m.bounds
 	if m.dir == 0 {
+		v.tail = nil
 		v.pos, v.single, v.loaded = m.pos, singlePartition(m.pos), true
 		v.read = map[int32]int64{}
 		for p, b := range m.bounds {
@@ -597,10 +603,15 @@ func (t *topicTab) seek(text string) tea.Cmd {
 	return t.jump(pos)
 }
 
-// jump replaces the view with the messages at pos; it ends live tail.
+// jump replaces the view with the messages at pos; once it lands it ends
+// live tail, which is paused meanwhile (a deleted offset may call it off).
 func (t *topicTab) jump(pos kmsgx.Position) tea.Cmd {
-	t.msgs.gen++
-	t.msgs.tail = nil
+	v := t.msgs
+	v.gen++ // the poll out is dropped
+	if v.tail != nil {
+		v.tail.resume = v.tail.resume || !v.tail.paused
+		v.tail.paused, v.tail.polling = true, false
+	}
 	return t.loadMsgs(0, pos, nil)
 }
 
@@ -1086,6 +1097,7 @@ const (
 // liveTail is the state of live tail on a message view.
 type liveTail struct {
 	paused  bool
+	resume  bool // paused by a jump: goes on if the jump does not happen
 	hidden  bool // the tab is not on screen: no polls
 	polling bool // a Poll is out
 	added   int  // messages it brought
