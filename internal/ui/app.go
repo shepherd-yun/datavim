@@ -116,8 +116,10 @@ type Model struct {
 	revealing   *revealTarget
 	scans       map[redisDBKey]*keyScan // the key scans behind the redis db nodes
 	kafkaTrees  map[string]*kafkaTree   // what the kafka connections' trees are built from
-	bulk        *bulkDelete             // the running pattern delete, or nil
-	bulkGen     int
+	// topicFormConn is the connection the open new-topic form adds to.
+	topicFormConn string
+	bulk          *bulkDelete // the running pattern delete, or nil
+	bulkGen       int
 }
 
 // registerUser is a tab or popup with a vim editor.
@@ -238,6 +240,18 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.openTopicAtMsg(msg)
 	case resetTimesMsg:
 		m.resetTimes(msg)
+	case overlay.TopicFormMsg:
+		m.topicFormed(msg)
+	case createTopicMsg:
+		return m, m.createTopic(msg)
+	case topicCreatedMsg:
+		return m, m.topicCreated(msg)
+	case deleteTopicAskMsg:
+		m.deleteTopicAsked(msg)
+	case deleteTopicMsg:
+		return m, m.deleteTopic(msg)
+	case topicDeletedMsg:
+		return m, m.topicDeleted(msg)
 	case redisKeyChangedMsg:
 		m.keyChanged(msg)
 	case keyOpAskMsg:

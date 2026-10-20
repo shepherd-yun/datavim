@@ -43,6 +43,7 @@ type kafkaTree struct {
 	showInternal, byName bool
 	filter               map[string]string // section -> name filter
 	gen                  int               // bumped by every load; late lag batches of an older one are dropped
+	selectTopic          string            // a topic just created: selected once the tree is read again
 }
 
 // isKafka reports whether conn is a kafka connection.
@@ -147,6 +148,10 @@ func (m *Model) kafkaTreeLoaded(msg kafkaTreeMsg) tea.Cmd {
 	st.gen++
 	st.cluster, st.topics, st.groups, st.errs = msg.cluster, msg.topics, msg.groups, msg.errs
 	m.buildKafkaTree(n.Conn)
+	if st.selectTopic != "" {
+		m.selectNewTopic(n.Conn, st.selectTopic)
+		st.selectTopic = ""
+	}
 	return m.lagCmd(n.Conn, st, 0)
 }
 
@@ -484,6 +489,16 @@ func (m *Model) kafkaTreeAction(a keymap.Action, n *tree.Node) (tea.Cmd, bool) {
 		}
 		m.tree.StartLoad(root)
 		return loadKafkaTree(m.backend, root), true
+	case keymap.NewKey:
+		return m.newTopicForm(n), true
+	case keymap.DeleteNode:
+		switch n.Kind {
+		case tree.KindConn:
+			return nil, false
+		case tree.KindTopic:
+			return m.askDeleteTopic(n), true
+		}
+		m.setStatus("only topics (and the connection) can be deleted here", true)
 	case keymap.Open:
 		switch n.Kind {
 		case tree.KindTopic:
