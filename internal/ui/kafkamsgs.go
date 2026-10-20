@@ -41,6 +41,7 @@ type msgView struct {
 	grid    *grid.Model
 	recs    []kafka.Record
 	bounds  kmsgx.Bounds
+	read    map[int32]int64 // the highest offset read of each partition
 	pos     kmsgx.Position
 	single  bool
 	gen     int // bumped by every jump; late results of an older one are dropped
@@ -154,6 +155,7 @@ type msgsLoadedMsg struct {
 	recs       []kafka.Record
 	bounds     kmsgx.Bounds
 	reader     kafka.Reader // opened by this load
+	ranges     map[int32]kafka.Range
 	gone       *kmsgx.ErrOffsetGone
 	at         time.Time // PosTime: put the cursor on the first message at or after it
 	err        error
@@ -252,6 +254,7 @@ func (t *topicTab) loadMsgs(dir int, pos kmsgx.Position, edges map[int32]int64) 
 				}
 				msg.reader = reader
 			}
+			msg.ranges = ranges
 			msg.recs, err = reader.Range(ctx, topic, ranges)
 			return err
 		})
@@ -263,8 +266,18 @@ func (t *topicTab) loadMsgs(dir int, pos kmsgx.Position, edges map[int32]int64) 
 	}
 }
 
+// noteRead records that ranges were read.
+func (v *msgView) noteRead(ranges map[int32]kafka.Range) {
+	for p, rg := range ranges {
+		if o, ok := v.read[p]; !ok || rg.To-1 > o {
+			v.read[p] = rg.To - 1
+		}
+	}
+}
+
 // edges are the lowest (low) or highest offset kept of each partition;
-// partitions with none kept count from their end.
+// partitions with none kept count from their end (low) or from what was
+// read of them (high).
 func (v *msgView) edges(low bool) map[int32]int64 {
 	out := map[int32]int64{}
 	for _, r := range v.recs {
@@ -274,11 +287,14 @@ func (v *msgView) edges(low bool) map[int32]int64 {
 			out[r.Partition] = r.Offset
 		}
 	}
-	if low && !v.single {
-		for p, b := range v.bounds {
-			if _, ok := out[p]; !ok && (v.pos.Partitions == nil || slices.Contains(v.pos.Partitions, p)) {
-				out[p] = b.To
-			}
+	for p, b := range v.bounds {
+		if _, ok := out[p]; ok || v.single || v.pos.Partitions != nil && !slices.Contains(v.pos.Partitions, p) {
+			continue
+		}
+		if low {
+			out[p] = b.To
+		} else if o, ok := v.read[p]; ok {
+			out[p] = o
 		}
 	}
 	return out
@@ -311,7 +327,14 @@ func (t *topicTab) msgsLoaded(m msgsLoadedMsg) tea.Cmd {
 	v.bounds = m.bounds
 	if m.dir == 0 {
 		v.pos, v.single, v.loaded = m.pos, singlePartition(m.pos), true
+		v.read = map[int32]int64{}
+		for p, b := range m.bounds {
+			if _, ok := m.ranges[p]; !ok {
+				v.read[p] = b.To - 1 // nothing to read there: up to its end
+			}
+		}
 	}
+	v.noteRead(m.ranges)
 	if m.dir != 0 && len(m.recs) == 0 {
 		if m.dir < 0 {
 			t.setStatus("beginning of partition", false)

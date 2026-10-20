@@ -683,3 +683,33 @@ func TestTailSearchPauses(t *testing.T) {
 		t.Fatalf("T resumes live tail (%s)", tt.status)
 	}
 }
+
+// grow appends n messages to partition p of topic.
+func grow(k *fakeKafka, topic string, p int32, n int64) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	t := k.topics[topic]
+	for range n {
+		t.recs[p] = append(t.recs[p], fakeRecord(topic, p, t.detail.Parts[p].End))
+		t.detail.Parts[p].End++
+	}
+}
+
+func TestMessagesNewerReadsEmptyPartitions(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 2, 0, 0)
+	grow(k, "orders", 0, 5)
+	tt := openMessages(t, m, "orders")
+	if len(tt.msgs.recs) != 5 {
+		t.Fatalf("%d recs", len(tt.msgs.recs))
+	}
+	grow(k, "orders", 1, 3) // p1 had nothing when the view was read
+	drainAll(t, m, tt.loadMore(1))
+	got := k.lastReader().rangeList()
+	if last := got[len(got)-1]; last[1] != (kafka.Range{From: 0, To: 3}) {
+		t.Fatalf("newer reads %v", last)
+	}
+	if len(tt.msgs.recs) != 8 {
+		t.Fatalf("%d recs", len(tt.msgs.recs))
+	}
+}
