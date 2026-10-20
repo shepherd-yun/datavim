@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-21
+
 ### Added
 - Kafka connections: `driver = "kafka"` with a broker list in `host`, SASL PLAIN / SCRAM-SHA-256 /
   SCRAM-SHA-512 (`params.sasl`, the password in the keychain), TLS and mTLS (`tls`, `tls_ca`,
@@ -479,7 +481,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/sqlvim/compare/v2.3.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/sqlvim/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/shepherd-yun/sqlvim/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/shepherd-yun/sqlvim/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/shepherd-yun/sqlvim/compare/v2.1.1...v2.2.0
 [2.1.1]: https://github.com/shepherd-yun/sqlvim/compare/v2.1.0...v2.1.1
