@@ -99,6 +99,8 @@ func TestCellFilter(t *testing.T) {
 		{"", "offset", "=", "7", "offset = 7"},
 		{"", "value", "=", "", `value = ""`},
 		{"", "value", "=", "or", `value = "or"`},
+		{"key = a or key = b", "part", "=", "1", "(key = a or key = b) and partition = 1"},
+		{"(key = a or key = b) and value ~ x", "part", "=", "1", "(key = a or key = b) and value ~ x and partition = 1"},
 	} {
 		got := CellFilter(tc.existing, tc.col, tc.op, tc.value)
 		if got != tc.want {

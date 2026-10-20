@@ -386,17 +386,24 @@ func jsonPath(value []byte, path string) (string, bool) {
 
 // CellFilter is the condition ff / f! / fs add for a table cell: column is
 // the column name (KEY, VALUE, PART / partition, OFFSET), op "=", "!=" or
-// "~". It is joined to a non-empty existing expression with " and ".
+// "~". It is joined to a non-empty existing expression with " and ",
+// in parentheses when that expression is an or.
 func CellFilter(existing, column, op, value string) string {
 	field := strings.ToLower(column)
 	if field == "part" {
 		field = "partition"
 	}
 	c := field + " " + op + " " + quoteValue(value)
-	if strings.TrimSpace(existing) == "" {
+	existing = strings.TrimSpace(existing)
+	if existing == "" {
 		return c
 	}
-	return strings.TrimSpace(existing) + " and " + c
+	if f, err := ParseFilter(existing, time.Now()); err == nil {
+		if _, ok := f.root.(orNode); ok {
+			existing = "(" + existing + ")"
+		}
+	}
+	return existing + " and " + c
 }
 
 // quoteValue quotes v when it would not read back as one bare value.
