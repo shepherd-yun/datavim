@@ -105,11 +105,15 @@ func validTopicName(name string) error {
 		return errors.New("the name has 249 characters at most")
 	}
 	for _, r := range name {
-		if !(r == '.' || r == '_' || r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+		if !topicChar(r) {
 			return errors.New("the name has letters, digits, . _ and - only")
 		}
 	}
 	return nil
+}
+
+func topicChar(r rune) bool {
+	return r == '.' || r == '_' || r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z'
 }
 
 func (f *TopicForm) topic() (kafka.NewTopic, error) {

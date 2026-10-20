@@ -45,18 +45,49 @@ func TestMergeRecords(t *testing.T) {
 		wantCursor  int
 		wantDropped int
 	}{
-		{"older by time", old, []kafka.Record{rec(0, 9, 9), rec(1, 4, 8)}, -1, false, 100, 0,
-			[]string{"p1:4", "p0:9", "p0:10", "p1:5", "p0:11"}, 2, 0},
-		{"newer by time", old, []kafka.Record{rec(1, 6, 13)}, 1, false, 100, 2,
-			[]string{"p0:10", "p1:5", "p0:11", "p1:6"}, 2, 0},
-		{"single by offset", []kafka.Record{rec(0, 10, 50), rec(0, 11, 40)}, []kafka.Record{rec(0, 9, 60)}, -1, true, 100, 0,
-			[]string{"p0:9", "p0:10", "p0:11"}, 1, 0},
-		{"replace", old, []kafka.Record{rec(2, 1, 1)}, 0, false, 100, 2,
-			[]string{"p2:1"}, 0, 0},
-		{"limit drops the far end (tail)", old, []kafka.Record{rec(0, 9, 9), rec(1, 4, 8)}, -1, false, 3, 0,
-			[]string{"p1:4", "p0:9", "p0:10"}, 2, 2},
-		{"limit drops the far end (head)", old, []kafka.Record{rec(1, 6, 13), rec(1, 7, 14)}, 1, false, 3, 2,
-			[]string{"p0:11", "p1:6", "p1:7"}, 0, 2},
+		{
+			"older by time", old,
+			[]kafka.Record{rec(0, 9, 9), rec(1, 4, 8)},
+			-1, false, 100, 0,
+			[]string{"p1:4", "p0:9", "p0:10", "p1:5", "p0:11"},
+			2, 0,
+		},
+		{
+			"newer by time", old,
+			[]kafka.Record{rec(1, 6, 13)},
+			1, false, 100, 2,
+			[]string{"p0:10", "p1:5", "p0:11", "p1:6"},
+			2, 0,
+		},
+		{
+			"single by offset",
+			[]kafka.Record{rec(0, 10, 50), rec(0, 11, 40)},
+			[]kafka.Record{rec(0, 9, 60)},
+			-1, true, 100, 0,
+			[]string{"p0:9", "p0:10", "p0:11"},
+			1, 0,
+		},
+		{
+			"replace", old,
+			[]kafka.Record{rec(2, 1, 1)},
+			0, false, 100, 2,
+			[]string{"p2:1"},
+			0, 0,
+		},
+		{
+			"limit drops the far end (tail)", old,
+			[]kafka.Record{rec(0, 9, 9), rec(1, 4, 8)},
+			-1, false, 3, 0,
+			[]string{"p1:4", "p0:9", "p0:10"},
+			2, 2,
+		},
+		{
+			"limit drops the far end (head)", old,
+			[]kafka.Record{rec(1, 6, 13), rec(1, 7, 14)},
+			1, false, 3, 2,
+			[]string{"p0:11", "p1:6", "p1:7"},
+			0, 2,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, cur, dropped := mergeRecords(slices.Clone(tc.old), tc.add, tc.dir, tc.single, tc.limit, tc.cursor)

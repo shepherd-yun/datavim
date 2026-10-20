@@ -278,7 +278,7 @@ func (m *Manager) resetLocked(name string) {
 	m.resetServersLocked(name)
 	if c, ok := m.kafka[name]; ok {
 		delete(m.kafka, name)
-		go c.Client.Close()
+		go c.Close()
 	}
 }
 
@@ -495,7 +495,7 @@ func (m *Manager) CloseAll() {
 		delete(m.redis, k)
 	}
 	for k, c := range m.kafka {
-		c.Client.Close()
+		c.Close()
 		delete(m.kafka, k)
 	}
 }

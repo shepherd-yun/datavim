@@ -53,8 +53,10 @@ type ResetOffsets struct {
 func NewResetOffsets(keys *keymap.Keymap, group string, lags []kafka.PartitionLag, sel []kafka.TP, members int, prod bool, now time.Time,
 	submit func([]kafka.OffsetCommit) tea.Msg, askTime func(time.Time) tea.Cmd,
 ) *ResetOffsets {
-	r := &ResetOffsets{keys: keys, group: group, lags: lags, members: members, prod: prod, now: now,
-		submit: submit, askTime: askTime, target: newField("next"), times: map[time.Time]map[kafka.TP]int64{}}
+	r := &ResetOffsets{
+		keys: keys, group: group, lags: lags, members: members, prod: prod, now: now,
+		submit: submit, askTime: askTime, target: newField("next"), times: map[time.Time]map[kafka.TP]int64{},
+	}
 	if len(sel) > 0 {
 		label := fmt.Sprintf("%s p%d", sel[0].Topic, sel[0].Partition)
 		if len(sel) > 1 {

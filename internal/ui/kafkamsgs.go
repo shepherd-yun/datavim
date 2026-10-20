@@ -590,8 +590,10 @@ func (t *topicTab) msgsUpdate(msg tea.Msg) (tea.Cmd, bool) {
 	case seekMsg:
 		return t.seek(m.text), true
 	case seekEarliestMsg:
-		return t.jump(kmsgx.Position{Kind: kmsgx.PosOffset, Partitions: []int32{m.partition},
-			Offsets: map[int32]int64{m.partition: m.earliest}}), true
+		return t.jump(kmsgx.Position{
+			Kind: kmsgx.PosOffset, Partitions: []int32{m.partition},
+			Offsets: map[int32]int64{m.partition: m.earliest},
+		}), true
 	case msgFilterMsg:
 		t.setFilter(m.filter)
 		return nil, true

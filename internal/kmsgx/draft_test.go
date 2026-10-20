@@ -1,6 +1,7 @@
 package kmsgx
 
 import (
+	"errors"
 	"reflect"
 	"strings"
 	"testing"
@@ -27,8 +28,10 @@ func TestParseDraft(t *testing.T) {
 		want []DraftRecord
 	}{
 		{"spec example", specDraft, []DraftRecord{
-			{Line: 2, EndLine: 7, Key: []byte("ord-1"), Partition: 2, Value: []byte(`{"id": 1, "amount": 99}`),
-				Headers: []kafka.Header{{Key: "trace-id", Value: []byte("abc123")}, {Key: "source", Value: []byte("sqlvim")}}},
+			{
+				Line: 2, EndLine: 7, Key: []byte("ord-1"), Partition: 2, Value: []byte(`{"id": 1, "amount": 99}`),
+				Headers: []kafka.Header{{Key: "trace-id", Value: []byte("abc123")}, {Key: "source", Value: []byte("sqlvim")}},
+			},
 			{Line: 9, EndLine: 10, Key: []byte("ord-2"), Partition: -1, Value: []byte(`{"id": 2, "amount": 12}`)},
 		}},
 		{"body only", "{\"a\":1}\n\n\n", []DraftRecord{
@@ -41,8 +44,10 @@ func TestParseDraft(t *testing.T) {
 			{Line: 1, EndLine: 3, Key: []byte{}, Partition: -1, Value: []byte("v")},
 		}},
 		{"headers only", "key: k\nheader: a=\nheader: a=2", []DraftRecord{
-			{Line: 1, EndLine: 3, Key: []byte("k"), Partition: -1, Value: []byte{},
-				Headers: []kafka.Header{{Key: "a", Value: []byte{}}, {Key: "a", Value: []byte("2")}}},
+			{
+				Line: 1, EndLine: 3, Key: []byte("k"), Partition: -1, Value: []byte{},
+				Headers: []kafka.Header{{Key: "a", Value: []byte{}}, {Key: "a", Value: []byte("2")}},
+			},
 		}},
 		{"header-like line in the body", "key: k\n\nline one\nkey: x\n", []DraftRecord{
 			{Line: 1, EndLine: 4, Key: []byte("k"), Partition: -1, Value: []byte("line one\nkey: x")},
@@ -86,11 +91,7 @@ func TestParseDraftErrors(t *testing.T) {
 	}
 }
 
-func asDraftError(err error, de *DraftError) bool {
-	d, ok := err.(DraftError)
-	*de = d
-	return ok
-}
+func asDraftError(err error, de *DraftError) bool { return errors.As(err, de) }
 
 func TestDraftAt(t *testing.T) {
 	for line, key := range map[int]string{1: "ord-1", 7: "ord-1", 8: "ord-1", 9: "ord-2", 10: "ord-2", 11: "ord-2"} {

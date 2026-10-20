@@ -279,8 +279,10 @@ func TestConnFormKafka(t *testing.T) {
 		t.Fatalf("conn = %+v", c)
 	}
 
-	orig := config.Connection{Name: "k", Driver: "kafka", User: "app",
-		Params: map[string]string{"sasl": "plain", "tls": "true", "client_id": "me"}}
+	orig := config.Connection{
+		Name: "k", Driver: "kafka", User: "app",
+		Params: map[string]string{"sasl": "plain", "tls": "true", "client_id": "me"},
+	}
 	f = NewEditConnForm(keymap.Default(), orig)
 	if v := ansi.Strip(f.View(80, 30)); !strings.Contains(v, "‹ plain ›") || !strings.Contains(v, "‹ on ›") {
 		t.Fatalf("edit form shows the kafka settings:\n%s", v)

@@ -92,9 +92,11 @@ func (k *fakeKafka) addTopic(name string, parts int, start, n int64) *fakeTopic 
 func fakeRecord(topic string, p int32, o int64) kafka.Record {
 	v := fmt.Sprintf(`{"p":%d,"o":%d}`, p, o)
 	key := "k-" + strconv.FormatInt(o, 10)
-	return kafka.Record{Topic: topic, Partition: p, Offset: o, TimeType: "CreateTime",
+	return kafka.Record{
+		Topic: topic, Partition: p, Offset: o, TimeType: "CreateTime",
 		Time: fakeKafkaBase.Add(time.Duration(o)*3*time.Second + time.Duration(p)*time.Second),
-		Key:  []byte(key), Value: []byte(v), Size: len(key) + len(v)}
+		Key:  []byte(key), Value: []byte(v), Size: len(key) + len(v),
+	}
 }
 
 // setRecord replaces one record of a topic.

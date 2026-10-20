@@ -344,8 +344,10 @@ func TestUpdateConnectionTouchesOnlyItsBlock(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "connections.toml", editableConns)
 	on := true
-	c := Connection{Name: "prod", Driver: "postgres", Host: "10.0.1.6", Port: 5432, User: "app", SSH: "bastion", Env: EnvProd, ReadOnly: &on,
-		Params: map[string]string{"sslmode": "require"}}
+	c := Connection{
+		Name: "prod", Driver: "postgres", Host: "10.0.1.6", Port: 5432, User: "app", SSH: "bastion", Env: EnvProd, ReadOnly: &on,
+		Params: map[string]string{"sslmode": "require"},
+	}
 	if _, err := UpdateConnection(dir, "prod-pg", c); err != nil {
 		t.Fatal(err)
 	}
@@ -543,10 +545,18 @@ func TestNormalizeKafka(t *testing.T) {
 		{"port applies to bare hosts", Connection{Name: "k", Driver: "kafka", Host: "b1,b2", Port: 19092}, []string{"b1:19092", "b2:19092"}, ""},
 		{"ipv6", Connection{Name: "k", Driver: "kafka", Host: "[::1]:9094,[::2]"}, []string{"[::1]:9094", "[::2]:9092"}, ""},
 		{"scram", Connection{Name: "k", Driver: "kafka", User: "app", Params: map[string]string{"sasl": "scram-sha-512"}}, []string{"localhost:9092"}, ""},
-		{"oauth not yet", Connection{Name: "k", Driver: "kafka", User: "app", Params: map[string]string{"sasl": "oauth"}}, nil,
-			`connection "k": kafka sasl "oauth" is not supported yet (want plain, scram-sha-256 or scram-sha-512)`},
-		{"sasl needs user", Connection{Name: "k", Driver: "kafka", Params: map[string]string{"sasl": "plain"}}, nil,
-			`connection "k": kafka sasl needs a user`},
+		{
+			"oauth not yet",
+			Connection{Name: "k", Driver: "kafka", User: "app", Params: map[string]string{"sasl": "oauth"}},
+			nil,
+			`connection "k": kafka sasl "oauth" is not supported yet (want plain, scram-sha-256 or scram-sha-512)`,
+		},
+		{
+			"sasl needs user",
+			Connection{Name: "k", Driver: "kafka", Params: map[string]string{"sasl": "plain"}},
+			nil,
+			`connection "k": kafka sasl needs a user`,
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c, err := Normalize(tc.in)
@@ -593,8 +603,10 @@ func TestAppendConnectionWritesParams(t *testing.T) {
 func TestUpdateConnectionWritesParams(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "connections.toml", editableConns)
-	prod := Connection{Name: "prod-pg", Driver: "postgres", Host: "10.0.1.5", User: "app", Database: "app", Env: EnvProd,
-		ReadOnly: new(true), Params: map[string]string{"sslmode": "require", "x": "1"}}
+	prod := Connection{
+		Name: "prod-pg", Driver: "postgres", Host: "10.0.1.5", User: "app", Database: "app", Env: EnvProd,
+		ReadOnly: new(true), Params: map[string]string{"sslmode": "require", "x": "1"},
+	}
 	if _, err := UpdateConnection(dir, "prod-pg", prod); err != nil {
 		t.Fatal(err)
 	}

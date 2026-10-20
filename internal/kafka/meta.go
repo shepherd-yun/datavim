@@ -195,8 +195,10 @@ func (c *client) TopicConfigs(ctx context.Context, topic string) ([]ConfigEntry,
 	}
 	out := make([]ConfigEntry, 0, len(rc.Configs))
 	for _, cf := range rc.Configs {
-		e := ConfigEntry{Name: cf.Key, Sensitive: cf.Sensitive, Source: configSource(cf.Source),
-			Default: cf.Source == kmsg.ConfigSourceDefaultConfig}
+		e := ConfigEntry{
+			Name: cf.Key, Sensitive: cf.Sensitive, Source: configSource(cf.Source),
+			Default: cf.Source == kmsg.ConfigSourceDefaultConfig,
+		}
 		if cf.Value != nil && !cf.Sensitive {
 			e.Value = *cf.Value
 		}

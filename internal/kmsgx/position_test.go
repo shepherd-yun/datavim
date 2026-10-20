@@ -67,16 +67,16 @@ func TestPositionRanges(t *testing.T) {
 		want   map[int32]Range
 		err    string
 	}{
-		{"latest", Position{Kind: PosLatest}, nil, map[int32]Range{0: {800, 1000}}, ""},
-		{"earliest", Position{Kind: PosEarliest}, nil, map[int32]Range{0: {100, 300}}, ""},
-		{"tail", Position{Kind: PosTail, N: 500}, nil, map[int32]Range{0: {500, 700}}, ""},
-		{"tail beyond start", Position{Kind: PosTail, N: 5000}, nil, map[int32]Range{0: {100, 300}}, ""},
-		{"offset", off(500), nil, map[int32]Range{0: {497, 697}}, ""},
-		{"offset near start", off(101), nil, map[int32]Range{0: {100, 300}}, ""},
-		{"offset at end", off(1000), nil, map[int32]Range{0: {997, 1000}}, ""},
+		{"latest", Position{Kind: PosLatest}, nil, map[int32]Range{0: {From: 800, To: 1000}}, ""},
+		{"earliest", Position{Kind: PosEarliest}, nil, map[int32]Range{0: {From: 100, To: 300}}, ""},
+		{"tail", Position{Kind: PosTail, N: 500}, nil, map[int32]Range{0: {From: 500, To: 700}}, ""},
+		{"tail beyond start", Position{Kind: PosTail, N: 5000}, nil, map[int32]Range{0: {From: 100, To: 300}}, ""},
+		{"offset", off(500), nil, map[int32]Range{0: {From: 497, To: 697}}, ""},
+		{"offset near start", off(101), nil, map[int32]Range{0: {From: 100, To: 300}}, ""},
+		{"offset at end", off(1000), nil, map[int32]Range{0: {From: 997, To: 1000}}, ""},
 		{"offset past end", off(1001), nil, nil, "offset 1,001 is past the end (1,000)"},
 		{"offset gone", off(50), nil, nil, "offset 50 is gone; earliest is 100"},
-		{"time", Position{Kind: PosTime}, map[int32]int64{0: 600}, map[int32]Range{0: {597, 797}}, ""},
+		{"time", Position{Kind: PosTime}, map[int32]int64{0: 600}, map[int32]Range{0: {From: 597, To: 797}}, ""},
 		{"no such partition", Position{Kind: PosLatest, Partitions: []int32{7}}, nil, nil, "partition 7 doesn't exist"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -104,24 +104,24 @@ func TestPositionRanges(t *testing.T) {
 		t.Fatalf("Error() = %q", e)
 	}
 	// several partitions, empty ones are left out
-	got, err := Position{Kind: PosLatest}.Ranges(Bounds{0: {0, 50}, 1: {10, 10}, 2: {0, 500}}, 200, nil)
-	if err != nil || !maps.Equal(got, map[int32]Range{0: {0, 50}, 2: {300, 500}}) {
+	got, err := Position{Kind: PosLatest}.Ranges(Bounds{0: {From: 0, To: 50}, 1: {From: 10, To: 10}, 2: {From: 0, To: 500}}, 200, nil)
+	if err != nil || !maps.Equal(got, map[int32]Range{0: {From: 0, To: 50}, 2: {From: 300, To: 500}}) {
 		t.Fatalf("got %v, %v", got, err)
 	}
 }
 
 func TestOlderNewer(t *testing.T) {
 	b := Bounds{0: {From: 100, To: 1000}, 1: {From: 0, To: 50}}
-	if got := Older(map[int32]int64{0: 800}, b, 200); !maps.Equal(got, map[int32]Range{0: {600, 800}}) {
+	if got := Older(map[int32]int64{0: 800}, b, 200); !maps.Equal(got, map[int32]Range{0: {From: 600, To: 800}}) {
 		t.Fatalf("Older = %v", got)
 	}
 	if got := Older(map[int32]int64{0: 100}, b, 200); len(got) != 0 {
 		t.Fatalf("Older at the start = %v", got)
 	}
-	if got := Older(map[int32]int64{0: 150, 1: 10}, b, 200); !maps.Equal(got, map[int32]Range{0: {100, 150}, 1: {0, 10}}) {
+	if got := Older(map[int32]int64{0: 150, 1: 10}, b, 200); !maps.Equal(got, map[int32]Range{0: {From: 100, To: 150}, 1: {From: 0, To: 10}}) {
 		t.Fatalf("Older = %v", got)
 	}
-	if got := Newer(map[int32]int64{0: 899, 1: 49}, b, 50); !maps.Equal(got, map[int32]Range{0: {900, 950}}) {
+	if got := Newer(map[int32]int64{0: 899, 1: 49}, b, 50); !maps.Equal(got, map[int32]Range{0: {From: 900, To: 950}}) {
 		t.Fatalf("Newer = %v", got)
 	}
 	if got := Newer(map[int32]int64{0: 999}, b, 50); len(got) != 0 {

@@ -80,9 +80,9 @@ func TestResetDialogProdTypeName(t *testing.T) {
 	if v := view(o); !strings.Contains(v, "order-svc") || !strings.Contains(v, "does not match") {
 		t.Fatalf("view:\n%s", v)
 	}
-	_, msg = send(t, o, "backspace")
+	send(t, o, "backspace")
 	for _, k := range "order-svc" {
-		_, msg = send(t, o, string(k))
+		send(t, o, string(k))
 	}
 	_, msg = send(t, o, "enter")
 	got, ok := msg.(resetSubmitted)

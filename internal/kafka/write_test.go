@@ -83,8 +83,10 @@ func TestProduceNullAndHeaders(t *testing.T) {
 func TestCreateDeleteTopic(t *testing.T) {
 	c := newCluster(t)
 	cl := open(t, c)
-	if err := cl.CreateTopic(ctx(t), NewTopic{Name: "audit", Partitions: 4, Replication: -1,
-		Configs: map[string]string{"retention.ms": "60000"}}); err != nil {
+	if err := cl.CreateTopic(ctx(t), NewTopic{
+		Name: "audit", Partitions: 4, Replication: -1,
+		Configs: map[string]string{"retention.ms": "60000"},
+	}); err != nil {
 		t.Fatal(err)
 	}
 	d, err := cl.TopicDetail(ctx(t), "audit")

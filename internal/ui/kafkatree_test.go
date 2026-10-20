@@ -129,8 +129,10 @@ func TestKafkaTreeExpand(t *testing.T) {
 	m, b, k := newKafkaModel(t, config.Connection{})
 	k.addTopic("orders", 3, 0, 10)
 	for i := range 150 {
-		k.addGroup(kafka.GroupDetail{Group: kafka.Group{Name: fmt.Sprintf("g-%03d", i)},
-			Lag: []kafka.PartitionLag{{TP: kafka.TP{Topic: "orders"}, Lag: int64(i)}}})
+		k.addGroup(kafka.GroupDetail{
+			Group: kafka.Group{Name: fmt.Sprintf("g-%03d", i)},
+			Lag:   []kafka.PartitionLag{{TP: kafka.TP{Topic: "orders"}, Lag: int64(i)}},
+		})
 	}
 	pressAll(t, m, "l")
 	root := m.tree.Roots()[0]

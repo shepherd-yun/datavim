@@ -314,8 +314,10 @@ func (t *groupTab) gotoStuck() tea.Cmd {
 		if l.Committed >= l.End {
 			msg.note = "no lag on this partition"
 		}
-		msg.pos = kmsgx.Position{Kind: kmsgx.PosOffset, Partitions: []int32{l.Partition},
-			Offsets: map[int32]int64{l.Partition: min(l.Committed, l.End)}}
+		msg.pos = kmsgx.Position{
+			Kind: kmsgx.PosOffset, Partitions: []int32{l.Partition},
+			Offsets: map[int32]int64{l.Partition: min(l.Committed, l.End)},
+		}
 	}
 	return func() tea.Msg { return msg }
 }

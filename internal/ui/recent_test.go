@@ -1,10 +1,11 @@
 package ui
 
 import (
-	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"

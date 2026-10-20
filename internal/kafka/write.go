@@ -118,8 +118,10 @@ func (c *client) Produce(ctx context.Context, topic string, recs []ProduceRecord
 	}
 	out := make([]ProduceResult, len(krs))
 	for i, pr := range c.kcl.ProduceSync(ctx, krs...) {
-		out[i] = ProduceResult{Partition: pr.Record.Partition, Offset: pr.Record.Offset, Time: pr.Record.Timestamp,
-			Err: wrap(ctx, pr.Err, "topic "+topic)}
+		out[i] = ProduceResult{
+			Partition: pr.Record.Partition, Offset: pr.Record.Offset, Time: pr.Record.Timestamp,
+			Err: wrap(ctx, pr.Err, "topic "+topic),
+		}
 		if pr.Err != nil {
 			out[i].Partition, out[i].Offset = -1, -1
 		}
@@ -186,13 +188,13 @@ func (c *client) ResetOffsets(ctx context.Context, group string, commits []Offse
 		if err != nil {
 			return nil, wrap(ctx, err, what)
 		}
-		if dg := ds[group]; dg.Err != nil {
+		dg := ds[group]
+		if dg.Err != nil {
 			return nil, wrap(ctx, dg.Err, what)
-		} else {
-			state = normalizeState(dg.State)
-			if len(dg.Members) > 0 {
-				state = "Stable"
-			}
+		}
+		state = normalizeState(dg.State)
+		if len(dg.Members) > 0 {
+			state = "Stable"
 		}
 	case GroupConsumer:
 		s, _, members, err := c.describeConsumerGroup(ctx, group)

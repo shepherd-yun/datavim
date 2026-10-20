@@ -432,8 +432,10 @@ func TestUpdateConnection(t *testing.T) {
 		t.Fatal(err)
 	}
 	// the form sends the params it keeps plus the ones it edits
-	edited := config.Connection{Name: "laptop", Driver: "postgres", Host: "h2", User: "u", ReadOnly: &ro,
-		Params: map[string]string{"sslmode": "disable", "tls": "true"}}
+	edited := config.Connection{
+		Name: "laptop", Driver: "postgres", Host: "h2", User: "u", ReadOnly: &ro,
+		Params: map[string]string{"sslmode": "disable", "tls": "true"},
+	}
 	if err := m.UpdateConnection("local", edited, "", false); err != nil {
 		t.Fatal(err)
 	}

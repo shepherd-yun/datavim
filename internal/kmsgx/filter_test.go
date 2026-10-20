@@ -11,8 +11,10 @@ import (
 func TestFilterMatch(t *testing.T) {
 	now := time.Date(2026, 10, 20, 14, 0, 0, 0, time.Local)
 	rec := func(key, value string) kafka.Record {
-		return kafka.Record{Key: []byte(key), Value: []byte(value), Size: len(key) + len(value),
-			Time: time.Date(2026, 10, 20, 9, 30, 0, 0, time.Local)}
+		return kafka.Record{
+			Key: []byte(key), Value: []byte(value), Size: len(key) + len(value),
+			Time: time.Date(2026, 10, 20, 9, 30, 0, 0, time.Local),
+		}
 	}
 	big := rec("k", strings.Repeat("x", 2000))
 	big.Partition = 1

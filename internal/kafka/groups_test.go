@@ -45,7 +45,8 @@ func commit(t *testing.T, c *kfake.Cluster, group string, offs ...kadm.Offset) {
 func consume(t *testing.T, c *kfake.Cluster, group, topic string, opts ...kgo.Opt) *kgo.Client {
 	t.Helper()
 	assigned := make(chan struct{}, 1)
-	opts = append([]kgo.Opt{kgo.SeedBrokers(c.ListenAddrs()...), kgo.ConsumerGroup(group), kgo.ConsumeTopics(topic),
+	opts = append([]kgo.Opt{
+		kgo.SeedBrokers(c.ListenAddrs()...), kgo.ConsumerGroup(group), kgo.ConsumeTopics(topic),
 		kgo.ClientID("worker-1"),
 		kgo.OnPartitionsAssigned(func(_ context.Context, _ *kgo.Client, m map[string][]int32) {
 			if len(m) > 0 {
@@ -54,7 +55,8 @@ func consume(t *testing.T, c *kfake.Cluster, group, topic string, opts ...kgo.Op
 				default:
 				}
 			}
-		})}, opts...)
+		}),
+	}, opts...)
 	kcl, err := kgo.NewClient(opts...)
 	if err != nil {
 		t.Fatal(err)

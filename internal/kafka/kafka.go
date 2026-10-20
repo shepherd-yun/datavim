@@ -286,22 +286,22 @@ func wrap(ctx context.Context, err error, what string) error {
 	switch {
 	case errors.Is(err, kerr.SaslAuthenticationFailed), errors.Is(err, kerr.IllegalSaslState),
 		errors.Is(err, kerr.UnsupportedSaslMechanism):
-		return fmt.Errorf("%w: %v", ErrAuthFailed, err)
+		return fmt.Errorf("%w: %w", ErrAuthFailed, err)
 	case errors.Is(err, kerr.TopicAuthorizationFailed), errors.Is(err, kerr.GroupAuthorizationFailed),
 		errors.Is(err, kerr.ClusterAuthorizationFailed), errors.Is(err, kerr.TransactionalIDAuthorizationFailed),
 		errors.Is(err, kerr.DelegationTokenAuthorizationFailed):
 		if what != "" {
-			return fmt.Errorf("%w (%s): %v", ErrDenied, what, err)
+			return fmt.Errorf("%w (%s): %w", ErrDenied, what, err)
 		}
-		return fmt.Errorf("%w: %v", ErrDenied, err)
+		return fmt.Errorf("%w: %w", ErrDenied, err)
 	case errors.Is(err, kerr.UnsupportedVersion), strings.Contains(err.Error(), "broker is too old"):
-		return fmt.Errorf("%w: %v", ErrUnsupported, err)
+		return fmt.Errorf("%w: %w", ErrUnsupported, err)
 	}
 	var ne net.Error
 	var ke *kerr.Error
 	if !errors.As(err, &ke) && (errors.As(err, &ne) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) ||
 		errors.Is(err, kgo.ErrClientClosed) || errors.Is(err, net.ErrClosed)) {
-		return fmt.Errorf("%w: %v", db.ErrConnLost, err)
+		return fmt.Errorf("%w: %w", db.ErrConnLost, err)
 	}
 	return err
 }

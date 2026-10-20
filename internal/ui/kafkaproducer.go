@@ -3,6 +3,7 @@ package ui
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -305,7 +306,7 @@ func (t *producerTab) runAtCursor() tea.Cmd {
 		for line := first; line <= last; line++ {
 			r, err := kmsgx.DraftAt(text, line)
 			if err != nil {
-				if _, isDraftErr := err.(kmsgx.DraftError); isDraftErr {
+				if errors.As(err, new(kmsgx.DraftError)) {
 					return t.send(nil, err)
 				}
 				continue // a separator or comment line
@@ -331,7 +332,8 @@ func (t *producerTab) send(recs []kmsgx.DraftRecord, err error) tea.Cmd {
 		return nil
 	}
 	if err != nil {
-		if de, ok := err.(kmsgx.DraftError); ok {
+		var de kmsgx.DraftError
+		if errors.As(err, &de) {
 			t.onResults = false
 			t.editor.SetCursor(de.Line-1, 0)
 		}

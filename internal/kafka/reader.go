@@ -43,7 +43,7 @@ type Reader interface {
 	Tail(ctx context.Context, topic string, from map[int32]int64) error
 	// Poll waits until there are records or ctx ends (not an error) and
 	// returns at most max of them.
-	Poll(ctx context.Context, max int) ([]Record, error)
+	Poll(ctx context.Context, maxRecs int) ([]Record, error)
 	Close() error
 }
 
@@ -213,7 +213,7 @@ func partitionBounds(ctx context.Context, adm *kadm.Client, topic string) (start
 	return starts, ends, nil
 }
 
-func (r *reader) Tail(ctx context.Context, topic string, from map[int32]int64) error {
+func (r *reader) Tail(_ context.Context, topic string, from map[int32]int64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.stopTail()

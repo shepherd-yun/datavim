@@ -111,8 +111,10 @@ func TestRangeClampsToEnd(t *testing.T) {
 
 func TestTruncate(t *testing.T) {
 	c := newCluster(t)
-	produce(t, c, &kgo.Record{Topic: "orders", Key: []byte("k"), Value: bytes.Repeat([]byte("x"), 20),
-		Headers: []kgo.RecordHeader{{Key: "h", Value: []byte("vv")}}})
+	produce(t, c, &kgo.Record{
+		Topic: "orders", Key: []byte("k"), Value: bytes.Repeat([]byte("x"), 20),
+		Headers: []kgo.RecordHeader{{Key: "h", Value: []byte("vv")}},
+	})
 	recs, err := openReader(t, c, ReaderConfig{MaxValueBytes: 10}).Range(ctx(t), "orders", map[int32]Range{0: {0, 1}})
 	if err != nil {
 		t.Fatal(err)

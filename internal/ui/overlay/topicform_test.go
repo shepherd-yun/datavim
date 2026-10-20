@@ -36,8 +36,10 @@ func TestTopicForm(t *testing.T) {
 	if !ok {
 		t.Fatalf("msg = %#v\n%s", msg, ansi.Strip(f.View(100, 40)))
 	}
-	want := map[string]string{"retention.ms": "86400000", "cleanup.policy": "compact", "min.insync.replicas": "2",
-		"segment.ms": "1000", "max.message.bytes": "2048"}
+	want := map[string]string{
+		"retention.ms": "86400000", "cleanup.policy": "compact", "min.insync.replicas": "2",
+		"segment.ms": "1000", "max.message.bytes": "2048",
+	}
 	if got.Topic.Name != "audit" || got.Topic.Partitions != 6 || got.Topic.Replication != 3 || !maps.Equal(got.Topic.Configs, want) {
 		t.Fatalf("topic = %+v", got.Topic)
 	}

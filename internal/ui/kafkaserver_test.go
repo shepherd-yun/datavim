@@ -36,8 +36,10 @@ func TestKafkaServerStatus(t *testing.T) {
 		t.Fatalf("title %q, context %s", s.Title(), s.Context())
 	}
 	view := screen(m)
-	for _, w := range []string{"cluster id", "abc", "controller", "brokers", "version", "4.1", "topics", "partitions", "5",
-		"under-replicated partitions", "offline partitions", "groups", "groups with lag"} {
+	for _, w := range []string{
+		"cluster id", "abc", "controller", "brokers", "version", "4.1", "topics", "partitions", "5",
+		"under-replicated partitions", "offline partitions", "groups", "groups with lag",
+	} {
 		if !strings.Contains(view, w) {
 			t.Fatalf("missing %q:\n%s", w, view)
 		}
@@ -46,8 +48,10 @@ func TestKafkaServerStatus(t *testing.T) {
 	for _, r := range s.grids[secKStatus].Result().Rows {
 		got[r[0].Text] = r[1].Text
 	}
-	want := map[string]string{"brokers": "2", "topics": "2", "partitions": "5", "under-replicated partitions": "1",
-		"offline partitions": "0", "groups": "2", "groups with lag": "1", "controller": "1", "cluster id": "abc", "version": "4.1"}
+	want := map[string]string{
+		"brokers": "2", "topics": "2", "partitions": "5", "under-replicated partitions": "1",
+		"offline partitions": "0", "groups": "2", "groups with lag": "1", "controller": "1", "cluster id": "abc", "version": "4.1",
+	}
 	for k, v := range want {
 		if got[k] != v {
 			t.Errorf("%s = %q, want %q", k, got[k], v)

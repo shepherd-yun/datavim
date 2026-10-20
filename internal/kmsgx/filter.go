@@ -21,8 +21,10 @@ type Filter struct {
 // node is one part of a filter expression.
 type node interface{ match(r kafka.Record) bool }
 
-type orNode []node
-type andNode []node
+type (
+	orNode  []node
+	andNode []node
+)
 
 func (n orNode) match(r kafka.Record) bool {
 	for _, c := range n {

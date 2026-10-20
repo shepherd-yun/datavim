@@ -267,8 +267,10 @@ func (m *Model) buildKafkaTree(conn string) {
 		if b.Controller {
 			detail = append(detail, "★ controller")
 		}
-		brokers = append(brokers, &tree.Node{Kind: tree.KindBroker, Conn: conn, Section: secBrokers,
-			Key: strconv.Itoa(int(b.ID)), Name: fmt.Sprintf("%d  %s:%d", b.ID, b.Host, b.Port), Detail: strings.Join(detail, " · ")})
+		brokers = append(brokers, &tree.Node{
+			Kind: tree.KindBroker, Conn: conn, Section: secBrokers,
+			Key: strconv.Itoa(int(b.ID)), Name: fmt.Sprintf("%d  %s:%d", b.ID, b.Host, b.Port), Detail: strings.Join(detail, " · "),
+		})
 	}
 	topics := buildTopicNodes(conn, filterTopics(st.topics, st.filter[secTopics]), st.showInternal)
 	groups := buildGroupNodes(conn, filterGroups(st.groups, st.filter[secGroups]), st.lag, st.byName)
@@ -304,8 +306,10 @@ func (m *Model) buildKafkaTree(conn string) {
 // kafkaSection is one section node with its children and error.
 func (m *Model) kafkaSection(conn, sec, title string, count int, children []*tree.Node) *tree.Node {
 	st := m.kafkaTrees[conn]
-	n := &tree.Node{Kind: tree.KindKafkaSection, Conn: conn, Section: sec, Key: sec,
-		Name: fmt.Sprintf("%s (%s)", title, groupDigits(int64(count)))}
+	n := &tree.Node{
+		Kind: tree.KindKafkaSection, Conn: conn, Section: sec, Key: sec,
+		Name: fmt.Sprintf("%s (%s)", title, groupDigits(int64(count))),
+	}
 	if f := st.filter[sec]; f != "" {
 		n.Detail = "filter " + f
 	}
@@ -401,8 +405,10 @@ func buildTopicNodes(conn string, topics []kafka.Topic, showInternal bool) []*tr
 }
 
 func topicNode(conn string, t kafka.Topic) *tree.Node {
-	n := &tree.Node{Kind: tree.KindTopic, Conn: conn, Section: secTopics, Key: t.Name, Name: t.Name,
-		Detail: strconv.Itoa(t.Partitions) + "p"}
+	n := &tree.Node{
+		Kind: tree.KindTopic, Conn: conn, Section: secTopics, Key: t.Name, Name: t.Name,
+		Detail: strconv.Itoa(t.Partitions) + "p",
+	}
 	if t.UnderReplicated+t.Offline > 0 {
 		n.Warn = true
 		n.Detail += " · under-replicated"

@@ -48,8 +48,10 @@ type timings struct {
 	group, kserver time.Duration
 }
 
-var defaultTimings = timings{tick: 100 * time.Millisecond, draft: time.Second, server: statusInterval,
-	group: 5 * time.Second, kserver: 10 * time.Second}
+var defaultTimings = timings{
+	tick: 100 * time.Millisecond, draft: time.Second, server: statusInterval,
+	group: 5 * time.Second, kserver: 10 * time.Second,
+}
 
 var spinner = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 

@@ -309,8 +309,10 @@ func TestIntegrationSCRAMOverTLS(t *testing.T) {
 	if host != "localhost" && net.ParseIP(host) == nil {
 		t.Logf("broker host %q", host)
 	}
-	cfg := Config{Brokers: []string{net.JoinHostPort("localhost", port)}, SASL: "scram-sha-256", User: "app",
-		Password: "right-pw-123", TLS: true, TLSCA: caFile}
+	cfg := Config{
+		Brokers: []string{net.JoinHostPort("localhost", port)}, SASL: "scram-sha-256", User: "app",
+		Password: "right-pw-123", TLS: true, TLSCA: caFile,
+	}
 	cl, err := Open(ictx(t), cfg)
 	if err != nil {
 		t.Fatal(err)
