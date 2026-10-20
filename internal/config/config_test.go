@@ -1,6 +1,7 @@
 package config
 
 import (
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -343,7 +344,8 @@ func TestUpdateConnectionTouchesOnlyItsBlock(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "connections.toml", editableConns)
 	on := true
-	c := Connection{Name: "prod", Driver: "postgres", Host: "10.0.1.6", Port: 5432, User: "app", SSH: "bastion", Env: EnvProd, ReadOnly: &on}
+	c := Connection{Name: "prod", Driver: "postgres", Host: "10.0.1.6", Port: 5432, User: "app", SSH: "bastion", Env: EnvProd, ReadOnly: &on,
+		Params: map[string]string{"sslmode": "require"}}
 	if _, err := UpdateConnection(dir, "prod-pg", c); err != nil {
 		t.Fatal(err)
 	}
@@ -524,7 +526,99 @@ func TestNormalizeRedis(t *testing.T) {
 			t.Errorf("Database %q: err = %v", bad, err)
 		}
 	}
-	if _, err := Normalize(Connection{Name: "x", Driver: "sqlite"}); err == nil || !strings.Contains(err.Error(), "oracle or redis") {
+	if _, err := Normalize(Connection{Name: "x", Driver: "sqlite"}); err == nil || !strings.Contains(err.Error(), "redis or kafka") {
 		t.Errorf("unknown driver err = %v", err)
+	}
+}
+
+func TestNormalizeKafka(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		in      Connection
+		brokers []string
+		err     string
+	}{
+		{"defaults", Connection{Name: "k", Driver: "kafka"}, []string{"localhost:9092"}, ""},
+		{"broker list", Connection{Name: "k", Driver: "kafka", Host: "b1, b2:9093,, "}, []string{"b1:9092", "b2:9093"}, ""},
+		{"port applies to bare hosts", Connection{Name: "k", Driver: "kafka", Host: "b1,b2", Port: 19092}, []string{"b1:19092", "b2:19092"}, ""},
+		{"ipv6", Connection{Name: "k", Driver: "kafka", Host: "[::1]:9094,[::2]"}, []string{"[::1]:9094", "[::2]:9092"}, ""},
+		{"scram", Connection{Name: "k", Driver: "kafka", User: "app", Params: map[string]string{"sasl": "scram-sha-512"}}, []string{"localhost:9092"}, ""},
+		{"oauth not yet", Connection{Name: "k", Driver: "kafka", User: "app", Params: map[string]string{"sasl": "oauth"}}, nil,
+			`connection "k": kafka sasl "oauth" is not supported yet (want plain, scram-sha-256 or scram-sha-512)`},
+		{"sasl needs user", Connection{Name: "k", Driver: "kafka", Params: map[string]string{"sasl": "plain"}}, nil,
+			`connection "k": kafka sasl needs a user`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Normalize(tc.in)
+			if tc.err != "" {
+				if err == nil || err.Error() != tc.err {
+					t.Fatalf("err = %v, want %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.Port == 0 {
+				t.Fatalf("port not defaulted: %+v", c)
+			}
+			if got := KafkaBrokers(c); !slices.Equal(got, tc.brokers) {
+				t.Fatalf("brokers = %q, want %q", got, tc.brokers)
+			}
+		})
+	}
+	if c, _ := Normalize(Connection{Name: "k", Driver: "kafka"}); c.Port != 9092 {
+		t.Fatalf("port = %d", c.Port)
+	}
+}
+
+func TestAppendConnectionWritesParams(t *testing.T) {
+	dir := t.TempDir()
+	p := map[string]string{"sasl": "scram-sha-512", "tls": "true", "odd key": `a"b`}
+	if _, err := AppendConnection(dir, Connection{Name: "k", Driver: "kafka", User: "app", Params: p}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := AppendConnection(dir, Connection{Name: "m", Driver: "mysql"}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !maps.Equal(cfg.Connections[0].Params, p) || cfg.Connections[1].Params != nil {
+		t.Fatalf("connections = %+v", cfg.Connections)
+	}
+}
+
+func TestUpdateConnectionWritesParams(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "connections.toml", editableConns)
+	prod := Connection{Name: "prod-pg", Driver: "postgres", Host: "10.0.1.5", User: "app", Database: "app", Env: EnvProd,
+		ReadOnly: new(true), Params: map[string]string{"sslmode": "require", "x": "1"}}
+	if _, err := UpdateConnection(dir, "prod-pg", prod); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !maps.Equal(cfg.Connections[1].Params, prod.Params) {
+		t.Fatalf("params = %v", cfg.Connections[1].Params)
+	}
+	prod.Params = nil
+	if _, err := UpdateConnection(dir, "prod-pg", prod); err != nil {
+		t.Fatal(err)
+	}
+	data, _ := os.ReadFile(filepath.Join(dir, "connections.toml"))
+	if strings.Contains(string(data), "params") {
+		t.Fatalf("emptied params are removed:\n%s", data)
+	}
+	// local has no params: adding some appends a line
+	local := Connection{Name: "local", Driver: "mysql", User: "root", Params: map[string]string{"tls": "true"}}
+	if _, err := UpdateConnection(dir, "local", local); err != nil {
+		t.Fatal(err)
+	}
+	if cfg, err = Load(dir); err != nil || cfg.Connections[0].Params["tls"] != "true" {
+		t.Fatalf("local = %+v, err %v", cfg.Connections, err)
 	}
 }

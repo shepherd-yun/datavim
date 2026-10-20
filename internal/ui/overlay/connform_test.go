@@ -217,7 +217,7 @@ func TestConnFormReadOnly(t *testing.T) {
 
 func TestConnFormOracleServiceLabel(t *testing.T) {
 	f := NewConnForm(keymap.Default())
-	o, msg := send(t, f, "o", "tab", "left", "left", "tab") // driver: mysql -> oracle (before redis)
+	o, msg := send(t, f, "o", "tab", "left", "left", "left", "tab") // driver: mysql -> oracle (before redis, kafka)
 	if o == nil || msg != nil {
 		t.Fatal("form closed")
 	}
@@ -239,7 +239,7 @@ func TestConnFormOracleServiceLabel(t *testing.T) {
 
 func TestConnFormRedis(t *testing.T) {
 	f := NewConnForm(keymap.Default())
-	o, msg := send(t, f, "r", "tab", "left", "tab") // driver: mysql -> redis (last)
+	o, msg := send(t, f, "r", "tab", "left", "left", "tab") // driver: mysql -> redis (before kafka)
 	if o == nil || msg != nil {
 		t.Fatal("form closed")
 	}
@@ -251,5 +251,56 @@ func TestConnFormRedis(t *testing.T) {
 	c := msg.(ConnFormMsg).Conn
 	if c.Driver != "redis" || c.Port != 6379 || c.Database != "2" {
 		t.Fatalf("conn = %+v", c)
+	}
+}
+
+func TestConnFormKafka(t *testing.T) {
+	f := NewConnForm(keymap.Default())
+	if v := ansi.Strip(f.View(80, 30)); strings.Contains(v, "SASL") || strings.Contains(v, "Brokers") {
+		t.Fatalf("mysql shows the kafka fields:\n%s", v)
+	}
+	o, msg := send(t, f, "k", "tab", "left", "tab") // driver: mysql -> kafka (last)
+	if o == nil || msg != nil {
+		t.Fatal("form closed")
+	}
+	v := ansi.Strip(f.View(80, 30))
+	if !strings.Contains(v, "Brokers") || strings.Contains(v, "Database") || strings.Contains(v, "Encrypt") ||
+		!strings.Contains(v, "SASL") || !strings.Contains(v, "TLS") {
+		t.Fatalf("kafka form:\n%s", v)
+	}
+	// host, port, user, password -> SASL (Database is hidden)
+	_, msg = send(t, f, "tab", "tab", "a", "p", "p", "tab", "tab",
+		"left", "tab", // SASL: none -> scram-sha-512 (last)
+		"left", // TLS: off -> on, skip verify (last)
+		"ctrl+s")
+	c := msg.(ConnFormMsg).Conn
+	want := map[string]string{"sasl": "scram-sha-512", "tls": "true", "tls_skip_verify": "true"}
+	if c.Driver != "kafka" || c.Port != 9092 || c.User != "app" || !maps.Equal(c.Params, want) {
+		t.Fatalf("conn = %+v", c)
+	}
+
+	orig := config.Connection{Name: "k", Driver: "kafka", User: "app",
+		Params: map[string]string{"sasl": "plain", "tls": "true", "client_id": "me"}}
+	f = NewEditConnForm(keymap.Default(), orig)
+	if v := ansi.Strip(f.View(80, 30)); !strings.Contains(v, "‹ plain ›") || !strings.Contains(v, "‹ on ›") {
+		t.Fatalf("edit form shows the kafka settings:\n%s", v)
+	}
+	_, msg = send(t, f, "ctrl+s")
+	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, orig.Params) {
+		t.Fatalf("edited params = %v", p)
+	}
+	f = NewEditConnForm(keymap.Default(), orig)
+	f.cur = ffSASL
+	send(t, f, "right") // plain -> scram-sha-256
+	f.cur = ffTLS
+	_, msg = send(t, f, "left", "ctrl+s") // on -> off
+	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, map[string]string{"sasl": "scram-sha-256", "client_id": "me"}) {
+		t.Fatalf("edited params = %v", p)
+	}
+	// kafka params stay off other drivers
+	f = NewEditConnForm(keymap.Default(), config.Connection{Name: "m", Driver: "mysql"})
+	_, msg = send(t, f, "ctrl+s")
+	if p := msg.(ConnFormMsg).Conn.Params; p != nil {
+		t.Fatalf("mysql params = %v", p)
 	}
 }

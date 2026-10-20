@@ -431,18 +431,21 @@ func TestUpdateConnection(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	edited := config.Connection{Name: "laptop", Driver: "postgres", Host: "h2", User: "u", ReadOnly: &ro}
+	// the form sends the params it keeps plus the ones it edits
+	edited := config.Connection{Name: "laptop", Driver: "postgres", Host: "h2", User: "u", ReadOnly: &ro,
+		Params: map[string]string{"sslmode": "disable", "tls": "true"}}
 	if err := m.UpdateConnection("local", edited, "", false); err != nil {
 		t.Fatal(err)
 	}
-	if len(persisted) != 1 || persisted[0].old != "local" || persisted[0].c.Name != "laptop" || persisted[0].c.Port != 5432 {
+	if len(persisted) != 1 || persisted[0].old != "local" || persisted[0].c.Name != "laptop" || persisted[0].c.Port != 5432 ||
+		persisted[0].c.Params["tls"] != "true" {
 		t.Fatalf("persisted = %+v", persisted)
 	}
 	if _, ok := m.Connection("local"); ok {
 		t.Fatal("the old name is gone")
 	}
 	c, ok := m.Connection("laptop")
-	if !ok || c.Host != "h2" || !c.IsReadOnly() || c.Params["sslmode"] != "disable" {
+	if !ok || c.Host != "h2" || !c.IsReadOnly() || c.Params["sslmode"] != "disable" || c.Params["tls"] != "true" {
 		t.Fatalf("laptop = %+v; readonly and params are kept", c)
 	}
 	if !c1.(*fakeConn).waitClosed() {

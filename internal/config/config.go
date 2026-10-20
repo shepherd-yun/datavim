@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -107,7 +108,7 @@ type settingsFile struct {
 	Theme map[string]string `toml:"theme"`
 }
 
-var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432, "sqlserver": 1433, "oracle": 1521, "redis": 6379}
+var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432, "sqlserver": 1433, "oracle": 1521, "redis": 6379, "kafka": 9092}
 
 type connectionsFile struct {
 	Connections []Connection `toml:"connection"`
@@ -191,7 +192,7 @@ func Normalize(c Connection) (Connection, error) {
 	}
 	port, ok := defaultPorts[c.Driver]
 	if !ok {
-		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql, postgres, sqlserver, oracle or redis)", c.Name, c.Driver)
+		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql, postgres, sqlserver, oracle, redis or kafka)", c.Name, c.Driver)
 	}
 	if c.Port == 0 {
 		c.Port = port
@@ -202,6 +203,16 @@ func Normalize(c Connection) (Connection, error) {
 	if c.Driver == "redis" && c.Database != "" {
 		if n, err := strconv.Atoi(c.Database); err != nil || n < 0 {
 			return c, fmt.Errorf("connection %q: redis database must be a number (0, 1, …), got %q", c.Name, c.Database)
+		}
+	}
+	if c.Driver == "kafka" {
+		switch mech := c.Params["sasl"]; mech {
+		case "", "plain", "scram-sha-256", "scram-sha-512":
+			if mech != "" && c.User == "" {
+				return c, fmt.Errorf("connection %q: kafka sasl needs a user", c.Name)
+			}
+		default:
+			return c, fmt.Errorf("connection %q: kafka sasl %q is not supported yet (want plain, scram-sha-256 or scram-sha-512)", c.Name, mech)
 		}
 	}
 	c.SSH = strings.TrimSpace(c.SSH)
@@ -223,6 +234,23 @@ func Normalize(c Connection) (Connection, error) {
 func RedisDB(c Connection) int {
 	n, _ := strconv.Atoi(c.Database)
 	return max(n, 0)
+}
+
+// KafkaBrokers is a kafka connection's bootstrap broker list: Host split
+// at commas, with Port added to the entries that have none.
+func KafkaBrokers(c Connection) []string {
+	var out []string
+	for b := range strings.SplitSeq(c.Host, ",") {
+		b = strings.TrimSpace(b)
+		if b == "" {
+			continue
+		}
+		if _, _, err := net.SplitHostPort(b); err != nil {
+			b = net.JoinHostPort(strings.Trim(b, "[]"), strconv.Itoa(c.Port))
+		}
+		out = append(out, b)
+	}
+	return out
 }
 
 func normalize(in []Connection) ([]Connection, error) {
@@ -247,15 +275,16 @@ func normalize(in []Connection) ([]Connection, error) {
 
 // connBlock is what <space>n writes; empty optional keys are left out.
 type connBlock struct {
-	Name     string `toml:"name"`
-	Driver   string `toml:"driver"`
-	Host     string `toml:"host"`
-	Port     int    `toml:"port"`
-	User     string `toml:"user,omitempty"`
-	Database string `toml:"database,omitempty"`
-	SSH      string `toml:"ssh,omitempty"`
-	Env      Env    `toml:"env"`
-	ReadOnly *bool  `toml:"readonly,omitempty"`
+	Name     string            `toml:"name"`
+	Driver   string            `toml:"driver"`
+	Host     string            `toml:"host"`
+	Port     int               `toml:"port"`
+	User     string            `toml:"user,omitempty"`
+	Database string            `toml:"database,omitempty"`
+	SSH      string            `toml:"ssh,omitempty"`
+	Env      Env               `toml:"env"`
+	ReadOnly *bool             `toml:"readonly,omitempty"`
+	Params   map[string]string `toml:"params,omitempty,inline"`
 }
 
 // AppendConnection validates c and appends it to dir/connections.toml as a new
@@ -278,7 +307,7 @@ func AppendConnection(dir string, c Connection) (Connection, error) {
 		Connection []connBlock `toml:"connection"`
 	}{[]connBlock{{
 		Name: c.Name, Driver: c.Driver, Host: c.Host, Port: c.Port,
-		User: c.User, Database: c.Database, SSH: c.SSH, Env: c.Env, ReadOnly: c.ReadOnly,
+		User: c.User, Database: c.Database, SSH: c.SSH, Env: c.Env, ReadOnly: c.ReadOnly, Params: c.Params,
 	}}})
 	if err != nil {
 		return c, err

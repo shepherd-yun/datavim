@@ -134,7 +134,8 @@ func (m *Manager) AddConnection(c config.Connection, password string, save bool)
 }
 
 // UpdateConnection replaces the connection called old with c (which may be
-// renamed). Params, which the form does not edit, are kept. A readonly equal
+// renamed). c carries the params: the form keeps the ones it does not
+// show. A readonly equal
 // to the current one keeps a SetReadOnly switch for this run and saves the
 // file's value; a different one is saved and ends the switch. Open
 // connections are closed, and a saved password follows a rename. A non-empty
@@ -154,7 +155,6 @@ func (m *Manager) UpdateConnection(old string, c config.Connection, password str
 	if _, taken := m.Connection(c.Name); taken && c.Name != old {
 		return fmt.Errorf("connection %q already exists", c.Name)
 	}
-	c.Params = cur.Params
 	saved := c
 	m.mu.Lock()
 	fileRO, switched := m.savedRO[old]

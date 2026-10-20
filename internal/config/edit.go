@@ -13,8 +13,9 @@ import (
 
 // UpdateConnection rewrites the [[connection]] block named name in
 // dir/connections.toml so it describes c. Only the keys the connection form
-// edits are touched, and only when their value changes: other keys (params),
-// comments and the other blocks stay byte for byte.
+// edits are touched, and only when their value changes: other keys,
+// comments and the other blocks stay byte for byte. Changed params are
+// written as one inline table.
 func UpdateConnection(dir, name string, c Connection) (Connection, error) {
 	c, err := Normalize(c)
 	if err != nil {
@@ -140,12 +141,17 @@ func editBlock(body []string, old, c Connection) ([]string, error) {
 		{"ssh", old.SSH, c.SSH, true},
 		{"env", string(old.Env), string(c.Env), false},
 		{"readonly", boolOrNil(old.ReadOnly), boolOrNil(c.ReadOnly), true},
+		{"params", paramsLine(old.Params), paramsLine(c.Params), true},
 	} {
 		if f.old == f.new {
 			continue
 		}
 		line := ""
-		if !f.optional || (f.new != "" && f.new != nil) {
+		switch {
+		case f.key == "params" && f.new != "":
+			line = f.new.(string)
+		case f.key == "params":
+		case !f.optional || (f.new != "" && f.new != nil):
 			enc, err := toml.Marshal(map[string]any{f.key: f.new})
 			if err != nil {
 				return nil, err
@@ -170,6 +176,20 @@ func editBlock(body []string, old, c Connection) ([]string, error) {
 		}
 	}
 	return out, nil
+}
+
+// paramsLine is the "params = { … }" line for p, or "" when p is empty.
+func paramsLine(p map[string]string) string {
+	if len(p) == 0 {
+		return ""
+	}
+	enc, err := toml.Marshal(struct {
+		Params map[string]string `toml:"params,inline"`
+	}{p})
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSuffix(string(enc), "\n")
 }
 
 // boolOrNil is *b, or nil for an unset key.
@@ -199,7 +219,7 @@ func comment(l string) bool { return strings.HasPrefix(strings.TrimSpace(l), "#"
 func sameEditable(a, b Connection) bool {
 	return a.Name == b.Name && a.Driver == b.Driver && a.Host == b.Host && a.Port == b.Port &&
 		a.User == b.User && a.Database == b.Database && a.SSH == b.SSH && a.Env == b.Env &&
-		boolOrNil(a.ReadOnly) == boolOrNil(b.ReadOnly)
+		boolOrNil(a.ReadOnly) == boolOrNil(b.ReadOnly) && paramsLine(a.Params) == paramsLine(b.Params)
 }
 
 // writeChecked parses the new content the way Load does and lets check vet

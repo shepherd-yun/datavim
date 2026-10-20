@@ -40,6 +40,8 @@ const (
 	ffDatabase
 	ffEncrypt // SQL Server only
 	ffTrust   // SQL Server only
+	ffSASL    // Kafka only
+	ffTLS     // Kafka only
 	ffSSH
 	ffEnv
 	ffReadOnly
@@ -64,6 +66,12 @@ const oracleDefaultService = "FREEPDB1"
 // encryptChoices are go-mssqldb's encrypt values; default leaves it out.
 var encryptChoices = []string{"default", "true", "false", "disable"}
 
+// saslChoices are kafka's params.sasl; none leaves it out.
+var saslChoices = []string{"none", "plain", "scram-sha-256", "scram-sha-512"}
+
+// kafkaTLSChoices map to params.tls and params.tls_skip_verify.
+var kafkaTLSChoices = []string{"off", "on", "on, skip verify"}
+
 // readOnlyChoices set readonly; auto leaves it out, so env decides.
 var readOnlyChoices = []string{"auto", "yes", "no"}
 
@@ -71,7 +79,7 @@ var readOnlyChoices = []string{"auto", "yes", "no"}
 func NewConnForm(keys *keymap.Keymap) *ConnForm {
 	return &ConnForm{keys: keys, fields: []formField{
 		ffName:     {label: "Name"},
-		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver", "oracle", "redis"}},
+		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver", "oracle", "redis", "kafka"}},
 		ffHost:     {label: "Host", input: newField("localhost")},
 		ffPort:     {label: "Port"},
 		ffUser:     {label: "User"},
@@ -79,6 +87,8 @@ func NewConnForm(keys *keymap.Keymap) *ConnForm {
 		ffDatabase: {label: "Database"},
 		ffEncrypt:  {label: "Encrypt", choices: encryptChoices},
 		ffTrust:    {label: "Trust cert", choices: []string{"no", "yes"}},
+		ffSASL:     {label: "SASL", choices: saslChoices},
+		ffTLS:      {label: "TLS", choices: kafkaTLSChoices},
 		ffSSH:      {label: "SSH host"},
 		ffEnv:      {label: "Env", choices: []string{"dev", "staging", "prod"}},
 		ffReadOnly: {label: "Read-only", choices: readOnlyChoices},
@@ -120,6 +130,16 @@ func NewEditConnForm(keys *keymap.Keymap, c config.Connection) *ConnForm {
 	if strings.EqualFold(param(c.Params, "TrustServerCertificate"), "true") {
 		choose(ffTrust, "yes")
 	}
+	if c.Driver == "kafka" {
+		choose(ffSASL, c.Params["sasl"])
+		switch {
+		case c.Params["tls"] != "true":
+		case c.Params["tls_skip_verify"] == "true":
+			choose(ffTLS, kafkaTLSChoices[2])
+		default:
+			choose(ffTLS, kafkaTLSChoices[1])
+		}
+	}
 	return f
 }
 
@@ -135,8 +155,13 @@ func param(p map[string]string, key string) string {
 
 // shown reports whether field i applies to the chosen driver.
 func (f *ConnForm) shown(i int) bool {
-	if i == ffEncrypt || i == ffTrust {
+	switch i {
+	case ffEncrypt, ffTrust:
 		return f.value(ffDriver) == "sqlserver"
+	case ffSASL, ffTLS:
+		return f.value(ffDriver) == "kafka"
+	case ffDatabase:
+		return f.value(ffDriver) != "kafka"
 	}
 	return true
 }
@@ -204,9 +229,13 @@ func (f *ConnForm) submit() (Overlay, tea.Cmd) {
 		}
 		port = n
 	}
+	database := f.text(ffDatabase)
+	if !f.shown(ffDatabase) {
+		database = ""
+	}
 	c, err := config.Normalize(config.Connection{
 		Name: f.text(ffName), Driver: f.value(ffDriver), Host: f.text(ffHost), Port: port,
-		User: f.text(ffUser), Database: f.text(ffDatabase), SSH: f.text(ffSSH), Env: config.Env(f.value(ffEnv)),
+		User: f.text(ffUser), Database: database, SSH: f.text(ffSSH), Env: config.Env(f.value(ffEnv)),
 		ReadOnly: f.submitReadOnly(), Params: f.submitParams(),
 	})
 	if err != nil {
@@ -227,8 +256,8 @@ func (f *ConnForm) submitReadOnly() *bool {
 	return nil
 }
 
-// submitParams are the edited connection's params with the SQL Server
-// fields applied: default and no remove their key.
+// submitParams are the edited connection's params with the SQL Server and
+// Kafka fields applied: default, no, none and off remove their key.
 func (f *ConnForm) submitParams() map[string]string {
 	p := maps.Clone(f.params)
 	if p == nil {
@@ -244,6 +273,20 @@ func (f *ConnForm) submitParams() map[string]string {
 		}
 		if f.value(ffTrust) == "yes" {
 			p["TrustServerCertificate"] = "true"
+		}
+	}
+	if f.value(ffDriver) == "kafka" {
+		delete(p, "sasl")
+		delete(p, "tls")
+		delete(p, "tls_skip_verify")
+		if s := f.value(ffSASL); s != "none" {
+			p["sasl"] = s
+		}
+		if t := f.fields[ffTLS].choice; t > 0 {
+			p["tls"] = "true"
+			if t == 2 {
+				p["tls_skip_verify"] = "true"
+			}
 		}
 	}
 	if len(p) == 0 {
@@ -267,6 +310,9 @@ func (f *ConnForm) View(width, _ int) string {
 		}
 		if i == ffDatabase && f.value(ffDriver) == "redis" {
 			name = "DB" // a db number; empty is 0
+		}
+		if i == ffHost && f.value(ffDriver) == "kafka" {
+			name = "Brokers" // host[:port], comma-separated
 		}
 		label := fmt.Sprintf("%-14s", name)
 		switch {
