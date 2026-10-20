@@ -30,6 +30,16 @@ const (
 	DBServer Context = "db_server"
 	// RedisBigKeys is a big-key analysis tab.
 	RedisBigKeys Context = "redis_bigkeys"
+	// KafkaTopic is a Kafka topic tab's Partitions, Config and Consumers.
+	KafkaTopic Context = "kafka_topic"
+	// KafkaMessages is a Kafka topic tab's Messages.
+	KafkaMessages Context = "kafka_messages"
+	// KafkaGroup is a consumer group tab.
+	KafkaGroup Context = "kafka_group"
+	// KafkaProduceResults is the result pane of a producer console.
+	KafkaProduceResults Context = "kafka_produce_results"
+	// KafkaServer is a Kafka connection's cluster status tab.
+	KafkaServer Context = "kafka_server"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
 	// only one-key bindings count there.
 	Popup Context = "popup"
@@ -160,6 +170,12 @@ const (
 	ImportAll          Action = "import.all"
 	ImportNone         Action = "import.none"
 	ImportType         Action = "import.type"
+	Seek               Action = "kafka.seek"
+	LiveTail           Action = "kafka.tail"
+	ResetOffsets       Action = "kafka.reset_offsets"
+	ToggleInternal     Action = "kafka.internal"
+	SortGroups         Action = "kafka.sort_groups"
+	ToggleHeaders      Action = "kafka.headers"
 )
 
 const (

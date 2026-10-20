@@ -535,3 +535,81 @@ func TestServerInfoBothKinds(t *testing.T) {
 		}
 	}
 }
+
+func TestKafkaBindings(t *testing.T) {
+	k := Default()
+	for _, tc := range []struct {
+		ctx  Context
+		keys string
+		want Action
+	}{
+		{KafkaGroup, "g d", OpenCellKey},
+		{KafkaGroup, "R", ResetOffsets},
+		{KafkaGroup, "]", NextSection},
+		{KafkaGroup, "K", CellDetail},
+		{KafkaMessages, "]", NextSection},
+		{KafkaMessages, "[", PrevSection},
+		{KafkaMessages, "K", CellDetail},
+		{KafkaMessages, "v", ValueFormat},
+		{KafkaMessages, "t", Seek},
+		{KafkaMessages, "T", LiveTail},
+		{KafkaMessages, "c", ToggleHeaders},
+		{KafkaMessages, "F", FilterPrompt},
+		{KafkaMessages, "f f", FilterEqual},
+		{KafkaMessages, "f !", FilterNotEqual},
+		{KafkaMessages, "f s", FilterContains},
+		{KafkaMessages, "f x", FilterClear},
+		{KafkaMessages, "g d", OpenCellKey},
+		{KafkaMessages, "y y", YankRow},
+		{KafkaMessages, "space v", ExternalEdit},
+		{KafkaMessages, "L", NextTab}, // tab keys stay global
+		{KafkaTopic, "enter", Open},
+		{KafkaTopic, "]", NextSection},
+		{KafkaServer, "]", NextSection},
+		{KafkaServer, "enter", Open},
+		{KafkaProduceResults, "ctrl+k", FocusEditor},
+		{KafkaProduceResults, "M", ToggleMessages},
+		{KafkaProduceResults, "j", Down},
+		{Tree, ".", ToggleInternal},
+		{Tree, "s", SortGroups},
+	} {
+		if a, r := k.Resolve(tc.ctx, strings.Fields(tc.keys)); a != tc.want || r != Matched {
+			t.Errorf("%s %q = %q (%v), want %q", tc.ctx, tc.keys, a, r, tc.want)
+		}
+	}
+	descOf := func(ctx Context, kind Kind, a Action) string {
+		for _, b := range k.bindings {
+			if b.Context == ctx && b.Action == a {
+				return b.descFor(kind)
+			}
+		}
+		return ""
+	}
+	if d := descOf(Tree, KindKafka, DeleteNode); d != "Delete connection / delete topic" {
+		t.Errorf("DeleteNode on kafka = %q", d)
+	}
+	if d := descOf(Tree, KindKafka, NewKey); d != "New topic" {
+		t.Errorf("NewKey on kafka = %q", d)
+	}
+	if d := descOf(Tree, KindKafka, Open); d != "Open the topic / group" {
+		t.Errorf("Open on kafka = %q", d)
+	}
+	has := func(entries []HelpEntry, a string) bool {
+		return slices.ContainsFunc(entries, func(e HelpEntry) bool { return strings.Contains(e.Desc, a) })
+	}
+	if has(k.Help(Tree, KindSQL), "internal topics") || has(k.Help(Tree, KindRedis), "Sort consumer groups") {
+		t.Error("kafka tree keys listed on SQL / Redis")
+	}
+	if !has(k.Help(Tree, KindKafka), "internal topics") || !has(k.Help(Tree, KindKafka), "New topic") ||
+		!has(k.Help(Tree, KindKafka), "Filter topics") {
+		t.Errorf("kafka tree help = %+v", k.Help(Tree, KindKafka))
+	}
+	if has(k.Help(Tree, KindKafka), "Truncate table") || has(k.Help(Tree, KindKafka), "Biggest Redis keys") {
+		t.Error("SQL / Redis keys listed on kafka")
+	}
+	for _, ctx := range []Context{KafkaTopic, KafkaMessages, KafkaGroup, KafkaProduceResults, KafkaServer} {
+		if !slices.Contains(Contexts(), ctx) {
+			t.Errorf("Contexts() lacks %s", ctx)
+		}
+	}
+}

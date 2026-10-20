@@ -65,7 +65,7 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("left"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("p"), Password, "Enter password"},
 		Binding{Tree, keys("e"), EditNode, "Edit connection / modify table"},
-		Binding{Tree, keys("d", "d"), DeleteNode, "Delete connection / drop table or view / delete Redis keys"},
+		Binding{Tree, keys("d", "d"), DeleteNode, "Delete connection / drop table or view / delete Redis keys or a topic"},
 		Binding{Tree, keys("r"), RenameTable, "Rename table, view or Redis key"},
 		Binding{Tree, keys("T"), TruncateTable, "Truncate table"},
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},
@@ -89,6 +89,8 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("z", "M"), FoldCloseTree, "Collapse everything"},
 		Binding{Tree, keys("Z"), FoldCloseTree, "Collapse everything"},
 		Binding{Tree, keys("z", "x"), FoldFocus, "Collapse all but the path to the cursor"},
+		Binding{Tree, keys("."), ToggleInternal, "Show / hide internal topics"},
+		Binding{Tree, keys("s"), SortGroups, "Sort consumer groups: by lag / by name"},
 	)
 
 	b = append(b, gridBindings(Grid)...)
@@ -204,6 +206,38 @@ func DefaultBindings() []Binding {
 
 	b = append(b, gridBindings(RedisBigKeys)...)
 	b = append(b, Binding{RedisBigKeys, keys("enter"), Open, "Open the key"})
+
+	for _, ctx := range []Context{KafkaTopic, KafkaMessages, KafkaGroup, KafkaServer} {
+		b = append(b, gridBindings(ctx)...)
+		b = append(b,
+			Binding{ctx, keys("["), PrevSection, "Previous section"},
+			Binding{ctx, keys("]"), NextSection, "Next section"},
+		)
+	}
+	b = append(b,
+		Binding{KafkaTopic, keys("enter"), Open, "Open the group (consumers)"},
+		Binding{KafkaMessages, keys("v"), ValueFormat, "Value format: auto, text, JSON, hex, base64"},
+		Binding{KafkaMessages, keys("F"), FilterPrompt, "Filter messages (key, value, header.x, value.path …)"},
+		Binding{KafkaMessages, keys("f", "f"), FilterEqual, "Filter: equals this value"},
+		Binding{KafkaMessages, keys("f", "!"), FilterNotEqual, "Filter: not this value"},
+		Binding{KafkaMessages, keys("f", "s"), FilterContains, "Filter: contains this value"},
+		Binding{KafkaMessages, keys("f", "~"), FilterContains, "Filter: contains this value"},
+		Binding{KafkaMessages, keys("f", "x"), FilterClear, "Clear the filter"},
+		Binding{KafkaMessages, keys("t"), Seek, "Jump to an offset, a time or a partition"},
+		Binding{KafkaMessages, keys("T"), LiveTail, "Live tail: on / pause"},
+		Binding{KafkaMessages, keys("c"), ToggleHeaders, "Show / hide the headers column"},
+		Binding{KafkaMessages, keys("g", "d"), OpenCellKey, "Back to the group this view came from"},
+		Binding{KafkaMessages, keys(LeaderToken, "v"), ExternalEdit, "Open the value in $EDITOR (read-only)"},
+		Binding{KafkaGroup, keys("g", "d"), OpenCellKey, "Jump to the message this group is stuck on"},
+		Binding{KafkaGroup, keys("R"), ResetOffsets, "Reset offsets…"},
+		Binding{KafkaServer, keys("enter"), Open, "Open the topic's partitions"},
+	)
+	b = append(b, gridBindings(KafkaProduceResults)...)
+	b = append(b,
+		Binding{KafkaProduceResults, keys("M"), ToggleMessages, "Toggle messages"},
+		Binding{KafkaProduceResults, keys("ctrl+k"), FocusEditor, "Focus editor"},
+		Binding{KafkaProduceResults, keys("ctrl+j"), FocusEditor, "Focus editor (wraps)"},
+	)
 
 	b = append(b, vertical(Import)...)
 	b = append(b,

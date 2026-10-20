@@ -1,5 +1,7 @@
 package keymap
 
+import "slices"
+
 // Kind is the kind of connection the UI is working on. Help and which-key
 // list only the bindings that make sense on it; keys still resolve either
 // way, and the actions refuse what does not apply.
@@ -10,61 +12,78 @@ const (
 	KindAny Kind = iota
 	KindSQL
 	KindRedis
+	KindKafka
 )
 
-// kinds marks, per context, the actions that belong to one kind only.
-var kinds = map[Context]map[Action]Kind{
+// sql, redis and kafka are the kind sets of kinds.
+var (
+	sql        = []Kind{KindSQL}
+	redis      = []Kind{KindRedis}
+	kafka      = []Kind{KindKafka}
+	redisKafka = []Kind{KindRedis, KindKafka}
+	sqlRedis   = []Kind{KindSQL, KindRedis}
+)
+
+// kinds marks, per context, the actions that belong to some kinds only.
+var kinds = map[Context]map[Action][]Kind{
 	Global: {
-		OpenStructure:     KindSQL,
-		OpenFullStructure: KindSQL,
-		CopyDDL:           KindSQL,
-		ToggleTx:          KindSQL,
-		CopyAs("sql"):     KindSQL,
-		ExportAs("sql"):   KindSQL,
-		OpenKey:           KindRedis,
-		Favorites:         KindRedis,
+		OpenStructure:     sql,
+		OpenFullStructure: sql,
+		CopyDDL:           sql,
+		ToggleTx:          sql,
+		CopyAs("sql"):     sql,
+		ExportAs("sql"):   sql,
+		OpenKey:           redis,
+		Favorites:         redis,
 	},
 	Tree: {
-		TruncateTable:  KindSQL,
-		MarkCompare:    KindSQL,
-		Compare:        KindSQL,
-		ImportData:     KindSQL,
-		YankQualified:  KindSQL,
-		CopyDDL:        KindSQL,
-		NewKey:         KindRedis,
-		ToggleFavorite: KindRedis,
-		BigKeys:        KindRedis,
-		FilterPrompt:   KindRedis,
-		FilterClear:    KindRedis,
+		TruncateTable:  sql,
+		MarkCompare:    sql,
+		Compare:        sql,
+		ImportData:     sql,
+		YankQualified:  sql,
+		CopyDDL:        sql,
+		RenameTable:    sqlRedis,
+		NewKey:         redisKafka,
+		ToggleFavorite: redis,
+		BigKeys:        redis,
+		FilterPrompt:   redisKafka,
+		FilterClear:    redisKafka,
+		ToggleInternal: kafka,
+		SortGroups:     kafka,
 	},
-	Grid:      {CopyDDL: KindSQL, CopyAs("sql"): KindSQL},
-	Results:   {CopyDDL: KindSQL, CopyAs("sql"): KindSQL},
-	Structure: {CopyDDL: KindSQL},
+	Grid:      {CopyDDL: sql, CopyAs("sql"): sql},
+	Results:   {CopyDDL: sql, CopyAs("sql"): sql},
+	Structure: {CopyDDL: sql},
 }
 
-// kindDescs replaces the description of a binding shared by both kinds,
-// which otherwise reads for both at once.
-var kindDescs = map[Context]map[Action][2]string{ // [SQL, Redis]
+// kindDescs replaces the description of a binding shared by several
+// kinds, which otherwise reads for all of them at once.
+var kindDescs = map[Context]map[Action][3]string{ // [SQL, Redis, Kafka]
 	Global: {
-		History: {"SQL history", "Command history"},
+		History:     {"SQL history", "Command history", "SQL and command history"},
+		OpenConsole: {"Open console", "Open console", "Producer console for the topic"},
 	},
 	Tree: {
-		Open:        {"Open: table data, a column or index in the structure, a foreign key's table", "Open the key"},
-		EditNode:    {"Edit connection / modify table", "Edit connection"},
-		DeleteNode:  {"Delete connection / drop table or view", "Delete connection / delete Redis keys"},
-		RenameTable: {"Rename table or view", "Rename Redis key"},
+		Open:         {"Open: table data, a column or index in the structure, a foreign key's table", "Open the key", "Open the topic / group"},
+		EditNode:     {"Edit connection / modify table", "Edit connection", "Edit connection"},
+		DeleteNode:   {"Delete connection / drop table or view", "Delete connection / delete Redis keys", "Delete connection / delete topic"},
+		RenameTable:  {"Rename table or view", "Rename Redis key", ""},
+		NewKey:       {"", "New Redis key", "New topic"},
+		FilterPrompt: {"", "Filter Redis keys (pattern)", "Filter topics / groups by name"},
+		FilterClear:  {"", "Clear the Redis key filter", "Clear the topic / group filter"},
 	},
 }
 
 // shows reports whether b is listed on kind.
 func (b Binding) shows(kind Kind) bool {
-	k := kinds[b.Context][b.Action]
-	return kind == KindAny || k == KindAny || k == kind
+	ks := kinds[b.Context][b.Action]
+	return kind == KindAny || ks == nil || slices.Contains(ks, kind)
 }
 
 // descFor is b's description on kind.
 func (b Binding) descFor(kind Kind) string {
-	if d, ok := kindDescs[b.Context][b.Action]; ok && kind != KindAny {
+	if d, ok := kindDescs[b.Context][b.Action]; ok && kind != KindAny && d[kind-KindSQL] != "" {
 		return d[kind-KindSQL]
 	}
 	return b.Desc
