@@ -242,17 +242,25 @@ func (r *ResetOffsets) View(width, height int) string {
 	case !r.confirming:
 		lines = append(lines, theme.Muted.Render("tab scope / to · ←→ scope · enter review · esc cancel"))
 	case kmsgx.ConfirmFor(kmsgx.OpResetOffsets, r.prod) == kmsgx.ConfirmTypeName:
-		lines = append(lines, fmt.Sprintf("Reset %d partitions? Type %s to confirm:", len(r.rows), theme.Title.Render(textutil.Sanitize(r.group))),
+		lines = append(lines, fmt.Sprintf("Reset %s? Type %s to confirm:", partitions(len(r.rows)), theme.Title.Render(textutil.Sanitize(r.group))),
 			"> "+r.name.View(w-4))
 		if r.wrong {
 			lines = append(lines, theme.Error.Render("does not match"))
 		}
 		lines = append(lines, theme.Muted.Render("enter confirm · esc back"))
 	default:
-		lines = append(lines, fmt.Sprintf("Reset %d partitions? y confirm · n back · esc back", len(r.rows)))
+		lines = append(lines, fmt.Sprintf("Reset %s? y confirm · n back · esc back", partitions(len(r.rows))))
 	}
 	h := min(len(lines)+2, max(height-2, 3))
 	return theme.Box("Reset offsets · group "+textutil.Sanitize(r.group), strings.Join(lines, "\n"), w, h, true)
+}
+
+// partitions is "1 partition" or "3 partitions".
+func partitions(n int) string {
+	if n == 1 {
+		return "1 partition"
+	}
+	return fmt.Sprintf("%d partitions", n)
 }
 
 // digits is n with thousands separators.

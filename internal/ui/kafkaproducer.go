@@ -123,7 +123,8 @@ type producerTab struct {
 func newProducerTab(id int, b Backend, st Store, conn, topic string, s config.Settings, tm timings) *producerTab {
 	t := &producerTab{
 		id: id, backend: b, store: st, conn: conn, topic: topic, timings: tm, editorCmd: s.EditorCommand(os.Getenv),
-		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), keys: keymap.Default(),
+		// a result line is wider than a data cell
+		editor: editor.New(), grid: grid.New(nil, max(s.MaxColumnWidth, 120)), keys: keymap.Default(),
 	}
 	t.editor.EnterInsert()
 	return t

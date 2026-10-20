@@ -132,3 +132,11 @@ func TestResetNeverCommittedNext(t *testing.T) {
 		t.Fatal("an error keeps the dialog")
 	}
 }
+
+func TestResetDialogConfirmWording(t *testing.T) {
+	r := newReset(kafka.TP{Topic: "orders", Partition: 1}, 0, true)
+	send(t, r, "enter")
+	if v := view(r); !strings.Contains(v, "Reset 1 partition? Type order-svc") {
+		t.Fatalf("view:\n%s", v)
+	}
+}
