@@ -213,8 +213,8 @@ sqlvim --list-workspaces
 | `Ctrl-j` / `Ctrl-k` | 控制台：切到结果 / 编辑器；`M` 切换消息日志 |
 | `<Space>v` | 在 `$EDITOR` 中编辑控制台内容 |
 | `<Space>h` | SQL 历史 |
-| `<Space>y t/c/j/m/i` | 复制结果为 TSV / CSV / JSON / Markdown / INSERT |
-| `<Space>yd` | 复制光标所在表的 DDL（树、数据 tab 或结构 tab）；在函数定义弹窗里按 `y` 复制其定义 |
+| `<Space>y t/c/j/m/i` | 复制结果为 TSV / CSV / JSON / Markdown / INSERT；在结果表格里也可直接按 `y t/c/j/m/i` |
+| `<Space>yd` | 复制光标所在表的 DDL（树、数据 tab 或结构 tab，这些地方也可直接按 `yd`）；在函数定义弹窗里按 `y` 复制其定义 |
 | `<Space>x c/j/s/x` | 导出结果为 CSV / JSON / SQL / xlsx |
 | `I` | 树：把 CSV / TSV / xlsx 文件导入到这张表；在库或 schema 上则新建表 |
 | `x` / `a` `A` / `i` / `t` | Import tab：导入或跳过一列 / 全选 / 全不选 / 选目标列（新表：改列名）/ 新表：改类型；`[` `]` 切换区域，`<Space>w` 校验并导入 |

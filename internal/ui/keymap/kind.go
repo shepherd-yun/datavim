@@ -30,12 +30,16 @@ var kinds = map[Context]map[Action]Kind{
 		Compare:        KindSQL,
 		ImportData:     KindSQL,
 		YankQualified:  KindSQL,
+		CopyDDL:        KindSQL,
 		NewKey:         KindRedis,
 		ToggleFavorite: KindRedis,
 		BigKeys:        KindRedis,
 		FilterPrompt:   KindRedis,
 		FilterClear:    KindRedis,
 	},
+	Grid:      {CopyDDL: KindSQL, CopyAs("sql"): KindSQL},
+	Results:   {CopyDDL: KindSQL, CopyAs("sql"): KindSQL},
+	Structure: {CopyDDL: KindSQL},
 }
 
 // kindDescs replaces the description of a binding shared by both kinds,

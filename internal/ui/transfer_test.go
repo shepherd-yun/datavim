@@ -37,6 +37,20 @@ func TestCopyAsFromDataTab(t *testing.T) {
 	}
 }
 
+func TestYCopiesAsFromDataTab(t *testing.T) {
+	m, _ := newTestModel(t)
+	clip := captureClipboard(t)
+	openUsers(t, m)
+	press(t, m, "y", "c")
+	if *clip != "id,name\n1,user1\n2,user2\n" {
+		t.Fatalf("clipboard = %q", *clip)
+	}
+	press(t, m, "y", "d")
+	if *clip != usersDDL {
+		t.Fatalf("ddl = %q", *clip)
+	}
+}
+
 func TestYankCellAndRow(t *testing.T) {
 	m, _ := newTestModel(t)
 	clip := captureClipboard(t)

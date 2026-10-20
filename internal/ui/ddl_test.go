@@ -25,6 +25,15 @@ func TestCopyDDLFromTheTree(t *testing.T) {
 	}
 }
 
+func TestYDCopiesDDLFromTheTree(t *testing.T) {
+	m, _ := newTestModel(t)
+	clip := captureClipboard(t)
+	press(t, m, "l", "j", "l", "j", "y", "d") // cursor on users
+	if *clip != usersDDL {
+		t.Fatalf("clipboard = %q", *clip)
+	}
+}
+
 func TestCopyDDLFromTabs(t *testing.T) {
 	m, _ := newTestModel(t)
 	clip := captureClipboard(t)

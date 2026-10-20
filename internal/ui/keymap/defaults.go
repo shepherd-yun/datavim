@@ -34,13 +34,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(LeaderToken, "i"), ServerInfo, "Server status: load, sessions, locks, …"},
 		{Global, keys(LeaderToken, "F"), Favorites, "Starred Redis keys"},
 	}
-	for _, c := range []struct{ key, format, desc string }{
-		{"t", "tsv", "Copy as TSV"},
-		{"c", "csv", "Copy as CSV"},
-		{"j", "json", "Copy as JSON"},
-		{"m", "md", "Copy as Markdown"},
-		{"i", "sql", "Copy as INSERT"},
-	} {
+	for _, c := range copyFormats {
 		b = append(b, Binding{Global, keys(LeaderToken, "y", c.key), CopyAs(c.format), c.desc})
 	}
 	for _, e := range []struct{ key, format, desc string }{
@@ -83,6 +77,7 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("I"), ImportData, "Import data from a file (database or schema: into a new table)"},
 		Binding{Tree, keys("y", "y"), YankName, "Copy name"},
 		Binding{Tree, keys("y", "q"), YankQualified, "Copy qualified name (db.table)"},
+		Binding{Tree, keys("y", "d"), CopyDDL, "Copy DDL"},
 		Binding{Tree, keys("F"), FilterPrompt, "Filter Redis keys (pattern)"},
 		Binding{Tree, keys("f", "x"), FilterClear, "Clear the Redis key filter"},
 		Binding{Tree, keys("z", "o"), FoldOpen, "Expand"},
@@ -134,6 +129,7 @@ func DefaultBindings() []Binding {
 		Binding{Structure, keys("l"), Right, "Next field"},
 		Binding{Structure, keys("right"), Right, "Next field"},
 		Binding{Structure, keys("y", "y"), YankName, "Copy the name under the cursor (DDL: all of it)"},
+		Binding{Structure, keys("y", "d"), CopyDDL, "Copy DDL"},
 		Binding{Structure, keys("e"), ModifyTable, "Modify the table / stop modifying"},
 		Binding{Structure, keys("i"), EditCell, "Edit the field"},
 		Binding{Structure, keys("enter"), EditCell, "Edit the field"},
@@ -252,10 +248,23 @@ func search(ctx Context) []Binding {
 	}
 }
 
+// copyFormats are the result formats under <leader>y, and under y in the
+// grids.
+var copyFormats = []struct{ key, format, desc string }{
+	{"t", "tsv", "Copy as TSV"},
+	{"c", "csv", "Copy as CSV"},
+	{"j", "json", "Copy as JSON"},
+	{"m", "md", "Copy as Markdown"},
+	{"i", "sql", "Copy as INSERT"},
+}
+
 // gridBindings are shared by the table-data grid and console results.
 func gridBindings(ctx Context) []Binding {
 	b := vertical(ctx)
 	b = append(b, search(ctx)...)
+	for _, c := range copyFormats {
+		b = append(b, Binding{ctx, keys("y", c.key), CopyAs(c.format), c.desc})
+	}
 	return append(b,
 		Binding{ctx, keys("h"), Left, "Move left"},
 		Binding{ctx, keys("left"), Left, "Move left"},
@@ -269,6 +278,7 @@ func gridBindings(ctx Context) []Binding {
 		Binding{ctx, keys("z", "L"), ScrollRight, "Scroll right one column"},
 		Binding{ctx, keys("y", "l"), YankCell, "Copy cell"},
 		Binding{ctx, keys("y", "y"), YankRow, "Copy row"},
+		Binding{ctx, keys("y", "d"), CopyDDL, "Copy DDL"},
 		Binding{ctx, keys("K"), CellDetail, "Show cell value"},
 	)
 }

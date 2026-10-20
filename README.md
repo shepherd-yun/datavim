@@ -258,8 +258,8 @@ picks the workspace by directory.
 | `Ctrl-j` / `Ctrl-k` | Console: results / editor; `M` toggles the message log |
 | `<Space>v` | Edit the console in `$EDITOR` |
 | `<Space>h` | SQL history |
-| `<Space>y t/c/j/m/i` | Copy result as TSV / CSV / JSON / Markdown / INSERT |
-| `<Space>yd` | Copy the DDL of the table under the cursor (tree, data or structure tab); `y` in a routine's definition copies it |
+| `<Space>y t/c/j/m/i` | Copy result as TSV / CSV / JSON / Markdown / INSERT; in a grid `y t/c/j/m/i` too |
+| `<Space>yd` | Copy the DDL of the table under the cursor (tree, data or structure tab; there `yd` too); `y` in a routine's definition copies it |
 | `<Space>x c/j/s/x` | Export result as CSV / JSON / SQL / xlsx |
 | `I` | Tree: import a CSV / TSV / xlsx file into the table; on a database or schema, into a new table |
 | `x` / `a` `A` / `i` / `t` | Import tab: import or skip a column / all / none / pick the target column (new table: rename) / new table: column type; `[` `]` switch sections, `<Space>w` checks and imports |

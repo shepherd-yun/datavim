@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- `y` in a grid also copies the result: `yt` / `yc` / `yj` / `ym` / `yi` as TSV / CSV / JSON /
+  Markdown / INSERT, like `<Space>y…`. `yd` copies the DDL in the tree, a grid and the structure
+  tab, so the `y` popup lists every copy.
+
 ## [2.2.0] - 2026-10-19
 
 ### Added

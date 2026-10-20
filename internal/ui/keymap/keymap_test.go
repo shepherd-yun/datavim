@@ -263,6 +263,25 @@ func TestDDLAndStructureBindings(t *testing.T) {
 	}
 }
 
+func TestYCopyBindings(t *testing.T) {
+	k := Default()
+	for _, ctx := range []Context{Tree, Grid, Results, Structure} {
+		if a, res := k.Resolve(ctx, []string{"y", "d"}); res != Matched || a != CopyDDL {
+			t.Errorf("%s: yd = %v %v, want ddl.copy", ctx, a, res)
+		}
+	}
+	for _, ctx := range []Context{Grid, Results} {
+		for key, want := range map[string]Action{
+			"t": CopyAs("tsv"), "c": CopyAs("csv"), "j": CopyAs("json"),
+			"m": CopyAs("md"), "i": CopyAs("sql"),
+		} {
+			if a, res := k.Resolve(ctx, []string{"y", key}); res != Matched || a != want {
+				t.Errorf("%s: y%s = %v %v, want %s", ctx, key, a, res, want)
+			}
+		}
+	}
+}
+
 func TestPopupKeys(t *testing.T) {
 	k := Default()
 	if !k.Triggers(Popup, OpenFullStructure, "ctrl+o") {
