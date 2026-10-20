@@ -120,6 +120,10 @@ func Open(ctx context.Context, cfg Config) (Client, error) {
 	}
 	if err != nil {
 		kcl.Close()
+		if errors.Is(err, kerr.UnsupportedSaslMechanism) {
+			// not a wrong password: asking for it again would never help
+			return nil, fmt.Errorf("kafka sasl %q is not enabled on the brokers: %w", cfg.SASL, err)
+		}
 		return nil, wrap(ctx, err, "")
 	}
 	c.versions = vs
@@ -284,8 +288,7 @@ func wrap(ctx context.Context, err error, what string) error {
 		return err
 	}
 	switch {
-	case errors.Is(err, kerr.SaslAuthenticationFailed), errors.Is(err, kerr.IllegalSaslState),
-		errors.Is(err, kerr.UnsupportedSaslMechanism):
+	case errors.Is(err, kerr.SaslAuthenticationFailed):
 		return fmt.Errorf("%w: %w", ErrAuthFailed, err)
 	case errors.Is(err, kerr.TopicAuthorizationFailed), errors.Is(err, kerr.GroupAuthorizationFailed),
 		errors.Is(err, kerr.ClusterAuthorizationFailed), errors.Is(err, kerr.TransactionalIDAuthorizationFailed),

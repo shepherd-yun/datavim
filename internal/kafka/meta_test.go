@@ -215,6 +215,24 @@ func TestSASLScram(t *testing.T) {
 	}
 }
 
+func TestSASLMechanismNotEnabled(t *testing.T) {
+	c := newCluster(t, kfake.EnableSASL(), kfake.Superuser("SCRAM-SHA-256", "app", "s3cret-pw"))
+	// kfake drops the connection; a real broker answers the handshake
+	c.ControlKey(int16(kmsg.SASLHandshake), func(r kmsg.Request) (kmsg.Response, error, bool) {
+		c.KeepControl()
+		resp := r.ResponseKind().(*kmsg.SASLHandshakeResponse)
+		resp.SetVersion(r.GetVersion())
+		resp.ErrorCode = kerr.UnsupportedSaslMechanism.Code
+		resp.SupportedMechanisms = []string{"SCRAM-SHA-256"}
+		return resp, nil, true
+	})
+	_, err := Open(ctx(t), Config{Brokers: c.ListenAddrs(), SASL: "plain", User: "app", Password: "s3cret-pw"})
+	// not a wrong password: asking for it again would never help
+	if err == nil || errors.Is(err, ErrAuthFailed) || !strings.Contains(err.Error(), `sasl "plain"`) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestSupports(t *testing.T) {
 	cl := open(t, newCluster(t))
 	if !cl.Supports("offsets_by_time") || !cl.Supports("delete_records") {
