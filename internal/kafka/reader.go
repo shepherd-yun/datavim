@@ -52,6 +52,7 @@ type reader struct {
 	rc     ReaderConfig
 	mu     sync.Mutex
 	tail   *kgo.Client // the live tail's client, nil when not tailing
+	bounds *kgo.Client // lists partition bounds; kept for the next Range
 	closed bool
 }
 
@@ -59,17 +60,16 @@ type reader struct {
 // would never be stopped.
 var errReaderClosed = errors.New("kafka: reader closed")
 
-// OpenReader checks cfg once (an ApiVersions round) and returns a Reader.
-// Every Range and Tail uses its own kgo client that only consumes the
-// partitions it was given: there is no buffered data from an earlier read
-// to mix in.
+// OpenReader checks cfg once (an ApiVersions round) and returns a Reader;
+// the client that checked stays to list partition bounds. Every Range and
+// Tail consumes with its own kgo client that only reads the partitions it
+// was given: there is no buffered data from an earlier read to mix in.
 func OpenReader(ctx context.Context, cfg Config, rc ReaderConfig) (Reader, error) {
 	c, err := Open(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	c.Close()
-	return &reader{cfg: cfg, rc: rc}, nil
+	return &reader{cfg: cfg, rc: rc, bounds: c.(*client).kcl}, nil
 }
 
 // consumer is a kgo client reading exactly the given offsets: no group,
@@ -110,12 +110,16 @@ func (r *reader) Range(ctx context.Context, topic string, ranges map[int32]Range
 	if len(ranges) == 0 {
 		return nil, nil
 	}
-	kcl, err := r.consumer(topic, nil)
-	if err != nil {
-		return nil, err
+	if r.bounds == nil {
+		opts, err := clientOpts(r.cfg)
+		if err != nil {
+			return nil, err
+		}
+		if r.bounds, err = kgo.NewClient(opts...); err != nil {
+			return nil, err
+		}
 	}
-	starts, ends, err := partitionBounds(ctx, kadm.NewClient(kcl), topic)
-	kcl.Close()
+	starts, ends, err := partitionBounds(ctx, kadm.NewClient(r.bounds), topic)
 	if err != nil {
 		return nil, wrap(ctx, err, what)
 	}
@@ -138,7 +142,7 @@ func (r *reader) Range(ctx context.Context, topic string, ranges map[int32]Range
 	if len(want) == 0 {
 		return nil, nil
 	}
-	kcl, err = r.consumer(topic, from)
+	kcl, err := r.consumer(topic, from)
 	if err != nil {
 		return nil, err
 	}
@@ -268,6 +272,10 @@ func (r *reader) Close() error {
 	defer r.mu.Unlock()
 	r.closed = true
 	r.stopTail()
+	if r.bounds != nil {
+		r.bounds.Close()
+		r.bounds = nil
+	}
 	return nil
 }
 

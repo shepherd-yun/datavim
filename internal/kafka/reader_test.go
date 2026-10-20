@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -190,5 +192,37 @@ func TestClosedReaderRefuses(t *testing.T) {
 	}
 	if _, err := r.Range(ctx(t), "orders", map[int32]Range{0: {0, 10}}); !errors.Is(err, errReaderClosed) {
 		t.Fatalf("Range after Close: %v", err)
+	}
+}
+
+func TestRangeReusesBoundsClient(t *testing.T) {
+	c := newCluster(t)
+	fill(t, c, "orders", 1, 10)
+	var dials atomic.Int32
+	cfg := Config{Brokers: c.ListenAddrs(), Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		dials.Add(1)
+		var d net.Dialer
+		return d.DialContext(ctx, network, addr)
+	}}
+	r, err := OpenReader(ctx(t), cfg, ReaderConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	read := func() int32 {
+		t.Helper()
+		before := dials.Load()
+		if _, err := r.Range(ctx(t), "orders", map[int32]Range{0: {0, 10}}); err != nil {
+			t.Fatal(err)
+		}
+		return dials.Load() - before
+	}
+	// each read connects its consumer (a seed broker, then the brokers),
+	// but the bounds client stays connected
+	most := int32(len(c.ListenAddrs()) + 1)
+	for i := range 2 {
+		if n := read(); n > most {
+			t.Fatalf("read %d dialed %d times, want at most %d", i+1, n, most)
+		}
 	}
 }
