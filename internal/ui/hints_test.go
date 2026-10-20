@@ -26,7 +26,7 @@ func TestHintsFollowCustomLeader(t *testing.T) {
 		t.Fatalf("screen still mentions <space>:\n%s", s)
 	}
 	// welcomeText pads keys to 10 columns plus a space, as "<space>c   " did.
-	for _, want := range []string{",c         console (SQL or Redis)", ", leader"} {
+	for _, want := range []string{",c         console (SQL, Redis or a Kafka producer)", ", leader"} {
 		if !strings.Contains(s, want) {
 			t.Fatalf("screen lacks %q:\n%s", want, s)
 		}

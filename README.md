@@ -1,6 +1,6 @@
 # sqlvim
 
-A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows. It also browses and queries Redis.
+A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows. It also browses and queries Redis and Kafka.
 
 [中文说明](README.zh-CN.md)
 
@@ -13,6 +13,8 @@ A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys
 - `<Space><Space>` searches every table, view, column and routine; `<Space>f` reopens recent tabs.
 - Copy and export results (TSV, CSV, JSON, Markdown, INSERT, xlsx), SQL history.
 - Import CSV, TSV and xlsx files into a table, or into a new table inferred from the file.
+- Kafka: topics, consumer groups by lag, messages with jumps, filters and live tail, offset resets
+  and a producer console.
 - SSH tunnels (agent, keys, ProxyJump), production safeguards, manual transactions.
 - Your own keys (`keymap.toml`) and colors (`[theme]`).
 
@@ -47,7 +49,7 @@ export_dir       = "~/Downloads"
 icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "plain"
 ```
 
-The tree draws [Nerd Font](https://www.nerdfonts.com) icons (v3): the MySQL / PostgreSQL / Redis logo
+The tree draws [Nerd Font](https://www.nerdfonts.com) icons (v3): the MySQL / PostgreSQL / Redis / Kafka logo
 before each connection, and database, schema, table, folder and key icons below it. Without a
 Nerd Font they show as boxes: set `icons = "plain"`.
 
@@ -128,6 +130,58 @@ value (the loaded rows or the whole key; binary values are written as `\xNN`). `
 folder finds the biggest keys of each type: it walks every key that matches the db's filter or
 the folder (in batches of 1,000, pausing between them, `Ctrl-c` stops it), so on a production
 instance run it at a quiet time.
+
+**Kafka** (Apache Kafka 2.8 to 4.x, Confluent, MSK, Redpanda): `driver = "kafka"`, `host` is a
+comma-separated list of bootstrap brokers (`b1:9092,b2:9092`; port 9092 by default) and `database`
+is not used:
+
+```toml
+[[connection]]
+name   = "events"
+driver = "kafka"
+host   = "b1.internal:9092,b2.internal:9092"
+user   = "reader"
+env    = "prod"
+params = { sasl = "scram-sha-512", tls = "true" }
+```
+
+`params`: `sasl` (`plain`, `scram-sha-256` or `scram-sha-512`; the password is asked for and
+kept in the keychain like any other), `tls = "true"`, `tls_skip_verify`, `tls_ca`, `tls_cert` and
+`tls_key` (PEM files, for mTLS), `client_id` (default `sqlvim`) and `show_internal = "true"`. The
+form has `SASL` and `TLS` fields. Through an SSH tunnel every broker connection goes through the
+bastion, including the brokers' advertised addresses, so the bastion must reach them. Expanding
+the connection lists Brokers, Topics (folders by the name before the first `.` `-` `_`; `.`
+shows the internal ones) and Consumer Groups, sorted by lag (`s` sorts by name), lagging groups
+in red; `F` / `fx` filter topics or groups by name.
+
+`Enter` on a topic opens its tab, `[` / `]` switch between Messages, Partitions, Config and
+Consumers. Messages shows the newest 200 messages of all partitions by time (one partition: by
+offset); moving past the first or last row loads 200 more per partition, and a view keeps at most
+10,000. `t` jumps: `latest`, `earliest`, `-500` (the last 500 of each partition), `p1:1180002`,
+an offset of the current partition, `p1,p3` (only those partitions) or `@2026-10-20 09:12` /
+`@09:12` / `@-15m`, with a preview as you type; an offset retention already deleted is said so
+and offers the earliest one. `T` starts and pauses live tail (it stops while the tab is hidden).
+`K` shows a message — key, headers and the value in auto / text / JSON / hex / base64 (`v`,
+values over 1 MB keep their first 1 MB) — `yy` copies it as JSON (binary as base64), `yl` copies a
+cell in full, `c` shows the headers column and `<Space>v` opens the value in `$EDITOR`. `F` filters
+with `key = ord-1`, `value ~ sku`, `header.source = checkout`, `value.user.id = 42`, `partition`,
+`offset`, `ts > 09:12`, `size > 1000`, joined with `and` / `or`; `ff` `f!` `fs` add the cell
+under the cursor, `fx` clears; with a filter `n` / `N` search on past what is loaded (up to
+100,000 messages, `Ctrl-c` stops). `<Space>xl` exports the messages as JSON Lines.
+
+`Enter` on a group opens its lag (refreshed every 5 seconds while shown; `↑` marks a lag that
+grew, `*` a partition never committed) and members. `gd` on a lag row opens the topic at the
+group's committed offset — the message it is stuck on — and `gd` there goes back. `R` resets
+offsets: this partition, the topic or every topic, to `next` (skip the stuck message),
+`earliest`, `latest`, an offset, `@time` or `+N` / `-N`, with a preview of every partition. It
+works only on an empty group (stop the consumers first) and gives up if the group changed since
+the preview. `<Space>c` on a topic opens a producer console: each message is optional `key:`,
+`partition:` and `header: name=value` lines, then the body; `key: null` is a null key, a body of
+`null` a tombstone, and `===` separates messages. `Enter` sends the message under the cursor (or
+the selection), `R` all of them, and the result shows each partition and offset. `o` on Topics
+creates a topic, `dd` on a topic deletes it, and `<Space>i` shows the cluster status (brokers,
+under-replicated partitions).
+
 
 ## Editing table data
 
@@ -290,7 +344,12 @@ picks the workspace by directory.
 | `:set noreadonly` / `:set readonly` | Unlock / lock the connection for this session |
 | `:q!` / `:qa!` | Close / quit without asking about open transactions |
 | `<Space><Space>` | Search tables, views, columns, routines, schemas and databases in every connection, loading the metadata of those not opened yet (`db.table.column`, `table.column` or any part of it narrows by parent, fuzzily, and opening a column puts the cursor on it; `@` searches only the connection in context; `Enter` opens, `Ctrl-o` opens the structure). `Tab` / `Shift-Tab` switch to the lines of the open consoles (`Enter` jumps to the line) or the SQL history (an empty query lists the recent statements, `Enter` inserts one as `<Space>h` does) |
-| `<Space>f` | Recently opened tables, structures, consoles, files and Redis keys |
+| `<Space>f` | Recently opened tables, structures, consoles, files, Redis keys, Kafka topics and groups |
+| `.` / `s` | Tree, on a Kafka connection: show / hide internal topics / sort consumer groups by lag or name |
+| `t` / `T` / `c` | Kafka messages: jump to an offset, time or partition / live tail on, pause / headers column |
+| `g d` | Kafka group tab: open the message the group is stuck on (in the messages, back to the group) |
+| `R` | Kafka group tab: reset offsets |
+| `<Space>x l` | Kafka messages: export as JSON Lines |
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
 | `v` | Redis key tab: show a string as auto / text / JSON / hex |
@@ -400,6 +459,12 @@ with a syntax error, the cursor jumps to where the server says the error is.
   runs, so `MULTI` does not get around these rules. Edits, TTL changes, renames and deletes from
   the key tab and the tree go through the same checks. For a production instance also use an
   ACL user that can only read (`+@read`).
+- Kafka: browsing reads partitions directly and never joins a consumer group, commits offsets or
+  creates a topic (sending to a missing topic is an error). Read-only connections refuse sending,
+  creating and deleting topics and resetting offsets; on prod writes ask for `y` and resetting
+  offsets wants the group name typed; deleting a topic wants its name typed on every connection.
+  Offsets are reset only on an empty group, and not at all if the group changed since the preview.
+  For a production cluster also use an account whose ACLs only allow reading.
 - `env = "prod"` frames the tab area in red and shows `[PROD]` in the status bar; every
   write or DDL statement on a prod connection asks for `y` first.
 - `UPDATE` / `DELETE` without `WHERE` asks you to type the table name before it runs.

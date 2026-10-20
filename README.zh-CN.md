@@ -1,6 +1,6 @@
 # sqlvim
 
-一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle，也能浏览和查询 Redis。
+一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle，也能浏览和查询 Redis 和 Kafka。
 
 [English](README.md)
 
@@ -11,6 +11,7 @@
 - `<Space><Space>` 搜索所有表、视图、列和函数；`<Space>f` 重新打开最近的 tab。
 - 复制与导出结果（TSV、CSV、JSON、Markdown、INSERT、xlsx），SQL 历史。
 - 把 CSV、TSV、xlsx 文件导入到表，或从文件推断结构新建表。
+- Kafka：topic、按 lag 排序的 consumer group，可跳转、过滤和 live tail 的消息浏览，重置 offset，producer console。
 - SSH 隧道（agent、密钥、ProxyJump），生产环境保护，手动事务。
 - 自定义按键（`keymap.toml`）与颜色（`[theme]`）。
 
@@ -45,7 +46,7 @@ export_dir       = "~/Downloads"
 icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "plain"
 ```
 
-树使用 [Nerd Font](https://www.nerdfonts.com)（v3）图标：连接前显示 MySQL / PostgreSQL / Redis 的标志，
+树使用 [Nerd Font](https://www.nerdfonts.com)（v3）图标：连接前显示 MySQL / PostgreSQL / Redis / Kafka 的标志，
 下面的库、schema、表、文件夹、键也各有图标。终端没有 Nerd Font 时会显示成方框，设置 `icons = "plain"` 即可。
 
 还没有配置？启动 sqlvim 后按 `<space>n` 添加连接。
@@ -99,6 +100,46 @@ Redis 不会回滚：`EXEC` 里某条命令失败时，它前后的命令仍然�
 `<Space>F` 列出收藏的 key，打开过的 key 会出现在 `<Space>f` 里。key 详情页上 `<Space>x…` 导出值（已加载的行或整个 key；
 二进制值写成 `\xNN`）。在 db 或文件夹上按 `B` 找出每种类型最大的 key：它会遍历匹配 db 过滤条件或文件夹的所有 key
 （每批 1,000 个，批与批之间会停顿，`Ctrl-c` 停止），所以生产实例上请在低峰时运行。
+
+**Kafka**（Apache Kafka 2.8 到 4.x、Confluent、MSK、Redpanda）：`driver = "kafka"`，`host` 是逗号分隔的
+bootstrap broker 列表（`b1:9092,b2:9092`，默认端口 9092），不用 `database`：
+
+```toml
+[[connection]]
+name   = "events"
+driver = "kafka"
+host   = "b1.internal:9092,b2.internal:9092"
+user   = "reader"
+env    = "prod"
+params = { sasl = "scram-sha-512", tls = "true" }
+```
+
+`params`：`sasl`（`plain`、`scram-sha-256` 或 `scram-sha-512`；密码和其他连接一样会询问并存进钥匙串）、
+`tls = "true"`、`tls_skip_verify`、`tls_ca`、`tls_cert` 和 `tls_key`（PEM 文件，用于 mTLS）、`client_id`（默认
+`sqlvim`）和 `show_internal = "true"`。连接表单里有 `SASL` 和 `TLS` 两项。走 SSH 隧道时，所有 broker 连接（包括
+broker 返回的 advertised 地址）都经过跳板机，所以跳板机必须能访问这些地址。展开连接后列出 Brokers、Topics（按名字里
+第一个 `.` `-` `_` 之前的前缀分文件夹；`.` 显示内部 topic）和 Consumer Groups，按 lag 从大到小排序（`s` 改为按名字），
+有积压的 group 标红；`F` / `fx` 按名字过滤 topic 或 group。
+
+在 topic 上按 `Enter` 打开标签页，`[` / `]` 在 Messages、Partitions、Config、Consumers 之间切换。Messages 按时间显示所有
+partition 最新的 200 条（只看一个 partition 时按 offset）；光标越过第一行或最后一行时每个 partition 再加载 200 条，一个视图
+最多保留 10,000 条。`t` 跳转：`latest`、`earliest`、`-500`（每个 partition 的最后 500 条）、`p1:1180002`、当前 partition 的
+offset、`p1,p3`（只看这些 partition）或 `@2026-10-20 09:12` / `@09:12` / `@-15m`，输入时显示预览；offset 已被 retention
+删除时会明确提示，并提供跳到 earliest。`T` 开启 / 暂停 live tail（标签页不可见时自动停止）。`K` 查看消息——key、headers
+以及按 auto / text / JSON / hex / base64（`v` 切换）显示的 value（超过 1 MB 的只保留前 1 MB）——`yy` 以 JSON 复制整条
+消息（二进制用 base64），`yl` 复制单元格的完整内容，`c` 显示 headers 列，`<Space>v` 用 `$EDITOR` 打开 value。`F` 过滤：
+`key = ord-1`、`value ~ sku`、`header.source = checkout`、`value.user.id = 42`、`partition`、`offset`、`ts > 09:12`、
+`size > 1000`，用 `and` / `or` 连接；`ff` `f!` `fs` 用光标处的单元格追加条件，`fx` 清除；有过滤时 `n` / `N` 会继续向后
+（向前）查找未加载的消息（最多 100,000 条，`Ctrl-c` 停止）。`<Space>xl` 把消息导出为 JSON Lines。
+
+在 group 上按 `Enter` 打开 lag（显示时每 5 秒刷新；`↑` 表示 lag 变大，`*` 表示从未提交过）和成员。在 lag 的一行上按 `gd`
+打开 topic 并定位到 group 的 committed offset——也就是卡住的那条消息——在那里再按 `gd` 回到 group。`R` 重置 offset：
+范围是这个 partition、这个 topic 或所有 topic，目标是 `next`（跳过卡住的消息）、`earliest`、`latest`、某个 offset、`@时间`
+或 `+N` / `-N`，执行前预览每个 partition。只能在 group 为 Empty 时重置（先停掉消费者），预览之后 group 有变化就放弃。
+在 topic 上按 `<Space>c` 打开 producer console：每条消息由可选的 `key:`、`partition:`、`header: name=value` 行和正文组成；
+`key: null` 表示 key 为 null，正文只有 `null` 表示 tombstone，消息之间用 `===` 分隔。`Enter` 发送光标所在的消息（或选中的
+消息），`R` 发送全部，结果区显示每条的 partition 和 offset。在 Topics 上按 `o` 新建 topic，在 topic 上按 `dd` 删除，
+`<Space>i` 显示集群状态（broker、副本不足的 partition）。
 
 ## 编辑表数据
 
@@ -261,7 +302,12 @@ sqlvim --list-workspaces
 | `:set noreadonly` / `:set readonly` | 本次会话解锁 / 锁定连接 |
 | `:q!` / `:qa!` | 关闭 / 退出，不询问未结束的事务 |
 | `<Space><Space>` | 搜索表、视图、列、函数、schema 和数据库，范围是所有连接，并加载尚未打开的连接的元数据（可以用 `db.table.column`、`table.column` 或其中一段按上级模糊限定，打开列时光标直接落在该列；`@` 开头只搜当前上下文的连接；`Enter` 打开，`Ctrl-o` 打开结构）。`Tab` / `Shift-Tab` 切换到搜索已打开 console 的内容（`Enter` 跳到那一行）或 SQL 历史（查询为空时列出最近的语句，`Enter` 像 `<Space>h` 一样插入语句） |
-| `<Space>f` | 最近打开的表、结构、控制台、文件和 Redis key |
+| `<Space>f` | 最近打开的表、结构、控制台、文件、Redis key、Kafka topic 和 group |
+| `.` / `s` | 树里 Kafka 连接上：显示 / 隐藏内部 topic / consumer group 按 lag 或名字排序 |
+| `t` / `T` / `c` | Kafka 消息：跳到 offset、时间或 partition / 开启、暂停 live tail / headers 列 |
+| `g d` | Kafka group 标签页：打开 group 卡住的那条消息（在消息里按则回到 group） |
+| `R` | Kafka group 标签页：重置 offset |
+| `<Space>x l` | Kafka 消息：导出为 JSON Lines |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |
 
@@ -339,6 +385,10 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
   `CLIENT KILL`、`SHUTDOWN`、`DEBUG` 等）在任何连接上都要确认，prod 上要输入连接名；db 里超过 10,000 个 key 时拒绝 `KEYS`
   （请用 `SCAN` 或树的过滤）。多行一起执行时先检查全部再执行，所以 `MULTI` 绕不过这些规则。
   在详情页和树上做的编辑、TTL、重命名和删除同样要过这些检查。生产实例建议再配一个只读的 ACL 用户（`+@read`）。
+- Kafka：浏览消息时直接读取 partition，从不加入 consumer group、不提交 offset、不创建 topic（发消息到不存在的 topic
+  会报错）。只读连接拒绝发消息、新建和删除 topic、重置 offset；prod 连接上的写操作按 `y` 确认，重置 offset 要输入
+  group 名；删除 topic 在任何连接上都要输入 topic 名。只有 group 为 Empty 时才能重置 offset，预览之后 group 有变化
+  就放弃。生产集群建议使用 ACL 只允许读的账号。
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，

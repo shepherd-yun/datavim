@@ -62,3 +62,11 @@ port     = 6379
 database = "0"             # the default db number
 env      = "prod"
 params   = { separator = ":" }   # groups keys into folders; tls = "true" for TLS
+
+[[connection]]
+name     = "events"
+driver   = "kafka"
+host     = "b1.internal:9092,b2.internal:9092"   # bootstrap brokers; port defaults to 9092
+user     = "reader"        # the SASL user; the password goes to the keychain
+env      = "prod"
+params   = { sasl = "scram-sha-512", tls = "true" }   # also tls_ca, tls_cert, tls_key, client_id, show_internal

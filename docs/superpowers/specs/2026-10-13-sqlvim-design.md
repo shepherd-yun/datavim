@@ -49,6 +49,14 @@ jorgerojas26/lazysql（Go + tview）定位相近，作者用过后体验不佳�
 ## 3. 架构
 
 > Redis 连接不走 `db.Conn`，而是平行的 `internal/rdb`（连接）和 `internal/rcmd`（纯包），见 [Redis 支持设计文档](2026-10-16-redis-design.md) §3。
+> Kafka 连接同样平行：`internal/kafka`（franz-go 的 kgo / kadm 封装）和 `internal/kmsgx`（纯包），`session.Manager` 用包装类型统一拦截所有写方法，见 [Kafka 支持设计文档](2026-10-20-kafka-design.md) §3。
+>
+> ```
+> ui ──→ session ──→ db    ──→ mysql / postgres / sqlserver / oracle
+>   │          ├───→ rdb   ──→ go-redis
+>   │          └───→ kafka ──→ franz-go (kgo / kadm)
+>   └──→ sqlx / rcmd / kmsgx（纯包）
+> ```
 
 ### 3.1 目录结构
 
@@ -195,7 +203,7 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 
 ### 5.3 生产库保护
 
-> Redis 的对应规则见 [Redis 支持设计文档](2026-10-16-redis-design.md) §7。
+> Redis 的对应规则见 [Redis 支持设计文档](2026-10-16-redis-design.md) §7，Kafka 的见 [Kafka 支持设计文档](2026-10-20-kafka-design.md) §8。
 
 由 `sqlx` 对语句分类：读 / 写（DML）/ DDL / 事务控制 / 其他。
 

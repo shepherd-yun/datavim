@@ -6,6 +6,30 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Kafka connections: `driver = "kafka"` with a broker list in `host`, SASL PLAIN / SCRAM-SHA-256 /
+  SCRAM-SHA-512 (`params.sasl`, the password in the keychain), TLS and mTLS (`tls`, `tls_ca`,
+  `tls_cert`, `tls_key`, `tls_skip_verify`) and SSH tunnels that carry every broker connection.
+  The tree lists Brokers, Topics (grouped by name prefix, internal topics behind `.`) and Consumer
+  Groups sorted by lag, lagging ones in red (`s` sorts by name; `F` / `fx` filter by name). A
+  topic tab shows Messages, Partitions, Config and Consumers (`[` / `]`): the newest 200
+  messages, more as the cursor passes the first or last row, `t` jumps to an offset, a time, the
+  tail or some partitions (a deleted offset is said so, never skipped silently), `T` live tail,
+  `F` / `ff` … filter (key, value, headers, JSON paths) and `n` / `N` search past what is loaded,
+  `K` shows a message in auto / text / JSON / hex / base64 (`v`), `yy` copies it as JSON, `c`
+  shows headers and `<Space>xl` exports JSON Lines. A group tab shows lag (refreshed every 5 s)
+  and members; `gd` jumps to the message the group is stuck on and `R` resets offsets after a
+  preview, only while the group is empty and unchanged since the preview. `<Space>c` on a topic
+  opens a producer console (`key:` / `partition:` / `header:` lines, `===` between messages),
+  `o` / `dd` in the tree create and delete topics, and `<Space>i` shows the cluster status.
+  Browsing never joins a group, commits offsets or creates topics; read-only connections refuse
+  every write, prod asks before writes and wants the group name typed to reset offsets, and
+  deleting a topic always wants its name typed.
+
+### Fixed
+- Params set in the new/edit connection form (SQL Server `Encrypt` and `Trust cert`) are now
+  saved to `connections.toml`; they were dropped before.
+
 ## [2.3.0] - 2026-10-20
 
 ### Added
