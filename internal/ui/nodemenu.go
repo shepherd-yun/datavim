@@ -94,15 +94,24 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			{keymap.Refresh, "Refresh"},
 			{keymap.DeleteNode, "Delete connection"},
 		}
-		if isRedis(m.backend, n.Conn) {
+		switch {
+		case isRedis(m.backend, n.Conn):
 			entries = append(entries[:1], append([]entry{
 				{keymap.ServerInfo, "Server status"},
 				{keymap.OpenKey, "Open key by name…"},
 				{keymap.Favorites, "Starred keys"},
 			}, entries[1:]...)...)
-		} else {
+		case isKafka(m.backend, n.Conn):
+			entries = append([]entry{
+				{keymap.ServerInfo, "Cluster status"},
+				{keymap.ToggleInternal, "Show / hide internal topics"},
+				{keymap.SortGroups, "Sort consumer groups: by lag / by name"},
+			}, entries[1:]...)
+		default:
 			entries = append(entries[:1], append([]entry{{keymap.ServerInfo, "Server status"}}, entries[1:]...)...)
 		}
+	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker:
+		entries = kafkaMenu(n)
 	case tree.KindDatabase, tree.KindSchema:
 		entries = []entry{
 			{keymap.OpenConsole, "Open console"},
@@ -202,6 +211,41 @@ func (m *Model) openNodeMenu() {
 }
 
 // isRedisNode reports whether n is a Redis db, folder, key or "load more" line.
+// kafkaMenu lists what can be done with a node of a kafka tree.
+func kafkaMenu(n *tree.Node) []menuEntry {
+	var entries []menuEntry
+	switch n.Kind {
+	case tree.KindTopic:
+		entries = append(entries, menuEntry{keymap.Open, "Open topic"}, menuEntry{keymap.OpenConsole, "Producer console"})
+	case tree.KindKafkaGroup:
+		entries = append(entries, menuEntry{keymap.Open, "Open group"})
+	case tree.KindTopicFolder:
+		entries = append(entries, menuEntry{keymap.Open, "Expand / collapse"})
+	}
+	switch n.Section {
+	case secTopics:
+		entries = append(entries, menuEntry{keymap.NewKey, "New topic…"}, menuEntry{keymap.FilterPrompt, "Filter topics…"},
+			menuEntry{keymap.FilterClear, "Clear the topic filter"}, menuEntry{keymap.ToggleInternal, "Show / hide internal topics"})
+	case secGroups:
+		entries = append(entries, menuEntry{keymap.FilterPrompt, "Filter groups…"}, menuEntry{keymap.FilterClear, "Clear the group filter"},
+			menuEntry{keymap.SortGroups, "Sort: by lag / by name"})
+	}
+	entries = append(entries, menuEntry{keymap.ServerInfo, "Cluster status"}, menuEntry{keymap.Refresh, "Refresh"})
+	if n.Kind == tree.KindTopic {
+		entries = append(entries, menuEntry{keymap.DeleteNode, "Delete topic…"})
+	}
+	return entries
+}
+
+// isKafkaNode reports whether n is a node under a kafka connection.
+func isKafkaNode(n *tree.Node) bool {
+	switch n.Kind {
+	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker:
+		return true
+	}
+	return false
+}
+
 func isRedisNode(n *tree.Node) bool {
 	_, ok := redisKeyOf(n)
 	return ok

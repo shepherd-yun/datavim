@@ -252,6 +252,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.deleteTopic(msg)
 	case topicDeletedMsg:
 		return m, m.topicDeleted(msg)
+	case openTopicSectionMsg:
+		return m, m.openTopicSection(msg)
 	case redisKeyChangedMsg:
 		m.keyChanged(msg)
 	case keyOpAskMsg:
@@ -629,8 +631,7 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		case isRedis(m.backend, conn):
 			return m.openServer(conn)
 		case isKafka(m.backend, conn):
-			m.setStatus(errKafkaUnsupported.Error()+" yet", true)
-			return nil
+			return m.openKafkaServer(conn)
 		}
 		return m.openSQLServer(conn)
 	case keymap.Refresh:
@@ -778,7 +779,7 @@ func sqlOnlyTreeAction(a keymap.Action, n *tree.Node) bool {
 	if n != nil && a == keymap.DeleteNode && (n.Kind == tree.KindRedisKey || n.Kind == tree.KindRedisDB || n.Kind == tree.KindKeyFolder) {
 		return false
 	}
-	if a == keymap.NodeActions && n != nil && (n.Kind == tree.KindConn || isRedisNode(n)) {
+	if a == keymap.NodeActions && n != nil && (n.Kind == tree.KindConn || isRedisNode(n) || isKafkaNode(n)) {
 		return false // the menu lists only what the node can do
 	}
 	switch a {
