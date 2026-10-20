@@ -228,7 +228,7 @@ func (t *topicTab) loadConsumers() tea.Cmd {
 func kafkaErr(err error) string {
 	switch {
 	case errors.Is(err, kafka.ErrDenied):
-		return "permission denied · " + err.Error()
+		return strings.TrimPrefix(err.Error(), "kafka: ")
 	case errors.Is(err, kafka.ErrUnsupported):
 		return kafka.ErrUnsupported.Error()
 	}

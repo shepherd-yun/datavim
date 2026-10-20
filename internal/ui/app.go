@@ -236,6 +236,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.openGroup(msg.conn, msg.group)
 	case openTopicAtMsg:
 		return m, m.openTopicAtMsg(msg)
+	case resetTimesMsg:
+		m.resetTimes(msg)
 	case redisKeyChangedMsg:
 		m.keyChanged(msg)
 	case keyOpAskMsg:

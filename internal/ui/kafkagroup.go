@@ -177,6 +177,10 @@ func (t *groupTab) Update(msg tea.Msg) tea.Cmd {
 		if m.gen == t.gen && t.visible && !t.loading {
 			return t.load()
 		}
+	case groupResetMsg:
+		return t.reset(m)
+	case groupResetDoneMsg:
+		return t.resetDone(m)
 	}
 	return nil
 }
@@ -277,6 +281,8 @@ func (t *groupTab) Handle(a keymap.Action) tea.Cmd {
 		return nil
 	case keymap.OpenCellKey:
 		return t.gotoStuck()
+	case keymap.ResetOffsets:
+		return t.askReset()
 	}
 	if cmd, ok := gridAction(t.activeGrid(), a); ok {
 		return cmd
