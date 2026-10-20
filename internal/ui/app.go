@@ -234,6 +234,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.kafkaFiltered(msg)
 	case openGroupMsg:
 		return m, m.openGroup(msg.conn, msg.group)
+	case openTopicAtMsg:
+		return m, m.openTopicAtMsg(msg)
 	case redisKeyChangedMsg:
 		m.keyChanged(msg)
 	case keyOpAskMsg:

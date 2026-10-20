@@ -465,6 +465,12 @@ func (t *topicTab) handleMsgs(a keymap.Action) (tea.Cmd, bool) {
 		return t.seekPrompt(), true
 	case keymap.LiveTail:
 		return t.toggleTail(), true
+	case keymap.OpenCellKey:
+		if v.from == "" {
+			t.setStatus("this view didn't come from a group", true)
+			return nil, true
+		}
+		return openGroupCmd(t.conn, v.from), true
 	case keymap.ToggleHeaders:
 		v.headers = !v.headers
 		t.renderMsgs(v.recIndex())

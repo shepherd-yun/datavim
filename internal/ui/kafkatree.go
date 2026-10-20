@@ -513,9 +513,3 @@ func (m *Model) kafkaFiltered(msg kafkaFilterMsg) {
 	}
 	m.buildKafkaTree(msg.conn)
 }
-
-// openGroup opens the group's tab (Task 18 replaces this).
-func (m *Model) openGroup(conn, group string) tea.Cmd {
-	m.setStatus("group "+group+" on "+conn, false)
-	return nil
-}

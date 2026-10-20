@@ -43,9 +43,13 @@ type timings struct {
 	draft time.Duration // idle time before a draft is saved
 	// server is the Redis server tab's sampling interval.
 	server time.Duration
+	// group and kserver refresh a Kafka group tab and a Kafka cluster
+	// status tab; 0 turns it off.
+	group, kserver time.Duration
 }
 
-var defaultTimings = timings{tick: 100 * time.Millisecond, draft: time.Second, server: statusInterval}
+var defaultTimings = timings{tick: 100 * time.Millisecond, draft: time.Second, server: statusInterval,
+	group: 5 * time.Second, kserver: 10 * time.Second}
 
 var spinner = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
