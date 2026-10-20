@@ -123,7 +123,7 @@ func (t *kafkaServerTab) exportSource() exportSrc {
 // Shown reads the cluster at once and goes on refreshing.
 func (t *kafkaServerTab) Shown() tea.Cmd {
 	t.visible = true
-	if !t.loaded || t.loading {
+	if t.loading {
 		return nil
 	}
 	return t.load()
@@ -133,6 +133,8 @@ func (t *kafkaServerTab) Shown() tea.Cmd {
 func (t *kafkaServerTab) Hidden() {
 	t.visible = false
 	t.gen++
+	// A load in flight is dropped by gen, so Shown must start another.
+	t.loading = false
 }
 
 func (t *kafkaServerTab) load() tea.Cmd {

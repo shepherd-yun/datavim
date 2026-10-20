@@ -9,6 +9,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 
 	tea "charm.land/bubbletea/v2"
 )
@@ -141,5 +142,21 @@ func TestKafkaNodeMenu(t *testing.T) {
 	pressAll(t, m, "a")
 	if m.overlay == nil {
 		t.Fatalf("a opens the menu on a kafka section: %q", m.status)
+	}
+}
+
+func TestKafkaServerHiddenDuringLoad(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 1)
+	m.setFocus(focusTree)
+	_, load := m.Update(uitest.Key("space"))
+	drainAll(t, m, load)
+	_, load = m.Update(uitest.Key("i"))
+	s := m.activeTab().(*kafkaServerTab)
+	drainAll(t, m, m.openTopic("events", "orders"))
+	drainAll(t, m, load)
+	pressAll(t, m, "1")
+	if s.loading || !s.loaded {
+		t.Fatalf("shown again: loaded (loading=%v loaded=%v)", s.loading, s.loaded)
 	}
 }

@@ -119,7 +119,7 @@ func (t *groupTab) exportSource() exportSrc {
 // Shown reads the group at once and goes on refreshing.
 func (t *groupTab) Shown() tea.Cmd {
 	t.visible = true
-	if t.detail == nil || t.loading {
+	if t.loading {
 		return nil
 	}
 	return t.load()
@@ -129,6 +129,8 @@ func (t *groupTab) Shown() tea.Cmd {
 func (t *groupTab) Hidden() {
 	t.visible = false
 	t.gen++
+	// A load in flight is dropped by gen, so Shown must start another.
+	t.loading = false
 }
 
 func (t *groupTab) load() tea.Cmd {

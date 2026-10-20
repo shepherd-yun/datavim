@@ -190,3 +190,17 @@ func TestGroupMembers(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupTabHiddenDuringLoad(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	orderSvc(k)
+	k.addTopic("refunds", 1, 0, 1)
+	_, load := m.Update(openGroupMsg{conn: "events", group: "order-svc"})
+	g := m.activeTab().(*groupTab)
+	drainAll(t, m, m.openTopic("events", "refunds")) // gd and tab switches hide it mid-load
+	drainAll(t, m, load)                             // the stale load lands
+	pressAll(t, m, "1")
+	if g.loading || g.detail == nil {
+		t.Fatalf("shown again: loaded (loading=%v detail=%v)", g.loading, g.detail != nil)
+	}
+}
