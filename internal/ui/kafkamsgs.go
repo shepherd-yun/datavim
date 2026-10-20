@@ -31,6 +31,7 @@ const (
 	msgBatch      = 200     // per partition, per load
 	msgLimit      = 10_000  // messages one view keeps
 	maxValueBytes = 1 << 20 // longer values keep their first 1 MB
+	contextRows   = 3       // messages shown before a jump's or a search's target
 	previewWidth  = 200     // cells of a key / value preview
 )
 
@@ -50,15 +51,38 @@ type msgView struct {
 	headers bool        // the HEADERS column is shown
 	format  valueFormat // how K and yl show keys and values
 	from    string      // the group this view was opened from
+
+	filter    kmsgx.Filter
+	shown     []int      // the indexes of the recs that pass the filter, one per grid row
+	search    *msgSearch // the running search past what is kept
+	searchGen int        // bumped when a search starts or stops
 }
 
 // current is the message under the cursor.
 func (v *msgView) current() (kafka.Record, bool) {
-	r, _ := v.grid.Position()
-	if r < 0 || r >= len(v.recs) {
-		return kafka.Record{}, false
+	if i := v.recIndex(); i >= 0 {
+		return v.recs[i], true
 	}
-	return v.recs[r], true
+	return kafka.Record{}, false
+}
+
+// recIndex is the index in recs of the message under the cursor, or -1.
+func (v *msgView) recIndex() int {
+	r, _ := v.grid.Position()
+	if r < 0 || r >= len(v.shown) {
+		return -1
+	}
+	return v.shown[r]
+}
+
+// refilter recomputes which recs the grid shows.
+func (v *msgView) refilter() {
+	v.shown = v.shown[:0]
+	for i, r := range v.recs {
+		if v.filter.Match(r) {
+			v.shown = append(v.shown, i)
+		}
+	}
 }
 
 // compareRecs orders messages by offset (single) or by time.
@@ -293,8 +317,7 @@ func (t *topicTab) msgsLoaded(m msgsLoadedMsg) tea.Cmd {
 		}
 		return nil
 	}
-	cursor, _ := v.grid.Position()
-	recs, cur, dropped := mergeRecords(v.recs, m.recs, m.dir, v.single, msgLimit, cursor)
+	recs, cur, dropped := mergeRecords(v.recs, m.recs, m.dir, v.single, msgLimit, v.recIndex())
 	v.recs = recs
 	if m.dir == 0 {
 		cur = t.jumpCursor(m)
@@ -334,13 +357,16 @@ func (t *topicTab) jumpCursor(m msgsLoadedMsg) int {
 	return 0
 }
 
-// renderMsgs shows the kept messages with the cursor on row cursor.
+// renderMsgs shows the kept messages that pass the filter, with the
+// cursor on recs[cursor] (or the next one shown).
 func (t *topicTab) renderMsgs(cursor int) {
-	g := t.msgs.grid
+	v, g := t.msgs, t.msgs.grid
 	_, col := g.Position()
+	v.refilter()
 	g.SetResult(t.msgsResult())
-	if len(t.msgs.recs) > 0 {
-		g.SetCursor(cursor, col)
+	if len(v.shown) > 0 {
+		row, _ := slices.BinarySearch(v.shown, cursor)
+		g.SetCursor(min(row, len(v.shown)-1), col)
 	}
 }
 
@@ -355,8 +381,9 @@ func (v *msgView) msgColumns() []string {
 func (t *topicTab) msgsResult() *db.ResultSet {
 	v := t.msgs
 	cols := v.msgColumns()
-	rows := make([][]string, len(v.recs))
-	for i, r := range v.recs {
+	rows := make([][]string, len(v.shown))
+	for i, ri := range v.shown {
+		r := v.recs[ri]
 		size := msgSize(r.Size)
 		if r.Truncated {
 			size += "+"
@@ -397,6 +424,9 @@ func msgSize(n int) string {
 func (t *topicTab) msgsHeader() string {
 	v := t.msgs
 	parts := []string{v.pos.Describe(v.bounds), plural(len(v.recs), "message")}
+	if !v.filter.IsZero() {
+		parts = append(parts, "filter: "+v.filter.String(), groupDigits(int64(len(v.shown)))+" of "+groupDigits(int64(len(v.recs))))
+	}
 	if v.format != fmtAuto {
 		parts = append(parts, "format "+v.format.String())
 	}
@@ -411,21 +441,28 @@ func (t *topicTab) msgsHeader() string {
 func (t *topicTab) handleMsgs(a keymap.Action) (tea.Cmd, bool) {
 	v := t.msgs
 	row, _ := v.grid.Position()
-	last := len(v.recs) - 1
+	last := len(v.shown) - 1
 	switch a {
 	case keymap.Down, keymap.HalfPageDown:
-		if row >= last && len(v.recs) > 0 {
+		if row >= last && len(v.shown) > 0 {
 			return t.loadMore(1), true
 		}
 	case keymap.Up, keymap.HalfPageUp:
-		if row == 0 && len(v.recs) > 0 {
+		if row == 0 && len(v.shown) > 0 {
 			return t.loadMore(-1), true
 		}
 	case keymap.Seek:
 		return t.seekPrompt(), true
 	case keymap.ToggleHeaders:
 		v.headers = !v.headers
-		t.renderMsgs(row)
+		t.renderMsgs(v.recIndex())
+		return nil, true
+	case keymap.FilterPrompt:
+		return t.filterPrompt(), true
+	case keymap.FilterEqual, keymap.FilterNotEqual, keymap.FilterContains:
+		return t.cellFilter(a), true
+	case keymap.FilterClear:
+		t.setFilter(kmsgx.Filter{})
 		return nil, true
 	case keymap.ValueFormat:
 		v.format = (v.format + 1) % (fmtBase64 + 1)
@@ -529,6 +566,11 @@ func (t *topicTab) msgsUpdate(msg tea.Msg) (tea.Cmd, bool) {
 	case seekEarliestMsg:
 		return t.jump(kmsgx.Position{Kind: kmsgx.PosOffset, Partitions: []int32{m.partition},
 			Offsets: map[int32]int64{m.partition: m.earliest}}), true
+	case msgFilterMsg:
+		t.setFilter(m.filter)
+		return nil, true
+	case searchStepMsg:
+		return t.searchStepped(m), true
 	case msgEditDoneMsg:
 		_ = os.Remove(m.path)
 		if m.err != nil {
@@ -638,7 +680,8 @@ func headersJSON(r kafka.Record) string {
 // object per message for JSON Lines.
 func (t *topicTab) msgsExport() exportSrc {
 	jsonl := &db.ResultSet{Columns: []db.ColumnInfo{{Name: "message", DatabaseType: "JSON"}}}
-	for _, r := range t.msgs.recs {
+	for _, i := range t.msgs.shown {
+		r := t.msgs.recs[i]
 		jsonl.Rows = append(jsonl.Rows, []db.Value{{Text: string(kmsgx.JSON(r))}})
 	}
 	return exportSrc{rs: t.msgs.grid.Result(), jsonl: jsonl, name: t.topic, conn: t.conn}
@@ -654,7 +697,7 @@ type msgDetail struct {
 }
 
 func newMsgDetail(t *topicTab, row int) *msgDetail {
-	return &msgDetail{tab: t, row: row, rec: t.msgs.recs[row]}
+	return &msgDetail{tab: t, row: row, rec: t.msgs.recs[t.msgs.shown[row]]}
 }
 
 func (d *msgDetail) HandleKey(msg tea.KeyPressMsg) (overlay.Overlay, tea.Cmd) {
@@ -673,8 +716,8 @@ func (d *msgDetail) HandleKey(msg tea.KeyPressMsg) (overlay.Overlay, tea.Cmd) {
 		if msg.String() == "N" {
 			step = -1
 		}
-		if r := d.row + step; r >= 0 && r < len(v.recs) {
-			d.row, d.rec, d.offset = r, v.recs[r], 0
+		if r := d.row + step; r >= 0 && r < len(v.shown) {
+			d.row, d.rec, d.offset = r, v.recs[v.shown[r]], 0
 			_, col := v.grid.Position()
 			v.grid.SetCursor(r, col)
 		}
@@ -726,4 +769,243 @@ func (d *msgDetail) View(width, height int) string {
 		body = append(body, textutil.Fit(l, w-2))
 	}
 	return theme.Box("message · v format · n/N next/prev · y copy value · esc close", strings.Join(body, "\n"), w, h, true)
+}
+
+// msgFilterMsg is a filter typed at the F prompt.
+type msgFilterMsg struct {
+	tabID  int
+	filter kmsgx.Filter
+}
+
+func (m msgFilterMsg) TabID() int { return m.tabID }
+
+// filterPrompt asks for a filter expression.
+func (t *topicTab) filterPrompt() tea.Cmd {
+	id := t.id
+	parse := func(text string) (kmsgx.Filter, error) { return kmsgx.ParseFilter(text, time.Now()) }
+	return openOverlay(overlay.NewPrompt("Filter messages", "key = x · value ~ y · header.h = v · value.a.b = 1", t.msgs.filter.String(),
+		func(text string) tea.Msg {
+			f, _ := parse(text) // validated
+			return msgFilterMsg{tabID: id, filter: f}
+		},
+		overlay.WithValidate(func(text string) error { _, err := parse(text); return err })))
+}
+
+// cellFilter is ff / f! / fs: a condition on the cell under the cursor,
+// joined to the filter.
+func (t *topicTab) cellFilter(a keymap.Action) tea.Cmd {
+	r, ok := t.msgs.current()
+	if !ok {
+		return nil
+	}
+	col, _ := t.msgs.grid.Column()
+	var value string
+	switch col.Name {
+	case "KEY":
+		value = string(r.Key)
+	case "VALUE":
+		value = string(r.Value)
+	case "PART":
+		value = strconv.Itoa(int(r.Partition))
+	case "OFFSET":
+		value = strconv.FormatInt(r.Offset, 10)
+	default:
+		t.setStatus("can't filter on this column", true)
+		return nil
+	}
+	op := map[keymap.Action]string{keymap.FilterEqual: "=", keymap.FilterNotEqual: "!=", keymap.FilterContains: "~"}[a]
+	f, err := kmsgx.ParseFilter(kmsgx.CellFilter(t.msgs.filter.String(), col.Name, op, value), time.Now())
+	if err != nil {
+		t.setStatus(err.Error(), true)
+		return nil
+	}
+	t.setFilter(f)
+	return nil
+}
+
+// setFilter shows only the kept messages f matches.
+func (t *topicTab) setFilter(f kmsgx.Filter) {
+	v := t.msgs
+	at := v.recIndex()
+	v.filter = f
+	t.renderMsgs(max(at, 0))
+	if !f.IsZero() {
+		t.setStatus("filter: "+f.String()+" · "+groupDigits(int64(len(v.shown)))+" of "+groupDigits(int64(len(v.recs))), false)
+	}
+}
+
+// Search limits (design §5.6): a search stops at the first match, or
+// after searchCap messages.
+const searchCap = 100_000
+
+// msgSearch is n / N looking past the kept messages for the next match.
+type msgSearch struct {
+	dir     int
+	scanned int
+}
+
+// searchStepMsg is one batch a search read.
+type searchStepMsg struct {
+	tabID, gen int
+	conn       string
+	ranges     map[int32]kafka.Range
+	recs       []kafka.Record
+	err        error
+}
+
+func (m searchStepMsg) TabID() int { return m.tabID }
+func (m searchStepMsg) kafkaMsg()  {}
+
+// searchFilter is n / N while a filter is set: the next match kept, else
+// a search through the next messages; ok is false without a filter.
+func (t *topicTab) searchFilter(forward bool) (tea.Cmd, bool) {
+	v := t.msgs
+	if t.section != secMessages || v.filter.IsZero() {
+		return nil, false
+	}
+	if v.search != nil {
+		return nil, true
+	}
+	row, col := v.grid.Position()
+	switch {
+	case forward && row+1 < len(v.shown):
+		v.grid.SetCursor(row+1, col)
+		return nil, true
+	case !forward && len(v.shown) > 0 && row > 0:
+		v.grid.SetCursor(row-1, col)
+		return nil, true
+	case v.reader == nil || !v.loaded:
+		return nil, true
+	}
+	dir := 1
+	if !forward {
+		dir = -1
+	}
+	v.searchGen++
+	v.search = &msgSearch{dir: dir}
+	t.setStatus("searching… scanned 0", false)
+	return t.searchStep(v.edges(dir < 0)), true
+}
+
+// searchStep reads the batch past edges in the search's direction.
+func (t *topicTab) searchStep(edges map[int32]int64) tea.Cmd {
+	v := t.msgs
+	id, gen, b, conn, topic, reader, dir := t.id, v.searchGen, t.backend, t.conn, t.topic, v.reader, v.search.dir
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		defer cancel()
+		msg := searchStepMsg{tabID: id, gen: gen, conn: conn}
+		msg.err = withKafka(ctx, b, conn, func(c kafka.Client) error {
+			d, err := c.TopicDetail(ctx, topic)
+			if err != nil {
+				return err
+			}
+			if dir > 0 {
+				msg.ranges = kmsgx.Newer(edges, boundsOf(d), msgBatch)
+			} else {
+				msg.ranges = kmsgx.Older(edges, boundsOf(d), msgBatch)
+			}
+			if len(msg.ranges) == 0 {
+				return nil
+			}
+			msg.recs, err = reader.Range(ctx, topic, msg.ranges)
+			return err
+		})
+		return msg
+	}
+}
+
+func (t *topicTab) searchStepped(m searchStepMsg) tea.Cmd {
+	v := t.msgs
+	s := v.search
+	if s == nil || m.gen != v.searchGen {
+		return nil
+	}
+	stop := func(status string, isErr bool) {
+		v.search = nil
+		v.searchGen++
+		t.setStatus(status, isErr)
+	}
+	if m.err != nil {
+		stop("search: "+kafkaErr(m.err), true)
+		return nil
+	}
+	if len(m.ranges) == 0 {
+		if s.dir > 0 {
+			stop("no match before the end", false)
+		} else {
+			stop("no match after the beginning", false)
+		}
+		return nil
+	}
+	recs := slices.Clone(m.recs)
+	slices.SortStableFunc(recs, compareRecs(v.single))
+	found := -1
+	if s.dir > 0 {
+		found = slices.IndexFunc(recs, v.filter.Match)
+	} else {
+		for i := len(recs) - 1; i >= 0 && found < 0; i-- {
+			if v.filter.Match(recs[i]) {
+				found = i
+			}
+		}
+	}
+	if found >= 0 {
+		keep := slices.Clone(recs[max(found-contextRows, 0):found])
+		for _, r := range recs {
+			if v.filter.Match(r) {
+				keep = append(keep, r)
+			}
+		}
+		target := recs[found]
+		merged, _, dropped := mergeRecords(v.recs, keep, s.dir, v.single, msgLimit, v.recIndex())
+		v.recs = merged
+		at := slices.IndexFunc(merged, func(r kafka.Record) bool { return r.Partition == target.Partition && r.Offset == target.Offset })
+		t.renderMsgs(max(at, 0))
+		stop(fmt.Sprintf("found p%d:%s after %s messages", target.Partition, groupDigits(target.Offset), groupDigits(int64(s.scanned+found+1))), false)
+		if dropped > 0 {
+			t.setStatus(t.status+" · dropped "+groupDigits(int64(dropped))+" messages far from the cursor", false)
+		}
+		return nil
+	}
+	s.scanned += rangeSize(m.ranges)
+	if s.scanned >= searchCap {
+		if s.dir > 0 {
+			stop("no match in the next "+groupDigits(searchCap)+" messages", false)
+		} else {
+			stop("no match in the previous "+groupDigits(searchCap)+" messages", false)
+		}
+		return nil
+	}
+	t.setStatus("searching… scanned "+groupDigits(int64(s.scanned)), false)
+	next := map[int32]int64{}
+	for p, rg := range m.ranges {
+		if s.dir > 0 {
+			next[p] = rg.To - 1
+		} else {
+			next[p] = rg.From
+		}
+	}
+	return t.searchStep(next)
+}
+
+// rangeSize is how many offsets ranges cover.
+func rangeSize(ranges map[int32]kafka.Range) int {
+	n := 0
+	for _, r := range ranges {
+		n += int(r.To - r.From)
+	}
+	return n
+}
+
+// cancelRun is ctrl+c: it stops a search.
+func (t *topicTab) cancelRun() tea.Cmd {
+	if t.msgs.search != nil {
+		t.msgs.search = nil
+		t.msgs.searchGen++
+		t.setStatus("search stopped", false)
+		return nil
+	}
+	t.setStatus("nothing is running", false)
+	return nil
 }

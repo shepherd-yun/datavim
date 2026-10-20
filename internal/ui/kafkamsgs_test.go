@@ -13,6 +13,9 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 func rec(p int32, o int64, sec int) kafka.Record {
@@ -338,3 +341,128 @@ func TestRenderValueBase64(t *testing.T) {
 		t.Fatal("name")
 	}
 }
+
+func TestMessagesFilterPrompt(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 10)
+	tt := openMessages(t, m, "orders")
+	pressAll(t, m, "F")
+	typeText(t, m, "key = k-5")
+	pressAll(t, m, "enter")
+	if n := tt.msgGrid.RowCount(); n != 1 || cursorRec(t, tt).Offset != 5 {
+		t.Fatalf("%d rows", n)
+	}
+	if !strings.Contains(screen(m), "filter: key = k-5 · 1 of 10") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	pressAll(t, m, "F")
+	typeText(t, m, " ==")
+	pressAll(t, m, "enter")
+	if _, ok := m.overlay.(*overlay.Prompt); !ok {
+		t.Fatal("a bad filter keeps the prompt open")
+	}
+	pressAll(t, m, "esc", "f", "x")
+	if n := tt.msgGrid.RowCount(); n != 10 {
+		t.Fatalf("cleared: %d rows", n)
+	}
+}
+
+func TestMessagesCellFilter(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 10)
+	tt := openMessages(t, m, "orders")
+	tt.msgGrid.SelectColumn("KEY")
+	pressAll(t, m, "f", "f")
+	if got := tt.msgs.filter.String(); got != "key = k-9" {
+		t.Fatalf("filter = %q", got)
+	}
+	tt.msgGrid.SelectColumn("PART")
+	pressAll(t, m, "f", "!")
+	if got := tt.msgs.filter.String(); got != "key = k-9 and partition != 0" || tt.msgGrid.RowCount() != 0 {
+		t.Fatalf("filter = %q, %d rows", got, tt.msgGrid.RowCount())
+	}
+}
+
+func TestMessagesFilterBadColumn(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 10)
+	tt := openMessages(t, m, "orders")
+	tt.msgGrid.SelectColumn("TIME")
+	pressAll(t, m, "f", "f")
+	if !strings.Contains(tt.status, "can't filter on this column") || !tt.msgs.filter.IsZero() {
+		t.Fatalf("status %q", tt.status)
+	}
+}
+
+func TestMessagesSearchForward(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 10_000)
+	r := fakeRecord("orders", 0, 5300)
+	r.Key = []byte("special")
+	k.setRecord(r)
+	tt := openMessages(t, m, "orders")
+	seek(t, m, "earliest")
+	pressAll(t, m, "F")
+	typeText(t, m, "key = special")
+	pressAll(t, m, "enter")
+	if tt.msgGrid.RowCount() != 0 {
+		t.Fatal("no match loaded yet")
+	}
+	before := len(k.lastReader().rangeList())
+	pressAll(t, m, "n")
+	if c := cursorRec(t, tt); c.Offset != 5300 {
+		t.Fatalf("cursor on %d", c.Offset)
+	}
+	if n := len(k.lastReader().rangeList()) - before; n < 10 {
+		t.Fatalf("%d reads", n)
+	}
+	if len(tt.msgs.recs) > 200+3+1 {
+		t.Fatalf("the scan keeps only matches and their context: %d kept", len(tt.msgs.recs))
+	}
+	pressAll(t, m, "f", "x")
+	row, _ := tt.msgGrid.Position()
+	if row == 0 || tt.msgs.recs[tt.msgs.shown[row-1]].Offset != 5299 {
+		t.Fatalf("3 messages of context before the match (row %d)", row)
+	}
+}
+
+func TestMessagesSearchCap(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 120_000)
+	tt := openMessages(t, m, "orders")
+	seek(t, m, "earliest")
+	pressAll(t, m, "F")
+	typeText(t, m, "key = nothing")
+	pressAll(t, m, "enter", "n")
+	if !strings.Contains(tt.status, "no match in the next 100,000 messages") {
+		t.Fatalf("status = %q", tt.status)
+	}
+	if last := k.lastReader().rangeList(); last[len(last)-1][0].To > 100_400 {
+		t.Fatalf("read past the cap: %v", last[len(last)-1])
+	}
+}
+
+func TestMessagesSearchCancel(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 5000)
+	tt := openMessages(t, m, "orders")
+	seek(t, m, "earliest")
+	pressAll(t, m, "F")
+	typeText(t, m, "key = nothing")
+	pressAll(t, m, "enter")
+	_, cmd := m.Update(uitestKey("n"))
+	if !strings.Contains(tt.status, "searching") {
+		t.Fatalf("status = %q", tt.status)
+	}
+	pressAll(t, m, "ctrl+c")
+	if !strings.Contains(tt.status, "search stopped") {
+		t.Fatalf("status = %q", tt.status)
+	}
+	n := len(k.lastReader().rangeList())
+	drainAll(t, m, cmd)
+	if got := len(k.lastReader().rangeList()); got > n+1 {
+		t.Fatalf("the search went on: %d reads after the stop", got-n)
+	}
+}
+
+func uitestKey(k string) tea.Msg { return uitest.Key(k) }

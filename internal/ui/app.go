@@ -552,10 +552,13 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		return loadHistory(m.store)
 	case keymap.Search:
 		m.cmdline = overlay.NewSearchLine()
-	case keymap.SearchNext:
-		m.find(true)
-	case keymap.SearchPrev:
-		m.find(false)
+	case keymap.SearchNext, keymap.SearchPrev:
+		if s, ok := m.activeTab().(filterSearcher); ok && m.focus == focusTabs {
+			if cmd, ok := s.searchFilter(a == keymap.SearchNext); ok {
+				return cmd
+			}
+		}
+		m.find(a == keymap.SearchNext)
 	case keymap.CommandLine:
 		m.cmdline = overlay.NewCmdLine()
 	case keymap.Help:
@@ -833,6 +836,12 @@ func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
 	}
 	m.tree.StartLoad(node)
 	return tea.Batch(retry, loadChildren(m.backend, node))
+}
+
+// filterSearcher is a tab whose n / N search with its filter while one is
+// set.
+type filterSearcher interface {
+	searchFilter(forward bool) (tea.Cmd, bool)
 }
 
 // connUser is a tab that works on more connections than its Target.
