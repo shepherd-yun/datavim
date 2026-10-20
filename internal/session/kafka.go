@@ -80,6 +80,7 @@ func (m *Manager) Kafka(ctx context.Context, name string) (kafka.Client, error) 
 	}
 	m.mu.Lock()
 	c, ok := m.kafka[name]
+	gen := m.kafkaGen[name]
 	m.mu.Unlock()
 	if ok {
 		return c, nil
@@ -92,15 +93,23 @@ func (m *Manager) Kafka(ctx context.Context, name string) (kafka.Client, error) 
 	if err := kafkaOpenErr(name, err); err != nil {
 		return nil, err
 	}
-	g := &guardedKafka{Client: raw, m: m, name: name}
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	if existing, ok := m.kafka[name]; ok {
-		raw.Close() // lost a race with another opener
-		return existing, nil
+	existing, ok := m.kafka[name]
+	stale := m.kafkaGen[name] != gen
+	if !ok && !stale {
+		g := &guardedKafka{Client: raw, m: m, name: name}
+		m.kafka[name] = g
+		m.mu.Unlock()
+		return g, nil
 	}
-	m.kafka[name] = g
-	return g, nil
+	m.mu.Unlock()
+	raw.Close()
+	if ok {
+		return existing, nil // lost a race with another opener
+	}
+	// reset while opening (a new password, an edited connection): the
+	// settings it was opened with are old
+	return m.Kafka(ctx, name)
 }
 
 // KafkaReader opens a new Reader for a message view; the caller closes it.

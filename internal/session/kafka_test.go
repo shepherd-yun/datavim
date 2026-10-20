@@ -85,9 +85,17 @@ type fakeKafkaOpener struct {
 	clients    []*fakeKafkaClient
 	readers    int
 	authFailed bool
+	during     func() // runs inside the next open, once
 }
 
 func (f *fakeKafkaOpener) open(_ context.Context, cfg kafka.Config) (kafka.Client, error) {
+	f.mu.Lock()
+	during := f.during
+	f.during = nil
+	f.mu.Unlock()
+	if during != nil {
+		during()
+	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.cfgs = append(f.cfgs, cfg)
@@ -283,5 +291,21 @@ func TestKafkaWrongDriver(t *testing.T) {
 	}
 	if _, err := m.Conn(context.Background(), "k", ""); err == nil {
 		t.Fatal("a kafka connection has no SQL Conn")
+	}
+}
+
+func TestKafkaResetDuringOpen(t *testing.T) {
+	m, op, _ := setupKafka(config.Connection{})
+	// a password or connection change while the client is being opened
+	op.during = func() { m.Reset("k") }
+	c, err := m.Kafka(context.Background(), "k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(op.clients) != 2 || !op.clients[0].waitClosed() {
+		t.Fatalf("the client opened before the reset is closed and opened again: %d clients", len(op.clients))
+	}
+	if c.(*guardedKafka).Client != op.clients[1] {
+		t.Fatal("the client cached is the one opened after the reset")
 	}
 }

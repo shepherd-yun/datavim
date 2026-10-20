@@ -70,6 +70,7 @@ type Manager struct {
 	open      map[connKey]db.Conn
 	redis     map[connKey]rdb.Client
 	kafka     map[string]*guardedKafka
+	kafkaGen  map[string]int // counts the resets of each connection
 	// savedRO is the readonly in connections.toml of the connections
 	// SetReadOnly switched for this run.
 	savedRO map[string]*bool
@@ -85,6 +86,7 @@ func NewManager(conns []config.Connection, secrets secret.Store, drivers ...db.D
 		open:      map[connKey]db.Conn{},
 		redis:     map[connKey]rdb.Client{},
 		kafka:     map[string]*guardedKafka{},
+		kafkaGen:  map[string]int{},
 		savedRO:   map[string]*bool{},
 	}
 	for _, d := range drivers {
@@ -276,6 +278,7 @@ func (m *Manager) Reset(name string) {
 
 func (m *Manager) resetLocked(name string) {
 	m.resetServersLocked(name)
+	m.kafkaGen[name]++
 	if c, ok := m.kafka[name]; ok {
 		delete(m.kafka, name)
 		go c.Close()
