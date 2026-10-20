@@ -115,6 +115,7 @@ type Model struct {
 	searchPicks []func(bool) tea.Cmd // opens each row; the flag asks for the structure
 	revealing   *revealTarget
 	scans       map[redisDBKey]*keyScan // the key scans behind the redis db nodes
+	kafkaTrees  map[string]*kafkaTree   // what the kafka connections' trees are built from
 	bulk        *bulkDelete             // the running pattern delete, or nil
 	bulkGen     int
 }
@@ -157,6 +158,7 @@ func New(b Backend, st Store, settings config.Settings) *Model {
 		whichKeyDelay: defaultWhichKeyDelay,
 		timings:       defaultTimings,
 		scans:         map[redisDBKey]*keyScan{},
+		kafkaTrees:    map[string]*kafkaTree{},
 	}
 }
 
@@ -224,6 +226,12 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.childrenLoaded(msg)
 	case redisScanMsg:
 		return m, m.scanned(msg)
+	case kafkaTreeMsg:
+		return m, m.kafkaTreeLoaded(msg)
+	case kafkaLagMsg:
+		return m, m.kafkaLagged(msg)
+	case kafkaFilterMsg:
+		m.kafkaFiltered(msg)
 	case redisKeyChangedMsg:
 		m.keyChanged(msg)
 	case keyOpAskMsg:
@@ -476,6 +484,8 @@ func (m *Model) connKind() keymap.Kind {
 		return keymap.KindAny
 	case isRedis(m.backend, conn):
 		return keymap.KindRedis
+	case isKafka(m.backend, conn):
+		return keymap.KindKafka
 	}
 	return keymap.KindSQL
 }
@@ -530,6 +540,10 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		}
 		if isRedis(m.backend, conn) {
 			return m.openRedisConsole(conn, redisDBOf(ns))
+		}
+		if isKafka(m.backend, conn) {
+			m.setStatus("select a topic first", true)
+			return nil
 		}
 		return m.openConsole(conn, ns)
 	case keymap.History:
@@ -588,6 +602,9 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 			return nil
 		case isRedis(m.backend, conn):
 			return m.openServer(conn)
+		case isKafka(m.backend, conn):
+			m.setStatus(errKafkaUnsupported.Error()+" yet", true)
+			return nil
 		}
 		return m.openSQLServer(conn)
 	case keymap.Refresh:
@@ -628,6 +645,11 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 
 func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 	t := m.tree
+	if n := t.Selected(); n != nil && isKafka(m.backend, n.Conn) {
+		if cmd, ok := m.kafkaTreeAction(a, n); ok {
+			return cmd
+		}
+	}
 	if sqlOnlyTreeAction(a, t.Selected()) {
 		if n := t.Selected(); n != nil && m.refuseRedis(n.Conn) {
 			return nil

@@ -27,6 +27,13 @@ const (
 	KindKeyFolder // keys grouped by a prefix; Key is the raw prefix with its separator
 	KindRedisKey  // Key is the raw key, KeyType its TYPE
 	KindMore      // a "load more" / progress line at the end of a redis db
+	// Kafka: Section says which of Brokers, Topics and Consumer Groups a
+	// KindKafkaSection is; topics and groups keep their raw name in Key.
+	KindKafkaSection
+	KindTopicFolder // topics grouped by a name prefix; Key is the prefix
+	KindTopic
+	KindKafkaGroup
+	KindBroker
 )
 
 // Group tells the groups under a table apart.
@@ -51,6 +58,8 @@ type Node struct {
 	Ref      db.TableRef // a foreign key's referenced table
 	Key      string      // redis: the raw key (KindRedisKey) or prefix (KindKeyFolder); Name is its escaped form
 	KeyType  string      // a KindRedisKey's TYPE
+	Section  string      // a KindKafkaSection's section: "brokers", "topics" or "groups"
+	Warn     bool        // Detail is a warning (lag, under-replicated partitions)
 	Prod     bool
 	Expanded bool
 	Loaded   bool
@@ -64,7 +73,11 @@ type Node struct {
 
 func (n *Node) Parent() *Node { return n.parent }
 func (n *Node) Expandable() bool {
-	return n.Kind <= KindView || n.Kind == KindGroup || n.Kind == KindRedisDB || n.Kind == KindKeyFolder
+	switch n.Kind {
+	case KindGroup, KindRedisDB, KindKeyFolder, KindKafkaSection, KindTopicFolder:
+		return true
+	}
+	return n.Kind <= KindView
 }
 func (n *Node) IsTable() bool         { return n.Kind == KindTable || n.Kind == KindView }
 func (n *Node) TableRef() db.TableRef { return db.TableRef{Namespace: n.NS, Name: n.Name} }
@@ -442,7 +455,11 @@ func (m *Model) View(width int, focused bool) string {
 			}
 		}
 		if n.Detail != "" {
-			label += "  " + theme.Muted.Render(textutil.Sanitize(n.Detail))
+			style := theme.Muted
+			if n.Warn {
+				style = theme.Error
+			}
+			label += "  " + style.Render(textutil.Sanitize(n.Detail))
 		}
 		if n.Prod {
 			label += " " + theme.Prod.Render("[PROD]")
@@ -483,7 +500,7 @@ func icon(n *Node, style IconStyle) string {
 		return arrow + " •"
 	case KindView:
 		return arrow + " ◦"
-	case KindColumn, KindKey, KindForeignKey, KindIndex:
+	case KindColumn, KindKey, KindForeignKey, KindIndex, KindTopic, KindKafkaGroup, KindBroker:
 		return "·"
 	}
 	return arrow
@@ -500,6 +517,8 @@ func nerdGlyph(n *Node) string {
 			return "\ue76e" // dev-postgresql
 		case "redis":
 			return "\ue76d" // dev-redis
+		case "kafka":
+			return "\ue72e" // dev-apachekafka
 		}
 		return "\U000f01bc" // md-database
 	case KindDatabase, KindRedisDB:
@@ -510,7 +529,21 @@ func nerdGlyph(n *Node) string {
 		return "\U000f04eb" // md-table
 	case KindView:
 		return "\U000f1094" // md-table_eye
-	case KindGroup, KindKeyFolder:
+	case KindKafkaSection:
+		switch n.Section {
+		case "brokers":
+			return "\U000f048b" // md-server
+		case "groups":
+			return "\U000f0849" // md-account_group
+		}
+		return "\U000f0369" // md-message_text
+	case KindTopic:
+		return "\U000f0369" // md-message_text
+	case KindKafkaGroup:
+		return "\U000f0849" // md-account_group
+	case KindBroker:
+		return "\U000f048b" // md-server
+	case KindGroup, KindKeyFolder, KindTopicFolder:
 		if n.Expanded {
 			return "\U000f0770" // md-folder_open
 		}

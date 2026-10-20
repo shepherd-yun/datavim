@@ -25,6 +25,9 @@ func loadChildren(b Backend, n *tree.Node) tea.Cmd {
 	if kind == tree.KindConn && isRedis(b, connName) {
 		return loadRedisDBs(b, n)
 	}
+	if kind == tree.KindConn && isKafka(b, connName) {
+		return loadKafkaTree(b, n)
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 		defer cancel()

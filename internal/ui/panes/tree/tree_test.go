@@ -447,3 +447,20 @@ func TestRedisNodes(t *testing.T) {
 		t.Fatalf("nerd view:\n%s", v)
 	}
 }
+
+func TestKafkaKindsExpandable(t *testing.T) {
+	for k, want := range map[Kind]bool{
+		KindKafkaSection: true, KindTopicFolder: true, KindTopic: false, KindKafkaGroup: false, KindBroker: false,
+	} {
+		if got := (&Node{Kind: k}).Expandable(); got != want {
+			t.Errorf("kind %d: Expandable = %v", k, got)
+		}
+	}
+	m := New([]*Node{{Kind: KindConn, Name: "events", Driver: "kafka"}})
+	m.SetHeight(5)
+	m.roots[0].Children = []*Node{{Kind: KindKafkaGroup, Name: "order-svc", Detail: "lag 5", Warn: true, parent: m.roots[0]}}
+	m.roots[0].Expanded = true
+	if v := m.View(60, false); !strings.Contains(v, "lag 5") {
+		t.Fatalf("view:\n%s", v)
+	}
+}
