@@ -69,6 +69,21 @@ type Client interface {
 	// Supports reports whether the cluster has a feature:
 	// "consumer_groups" (KIP-848), "offsets_by_time" or "delete_records".
 	Supports(feature string) bool
+
+	// Groups lists every group by name; Protocol and Members are left
+	// for GroupDetail.
+	Groups(ctx context.Context) ([]Group, error)
+	GroupDetail(ctx context.Context, group string) (GroupDetail, error)
+	// GroupsLag sums each group's lag in one batch; groups without
+	// offsets to fetch (share, unknown) are left out.
+	GroupsLag(ctx context.Context, groups []string) (map[string]int64, error)
+	// TopicGroups lists the groups that commit to topic, with lag on
+	// topic only.
+	TopicGroups(ctx context.Context, topic string) ([]GroupDetail, error)
+	// OffsetsAt is each partition's first offset at or after ts, or its
+	// end offset.
+	OffsetsAt(ctx context.Context, topic string, ts time.Time) (map[int32]int64, error)
+
 	Close()
 }
 
