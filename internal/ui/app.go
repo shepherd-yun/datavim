@@ -232,6 +232,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.kafkaLagged(msg)
 	case kafkaFilterMsg:
 		m.kafkaFiltered(msg)
+	case openGroupMsg:
+		return m, m.openGroup(msg.conn, msg.group)
 	case redisKeyChangedMsg:
 		m.keyChanged(msg)
 	case keyOpAskMsg:
@@ -883,6 +885,8 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 		m.retryNode, m.retryTab = nil, msg.tabID
 	case bigKeysStepMsg:
 		m.retryNode, m.retryTab = nil, msg.tabID
+	case kafkaMsg:
+		m.retryNode, m.retryTab = nil, msg.TabID()
 	default:
 		return
 	}

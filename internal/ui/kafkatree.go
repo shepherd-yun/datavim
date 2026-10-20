@@ -514,12 +514,6 @@ func (m *Model) kafkaFiltered(msg kafkaFilterMsg) {
 	m.buildKafkaTree(msg.conn)
 }
 
-// openTopic opens the topic's tab (Task 14 replaces this).
-func (m *Model) openTopic(conn, topic string) tea.Cmd {
-	m.setStatus("topic "+topic+" on "+conn, false)
-	return nil
-}
-
 // openGroup opens the group's tab (Task 18 replaces this).
 func (m *Model) openGroup(conn, group string) tea.Cmd {
 	m.setStatus("group "+group+" on "+conn, false)
