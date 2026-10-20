@@ -10,7 +10,7 @@ sqlvim is a terminal SQL client (TUI) for MySQL and PostgreSQL with vim keys and
 make build              # bin/sqlvim
 make run                # build and run
 make test               # go test -race ./...
-make test-integration   # go test -race -tags integration ./internal/db/... ./internal/rdb/...  (needs Docker; OrbStack: `orb start`)
+make test-integration   # go test -race -tags integration ./internal/db/... ./internal/rdb/... ./internal/kafka/...  (needs Docker; OrbStack: `orb start`)
 make lint               # golangci-lint (gofumpt + goimports formatters, revive, gocritic, errorlint, …)
 make snapshot           # local GoReleaser build
 make release-notes VERSION=1.0.0   # prints that CHANGELOG.md section (used by the release workflow)

@@ -84,6 +84,15 @@ type Client interface {
 	// end offset.
 	OffsetsAt(ctx context.Context, topic string, ts time.Time) (map[int32]int64, error)
 
+	// Produce sends recs and waits for each acknowledgement; a missing
+	// topic is an error and is not created.
+	Produce(ctx context.Context, topic string, recs []ProduceRecord) ([]ProduceResult, error)
+	CreateTopic(ctx context.Context, t NewTopic) error
+	DeleteTopic(ctx context.Context, name string) error
+	// ResetOffsets commits only when the group is Empty and nothing moved
+	// since the preview (ErrGroupNotEmpty, ErrGroupChanged).
+	ResetOffsets(ctx context.Context, group string, commits []OffsetCommit) ([]CommitResult, error)
+
 	Close()
 }
 
@@ -100,7 +109,7 @@ func Open(ctx context.Context, cfg Config) (Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	kcl, err := kgo.NewClient(opts...)
+	kcl, err := kgo.NewClient(append(opts, kgo.RecordPartitioner(newPartitioner()))...)
 	if err != nil {
 		return nil, err
 	}

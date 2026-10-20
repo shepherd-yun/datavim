@@ -8,6 +8,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kmsg"
 )
@@ -57,8 +58,13 @@ type ConfigEntry struct {
 	Default, Sensitive  bool
 }
 
+// fresh makes kadm skip kgo's metadata cache (up to 5s old), so a refresh
+// right after creating or deleting a topic sees it. Asking for authorized
+// operations is what bypasses the cache; brokers before 2.3 ignore it.
+func fresh(ctx context.Context) context.Context { return kadm.WithAuthorizedOps(ctx) }
+
 func (c *client) Cluster(ctx context.Context) (ClusterInfo, error) {
-	m, err := c.adm.Metadata(ctx)
+	m, err := c.adm.Metadata(fresh(ctx))
 	if err != nil {
 		return ClusterInfo{}, wrap(ctx, err, "cluster")
 	}
@@ -80,24 +86,33 @@ func (c *client) Cluster(ctx context.Context) (ClusterInfo, error) {
 	return info, nil
 }
 
-// versionGuess is kversion's guess for the first broker that answered,
-// as "3.7" or "≥ 4.0".
+// versionGuess is kversion's guess for the first broker that answered.
 func (c *client) versionGuess() string {
 	for _, v := range c.versions.Sorted() {
-		if v.Err != nil {
-			continue
+		if v.Err == nil {
+			return formatVersionGuess(v.VersionGuess())
 		}
-		g := v.VersionGuess()
-		if rest, ok := strings.CutPrefix(g, "at least "); ok {
-			return "≥ " + strings.TrimPrefix(rest, "v")
-		}
-		return strings.TrimPrefix(g, "v")
 	}
-	return ""
+	return "unknown"
+}
+
+// formatVersionGuess turns kversion's "v3.7" / "at least v4.0" into "3.7"
+// / "≥ 4.0"; anything else (Redpanda answers like no Kafka release) is
+// "unknown".
+func formatVersionGuess(g string) string {
+	prefix := ""
+	if rest, ok := strings.CutPrefix(g, "at least "); ok {
+		prefix, g = "≥ ", rest
+	}
+	v, ok := strings.CutPrefix(g, "v")
+	if !ok || v == "" || strings.ContainsAny(v, " ") {
+		return "unknown"
+	}
+	return prefix + v
 }
 
 func (c *client) Topics(ctx context.Context) ([]Topic, error) {
-	m, err := c.adm.Metadata(ctx)
+	m, err := c.adm.Metadata(fresh(ctx))
 	if err != nil {
 		return nil, wrap(ctx, err, "topics")
 	}
@@ -123,7 +138,7 @@ func (c *client) Topics(ctx context.Context) ([]Topic, error) {
 
 func (c *client) TopicDetail(ctx context.Context, topic string) (TopicDetail, error) {
 	what := "topic " + topic
-	m, err := c.adm.Metadata(ctx, topic)
+	m, err := c.adm.Metadata(fresh(ctx), topic)
 	if err != nil {
 		return TopicDetail{}, wrap(ctx, err, what)
 	}

@@ -236,3 +236,17 @@ func TestConnLost(t *testing.T) {
 		t.Fatal("no error after the cluster closed")
 	}
 }
+
+func TestFormatVersionGuess(t *testing.T) {
+	for in, want := range map[string]string{
+		"v3.9":                     "3.9",
+		"at least v4.1":            "≥ 4.1",
+		"between v0.11.0 and v1.0": "unknown",
+		"unknown custom version":   "unknown",
+		"":                         "unknown",
+	} {
+		if got := formatVersionGuess(in); got != want {
+			t.Errorf("formatVersionGuess(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

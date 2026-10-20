@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"slices"
 	"strconv"
 	"testing"
 	"time"
@@ -13,10 +14,12 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcmysql "github.com/testcontainers/testcontainers-go/modules/mysql"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
+	tcredpanda "github.com/testcontainers/testcontainers-go/modules/redpanda"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/db/mysql"
 	"github.com/shepherd-yun/sqlvim/internal/db/postgres"
+	"github.com/shepherd-yun/sqlvim/internal/kafka"
 )
 
 // tunnelDial starts an SSH server and returns a dial function through it.
@@ -129,4 +132,49 @@ func TestMySQLThroughTunnel(t *testing.T) {
 		t.Fatalf("rs = %+v, err = %v", rs, err)
 	}
 	cancelThroughTunnel(t, conn, "SELECT SLEEP(30)") // KILL QUERY also goes through the tunnel
+}
+
+// TestKafkaThroughTunnel opens a Kafka client and a Reader through the
+// tunnel: the bootstrap and the advertised broker address both go through
+// the SSH server.
+func TestKafkaThroughTunnel(t *testing.T) {
+	ctx := context.Background()
+	ctr, err := tcredpanda.Run(ctx, "redpandadata/redpanda:v26.2.1")
+	testcontainers.CleanupContainer(t, ctr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	broker, err := ctr.KafkaSeedBroker(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, h, _ := direct(t)
+	dial, err := h.pool("").Connect(ctx, "bastion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cfg := kafka.Config{Brokers: []string{broker}, Dial: dial}
+	cl, err := kafka.Open(ctx, cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	if err := cl.CreateTopic(ctx, kafka.NewTopic{Name: "orders", Partitions: 1, Replication: -1}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := cl.Produce(ctx, "orders", []kafka.ProduceRecord{{Value: []byte("hello"), Partition: 0}}); err != nil {
+		t.Fatal(err)
+	}
+	r, err := kafka.OpenReader(ctx, cfg, kafka.ReaderConfig{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = r.Close() }()
+	recs, err := r.Range(ctx, "orders", map[int32]kafka.Range{0: {From: 0, To: 1}})
+	if err != nil || len(recs) != 1 || string(recs[0].Value) != "hello" {
+		t.Fatalf("recs = %+v, %v", recs, err)
+	}
+	if !slices.Contains(s.dialed(), broker) {
+		t.Fatalf("the SSH server dialed %v, not %s", s.dialed(), broker)
+	}
 }
