@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-10-20
+
 ### Added
 - `y` in a grid also copies the result: `yt` / `yc` / `yj` / `ym` / `yi` as TSV / CSV / JSON /
   Markdown / INSERT, like `<Space>y…`. `yd` copies the DDL in the tree, a grid and the structure
@@ -451,7 +453,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/sqlvim/compare/v2.2.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/sqlvim/compare/v2.3.0...HEAD
+[2.3.0]: https://github.com/shepherd-yun/sqlvim/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/shepherd-yun/sqlvim/compare/v2.1.1...v2.2.0
 [2.1.1]: https://github.com/shepherd-yun/sqlvim/compare/v2.1.0...v2.1.1
 [2.1.0]: https://github.com/shepherd-yun/sqlvim/compare/v2.0.3...v2.1.0
