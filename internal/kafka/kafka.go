@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kadm"
@@ -100,6 +101,11 @@ type client struct {
 	kcl      *kgo.Client
 	adm      *kadm.Client
 	versions kadm.BrokersApiVersions
+	opts     []kgo.Opt
+
+	mu           sync.Mutex
+	noIdempotent bool        // the cluster refused an idempotent producer
+	plain        *kgo.Client // Produce's client once noIdempotent
 }
 
 // Open connects and checks the connection with one ApiVersions round to
@@ -113,7 +119,7 @@ func Open(ctx context.Context, cfg Config) (Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	c := &client{kcl: kcl, adm: kadm.NewClient(kcl)}
+	c := &client{kcl: kcl, adm: kadm.NewClient(kcl), opts: opts}
 	vs, err := c.adm.ApiVersions(ctx)
 	if err == nil {
 		err = firstVersionsErr(vs)
@@ -243,7 +249,14 @@ func expandHome(p string) string {
 	return p
 }
 
-func (c *client) Close() { c.kcl.Close() }
+func (c *client) Close() {
+	c.kcl.Close()
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.plain != nil {
+		c.plain.Close()
+	}
+}
 
 // Supports checks the ApiVersions every reachable broker answered.
 func (c *client) Supports(feature string) bool {

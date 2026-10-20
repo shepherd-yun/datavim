@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/twmb/franz-go/pkg/kadm"
@@ -92,11 +93,54 @@ func (c *client) Produce(ctx context.Context, topic string, recs []ProduceRecord
 	if err != nil {
 		return nil, err
 	}
-	krs := make([]*kgo.Record, len(recs))
-	for i, r := range recs {
+	for _, r := range recs {
 		if r.Partition >= int32(len(d.Parts)) {
 			return nil, fmt.Errorf("partition %d doesn't exist (%s has %d)", r.Partition, topic, len(d.Parts))
 		}
+	}
+	kcl, err := c.producer()
+	if err != nil {
+		return nil, err
+	}
+	out := produceSync(ctx, kcl, topic, recs)
+	if kcl == c.kcl && allFailed(out, kerr.ClusterAuthorizationFailed) {
+		// before Kafka 3.0 an idempotent producer needs the IDEMPOTENT_WRITE
+		// cluster ACL; nothing was written, so send again without it
+		c.mu.Lock()
+		c.noIdempotent = true
+		c.mu.Unlock()
+		if kcl, err = c.producer(); err != nil {
+			return nil, err
+		}
+		out = produceSync(ctx, kcl, topic, recs)
+	}
+	if ctx.Err() != nil {
+		return out, ctx.Err()
+	}
+	return out, nil
+}
+
+// producer is the client Produce sends with: the shared one, or one
+// without idempotent writes once the cluster refused them.
+func (c *client) producer() (*kgo.Client, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.noIdempotent {
+		return c.kcl, nil
+	}
+	if c.plain == nil {
+		kcl, err := kgo.NewClient(append(slices.Clone(c.opts), kgo.RecordPartitioner(newPartitioner()), kgo.DisableIdempotentWrite())...)
+		if err != nil {
+			return nil, err
+		}
+		c.plain = kcl
+	}
+	return c.plain, nil
+}
+
+func produceSync(ctx context.Context, kcl *kgo.Client, topic string, recs []ProduceRecord) []ProduceResult {
+	krs := make([]*kgo.Record, len(recs))
+	for i, r := range recs {
 		kr := &kgo.Record{Topic: topic, Key: r.Key, Value: r.Value, Context: ctx}
 		if r.KeyNull {
 			kr.Key = nil
@@ -117,7 +161,7 @@ func (c *client) Produce(ctx context.Context, topic string, recs []ProduceRecord
 		krs[i] = kr
 	}
 	out := make([]ProduceResult, len(krs))
-	for i, pr := range c.kcl.ProduceSync(ctx, krs...) {
+	for i, pr := range kcl.ProduceSync(ctx, krs...) {
 		out[i] = ProduceResult{
 			Partition: pr.Record.Partition, Offset: pr.Record.Offset, Time: pr.Record.Timestamp,
 			Err: wrap(ctx, pr.Err, "topic "+topic),
@@ -126,10 +170,17 @@ func (c *client) Produce(ctx context.Context, topic string, recs []ProduceRecord
 			out[i].Partition, out[i].Offset = -1, -1
 		}
 	}
-	if ctx.Err() != nil {
-		return out, ctx.Err()
+	return out
+}
+
+// allFailed reports whether every result failed with err.
+func allFailed(out []ProduceResult, err error) bool {
+	for _, r := range out {
+		if !errors.Is(r.Err, err) {
+			return false
+		}
 	}
-	return out, nil
+	return len(out) > 0
 }
 
 func (c *client) CreateTopic(ctx context.Context, t NewTopic) error {

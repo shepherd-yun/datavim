@@ -7,8 +7,10 @@ import (
 	"testing"
 
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kfake"
 	"github.com/twmb/franz-go/pkg/kgo"
+	"github.com/twmb/franz-go/pkg/kmsg"
 )
 
 func TestProduce(t *testing.T) {
@@ -191,5 +193,23 @@ func TestResetOffsetsShareGroupRefused(t *testing.T) {
 		if err := resetRefusal(typ); err != nil {
 			t.Fatalf("%s: %v", typ, err)
 		}
+	}
+}
+
+func TestProduceWithoutIdempotentWriteACL(t *testing.T) {
+	c := newCluster(t)
+	// before Kafka 3.0 an idempotent producer needs the IDEMPOTENT_WRITE
+	// cluster ACL, which a user allowed to write a topic may not have
+	c.ControlKey(int16(kmsg.InitProducerID), func(r kmsg.Request) (kmsg.Response, error, bool) {
+		c.KeepControl()
+		resp := r.ResponseKind().(*kmsg.InitProducerIDResponse)
+		resp.SetVersion(r.GetVersion())
+		resp.ErrorCode = kerr.ClusterAuthorizationFailed.Code
+		return resp, nil, true
+	})
+	cl := open(t, c)
+	res, err := cl.Produce(ctx(t), "orders", []ProduceRecord{{Value: []byte("a"), Partition: 0}})
+	if err != nil || len(res) != 1 || res[0].Err != nil || res[0].Offset != 0 {
+		t.Fatalf("res = %+v, err %v", res, err)
 	}
 }
