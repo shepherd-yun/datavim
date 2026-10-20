@@ -210,7 +210,6 @@ func (m *Model) openNodeMenu() {
 	})
 }
 
-// isRedisNode reports whether n is a Redis db, folder, key or "load more" line.
 // kafkaMenu lists what can be done with a node of a kafka tree.
 func kafkaMenu(n *tree.Node) []menuEntry {
 	var entries []menuEntry
@@ -246,6 +245,7 @@ func isKafkaNode(n *tree.Node) bool {
 	return false
 }
 
+// isRedisNode reports whether n is a Redis db, folder, key or "load more" line.
 func isRedisNode(n *tree.Node) bool {
 	_, ok := redisKeyOf(n)
 	return ok
