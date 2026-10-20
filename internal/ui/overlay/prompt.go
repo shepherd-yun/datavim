@@ -24,6 +24,12 @@ func WithCompleter(c Completer) PromptOption { return func(p *Prompt) { p.comple
 // WithValidate checks the text on enter; an error keeps the prompt open.
 func WithValidate(v func(string) error) PromptOption { return func(p *Prompt) { p.validate = v } }
 
+// WithHint shows hint(text) under the input, updated as it is typed; a
+// hint flagged bad is drawn as an error.
+func WithHint(hint func(text string) (line string, bad bool)) PromptOption {
+	return func(p *Prompt) { p.hint = hint }
+}
+
 // Prompt asks for one line of text with an editable initial value.
 type Prompt struct {
 	title, label string
@@ -31,6 +37,7 @@ type Prompt struct {
 	submit       func(string) tea.Msg
 	complete     Completer
 	validate     func(string) error
+	hint         func(string) (string, bool)
 	popup        *complete.Model
 	popStart     int    // where the completed word starts
 	err          string // the last validation error, until the next edit
@@ -103,6 +110,17 @@ func (p *Prompt) suggest() {
 func (p *Prompt) View(width, height int) string {
 	w := max(min(width-4, 80), 20)
 	lines := []string{p.label, "> " + p.input.View(w-4)}
+	if p.hint != nil && p.err == "" {
+		if h, bad := p.hint(p.input.String()); h != "" {
+			st := theme.Muted
+			if bad {
+				st = theme.Error
+			}
+			for _, l := range textutil.Wrap(textutil.Sanitize(h), w-2) {
+				lines = append(lines, st.Render(l))
+			}
+		}
+	}
 	if p.err != "" {
 		for _, l := range textutil.Wrap(textutil.Sanitize(p.err), w-2) {
 			lines = append(lines, theme.Error.Render(l))

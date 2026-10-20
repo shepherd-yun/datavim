@@ -160,3 +160,42 @@ func (m *markdown) Close() error { return m.w.Flush() }
 var mdEscaper = strings.NewReplacer("|", `\|`, "\r\n", "<br>", "\n", "<br>", "\r", "", "\t", " ")
 
 func mdCell(s string) string { return mdEscaper.Replace(s) }
+
+// jsonlWriter writes one object per line; a lone JSON-typed column
+// holding an object is the line itself.
+type jsonlWriter struct {
+	w    *bufio.Writer
+	cols []db.ColumnInfo
+	keys []string
+}
+
+func newJSONL(w io.Writer) *jsonlWriter { return &jsonlWriter{w: bufio.NewWriter(w)} }
+
+func (j *jsonlWriter) WriteHeader(cols []db.ColumnInfo) error {
+	j.cols = cols
+	j.keys = make([]string, len(cols))
+	for i, c := range cols {
+		j.keys[i] = jsonString(c.Name)
+	}
+	return nil
+}
+
+func (j *jsonlWriter) WriteRow(row []db.Value) error {
+	if len(row) == 1 && isJSONType(j.cols[0].DatabaseType) && !row[0].Null && strings.HasPrefix(strings.TrimSpace(row[0].Text), "{") {
+		if v := jsonValue(j.cols[0], row[0]); strings.HasPrefix(v, "{") {
+			_, err := j.w.WriteString(v + "\n")
+			return err
+		}
+	}
+	_, _ = j.w.WriteString("{")
+	for i, v := range row {
+		if i > 0 {
+			_, _ = j.w.WriteString(", ")
+		}
+		_, _ = j.w.WriteString(j.keys[i] + ": " + jsonValue(j.cols[i], v))
+	}
+	_, err := j.w.WriteString("}\n")
+	return err
+}
+
+func (j *jsonlWriter) Close() error { return j.w.Flush() }

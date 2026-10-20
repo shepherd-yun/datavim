@@ -12,6 +12,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
@@ -90,6 +91,8 @@ type topicTab struct {
 	cfgErr    string
 	loading   bool
 
+	msgGrid                     *grid.Model
+	msgs                        *msgView
 	partGrid, cfgGrid, consGrid *grid.Model
 	consumers                   []kafka.GroupDetail
 	consLoaded, consLoading     bool
@@ -104,8 +107,10 @@ type topicTab struct {
 func newTopicTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, conn, topic string) *topicTab {
 	t := &topicTab{
 		id: id, backend: b, keys: keys, settings: s, conn: conn, topic: topic,
+		msgGrid:  grid.New(nil, s.MaxColumnWidth),
 		partGrid: grid.New(nil, s.MaxColumnWidth), cfgGrid: grid.New(nil, s.MaxColumnWidth), consGrid: grid.New(nil, s.MaxColumnWidth),
 	}
+	t.msgs = &msgView{grid: t.msgGrid, pos: kmsgx.Position{Kind: kmsgx.PosLatest}}
 	t.partGrid.SetMarks(t.partMark)
 	t.cfgGrid.SetMarks(t.cfgMark)
 	return t
@@ -129,12 +134,38 @@ func (t *topicTab) Context() keymap.Context {
 }
 func (t *topicTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
 func (t *topicTab) SetSize(w, h int)              { t.width, t.height = max(w, 0), max(h, 0) }
-func (t *topicTab) Init() tea.Cmd                 { return t.loadDetail() }
+func (t *topicTab) Init() tea.Cmd {
+	return tea.Batch(t.loadDetail(), t.loadMsgs(0, t.msgs.pos, nil))
+}
+
+// shutdown closes the message reader when the tab closes.
+func (t *topicTab) shutdown() func() {
+	r := t.msgs.reader
+	t.msgs.reader = nil
+	t.msgs.gen++
+	return func() {
+		if r != nil {
+			_ = r.Close()
+		}
+	}
+}
+
+func (t *topicTab) exportSource() exportSrc {
+	if t.section == secMessages {
+		return t.msgsExport()
+	}
+	g := t.activeGrid()
+	return exportSrc{rs: g.Result(), name: t.topic + "-" + strings.ToLower(topicSectionNames[t.section]), conn: t.conn}
+}
 
 func (t *topicTab) setStatus(s string, isErr bool) { t.status, t.statusE = s, isErr }
 
 func (t *topicTab) retryAfterPassword() tea.Cmd {
 	cmds := []tea.Cmd{t.loadDetail()}
+	if !t.msgs.loaded {
+		t.msgs.gen++
+		cmds = append(cmds, t.loadMsgs(0, t.msgs.pos, nil))
+	}
 	if t.section == secConsumers {
 		cmds = append(cmds, t.loadConsumers())
 	}
@@ -150,7 +181,7 @@ func (t *topicTab) activeGrid() *grid.Model {
 	case secConsumers:
 		return t.consGrid
 	}
-	return nil
+	return t.msgGrid
 }
 
 func (t *topicTab) Find(q string, forward bool) bool {
@@ -205,6 +236,9 @@ func kafkaErr(err error) string {
 }
 
 func (t *topicTab) Update(msg tea.Msg) tea.Cmd {
+	if cmd, ok := t.msgsUpdate(msg); ok {
+		return cmd
+	}
 	switch m := msg.(type) {
 	case topicLoadedMsg:
 		t.loading = false
@@ -236,6 +270,11 @@ func (t *topicTab) Update(msg tea.Msg) tea.Cmd {
 
 func (t *topicTab) Handle(a keymap.Action) tea.Cmd {
 	t.status = ""
+	if t.section == secMessages {
+		if cmd, ok := t.handleMsgs(a); ok {
+			return cmd
+		}
+	}
 	switch a {
 	case keymap.NextSection:
 		return t.setSection(min(t.section+1, topicSections-1))
@@ -480,7 +519,20 @@ func (t *topicTab) View(focused bool) string {
 	var g *grid.Model
 	switch t.section {
 	case secMessages:
-		lines = append(lines, theme.Muted.Render("no messages loaded"))
+		v := t.msgs
+		switch {
+		case v.err != "":
+			lines = append(lines, theme.Error.Render(textutil.Sanitize(v.err)))
+		case !v.loaded:
+			lines = append(lines, theme.Muted.Render("loading…"))
+		default:
+			lines = append(lines, theme.Muted.Render(t.msgsHeader()))
+			if len(v.recs) == 0 {
+				lines = append(lines, theme.Muted.Render("no messages here"))
+			} else {
+				g = t.msgGrid
+			}
+		}
 	case secPartitions:
 		if t.detail != nil {
 			g = t.partGrid

@@ -51,6 +51,14 @@ type exportSrc struct {
 	wholeLabel string // the scope choice's second option, e.g. "Whole key (12,345 fields)"
 	escaped    int    // cells of rs written escaped, for the status
 	note       string // added to the status, e.g. " · includes unsaved changes"
+	// jsonl, when set, is what JSON Lines exports instead of rs (Kafka
+	// messages in full rather than their previews).
+	jsonl *db.ResultSet
+}
+
+// yanker is a tab whose yy / yl copy something else than the grid's text.
+type yanker interface {
+	yankText(a keymap.Action) (text, what string, ok bool)
 }
 
 type (
@@ -153,6 +161,12 @@ func (m *Model) copyAs(f export.Format) tea.Cmd {
 }
 
 func (m *Model) yank(a keymap.Action) tea.Cmd {
+	if y, ok := m.activeTab().(yanker); ok {
+		if text, what, ok := y.yankText(a); ok {
+			m.setStatus("copied "+what, false)
+			return m.copy(text)
+		}
+	}
 	if k, ok := m.activeTab().(*keyTab); ok && k.isString() && a == keymap.YankCell {
 		m.setStatus("copied "+k.Title(), false)
 		return m.copy(k.text) // what was read of it, unescaped
@@ -248,8 +262,12 @@ func exportCmd(b Backend, src exportSrc, f export.Format, whole bool, path strin
 			return exportDoneMsg{path: path, err: err}
 		}
 		if !whole {
-			err := export.ToFile(path, f, src.opts, func(w export.Writer) error { return export.WriteRows(w, src.rs) })
-			return exportDoneMsg{path: path, rows: len(src.rs.Rows), escaped: src.escaped, note: src.note, err: err}
+			rs := src.rs
+			if f == export.JSONL && src.jsonl != nil {
+				rs = src.jsonl
+			}
+			err := export.ToFile(path, f, src.opts, func(w export.Writer) error { return export.WriteRows(w, rs) })
+			return exportDoneMsg{path: path, rows: len(rs.Rows), escaped: src.escaped, note: src.note, err: err}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), exportTimeout)
 		defer cancel()

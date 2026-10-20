@@ -109,3 +109,27 @@ func TestEncodeRejectsXLSXAndUnknown(t *testing.T) {
 		t.Fatal("unknown format")
 	}
 }
+
+func TestJSONL(t *testing.T) {
+	rs := &db.ResultSet{
+		Columns: []db.ColumnInfo{{Name: "id", DatabaseType: "INT"}, {Name: "name"}},
+		Rows:    [][]db.Value{{{Text: "1"}, {Text: "a"}}, {{Text: "2"}, {Null: true}}},
+	}
+	got, err := Encode(JSONL, rs, Options{})
+	if err != nil || got != "{\"id\": 1, \"name\": \"a\"}\n{\"id\": 2, \"name\": null}\n" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	msgs := &db.ResultSet{
+		Columns: []db.ColumnInfo{{Name: "message", DatabaseType: "JSON"}},
+		Rows:    [][]db.Value{{{Text: `{"topic":"orders","offset":7}`}}},
+	}
+	if got, err := Encode(JSONL, msgs, Options{}); err != nil || got != "{\"topic\":\"orders\",\"offset\":7}\n" {
+		t.Fatalf("message rows: %q, %v", got, err)
+	}
+	if got, _ := Encode(JSONL, &db.ResultSet{Columns: rs.Columns}, Options{}); got != "" {
+		t.Fatalf("empty: %q", got)
+	}
+	if JSONL.Label() != "JSON Lines" {
+		t.Fatal(JSONL.Label())
+	}
+}

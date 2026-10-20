@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -40,10 +41,11 @@ const (
 	fmtText
 	fmtJSON
 	fmtHex
+	fmtBase64 // Kafka messages only; Redis cycles up to fmtHex
 )
 
 func (f valueFormat) String() string {
-	return [...]string{"auto", "text", "json", "hex"}[f]
+	return [...]string{"auto", "text", "json", "hex", "base64"}[f]
 }
 
 // renderValue turns v into display lines. Auto shows a JSON object or
@@ -68,6 +70,8 @@ func renderValue(v string, f valueFormat) (lines []string, used valueFormat) {
 		return strings.Split(textutil.PrettyJSON(v), "\n"), fmtJSON
 	case fmtHex:
 		return hexDump(v), fmtHex
+	case fmtBase64:
+		return []string{base64.StdEncoding.EncodeToString([]byte(v))}, fmtBase64
 	}
 	return strings.Split(v, "\n"), fmtText
 }

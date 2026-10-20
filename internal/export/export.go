@@ -20,6 +20,9 @@ const (
 	Markdown Format = "md"
 	SQL      Format = "sql"
 	XLSX     Format = "xlsx"
+	// JSONL is one JSON object per line. A row whose only column is a
+	// JSON-typed object is written as that object (a Kafka message).
+	JSONL Format = "jsonl"
 )
 
 // Label is the human name shown in messages.
@@ -37,6 +40,8 @@ func (f Format) Label() string {
 		return "SQL INSERT"
 	case XLSX:
 		return "Excel"
+	case JSONL:
+		return "JSON Lines"
 	}
 	return string(f)
 }
@@ -70,6 +75,8 @@ func New(f Format, w io.Writer, o Options) (Writer, error) {
 		return newInsert(w, o), nil
 	case XLSX:
 		return newXLSX(w)
+	case JSONL:
+		return newJSONL(w), nil
 	}
 	return nil, fmt.Errorf("unknown export format %q", f)
 }

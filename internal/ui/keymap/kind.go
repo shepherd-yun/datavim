@@ -33,6 +33,7 @@ var kinds = map[Context]map[Action][]Kind{
 		ToggleTx:          sql,
 		CopyAs("sql"):     sql,
 		ExportAs("sql"):   sql,
+		ExportAs("jsonl"): kafka,
 		OpenKey:           redis,
 		Favorites:         redis,
 	},
