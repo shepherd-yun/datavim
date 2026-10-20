@@ -12,6 +12,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
+	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
 
@@ -771,5 +772,34 @@ func TestTailSeekGoneDeclinedKeepsTail(t *testing.T) {
 	pressAll(t, m, "y")
 	if tt.msgs.tail != nil {
 		t.Fatal("the jump made ends live tail")
+	}
+}
+
+func TestMessagesDetailFollowsKeymap(t *testing.T) {
+	bs := keymap.DefaultBindings()
+	for i, b := range bs {
+		if b.Context == keymap.KafkaMessages && b.Action == keymap.ValueFormat {
+			bs[i].Keys = []string{"x"}
+		}
+	}
+	km, err := keymap.New("space", bs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 3)
+	tt := openMessages(t, m, "orders")
+	m.keys, tt.keys = km, km
+	pressAll(t, m, "K")
+	if s := screen(m); !strings.Contains(s, "x format") {
+		t.Fatalf("the title shows the remapped key:\n%s", s)
+	}
+	pressAll(t, m, "x")
+	if tt.msgs.format != fmtText {
+		t.Fatalf("x cycles the format: %v", tt.msgs.format)
+	}
+	pressAll(t, m, "v")
+	if tt.msgs.format != fmtText {
+		t.Fatal("v is no longer bound")
 	}
 }

@@ -771,20 +771,27 @@ func newMsgDetail(t *topicTab, row int) *msgDetail {
 	return &msgDetail{tab: t, rec: t.msgs.recs[t.msgs.shown[row]]}
 }
 
+// trigger reports whether key is the Messages section's own key for a,
+// so the detail follows keymap.toml.
+func (d *msgDetail) trigger(a keymap.Action, key string) bool {
+	return d.tab.keys.Triggers(keymap.KafkaMessages, a, key)
+}
+
 func (d *msgDetail) HandleKey(msg tea.KeyPressMsg) (overlay.Overlay, tea.Cmd) {
 	v := d.tab.msgs
-	switch msg.String() {
-	case "esc", "q", "K":
+	key := msg.String()
+	switch {
+	case key == "esc" || key == "q" || d.trigger(keymap.CellDetail, key):
 		return nil, nil
-	case "v":
+	case d.trigger(keymap.ValueFormat, key):
 		v.format = (v.format + 1) % (fmtBase64 + 1)
-	case "j", "down":
+	case key == "j" || key == "down":
 		d.offset++
-	case "k", "up":
+	case key == "k" || key == "up":
 		d.offset--
-	case "n", "N":
+	case d.trigger(keymap.SearchNext, key) || d.trigger(keymap.SearchPrev, key):
 		step := 1
-		if msg.String() == "N" {
+		if d.trigger(keymap.SearchPrev, key) {
 			step = -1
 		}
 		row := slices.IndexFunc(v.shown, func(i int) bool {
@@ -795,7 +802,7 @@ func (d *msgDetail) HandleKey(msg tea.KeyPressMsg) (overlay.Overlay, tea.Cmd) {
 			_, col := v.grid.Position()
 			v.grid.SetCursor(r, col)
 		}
-	case "y":
+	case key == "y":
 		lines, _ := renderBytes(d.rec.Value, d.rec.ValueNull, v.format)
 		note := ""
 		if d.rec.Truncated {
@@ -842,7 +849,16 @@ func (d *msgDetail) View(width, height int) string {
 	for _, l := range lines[d.offset:end] {
 		body = append(body, textutil.Fit(l, w-2))
 	}
-	return theme.Box("message · v format · n/N next/prev · y copy value · esc close", strings.Join(body, "\n"), w, h, true)
+	k := d.tab.keys
+	own := func(a keymap.Action, label string) string {
+		if key := k.OwnKey(keymap.KafkaMessages, a); key != "" {
+			return key + " " + label
+		}
+		return ""
+	}
+	title := joinHints("message", own(keymap.ValueFormat, "format"), own(keymap.SearchNext, "next"), own(keymap.SearchPrev, "prev"),
+		"y copy value", "esc close")
+	return theme.Box(title, strings.Join(body, "\n"), w, h, true)
 }
 
 // msgFilterMsg is a filter typed at the F prompt.
