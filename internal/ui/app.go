@@ -548,6 +548,9 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 			return m.openRedisConsole(conn, redisDBOf(ns))
 		}
 		if isKafka(m.backend, conn) {
+			if kconn, topic := m.kafkaContextTopic(); topic != "" {
+				return m.openProducer(kconn, topic)
+			}
 			m.setStatus("select a topic first", true)
 			return nil
 		}
