@@ -126,11 +126,9 @@ func TestKafkaClientMethodsClassified(t *testing.T) {
 			t.Errorf("kafka.Client.%s is neither a read nor a write method: add it to kafkaWriteMethods (and guard it) or to kafkaReadMethods", name)
 		}
 	}
-	for _, name := range kafkaWriteMethods {
-		if _, ok := reflect.TypeFor[*guardedKafka]().MethodByName(name); !ok {
-			t.Errorf("guardedKafka does not override %s", name)
-		}
-	}
+	// Whether guardedKafka overrides each write method is not visible to
+	// reflect (embedded methods are promoted): TestKafkaGuardRefusesWrites
+	// calls every one on a read-only connection instead.
 }
 
 // callWrite calls the write method name on c with zero arguments.
