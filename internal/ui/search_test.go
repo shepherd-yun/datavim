@@ -285,3 +285,23 @@ func TestSearchKafkaNotLoaded(t *testing.T) {
 		t.Fatalf("searching reads nothing: %v", k.callList())
 	}
 }
+
+func TestSearchKafkaForgetsEditedConn(t *testing.T) {
+	for _, msg := range []tea.Msg{
+		connUpdatedMsg{old: "events", conn: config.Connection{Name: "events", Driver: "kafka", Host: "other:9092"}},
+		connRemovedMsg{name: "events"},
+	} {
+		m, _, k := newKafkaModel(t, config.Connection{})
+		k.addTopic("orders", 1, 0, 3)
+		m.setFocus(focusTree)
+		pressAll(t, m, "l")
+		drainAll(t, m, func() tea.Msg { return msg })
+		if _, ok := m.kafkaTrees["events"]; ok {
+			t.Fatalf("%T: the old tree is forgotten", msg)
+		}
+		search(t, m, "ord")
+		if s := screen(m); strings.Contains(s, "orders") {
+			t.Fatalf("%T: screen:\n%s", msg, s)
+		}
+	}
+}

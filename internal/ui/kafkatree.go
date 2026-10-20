@@ -561,7 +561,7 @@ func (m *Model) searchKafka(conn, text string) []kafkaHit {
 	var out []kafkaHit
 	for _, c := range m.backend.Connections() {
 		st := m.kafkaTrees[c.Name]
-		if st == nil || conn != "" && c.Name != conn {
+		if st == nil || conn != "" && c.Name != conn || c.Driver != "kafka" {
 			continue
 		}
 		add := func(name string, group bool) {

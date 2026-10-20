@@ -1619,6 +1619,7 @@ func (m *Model) connUpdated(msg connUpdatedMsg) tea.Cmd {
 	}
 	c := msg.conn
 	m.catalogs.Forget(msg.old)
+	delete(m.kafkaTrees, msg.old)
 	cmd := m.closeTabsOf(msg.old)
 	m.tree.ReplaceRoot(msg.old, connNode(c))
 	m.setFocus(focusTree)
@@ -1636,6 +1637,7 @@ func (m *Model) connRemoved(msg connRemovedMsg) tea.Cmd {
 		return nil
 	}
 	m.catalogs.Forget(msg.name)
+	delete(m.kafkaTrees, msg.name)
 	cmd := m.closeTabsOf(msg.name)
 	m.tree.RemoveRoot(msg.name)
 	m.setFocus(focusTree)
