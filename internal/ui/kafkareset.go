@@ -142,7 +142,7 @@ func (m *Model) resetTimes(msg resetTimesMsg) {
 		return
 	}
 	if msg.err != nil {
-		m.setStatus("offsets at "+msg.at.Format("2006-01-02 15:04")+": "+kafkaErr(msg.err), true)
+		r.TimesFailed(msg.at, "offsets at "+msg.at.Format("2006-01-02 15:04")+": "+kafkaErr(msg.err))
 		return
 	}
 	r.SetTimes(msg.at, msg.byTime)

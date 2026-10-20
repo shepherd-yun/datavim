@@ -86,6 +86,15 @@ func (r *ResetOffsets) SetTimes(ts time.Time, byTime map[kafka.TP]int64) {
 	r.plan()
 }
 
+// TimesFailed says why the offsets at ts could not be read; editing the
+// target asks for them again.
+func (r *ResetOffsets) TimesFailed(ts time.Time, why string) {
+	delete(r.times, ts)
+	if r.waiting {
+		r.waiting, r.err = false, why
+	}
+}
+
 // plan recomputes the preview; it returns the request for offsets by
 // time the target needs, if any.
 func (r *ResetOffsets) plan() tea.Cmd {

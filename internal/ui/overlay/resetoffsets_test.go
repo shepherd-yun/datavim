@@ -123,6 +123,23 @@ func TestResetDialogTimeTarget(t *testing.T) {
 	}
 }
 
+func TestResetDialogTimeTargetFailed(t *testing.T) {
+	var asked []time.Time
+	r := NewResetOffsets(keymap.Default(), "order-svc", resetLags(), []kafka.TP{{Topic: "orders"}}, 0, false, resetNow,
+		func(c []kafka.OffsetCommit) tea.Msg { return resetSubmitted{c} },
+		func(ts time.Time) tea.Cmd { asked = append(asked, ts); return nil })
+	send(t, r, "tab", "ctrl+u", "@", "0", "9", ":", "1", "2")
+	r.TimesFailed(asked[len(asked)-1], "offsets at 09:12: timed out")
+	if v := view(r); !strings.Contains(v, "offsets at 09:12: timed out") || strings.Contains(v, "…") {
+		t.Fatalf("view:\n%s", v)
+	}
+	n := len(asked)
+	send(t, r, "backspace", "2")
+	if len(asked) != n+1 {
+		t.Fatal("the same time is asked again once the target is edited")
+	}
+}
+
 func TestResetNeverCommittedNext(t *testing.T) {
 	r := newReset(kafka.TP{Topic: "refunds", Partition: 0}, 0, false)
 	if v := view(r); !strings.Contains(v, "has no committed offset; pick earliest, latest or an offset") {
