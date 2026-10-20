@@ -312,7 +312,8 @@ func (c *client) bounds(ctx context.Context, topics []string, what string) (star
 
 // GroupsLag sums each group's lag over every partition of the topics it
 // committed to, in one round of requests. Groups whose offsets cannot be
-// fetched (share groups, missing ones) are left out.
+// fetched (an error, or not allowed) are left out; a group that committed
+// nothing, which a missing one looks like, has lag 0.
 func (c *client) GroupsLag(ctx context.Context, groups []string) (map[string]int64, error) {
 	if len(groups) == 0 {
 		return map[string]int64{}, nil

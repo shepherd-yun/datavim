@@ -62,7 +62,7 @@ var kinds = map[Context]map[Action][]Kind{
 // kinds, which otherwise reads for all of them at once.
 var kindDescs = map[Context]map[Action][3]string{ // [SQL, Redis, Kafka]
 	Global: {
-		History:     {"SQL history", "Command history", "SQL and command history"},
+		History:     {"SQL history", "Command history", "SQL and Redis command history"},
 		OpenConsole: {"Open console", "Open console", "Producer console for the topic"},
 	},
 	Tree: {
