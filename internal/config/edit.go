@@ -80,6 +80,19 @@ func RemoveConnection(dir, name string) error {
 	return fmt.Errorf("connection %q is not in %s", name, path)
 }
 
+// tableEnd is the index of the first table header at or after i.
+func tableEnd(lines []string, i int) int {
+	for i < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[i]), "[") {
+		i++
+	}
+	return i
+}
+
+// subTable reports whether l is the header of a [connection.x] sub-table.
+func subTable(l string) bool {
+	return strings.HasPrefix(strings.ReplaceAll(strings.TrimSpace(l), " ", ""), "[connection.")
+}
+
 // block is one [[connection]] table: lines[start:end], from its header to
 // its last key (blank lines and comments after it belong to what follows).
 type block struct {
@@ -98,9 +111,16 @@ func readBlocks(path string) ([]string, []block, error) {
 		if strings.ReplaceAll(strings.TrimSpace(lines[i]), " ", "") != "[[connection]]" {
 			continue
 		}
-		end := i + 1
-		for end < len(lines) && !strings.HasPrefix(strings.TrimSpace(lines[end]), "[") {
-			end++
+		end := tableEnd(lines, i+1)
+		for { // [connection.params] and other sub-tables belong to the block
+			j := end
+			for j < len(lines) && (blank(lines[j]) || comment(lines[j])) {
+				j++
+			}
+			if j == len(lines) || !subTable(lines[j]) {
+				break
+			}
+			end = tableEnd(lines, j+1)
 		}
 		for end > i+1 && (blank(lines[end-1]) || comment(lines[end-1])) {
 			end--
@@ -124,9 +144,24 @@ func readBlocks(path string) ([]string, []block, error) {
 
 // editBlock rewrites the form's keys whose value changed. A changed line is
 // replaced whole (an end-of-line comment on it is lost); new keys go after
-// the block's last line; emptied optional keys are removed.
+// the last key before any sub-table; emptied optional keys are removed.
+// Changed params replace a [connection.params] table or params.x keys.
 func editBlock(body []string, old, c Connection) ([]string, error) {
 	out := append([]string{}, body...)
+	if paramsLine(old.Params) != paramsLine(c.Params) {
+		out = dropParams(out)
+	}
+	main := len(out)
+	for i, l := range out {
+		if subTable(l) {
+			main = i
+			break
+		}
+	}
+	last := main // where a new key goes: after the last key of the main table
+	for last > 1 && (blank(out[last-1]) || comment(out[last-1])) {
+		last--
+	}
 	for _, f := range []struct {
 		key      string
 		old, new any
@@ -159,7 +194,7 @@ func editBlock(body []string, old, c Connection) ([]string, error) {
 			line = strings.TrimSuffix(string(enc), "\n")
 		}
 		at := -1
-		for i, l := range out {
+		for i, l := range out[:main] {
 			if keyOf(l) == f.key {
 				at = i
 				break
@@ -168,14 +203,39 @@ func editBlock(body []string, old, c Connection) ([]string, error) {
 		switch {
 		case at >= 0 && line == "":
 			out = append(out[:at], out[at+1:]...)
+			main--
+			last--
 		case at >= 0:
 			indent := out[at][:len(out[at])-len(strings.TrimLeft(out[at], " \t"))]
 			out[at] = indent + line
 		case line != "":
-			out = append(out, line)
+			out = append(out[:last], append([]string{line}, out[last:]...)...)
+			main++
+			last++
 		}
 	}
 	return out, nil
+}
+
+// dropParams removes the params written as a [connection.params] table or
+// as params.x keys, with the blank lines and comments just above the table.
+func dropParams(body []string) []string {
+	var out []string
+	for i := 0; i < len(body); i++ {
+		l := body[i]
+		if strings.ReplaceAll(strings.TrimSpace(l), " ", "") == "[connection.params]" {
+			for len(out) > 1 && (blank(out[len(out)-1]) || comment(out[len(out)-1])) {
+				out = out[:len(out)-1]
+			}
+			i = tableEnd(body, i+1) - 1
+			continue
+		}
+		if strings.HasPrefix(keyOf(l), "params.") {
+			continue
+		}
+		out = append(out, l)
+	}
+	return out
 }
 
 // paramsLine is the "params = { … }" line for p, or "" when p is empty.

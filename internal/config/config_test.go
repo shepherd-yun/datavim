@@ -634,3 +634,79 @@ func TestUpdateConnectionWritesParams(t *testing.T) {
 		t.Fatalf("local = %+v, err %v", cfg.Connections, err)
 	}
 }
+
+func TestUpdateConnectionParamsSubTable(t *testing.T) {
+	const conns = `[[connection]]
+name = "a"
+driver = "postgres"
+host = "h1"
+
+# TLS settings
+[connection.params]
+sslmode = "require"
+
+[[connection]]
+name = "b"
+driver = "mysql"
+host = "h2"
+params.tls = "true"
+`
+	for _, tc := range []struct {
+		name   string
+		edit   Connection
+		params map[string]string
+	}{
+		{"a", Connection{Name: "a", Driver: "postgres", Host: "h9", Params: map[string]string{"sslmode": "require"}}, map[string]string{"sslmode": "require"}},
+		{"a", Connection{Name: "a", Driver: "postgres", Host: "h1", User: "u", Params: map[string]string{"sslmode": "disable"}}, map[string]string{"sslmode": "disable"}},
+		{"a", Connection{Name: "a", Driver: "postgres", Host: "h1"}, nil},
+		{"b", Connection{Name: "b", Driver: "mysql", Host: "h9", Params: map[string]string{"tls": "true"}}, map[string]string{"tls": "true"}},
+		{"b", Connection{Name: "b", Driver: "mysql", Host: "h2", Params: map[string]string{"tls": "false"}}, map[string]string{"tls": "false"}},
+	} {
+		dir := t.TempDir()
+		writeFile(t, dir, "connections.toml", conns)
+		want, err := UpdateConnection(dir, tc.name, tc.edit)
+		if err != nil {
+			t.Fatalf("%s %+v: %v", tc.name, tc.edit, err)
+		}
+		cfg, err := Load(dir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(cfg.Connections) != 2 {
+			t.Fatalf("%d connections", len(cfg.Connections))
+		}
+		for _, c := range cfg.Connections {
+			if c.Name != tc.name {
+				continue
+			}
+			if c.Host != want.Host || c.User != want.User || !maps.Equal(c.Params, tc.params) {
+				data, _ := os.ReadFile(filepath.Join(dir, "connections.toml"))
+				t.Fatalf("%s = %+v\n%s", tc.name, c, data)
+			}
+		}
+	}
+}
+
+func TestRemoveConnectionWithSubTable(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "connections.toml", `[[connection]]
+name = "a"
+driver = "postgres"
+host = "h1"
+
+[connection.params]
+sslmode = "require"
+
+[[connection]]
+name = "b"
+driver = "mysql"
+host = "h2"
+`)
+	if err := RemoveConnection(dir, "a"); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(dir)
+	if err != nil || len(cfg.Connections) != 1 || len(cfg.Connections[0].Params) != 0 {
+		t.Fatalf("%+v, err %v", cfg.Connections, err)
+	}
+}

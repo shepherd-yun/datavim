@@ -29,6 +29,8 @@ All notable changes to this project are documented here. The format follows
 ### Fixed
 - Params set in the new/edit connection form (SQL Server `Encrypt` and `Trust cert`) are now
   saved to `connections.toml`; they were dropped before.
+- Deleting a connection whose params are a `[connection.params]` table no longer fails, and
+  editing it keeps working now that the form saves params.
 
 ## [2.3.0] - 2026-10-20
 
