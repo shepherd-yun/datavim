@@ -31,3 +31,12 @@ type Record struct {
 
 // Range is the offsets [From, To) of one partition.
 type Range struct{ From, To int64 }
+
+// PartitionLag is a group's progress on one partition.
+type PartitionLag struct {
+	TP
+	Committed  int64 // -1: never committed
+	Start, End int64
+	Lag        int64  // End-Committed, or End-Start when never committed
+	Member     string // client id of the member it is assigned to, or ""
+}
