@@ -208,9 +208,9 @@ func singlePartition(pos kmsgx.Position) bool { return len(pos.Partitions) == 1 
 func (t *topicTab) loadMsgs(dir int, pos kmsgx.Position, edges map[int32]int64) tea.Cmd {
 	v := t.msgs
 	v.loading = true
-	id, gen, b, conn, topic, reader := t.id, v.gen, t.backend, t.conn, t.topic, v.reader
+	tabCtx, id, gen, b, conn, topic, reader := t.ctx, t.id, v.gen, t.backend, t.conn, t.topic, v.reader
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		ctx, cancel := context.WithTimeout(tabCtx, loadTimeout)
 		defer cancel()
 		msg := msgsLoadedMsg{tabID: id, gen: gen, conn: conn, dir: dir, pos: pos}
 		msg.err = withKafka(ctx, b, conn, func(c kafka.Client) error {
@@ -927,9 +927,9 @@ func (t *topicTab) searchFilter(forward bool) (tea.Cmd, bool) {
 // searchStep reads the batch past edges in the search's direction.
 func (t *topicTab) searchStep(edges map[int32]int64) tea.Cmd {
 	v := t.msgs
-	id, gen, b, conn, topic, reader, dir := t.id, v.searchGen, t.backend, t.conn, t.topic, v.reader, v.search.dir
+	tabCtx, id, gen, b, conn, topic, reader, dir := t.ctx, t.id, v.searchGen, t.backend, t.conn, t.topic, v.reader, v.search.dir
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		ctx, cancel := context.WithTimeout(tabCtx, loadTimeout)
 		defer cancel()
 		msg := searchStepMsg{tabID: id, gen: gen, conn: conn}
 		msg.err = withKafka(ctx, b, conn, func(c kafka.Client) error {
@@ -1118,9 +1118,9 @@ func (t *topicTab) toggleTail() tea.Cmd {
 // highest offset kept), or from their end when kept is nil.
 func (t *topicTab) startTail(kept map[int32]int64) tea.Cmd {
 	v := t.msgs
-	id, gen, b, conn, topic, reader, parts := t.id, v.gen, t.backend, t.conn, t.topic, v.reader, v.pos.Partitions
+	tabCtx, id, gen, b, conn, topic, reader, parts := t.ctx, t.id, v.gen, t.backend, t.conn, t.topic, v.reader, v.pos.Partitions
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		ctx, cancel := context.WithTimeout(tabCtx, loadTimeout)
 		defer cancel()
 		msg := tailStartedMsg{tabID: id, gen: gen, conn: conn}
 		msg.err = withKafka(ctx, b, conn, func(c kafka.Client) error {
@@ -1180,9 +1180,9 @@ func (t *topicTab) poll() tea.Cmd {
 		return nil
 	}
 	v.tail.polling = true
-	id, gen, reader := t.id, v.gen, v.reader
+	tabCtx, id, gen, reader := t.ctx, t.id, v.gen, v.reader
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), tailPollWait)
+		ctx, cancel := context.WithTimeout(tabCtx, tailPollWait)
 		defer cancel()
 		recs, err := reader.Poll(ctx, tailPollMax)
 		return tailPollMsg{tabID: id, gen: gen, recs: recs, err: err}
@@ -1226,9 +1226,9 @@ func (t *topicTab) Shown() tea.Cmd {
 		return nil
 	}
 	v.tail.hidden = false
-	id, gen, b, conn, topic := t.id, v.gen, t.backend, t.conn, t.topic
+	tabCtx, id, gen, b, conn, topic := t.ctx, t.id, v.gen, t.backend, t.conn, t.topic
 	estimate := func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		ctx, cancel := context.WithTimeout(tabCtx, loadTimeout)
 		defer cancel()
 		msg := tailEstimateMsg{tabID: id, gen: gen}
 		_ = withKafka(ctx, b, conn, func(c kafka.Client) error {

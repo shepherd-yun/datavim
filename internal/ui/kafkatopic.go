@@ -103,6 +103,9 @@ type topicTab struct {
 	statusE bool
 
 	width, height int
+
+	ctx    context.Context // every load's; shutdown cancels it
+	cancel context.CancelFunc
 }
 
 func newTopicTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, conn, topic string) *topicTab {
@@ -112,6 +115,7 @@ func newTopicTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, conn
 		partGrid: grid.New(nil, s.MaxColumnWidth), cfgGrid: grid.New(nil, s.MaxColumnWidth), consGrid: grid.New(nil, s.MaxColumnWidth),
 	}
 	t.msgs = &msgView{grid: t.msgGrid, pos: kmsgx.Position{Kind: kmsgx.PosLatest}, limit: msgLimit}
+	t.ctx, t.cancel = context.WithCancel(context.Background())
 	t.partGrid.SetMarks(t.partMark)
 	t.cfgGrid.SetMarks(t.cfgMark)
 	return t
@@ -140,8 +144,10 @@ func (t *topicTab) Init() tea.Cmd {
 	return tea.Batch(t.loadDetail(), t.loadMsgs(0, t.msgs.pos, nil))
 }
 
-// shutdown closes the message reader when the tab closes.
+// shutdown cancels the loads and closes the message reader when the tab
+// closes.
 func (t *topicTab) shutdown() func() {
+	t.cancel()
 	r := t.msgs.reader
 	t.msgs.reader = nil
 	t.msgs.gen++
@@ -150,6 +156,17 @@ func (t *topicTab) shutdown() func() {
 			_ = r.Close()
 		}
 	}
+}
+
+// orphanReader is the reader a load opened for a topic tab closed since.
+func orphanReader(msg tea.Msg) kafka.Reader {
+	switch m := msg.(type) {
+	case msgsLoadedMsg:
+		return m.reader
+	case tailStartedMsg:
+		return m.reader
+	}
+	return nil
 }
 
 func (t *topicTab) exportSource() exportSrc {
@@ -193,9 +210,9 @@ func (t *topicTab) Find(q string, forward bool) bool {
 
 func (t *topicTab) loadDetail() tea.Cmd {
 	t.loading = true
-	id, b, conn, topic := t.id, t.backend, t.conn, t.topic
+	tabCtx, id, b, conn, topic := t.ctx, t.id, t.backend, t.conn, t.topic
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		ctx, cancel := context.WithTimeout(tabCtx, loadTimeout)
 		defer cancel()
 		msg := topicLoadedMsg{tabID: id, conn: conn}
 		msg.err = withKafka(ctx, b, conn, func(c kafka.Client) error {
@@ -212,9 +229,9 @@ func (t *topicTab) loadDetail() tea.Cmd {
 
 func (t *topicTab) loadConsumers() tea.Cmd {
 	t.consLoading = true
-	id, b, conn, topic := t.id, t.backend, t.conn, t.topic
+	tabCtx, id, b, conn, topic := t.ctx, t.id, t.backend, t.conn, t.topic
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		ctx, cancel := context.WithTimeout(tabCtx, loadTimeout)
 		defer cancel()
 		msg := consumersLoadedMsg{tabID: id, conn: conn}
 		msg.err = withKafka(ctx, b, conn, func(c kafka.Client) error {

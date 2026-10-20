@@ -176,3 +176,19 @@ func TestTail(t *testing.T) {
 		}
 	}
 }
+
+func TestClosedReaderRefuses(t *testing.T) {
+	c := newCluster(t)
+	fill(t, c, "orders", 1, 10)
+	r := openReader(t, c, ReaderConfig{})
+	if err := r.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// a tail started after Close would never be stopped
+	if err := r.Tail(ctx(t), "orders", map[int32]int64{0: 0}); !errors.Is(err, errReaderClosed) {
+		t.Fatalf("Tail after Close: %v", err)
+	}
+	if _, err := r.Range(ctx(t), "orders", map[int32]Range{0: {0, 10}}); !errors.Is(err, errReaderClosed) {
+		t.Fatalf("Range after Close: %v", err)
+	}
+}

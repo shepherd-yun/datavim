@@ -48,11 +48,16 @@ type Reader interface {
 }
 
 type reader struct {
-	cfg  Config
-	rc   ReaderConfig
-	mu   sync.Mutex
-	tail *kgo.Client // the live tail's client, nil when not tailing
+	cfg    Config
+	rc     ReaderConfig
+	mu     sync.Mutex
+	tail   *kgo.Client // the live tail's client, nil when not tailing
+	closed bool
 }
+
+// errReaderClosed is a Range or Tail after Close: a tail started then
+// would never be stopped.
+var errReaderClosed = errors.New("kafka: reader closed")
 
 // OpenReader checks cfg once (an ApiVersions round) and returns a Reader.
 // Every Range and Tail uses its own kgo client that only consumes the
@@ -97,6 +102,9 @@ func (r *reader) stopTail() {
 func (r *reader) Range(ctx context.Context, topic string, ranges map[int32]Range) ([]Record, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.closed {
+		return nil, errReaderClosed
+	}
 	r.stopTail()
 	what := "topic " + topic
 	if len(ranges) == 0 {
@@ -216,6 +224,9 @@ func partitionBounds(ctx context.Context, adm *kadm.Client, topic string) (start
 func (r *reader) Tail(_ context.Context, topic string, from map[int32]int64) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.closed {
+		return errReaderClosed
+	}
 	r.stopTail()
 	kcl, err := r.consumer(topic, from)
 	if err != nil {
@@ -255,6 +266,7 @@ func (r *reader) Poll(ctx context.Context, maxRecs int) ([]Record, error) {
 func (r *reader) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	r.closed = true
 	r.stopTail()
 	return nil
 }

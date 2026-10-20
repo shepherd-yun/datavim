@@ -158,3 +158,20 @@ func TestTopicTabReuse(t *testing.T) {
 		t.Fatal("tab key")
 	}
 }
+
+func TestTopicCloseDuringLoad(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 10)
+	_, load := m.Update(openGroupMsg{conn: "events", group: "x"}) // any tab first
+	drainAll(t, m, load)
+	load = m.openTopic("events", "orders")
+	tt := m.activeTab().(*topicTab)
+	drainAll(t, m, m.closeTab(m.active))
+	if tt.ctx.Err() == nil {
+		t.Fatal("closing the tab cancels its loads")
+	}
+	drainAll(t, m, load) // the reader this load opened lands on no tab
+	if r := k.lastReader(); r == nil || !r.isClosed() {
+		t.Fatal("a reader opened for a closed tab is closed")
+	}
+}

@@ -434,6 +434,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			s := d.session
 			return m, func() tea.Msg { _ = s.Close(); return nil }
 		}
+		if r := orphanReader(msg); r != nil {
+			return m, func() tea.Msg { _ = r.Close(); return nil }
+		}
 	}
 	return m, nil
 }
