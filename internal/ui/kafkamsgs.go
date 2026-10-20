@@ -702,8 +702,12 @@ func (t *topicTab) yankText(a keymap.Action) (text, what string, ok bool) {
 	if !ok {
 		return "", "", false
 	}
+	cut := ""
+	if r.Truncated {
+		cut = " (the first 1 MB only)"
+	}
 	if a == keymap.YankRow {
-		return string(kmsgx.JSON(r)), fmt.Sprintf("message p%d:%d", r.Partition, r.Offset), true
+		return string(kmsgx.JSON(r)), fmt.Sprintf("message p%d:%d", r.Partition, r.Offset) + cut, true
 	}
 	col, _ := t.msgs.grid.Column()
 	switch col.Name {
@@ -712,10 +716,10 @@ func (t *topicTab) yankText(a keymap.Action) (text, what string, ok bool) {
 		return strings.Join(lines, "\n"), "key", true
 	case "VALUE":
 		if t.msgs.format == fmtAuto && !r.ValueNull && utf8.Valid(r.Value) {
-			return string(r.Value), "value", true
+			return string(r.Value), "value" + cut, true
 		}
 		lines, _ := renderBytes(r.Value, r.ValueNull, t.msgs.format)
-		return strings.Join(lines, "\n"), "value", true
+		return strings.Join(lines, "\n"), "value" + cut, true
 	case "HEADERS":
 		return headersJSON(r), "headers", true
 	}

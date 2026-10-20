@@ -713,3 +713,21 @@ func TestMessagesNewerReadsEmptyPartitions(t *testing.T) {
 		t.Fatalf("%d recs", len(tt.msgs.recs))
 	}
 }
+
+func TestMessagesYankTruncated(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 1)
+	r := fakeRecord("orders", 0, 0)
+	r.Truncated, r.Size = true, 3<<20
+	k.setRecord(r)
+	openMessages(t, m, "orders")
+	captureClipboard(t)
+	pressAll(t, m, "$", "y", "l") // VALUE
+	if !strings.Contains(m.status, "first 1 MB only") {
+		t.Fatalf("yl: status %q", m.status)
+	}
+	pressAll(t, m, "y", "y")
+	if !strings.Contains(m.status, "first 1 MB only") {
+		t.Fatalf("yy: status %q", m.status)
+	}
+}
