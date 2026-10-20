@@ -56,6 +56,9 @@ type msgView struct {
 	shown     []int      // the indexes of the recs that pass the filter, one per grid row
 	search    *msgSearch // the running search past what is kept
 	searchGen int        // bumped when a search starts or stops
+
+	tail  *liveTail // live tail; nil when off
+	limit int       // messages kept, msgLimit but in tests
 }
 
 // current is the message under the cursor.
@@ -317,7 +320,7 @@ func (t *topicTab) msgsLoaded(m msgsLoadedMsg) tea.Cmd {
 		}
 		return nil
 	}
-	recs, cur, dropped := mergeRecords(v.recs, m.recs, m.dir, v.single, msgLimit, v.recIndex())
+	recs, cur, dropped := mergeRecords(v.recs, m.recs, m.dir, v.single, v.limit, v.recIndex())
 	v.recs = recs
 	if m.dir == 0 {
 		cur = t.jumpCursor(m)
@@ -424,6 +427,13 @@ func msgSize(n int) string {
 func (t *topicTab) msgsHeader() string {
 	v := t.msgs
 	parts := []string{v.pos.Describe(v.bounds), plural(len(v.recs), "message")}
+	switch {
+	case v.tail == nil:
+	case v.tail.paused:
+		parts = append(parts, "live · paused")
+	default:
+		parts = append(parts, "live · +"+groupDigits(int64(v.tail.added))+" new")
+	}
 	if !v.filter.IsZero() {
 		parts = append(parts, "filter: "+v.filter.String(), groupDigits(int64(len(v.shown)))+" of "+groupDigits(int64(len(v.recs))))
 	}
@@ -453,6 +463,8 @@ func (t *topicTab) handleMsgs(a keymap.Action) (tea.Cmd, bool) {
 		}
 	case keymap.Seek:
 		return t.seekPrompt(), true
+	case keymap.LiveTail:
+		return t.toggleTail(), true
 	case keymap.ToggleHeaders:
 		v.headers = !v.headers
 		t.renderMsgs(v.recIndex())
@@ -491,10 +503,17 @@ func (t *topicTab) handleMsgs(a keymap.Action) (tea.Cmd, bool) {
 }
 
 // loadMore loads the batch before (dir -1) or after (+1) what is kept.
+// Reading pauses live tail.
 func (t *topicTab) loadMore(dir int) tea.Cmd {
 	v := t.msgs
 	if v.loading || !v.loaded {
 		return nil
+	}
+	if v.tail != nil {
+		if dir > 0 {
+			return nil // live tail brings the newer ones
+		}
+		v.tail.paused = true
 	}
 	if dir < 0 {
 		t.setStatus("loading older messages…", false)
@@ -550,9 +569,10 @@ func (t *topicTab) seek(text string) tea.Cmd {
 	return t.jump(pos)
 }
 
-// jump replaces the view with the messages at pos.
+// jump replaces the view with the messages at pos; it ends live tail.
 func (t *topicTab) jump(pos kmsgx.Position) tea.Cmd {
 	t.msgs.gen++
+	t.msgs.tail = nil
 	return t.loadMsgs(0, pos, nil)
 }
 
@@ -568,6 +588,13 @@ func (t *topicTab) msgsUpdate(msg tea.Msg) (tea.Cmd, bool) {
 			Offsets: map[int32]int64{m.partition: m.earliest}}), true
 	case msgFilterMsg:
 		t.setFilter(m.filter)
+		return nil, true
+	case tailStartedMsg:
+		return t.tailStarted(m), true
+	case tailPollMsg:
+		return t.tailPolled(m), true
+	case tailEstimateMsg:
+		t.tailEstimated(m)
 		return nil, true
 	case searchStepMsg:
 		return t.searchStepped(m), true
@@ -958,7 +985,7 @@ func (t *topicTab) searchStepped(m searchStepMsg) tea.Cmd {
 			}
 		}
 		target := recs[found]
-		merged, _, dropped := mergeRecords(v.recs, keep, s.dir, v.single, msgLimit, v.recIndex())
+		merged, _, dropped := mergeRecords(v.recs, keep, s.dir, v.single, v.limit, v.recIndex())
 		v.recs = merged
 		at := slices.IndexFunc(merged, func(r kafka.Record) bool { return r.Partition == target.Partition && r.Offset == target.Offset })
 		t.renderMsgs(max(at, 0))
@@ -1008,4 +1035,218 @@ func (t *topicTab) cancelRun() tea.Cmd {
 	}
 	t.setStatus("nothing is running", false)
 	return nil
+}
+
+// Live tail (design §5.4): each Poll waits up to tailPollWait for at most
+// tailPollMax messages.
+const (
+	tailPollWait = time.Second
+	tailPollMax  = 500
+)
+
+// liveTail is the state of live tail on a message view.
+type liveTail struct {
+	paused  bool
+	hidden  bool // the tab is not on screen: no polls
+	polling bool // a Poll is out
+	added   int  // messages it brought
+}
+
+// tailStartedMsg is the reader following the partitions from their end
+// (or from what is kept, after a pause).
+type tailStartedMsg struct {
+	tabID, gen int
+	conn       string
+	reader     kafka.Reader
+	bounds     kmsgx.Bounds
+	err        error
+}
+
+func (m tailStartedMsg) TabID() int               { return m.tabID }
+func (m tailStartedMsg) kafkaMsg()                {}
+func (m tailStartedMsg) failure() (string, error) { return m.conn, m.err }
+
+// tailPollMsg is what one Poll returned.
+type tailPollMsg struct {
+	tabID, gen int
+	recs       []kafka.Record
+	err        error
+}
+
+func (m tailPollMsg) TabID() int { return m.tabID }
+
+// tailEstimateMsg is the partitions' ends when the tab comes back on
+// screen.
+type tailEstimateMsg struct {
+	tabID, gen int
+	bounds     kmsgx.Bounds
+}
+
+func (m tailEstimateMsg) TabID() int { return m.tabID }
+
+// toggleTail is T: live tail on, paused, on again.
+func (t *topicTab) toggleTail() tea.Cmd {
+	v := t.msgs
+	switch {
+	case !v.loaded:
+		return nil
+	case v.tail == nil:
+		v.tail = &liveTail{}
+		t.setStatus("live", false)
+		return t.startTail(nil)
+	case !v.tail.paused:
+		v.tail.paused = true
+		t.setStatus("live · paused", false)
+		return nil
+	}
+	v.tail.paused = false
+	t.setStatus("live", false)
+	return t.startTail(v.edges(false))
+}
+
+// startTail follows the view's partitions from after kept (each partition's
+// highest offset kept), or from their end when kept is nil.
+func (t *topicTab) startTail(kept map[int32]int64) tea.Cmd {
+	v := t.msgs
+	id, gen, b, conn, topic, reader, parts := t.id, v.gen, t.backend, t.conn, t.topic, v.reader, v.pos.Partitions
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		defer cancel()
+		msg := tailStartedMsg{tabID: id, gen: gen, conn: conn}
+		msg.err = withKafka(ctx, b, conn, func(c kafka.Client) error {
+			d, err := c.TopicDetail(ctx, topic)
+			if err != nil {
+				return err
+			}
+			msg.bounds = boundsOf(d)
+			from := map[int32]int64{}
+			for p, bd := range msg.bounds {
+				if parts != nil && !slices.Contains(parts, p) {
+					continue
+				}
+				from[p] = bd.To
+				if o, ok := kept[p]; ok {
+					from[p] = min(o+1, bd.To)
+				}
+			}
+			if reader == nil {
+				if reader, err = b.KafkaReader(ctx, conn, kafka.ReaderConfig{MaxValueBytes: maxValueBytes}); err != nil {
+					return err
+				}
+				msg.reader = reader
+			}
+			return reader.Tail(ctx, topic, from)
+		})
+		return msg
+	}
+}
+
+func (t *topicTab) tailStarted(m tailStartedMsg) tea.Cmd {
+	v := t.msgs
+	if m.reader != nil {
+		if v.reader == nil {
+			v.reader = m.reader
+		} else if m.reader != v.reader {
+			_ = m.reader.Close()
+		}
+	}
+	if m.gen != v.gen || v.tail == nil {
+		return nil
+	}
+	if m.err != nil {
+		v.tail = nil
+		t.setStatus("live tail: "+kafkaErr(m.err), true)
+		return nil
+	}
+	v.bounds = m.bounds
+	return t.poll()
+}
+
+// poll asks the reader for what arrived, unless paused, hidden or asking
+// already.
+func (t *topicTab) poll() tea.Cmd {
+	v := t.msgs
+	if v.tail == nil || v.tail.paused || v.tail.hidden || v.tail.polling || v.reader == nil {
+		return nil
+	}
+	v.tail.polling = true
+	id, gen, reader := t.id, v.gen, v.reader
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), tailPollWait)
+		defer cancel()
+		recs, err := reader.Poll(ctx, tailPollMax)
+		return tailPollMsg{tabID: id, gen: gen, recs: recs, err: err}
+	}
+}
+
+func (t *topicTab) tailPolled(m tailPollMsg) tea.Cmd {
+	v := t.msgs
+	if m.gen != v.gen || v.tail == nil {
+		return nil
+	}
+	v.tail.polling = false
+	if m.err != nil {
+		v.tail = nil
+		t.setStatus("live tail: "+kafkaErr(m.err), true)
+		return nil
+	}
+	if len(m.recs) > 0 {
+		row, _ := v.grid.Position()
+		follow := len(v.shown) == 0 || row >= len(v.shown)-1
+		recs, cur, _ := mergeRecords(v.recs, m.recs, 1, v.single, v.limit, v.recIndex())
+		v.recs = recs
+		v.tail.added += len(m.recs)
+		if follow {
+			cur = len(recs) - 1
+		}
+		t.renderMsgs(cur)
+		t.setStatus("live · +"+groupDigits(int64(v.tail.added))+" new", false)
+	}
+	return t.poll()
+}
+
+// Shown goes on with live tail, saying about how many messages arrived
+// while the tab was hidden.
+func (t *topicTab) Shown() tea.Cmd {
+	v := t.msgs
+	if v.tail == nil || !v.tail.hidden {
+		return nil
+	}
+	v.tail.hidden = false
+	id, gen, b, conn, topic := t.id, v.gen, t.backend, t.conn, t.topic
+	estimate := func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		defer cancel()
+		msg := tailEstimateMsg{tabID: id, gen: gen}
+		_ = withKafka(ctx, b, conn, func(c kafka.Client) error {
+			d, err := c.TopicDetail(ctx, topic)
+			msg.bounds = boundsOf(d)
+			return err
+		})
+		return msg
+	}
+	return tea.Batch(estimate, t.poll())
+}
+
+// Hidden stops the polls of live tail.
+func (t *topicTab) Hidden() {
+	if v := t.msgs; v.tail != nil {
+		v.tail.hidden = true
+	}
+}
+
+func (t *topicTab) tailEstimated(m tailEstimateMsg) {
+	v := t.msgs
+	if m.gen != v.gen || v.tail == nil || m.bounds == nil {
+		return
+	}
+	var missed int64
+	for p, high := range v.edges(false) {
+		if bd, ok := m.bounds[p]; ok {
+			missed += max(bd.To-high-1, 0)
+		}
+	}
+	if missed > 0 {
+		t.setStatus("≈"+groupDigits(missed)+" new while hidden", false)
+	}
 }

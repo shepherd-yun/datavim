@@ -110,7 +110,7 @@ func newTopicTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, conn
 		msgGrid:  grid.New(nil, s.MaxColumnWidth),
 		partGrid: grid.New(nil, s.MaxColumnWidth), cfgGrid: grid.New(nil, s.MaxColumnWidth), consGrid: grid.New(nil, s.MaxColumnWidth),
 	}
-	t.msgs = &msgView{grid: t.msgGrid, pos: kmsgx.Position{Kind: kmsgx.PosLatest}}
+	t.msgs = &msgView{grid: t.msgGrid, pos: kmsgx.Position{Kind: kmsgx.PosLatest}, limit: msgLimit}
 	t.partGrid.SetMarks(t.partMark)
 	t.cfgGrid.SetMarks(t.cfgMark)
 	return t

@@ -466,3 +466,145 @@ func TestMessagesSearchCancel(t *testing.T) {
 }
 
 func uitestKey(k string) tea.Msg { return uitest.Key(k) }
+
+// step runs cmd once (each part of a batch), feeds the messages to m and
+// returns the commands they started, without running those.
+func step(t *testing.T, m *Model, cmd tea.Cmd) []tea.Cmd {
+	t.Helper()
+	if cmd == nil {
+		return nil
+	}
+	var next []tea.Cmd
+	switch msg := cmd().(type) {
+	case nil:
+	case tea.BatchMsg:
+		for _, c := range msg {
+			next = append(next, step(t, m, c)...)
+		}
+	default:
+		_, c := m.Update(msg)
+		if c != nil {
+			next = append(next, c)
+		}
+	}
+	return next
+}
+
+func stepAll(t *testing.T, m *Model, cmds []tea.Cmd) []tea.Cmd {
+	t.Helper()
+	var next []tea.Cmd
+	for _, c := range cmds {
+		next = append(next, step(t, m, c)...)
+	}
+	return next
+}
+
+// startTail opens orders (one partition, 10 messages) and turns live tail
+// on; it returns the pending poll.
+func startTail(t *testing.T) (*Model, *fakeKafka, *topicTab, []tea.Cmd) {
+	t.Helper()
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 10)
+	tt := openMessages(t, m, "orders")
+	_, cmd := m.Update(uitest.Key("T"))
+	polls := step(t, m, cmd) // Tail started: the first poll
+	if tt.msgs.tail == nil || len(polls) != 1 {
+		t.Fatalf("tail %+v, %d cmds", tt.msgs.tail, len(polls))
+	}
+	if from := k.lastReader().tails; len(from) != 1 || from[0][0] != 10 {
+		t.Fatalf("tail from %v", from)
+	}
+	return m, k, tt, polls
+}
+
+func queue(k *fakeKafka, offsets ...int64) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	for _, o := range offsets {
+		k.tailQ = append(k.tailQ, fakeRecord("orders", 0, o))
+	}
+}
+
+func TestTailAppendsAndFollows(t *testing.T) {
+	m, k, tt, polls := startTail(t)
+	queue(k, 10, 11, 12)
+	polls = stepAll(t, m, polls)
+	if len(tt.msgs.recs) != 13 || cursorRec(t, tt).Offset != 12 || len(polls) != 1 {
+		t.Fatalf("%d recs, cursor %d, %d polls", len(tt.msgs.recs), cursorRec(t, tt).Offset, len(polls))
+	}
+	if s := screen(m); !strings.Contains(s, "live · +3 new") {
+		t.Fatalf("screen:\n%s", s)
+	}
+}
+
+func TestTailNoFollowWhenCursorMoved(t *testing.T) {
+	m, k, tt, polls := startTail(t)
+	m.Update(uitest.Key("k"))
+	queue(k, 10)
+	stepAll(t, m, polls)
+	if c := cursorRec(t, tt); c.Offset != 8 {
+		t.Fatalf("cursor on %d", c.Offset)
+	}
+}
+
+func TestTailPause(t *testing.T) {
+	m, k, tt, polls := startTail(t)
+	m.Update(uitest.Key("T"))
+	if !tt.msgs.tail.paused || !strings.Contains(screen(m), "live · paused") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	queue(k, 10)
+	if next := stepAll(t, m, polls); len(next) != 0 {
+		t.Fatal("no poll while paused")
+	}
+	if len(tt.msgs.recs) != 11 {
+		t.Fatal("what the last poll read is kept, nothing is skipped")
+	}
+	n := k.lastReader().pollCount()
+	_, cmd := m.Update(uitest.Key("T"))
+	next := stepAll(t, m, step(t, m, cmd)) // tail again from what is kept, then poll
+	if k.lastReader().pollCount() != n+1 || len(next) != 1 {
+		t.Fatalf("resume polls again: %d polls", k.lastReader().pollCount()-n)
+	}
+}
+
+func TestTailHiddenStops(t *testing.T) {
+	m, k, tt, polls := startTail(t)
+	r := k.lastReader()
+	k.addTopic("refunds", 1, 0, 1)
+	drainAll(t, m, m.openTopic("events", "refunds")) // hides orders
+	if next := stepAll(t, m, polls); len(next) != 0 {
+		t.Fatal("no poll while hidden")
+	}
+	k.topics["orders"].detail.Parts[0].End = 15
+	_, cmd := m.Update(uitest.Key("1")) // back to orders
+	stepAll(t, m, step(t, m, cmd))
+	if !strings.Contains(tt.status, "≈5 new while hidden") {
+		t.Fatalf("status %q", tt.status)
+	}
+	if r.pollCount() < 2 {
+		t.Fatal("polling goes on once shown")
+	}
+}
+
+func TestTailCap(t *testing.T) {
+	m, k, tt, polls := startTail(t)
+	tt.msgs.limit = 12
+	queue(k, 10, 11, 12, 13)
+	stepAll(t, m, polls)
+	if n := len(tt.msgs.recs); n != 12 || tt.msgs.recs[0].Offset != 2 {
+		t.Fatalf("%d kept, first %d", n, tt.msgs.recs[0].Offset)
+	}
+}
+
+func TestTailSeekStops(t *testing.T) {
+	m, k, tt, polls := startTail(t)
+	seek(t, m, "earliest")
+	if tt.msgs.tail != nil {
+		t.Fatal("a jump ends live tail")
+	}
+	queue(k, 10)
+	if next := stepAll(t, m, polls); len(next) != 0 || len(tt.msgs.recs) != 10 {
+		t.Fatalf("the old poll is dropped: %d cmds, %d recs", len(next), len(tt.msgs.recs))
+	}
+}
