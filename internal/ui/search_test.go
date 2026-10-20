@@ -6,6 +6,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/sqlvim/internal/kafka"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/db"
@@ -244,5 +247,41 @@ func TestSearchStartsFromTheVisualSelection(t *testing.T) {
 	press(t, m, "esc", "space", "space") // without a selection the search is empty
 	if q := m.overlay.(*overlay.Search).Requery().Text; q != "" {
 		t.Fatalf("empty search: %q", q)
+	}
+}
+
+func TestSearchKafkaTopics(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 3)
+	k.addTopic("refunds", 1, 0, 3)
+	k.addGroup(kafka.GroupDetail{Group: kafka.Group{Name: "order-svc"}})
+	m.setFocus(focusTree)
+	pressAll(t, m, "l")
+	search(t, m, "ord")
+	s := screen(m)
+	if !strings.Contains(s, "topic") || !strings.Contains(s, "orders") || !strings.Contains(s, "order-svc") || strings.Contains(s, "refunds") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	pressAll(t, m, "enter")
+	if tt, ok := m.activeTab().(*topicTab); !ok || tt.topic != "orders" {
+		t.Fatalf("active tab = %T", m.activeTab())
+	}
+	search(t, m, "svc")
+	pressAll(t, m, "enter")
+	if g, ok := m.activeTab().(*groupTab); !ok || g.group != "order-svc" {
+		t.Fatalf("active tab = %T", m.activeTab())
+	}
+}
+
+func TestSearchKafkaNotLoaded(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 3)
+	m.setFocus(focusTree)
+	search(t, m, "ord")
+	if s := screen(m); strings.Contains(s, "orders") {
+		t.Fatalf("screen:\n%s", s)
+	}
+	if n := len(k.callList()); n != 0 {
+		t.Fatalf("searching reads nothing: %v", k.callList())
 	}
 }

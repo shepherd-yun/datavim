@@ -24,6 +24,7 @@ type searchResultsMsg struct {
 	gen     int
 	scope   overlay.SearchScope
 	hits    []meta.Hit // ScopeObjects
+	kafka   []kafkaHit // ScopeObjects: topics and groups of the kafka trees loaded
 	all     bool       // the results span every connection
 	lines   []consoleLine
 	entries []history.Entry // ScopeHistory
@@ -186,8 +187,9 @@ func (m *Model) searchObjects(gen int, conn, text string) tea.Cmd {
 		s.SetNote(m.searchNote())
 	}
 	snaps := m.catalogs.Snapshots(conn)
+	kafka := m.searchKafka(conn, text)
 	return tea.Batch(append(loads, func() tea.Msg {
-		return searchResultsMsg{gen: gen, hits: meta.Search(snaps, text, searchLimit), all: all}
+		return searchResultsMsg{gen: gen, hits: meta.Search(snaps, text, searchLimit), kafka: kafka, all: all}
 	})...)
 }
 
@@ -252,9 +254,21 @@ func (m *Model) searchResults(msg searchResultsMsg) {
 	var picks []func(bool) tea.Cmd
 	switch msg.scope {
 	case overlay.ScopeObjects:
+		for _, h := range msg.kafka {
+			if h.prefix {
+				items = append(items, h.item())
+				picks = append(picks, func(bool) tea.Cmd { return m.openKafkaHit(h) })
+			}
+		}
 		for _, h := range msg.hits {
 			items = append(items, searchItem(h, msg.all))
 			picks = append(picks, func(structure bool) tea.Cmd { return m.openHit(h, structure) })
+		}
+		for _, h := range msg.kafka {
+			if !h.prefix {
+				items = append(items, h.item())
+				picks = append(picks, func(bool) tea.Cmd { return m.openKafkaHit(h) })
+			}
 		}
 	case overlay.ScopeConsoles:
 		for _, l := range msg.lines {

@@ -49,6 +49,9 @@ var recentKinds = map[string]string{
 	history.RecentConsole:   "console",
 	history.RecentFile:      "file",
 	history.RecentRedisKey:  "key",
+
+	history.RecentKafkaTopic: "topic",
+	history.RecentKafkaGroup: "group",
 }
 
 // recentKey is the recent entry of key in db n of conn: the key quoted, so
@@ -114,6 +117,11 @@ func (m *Model) openRecent(r history.Recent) tea.Cmd {
 		return m.openFile(r.Conn, ns, r.Name)
 	case history.RecentRedisKey:
 		return m.openStoredKey(r.Conn, r.Database, r.Name)
+	case history.RecentKafkaTopic:
+		// the newest messages: not the jump, live tail or group it had
+		return m.openTopic(r.Conn, r.Name)
+	case history.RecentKafkaGroup:
+		return m.openGroup(r.Conn, r.Name)
 	}
 	return nil
 }
@@ -135,6 +143,10 @@ func (m *Model) touchActive() tea.Cmd {
 		r.Kind, r.Database = history.RecentConsole, strconv.Itoa(x.openDB)
 	case *keyTab:
 		r = recentKey(x.conn, x.db, x.key)
+	case *topicTab:
+		r = history.Recent{Kind: history.RecentKafkaTopic, Conn: x.conn, Name: x.topic}
+	case *groupTab:
+		r = history.Recent{Kind: history.RecentKafkaGroup, Conn: x.conn, Name: x.group}
 	case *consoleTab:
 		r.Kind, r.Name = history.RecentConsole, ""
 		if x.file != nil {

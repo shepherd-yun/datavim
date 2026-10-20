@@ -528,3 +528,61 @@ func (m *Model) kafkaFiltered(msg kafkaFilterMsg) {
 	}
 	m.buildKafkaTree(msg.conn)
 }
+
+// kafkaHit is a topic or group the global search found.
+type kafkaHit struct {
+	conn, name string
+	group      bool
+	prefix     bool // the name starts with the query: listed before the catalog hits
+}
+
+func (h kafkaHit) item() overlay.SearchItem {
+	kind := "topic"
+	if h.group {
+		kind = "group"
+	}
+	return overlay.SearchItem{Kind: kind, Label: h.name, Where: h.conn}
+}
+
+// searchKafka finds the topics and groups (of conn, unless empty) whose
+// name contains text, ignoring case: only in the trees already loaded, so
+// searching reads nothing.
+func (m *Model) searchKafka(conn, text string) []kafkaHit {
+	q := strings.ToLower(strings.TrimSpace(text))
+	if q == "" {
+		return nil
+	}
+	var out []kafkaHit
+	for _, c := range m.backend.Connections() {
+		st := m.kafkaTrees[c.Name]
+		if st == nil || conn != "" && c.Name != conn {
+			continue
+		}
+		add := func(name string, group bool) {
+			lower := strings.ToLower(name)
+			if i := strings.Index(lower, q); i >= 0 {
+				out = append(out, kafkaHit{conn: c.Name, name: name, group: group, prefix: i == 0})
+			}
+		}
+		for _, t := range st.topics {
+			if st.showInternal || !isInternalTopic(t) {
+				add(t.Name, false)
+			}
+		}
+		for _, g := range st.groups {
+			add(g.Name, true)
+		}
+	}
+	slices.SortStableFunc(out, func(a, b kafkaHit) int {
+		return cmp.Or(cmp.Compare(boolInt(!a.prefix), boolInt(!b.prefix)), cmp.Compare(len(a.name), len(b.name)), strings.Compare(a.name, b.name))
+	})
+	return out[:min(len(out), searchLimit)]
+}
+
+// openKafkaHit opens a found topic or group.
+func (m *Model) openKafkaHit(h kafkaHit) tea.Cmd {
+	if h.group {
+		return m.openGroup(h.conn, h.name)
+	}
+	return m.openTopic(h.conn, h.name)
+}

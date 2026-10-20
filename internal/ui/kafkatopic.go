@@ -11,6 +11,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
@@ -118,7 +119,8 @@ func newTopicTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, conn
 
 // openTopic opens (or shows) the tab of topic on conn.
 func (m *Model) openTopic(conn, topic string) tea.Cmd {
-	return m.showTab(topicTabKey(conn, topic), func(id int) tab {
+	rec := history.Recent{Kind: history.RecentKafkaTopic, Conn: conn, Name: topic}
+	return m.openTab(topicTabKey(conn, topic), rec, func(id int) tab {
 		return newTopicTab(id, m.backend, m.keys, m.settings, conn, topic)
 	})
 }

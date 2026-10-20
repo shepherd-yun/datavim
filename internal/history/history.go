@@ -26,6 +26,10 @@ const (
 	// RecentRedisKey is a Redis key: Database is the db number, Name the
 	// key as rcmd.Quote wrote it.
 	RecentRedisKey = "rkey"
+	// RecentKafkaTopic and RecentKafkaGroup are a Kafka topic or consumer
+	// group: Name is its name.
+	RecentKafkaTopic = "kafka_topic"
+	RecentKafkaGroup = "kafka_group"
 )
 
 // Favorite is a starred Redis key; Name is rcmd.Quote(key).

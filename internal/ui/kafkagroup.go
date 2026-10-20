@@ -12,6 +12,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
@@ -85,7 +86,8 @@ func newGroupTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, conn
 
 // openGroup opens (or shows) the tab of group on conn.
 func (m *Model) openGroup(conn, group string) tea.Cmd {
-	return m.showTab(groupTabKey(conn, group), func(id int) tab {
+	rec := history.Recent{Kind: history.RecentKafkaGroup, Conn: conn, Name: group}
+	return m.openTab(groupTabKey(conn, group), rec, func(id int) tab {
 		return newGroupTab(id, m.backend, m.keys, m.settings, conn, group, m.timings.group)
 	})
 }
@@ -384,7 +386,8 @@ func (m *Model) openTopicAt(conn, topic string, pos kmsgx.Position, from string)
 			return tt.jump(pos)
 		}
 	}
-	return m.showTab(key, func(id int) tab {
+	rec := history.Recent{Kind: history.RecentKafkaTopic, Conn: conn, Name: topic}
+	return m.openTab(key, rec, func(id int) tab {
 		t := newTopicTab(id, m.backend, m.keys, m.settings, conn, topic)
 		t.msgs.pos, t.msgs.from = pos, from
 		return t
