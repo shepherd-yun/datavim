@@ -66,7 +66,7 @@ func writeBytes(b *bytes.Buffer, name, enc string, v []byte, null bool) {
 func writeString(b *bytes.Buffer, s string) {
 	enc := json.NewEncoder(b)
 	enc.SetEscapeHTML(false)
-	_ = enc.Encode(s) // a string always encodes
+	_ = enc.Encode(s)       // a string always encodes
 	b.Truncate(b.Len() - 1) // Encode's newline
 }
 
