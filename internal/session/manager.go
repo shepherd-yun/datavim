@@ -59,12 +59,17 @@ type Manager struct {
 	RedisOpen RedisOpener
 	// RedisSessionOpen, if set, opens redis console sessions.
 	RedisSessionOpen RedisSessionOpener
+	// KafkaOpen and KafkaReaderOpen, if set, open kafka clients and
+	// message readers; nil makes kafka connections unavailable.
+	KafkaOpen       KafkaOpener
+	KafkaReaderOpen KafkaReaderOpener
 
 	mu        sync.Mutex
 	conns     []config.Connection
 	passwords map[string]string
 	open      map[connKey]db.Conn
 	redis     map[connKey]rdb.Client
+	kafka     map[string]*guardedKafka
 	// savedRO is the readonly in connections.toml of the connections
 	// SetReadOnly switched for this run.
 	savedRO map[string]*bool
@@ -79,6 +84,7 @@ func NewManager(conns []config.Connection, secrets secret.Store, drivers ...db.D
 		passwords: map[string]string{},
 		open:      map[connKey]db.Conn{},
 		redis:     map[connKey]rdb.Client{},
+		kafka:     map[string]*guardedKafka{},
 		savedRO:   map[string]*bool{},
 	}
 	for _, d := range drivers {
@@ -223,8 +229,9 @@ func (m *Manager) RemoveConnection(name string) error {
 }
 
 // SetReadOnly switches name between read-only and read-write for this run
-// only (connections.toml is not changed). Open connections are closed so the
-// server-side read-only setting follows on the next use.
+// only (connections.toml is not changed). Open SQL and Redis connections
+// are closed so the server-side read-only setting follows on the next use;
+// Kafka clients stay, their guard reads the flag on every write.
 func (m *Manager) SetReadOnly(name string, ro bool) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -234,7 +241,7 @@ func (m *Manager) SetReadOnly(name string, ro bool) error {
 				m.savedRO[name] = m.conns[i].ReadOnly
 			}
 			m.conns[i].ReadOnly = &ro
-			m.resetLocked(name)
+			m.resetServersLocked(name)
 			return nil
 		}
 	}
@@ -268,6 +275,15 @@ func (m *Manager) Reset(name string) {
 }
 
 func (m *Manager) resetLocked(name string) {
+	m.resetServersLocked(name)
+	if c, ok := m.kafka[name]; ok {
+		delete(m.kafka, name)
+		go c.Client.Close()
+	}
+}
+
+// resetServersLocked closes the SQL and Redis connections of name.
+func (m *Manager) resetServersLocked(name string) {
 	for k, c := range m.open {
 		if k.conn == name {
 			delete(m.open, k)
@@ -478,11 +494,18 @@ func (m *Manager) CloseAll() {
 		_ = c.Close()
 		delete(m.redis, k)
 	}
+	for k, c := range m.kafka {
+		c.Client.Close()
+		delete(m.kafka, k)
+	}
 }
 
 func (m *Manager) driverAvailable(name string) bool {
-	if name == "redis" {
+	switch name {
+	case "redis":
 		return m.RedisOpen != nil
+	case "kafka":
+		return m.KafkaOpen != nil
 	}
 	_, ok := m.drivers[name]
 	return ok
@@ -493,8 +516,8 @@ func (m *Manager) lookup(name string) (config.Connection, db.Driver, error) {
 	if !ok {
 		return config.Connection{}, nil, fmt.Errorf("unknown connection %q", name)
 	}
-	if c.Driver == "redis" {
-		return c, nil, fmt.Errorf("connection %q is a redis connection", name)
+	if c.Driver == "redis" || c.Driver == "kafka" {
+		return c, nil, fmt.Errorf("connection %q is a %s connection", name, c.Driver)
 	}
 	drv, ok := m.drivers[c.Driver]
 	if !ok {

@@ -7,6 +7,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
+	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
 )
 
@@ -21,6 +22,11 @@ type Backend interface {
 	// RedisSession opens a new dedicated connection on db n (n < 0 is the
 	// configured default) for a console; the caller closes it.
 	RedisSession(ctx context.Context, name string, n int) (rdb.Session, error)
+	// Kafka returns the client of a kafka connection; its writes refuse
+	// on a read-only connection.
+	Kafka(ctx context.Context, name string) (kafka.Client, error)
+	// KafkaReader opens a message reader for one view; the caller closes it.
+	KafkaReader(ctx context.Context, name string, rc kafka.ReaderConfig) (kafka.Reader, error)
 	SetPassword(name, password string, save bool) error
 	// Reset drops the open connections of name so the next Conn reconnects.
 	Reset(name string)

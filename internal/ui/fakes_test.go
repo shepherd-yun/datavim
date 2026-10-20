@@ -415,6 +415,8 @@ type fakeBackend struct {
 	others       map[string]*fakeConn // connections with their own fakeConn; the rest share conn
 	redis        *fakeRedis           // backs the redis connections addRedis added
 	redisOpens   []string
+	kafka        *fakeKafka // backs the kafka connections addKafka added
+	kafkaOpens   []string
 	connCalls    int
 	// sessionDBs is the n of every RedisSession call; sessions are the
 	// sessions handed out, in order.

@@ -20,6 +20,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db/sqlserver"
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
 	"github.com/shepherd-yun/sqlvim/internal/history"
+	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
 	"github.com/shepherd-yun/sqlvim/internal/secret"
 	"github.com/shepherd-yun/sqlvim/internal/session"
@@ -185,6 +186,8 @@ func newManager(cfg *config.Config, ws config.Workspace, tunnels session.Tunnele
 	mgr.Tunnels = tunnels
 	mgr.RedisOpen = rdb.Open
 	mgr.RedisSessionOpen = rdb.OpenSession
+	mgr.KafkaOpen = kafka.Open
+	mgr.KafkaReaderOpen = kafka.OpenReader
 	return mgr
 }
 

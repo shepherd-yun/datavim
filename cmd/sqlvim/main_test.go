@@ -216,3 +216,10 @@ func TestNewManagerOpensRedis(t *testing.T) {
 		t.Fatal("redis connections need an opener")
 	}
 }
+
+func TestNewManagerOpensKafka(t *testing.T) {
+	mgr := newManager(&config.Config{}, config.Workspace{Name: config.DefaultWorkspace, ConfigDir: t.TempDir()}, nil)
+	if mgr.KafkaOpen == nil || mgr.KafkaReaderOpen == nil {
+		t.Fatal("kafka connections need an opener")
+	}
+}
