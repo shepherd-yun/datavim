@@ -47,6 +47,8 @@ func TestFilterMatch(t *testing.T) {
 		{"ts > 09:12", rec("", ""), true},
 		{"ts < 09:12", rec("", ""), false},
 		{`ts > "2026-10-20 09:00"`, rec("", ""), true},
+		{"ts > 2026-10-20 09:00", rec("", ""), true},
+		{"ts < 2026-10-20  09:00:00 and key = a", rec("", ""), false},
 		{"offset < 10", rec("", ""), true},
 	} {
 		t.Run(tc.expr, func(t *testing.T) {

@@ -135,11 +135,41 @@ func lexFilter(s string) ([]token, error) {
 			for j < len(s) && !strings.ContainsRune(" \t()\"=!~<>", rune(s[j])) {
 				j++
 			}
+			// a date then a time is one value: ts > 2026-10-20 09:12
+			if isDate(s[i:j]) {
+				k := j
+				for k < len(s) && (s[k] == ' ' || s[k] == '\t') {
+					k++
+				}
+				e := k
+				for e < len(s) && !strings.ContainsRune(" \t()\"=!~<>", rune(s[e])) {
+					e++
+				}
+				if e > k && isClock(s[k:e]) {
+					out = append(out, token{text: s[i:j] + " " + s[k:e], col: i + 1})
+					i = e
+					continue
+				}
+			}
 			out = append(out, token{text: s[i:j], col: i + 1})
 			i = j
 		}
 	}
 	return out, nil
+}
+
+func isDate(s string) bool {
+	_, err := time.Parse("2006-01-02", s)
+	return err == nil
+}
+
+func isClock(s string) bool {
+	for _, layout := range []string{"15:04", "15:04:05"} {
+		if _, err := time.Parse(layout, s); err == nil {
+			return true
+		}
+	}
+	return false
 }
 
 type filterParser struct {
