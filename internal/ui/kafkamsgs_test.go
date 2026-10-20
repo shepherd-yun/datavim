@@ -731,3 +731,16 @@ func TestMessagesYankTruncated(t *testing.T) {
 		t.Fatalf("yy: status %q", m.status)
 	}
 }
+
+func TestMessagesDetailStepsAfterLoad(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 400)
+	tt := openMessages(t, m, "orders")
+	pressAll(t, m, "K") // on 399, the newest
+	d := m.overlay.(*msgDetail)
+	drainAll(t, m, tt.loadMore(-1)) // 200 older messages above it
+	pressAll(t, m, "N")
+	if d.rec.Offset != 398 || cursorRec(t, tt).Offset != 398 {
+		t.Fatalf("N went to %d (cursor %d)", d.rec.Offset, cursorRec(t, tt).Offset)
+	}
+}

@@ -752,13 +752,12 @@ func (t *topicTab) msgsExport() exportSrc {
 // cycles through; n / N show the next / previous message.
 type msgDetail struct {
 	tab    *topicTab
-	row    int
-	rec    kafka.Record
+	rec    kafka.Record // found again by partition and offset: loads move its row
 	offset int
 }
 
 func newMsgDetail(t *topicTab, row int) *msgDetail {
-	return &msgDetail{tab: t, row: row, rec: t.msgs.recs[t.msgs.shown[row]]}
+	return &msgDetail{tab: t, rec: t.msgs.recs[t.msgs.shown[row]]}
 }
 
 func (d *msgDetail) HandleKey(msg tea.KeyPressMsg) (overlay.Overlay, tea.Cmd) {
@@ -777,8 +776,11 @@ func (d *msgDetail) HandleKey(msg tea.KeyPressMsg) (overlay.Overlay, tea.Cmd) {
 		if msg.String() == "N" {
 			step = -1
 		}
-		if r := d.row + step; r >= 0 && r < len(v.shown) {
-			d.row, d.rec, d.offset = r, v.recs[v.shown[r]], 0
+		row := slices.IndexFunc(v.shown, func(i int) bool {
+			return v.recs[i].Partition == d.rec.Partition && v.recs[i].Offset == d.rec.Offset
+		})
+		if r := row + step; row >= 0 && r >= 0 && r < len(v.shown) {
+			d.rec, d.offset = v.recs[v.shown[r]], 0
 			_, col := v.grid.Position()
 			v.grid.SetCursor(r, col)
 		}
