@@ -238,7 +238,7 @@ func TestMessagesSeekTime(t *testing.T) {
 	m, _, k := newKafkaModel(t, config.Connection{})
 	k.addTopic("orders", 2, 0, 100)
 	tt := openMessages(t, m, "orders")
-	seek(t, m, "@09:00:30")
+	seek(t, m, "@2026-10-20 09:00:30") // the fake messages are on that day
 	at := time.Date(2026, 10, 20, 9, 0, 30, 0, time.Local)
 	c := cursorRec(t, tt)
 	if c.Time.Before(at) || k.countCalls("OffsetsAt") != 1 {
@@ -637,5 +637,49 @@ func TestTailSeekStops(t *testing.T) {
 	queue(k, 10)
 	if next := stepAll(t, m, polls); len(next) != 0 || len(tt.msgs.recs) != 10 {
 		t.Fatalf("the old poll is dropped: %d cmds, %d recs", len(next), len(tt.msgs.recs))
+	}
+}
+
+func TestTailRefreshEnds(t *testing.T) {
+	m, k, tt, polls := startTail(t)
+	pressAll(t, m, "space", "r")
+	if tt.msgs.tail != nil {
+		t.Fatal("refresh reads again and ends live tail, like a jump")
+	}
+	queue(k, 10)
+	if next := stepAll(t, m, polls); len(next) != 0 {
+		t.Fatalf("the old poll is dropped: %d cmds", len(next))
+	}
+	_, cmd := m.Update(uitest.Key("T"))
+	if next := step(t, m, cmd); tt.msgs.tail == nil || len(next) != 1 {
+		t.Fatalf("T starts live tail again: tail %+v, %d cmds", tt.msgs.tail, len(next))
+	}
+}
+
+func TestTailSearchPauses(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 1000)
+	tt := openMessages(t, m, "orders")
+	_, cmd := m.Update(uitest.Key("T"))
+	polls := step(t, m, cmd)
+	pressAll(t, m, "F")
+	typeText(t, m, "key = k-5")
+	pressAll(t, m, "enter")
+	pressAll(t, m, "N")
+	if c := cursorRec(t, tt); c.Offset != 5 {
+		t.Fatalf("cursor on %d", c.Offset)
+	}
+	if tt.msgs.tail == nil || !tt.msgs.tail.paused {
+		t.Fatalf("a search pauses live tail: %+v (%s)", tt.msgs.tail, tt.status)
+	}
+	stepAll(t, m, polls)
+	if tt.msgs.tail == nil {
+		t.Fatalf("the poll out during the search does not end live tail (%s)", tt.status)
+	}
+	n := k.lastReader().pollCount()
+	_, cmd = m.Update(uitest.Key("T"))
+	stepAll(t, m, step(t, m, cmd))
+	if k.lastReader().pollCount() == n || tt.msgs.tail == nil {
+		t.Fatalf("T resumes live tail (%s)", tt.status)
 	}
 }

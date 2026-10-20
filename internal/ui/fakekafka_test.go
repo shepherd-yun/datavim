@@ -3,6 +3,7 @@ package ui
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -399,18 +400,20 @@ func (c *fakeKafkaClient) Close() {}
 
 // fakeReader reads the fake cluster and records its calls.
 type fakeReader struct {
-	k      *fakeKafka
-	mu     sync.Mutex
-	ranges []map[int32]kafka.Range
-	tails  []map[int32]int64
-	polls  int
-	closed bool
-	block  chan struct{} // Range waits on it when set
+	k       *fakeKafka
+	mu      sync.Mutex
+	ranges  []map[int32]kafka.Range
+	tails   []map[int32]int64
+	polls   int
+	closed  bool
+	tailing bool          // Range and Close stop live tail, as the real reader does
+	block   chan struct{} // Range waits on it when set
 }
 
 func (r *fakeReader) Range(ctx context.Context, topic string, ranges map[int32]kafka.Range) ([]kafka.Record, error) {
 	r.mu.Lock()
 	r.ranges = append(r.ranges, ranges)
+	r.tailing = false
 	block := r.block
 	r.mu.Unlock()
 	if block != nil {
@@ -446,13 +449,18 @@ func (r *fakeReader) Tail(_ context.Context, _ string, from map[int32]int64) err
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.tails = append(r.tails, from)
+	r.tailing = true
 	return nil
 }
 
 func (r *fakeReader) Poll(context.Context, int) ([]kafka.Record, error) {
 	r.mu.Lock()
 	r.polls++
+	tailing := r.tailing
 	r.mu.Unlock()
+	if !tailing {
+		return nil, errors.New("kafka: not tailing")
+	}
 	r.k.mu.Lock()
 	defer r.k.mu.Unlock()
 	out := r.k.tailQ
@@ -463,7 +471,7 @@ func (r *fakeReader) Poll(context.Context, int) ([]kafka.Record, error) {
 func (r *fakeReader) Close() error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.closed = true
+	r.closed, r.tailing = true, false
 	return nil
 }
 

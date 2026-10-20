@@ -502,8 +502,7 @@ func (t *topicTab) handleMsgs(a keymap.Action) (tea.Cmd, bool) {
 		if r, ok := v.current(); ok && v.single && pos.Kind != kmsgx.PosLatest {
 			pos = kmsgx.Position{Kind: kmsgx.PosOffset, Partitions: []int32{r.Partition}, Offsets: map[int32]int64{r.Partition: r.Offset}}
 		}
-		v.gen++
-		return t.loadMsgs(0, pos, nil), true
+		return t.jump(pos), true
 	}
 	return nil, false
 }
@@ -916,6 +915,9 @@ func (t *topicTab) searchFilter(forward bool) (tea.Cmd, bool) {
 	if !forward {
 		dir = -1
 	}
+	if v.tail != nil {
+		v.tail.paused = true // reading ends the reader's tail; T goes on from what is kept
+	}
 	v.searchGen++
 	v.search = &msgSearch{dir: dir}
 	t.setStatus("searching… scanned 0", false)
@@ -1193,6 +1195,9 @@ func (t *topicTab) tailPolled(m tailPollMsg) tea.Cmd {
 		return nil
 	}
 	v.tail.polling = false
+	if m.err != nil && v.tail.paused {
+		return nil // a read made while paused ended the reader's tail; T starts it again
+	}
 	if m.err != nil {
 		v.tail = nil
 		t.setStatus("live tail: "+kafkaErr(m.err), true)
