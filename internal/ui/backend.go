@@ -31,9 +31,13 @@ type Backend interface {
 	// (session.ErrNoRegistry without schema_registry_url); its writes
 	// refuse on a read-only connection.
 	SchemaRegistry(ctx context.Context, name string) (kafka.Registry, error)
+	// KafkaConnect returns the client of one Kafka Connect cluster of a
+	// kafka connection (session.ErrNoConnect for an unknown one); its
+	// writes refuse on a read-only connection.
+	KafkaConnect(ctx context.Context, conn, cluster string) (kafka.Connect, error)
 	SetPassword(name, password string, save bool) error
 	// SetSecret remembers and saves a secret other than the password
-	// (session.SecretOAuth, session.SecretSchemaRegistry).
+	// (session.SecretOAuth, session.SecretSchemaRegistry, session.SecretConnect).
 	SetSecret(conn, kind, value string) error
 	// Reset drops the open connections of name so the next Conn reconnects.
 	Reset(name string)

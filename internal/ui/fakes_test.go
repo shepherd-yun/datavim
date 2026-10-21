@@ -420,6 +420,8 @@ type fakeBackend struct {
 	kafkaOpens    []string
 	registry      *fakeRegistry // made by the first SchemaRegistry call when nil
 	registryErr   error
+	connects      map[string]*fakeConnect // Kafka Connect clusters by name
+	connectErr    map[string]error        // KafkaConnect's error for a cluster
 	registryOpens int
 	connCalls     int
 	// sessionDBs is the n of every RedisSession call; sessions are the

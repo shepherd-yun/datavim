@@ -70,6 +70,8 @@ type Manager struct {
 	KafkaReaderOpen KafkaReaderOpener
 	// RegistryOpen makes Schema Registry clients; nil is kafka.OpenRegistry.
 	RegistryOpen RegistryOpener
+	// ConnectOpen makes Kafka Connect clients; nil is kafka.OpenConnect.
+	ConnectOpen ConnectOpener
 
 	mu        sync.Mutex
 	conns     []config.Connection
@@ -80,6 +82,8 @@ type Manager struct {
 	kafkaGen  map[string]int // counts the resets of each connection
 	// registries are the kafka connections' Schema Registry clients.
 	registries map[string]*guardedRegistry
+	// connects are the kafka connections' Kafka Connect clients.
+	connects map[connectKey]*guardedConnect
 	// savedRO is the readonly in connections.toml of the connections
 	// SetReadOnly switched for this run.
 	savedRO map[string]*bool
@@ -97,6 +101,7 @@ func NewManager(conns []config.Connection, secrets secret.Store, drivers ...db.D
 		kafka:      map[string]*guardedKafka{},
 		kafkaGen:   map[string]int{},
 		registries: map[string]*guardedRegistry{},
+		connects:   map[connectKey]*guardedConnect{},
 		savedRO:    map[string]*bool{},
 	}
 	for _, d := range drivers {
@@ -301,6 +306,11 @@ func (m *Manager) resetLocked(name string) {
 	m.resetServersLocked(name)
 	m.kafkaGen[name]++
 	delete(m.registries, name)
+	for k := range m.connects {
+		if k.conn == name {
+			delete(m.connects, k)
+		}
+	}
 	if c, ok := m.kafka[name]; ok {
 		delete(m.kafka, name)
 		go c.Close()
@@ -526,6 +536,7 @@ func (m *Manager) CloseAll() {
 		delete(m.kafka, k)
 	}
 	clear(m.registries)
+	clear(m.connects)
 }
 
 func (m *Manager) driverAvailable(name string) bool {
