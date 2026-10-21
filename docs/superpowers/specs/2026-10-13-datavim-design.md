@@ -50,14 +50,16 @@ jorgerojas26/lazysql（Go + tview）定位相近，作者用过后体验不佳�
 
 > Redis 连接不走 `db.Conn`，而是平行的 `internal/rdb`（连接）和 `internal/rcmd`（纯包），见 [Redis 支持设计文档](2026-10-16-redis-design.md) §3。
 > Kafka 连接同样平行：`internal/kafka`（franz-go 的 kgo / kadm 封装）和 `internal/kmsgx`（纯包），`session.Manager` 用包装类型统一拦截所有写方法，见 [Kafka 支持设计文档](2026-10-20-kafka-design.md) §3。
+> Elasticsearch 连接也平行：`internal/es`（`net/http`，类型化操作都建立在只有 `Do` 的 `es.Doer` 上）和 `internal/esx`（纯包），`session.Manager.ES` 只交出在 `Do` 里分级、检查只读、记审计的 `Doer`，见 [Elasticsearch 支持设计文档](2026-10-21-elasticsearch-design.md) §3、§9。
 >
 > 写操作审计（Kafka 设计文档 §9）也在 `session` 这一层：`db.Conn` / `db.Session`、`rdb.Client` / `rdb.Session` 和 Kafka 的包装类型在请求到达服务器后通过 `Manager.Audit` 记一条，写进 `internal/history` 的 `audit` 表；UI 不在各个入口分别记录。
 >
 > ```
 > ui ──→ session ──→ db    ──→ mysql / postgres / sqlserver / oracle
 >   │          ├───→ rdb   ──→ go-redis
->   │          └───→ kafka ──→ franz-go (kgo / kadm)
->   └──→ sqlx / rcmd / kmsgx（纯包）
+>   │          ├───→ kafka ──→ franz-go (kgo / kadm)
+>   │          └───→ es    ──→ net/http
+>   └──→ sqlx / rcmd / kmsgx / esx（纯包）
 > ```
 
 ### 3.1 目录结构
@@ -205,9 +207,9 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 
 ### 5.3 生产库保护
 
-> Redis 的对应规则见 [Redis 支持设计文档](2026-10-16-redis-design.md) §7，Kafka 的见 [Kafka 支持设计文档](2026-10-20-kafka-design.md) §8（K1 的发消息、建删 topic、重置 offset，以及 K2 的修改配置、增加 partition、删除消息 / group / group offset 和 Schema Registry 的写操作，K3 的 ACL 和 Kafka Connect 写操作）。
+> Redis 的对应规则见 [Redis 支持设计文档](2026-10-16-redis-design.md) §7，Kafka 的见 [Kafka 支持设计文档](2026-10-20-kafka-design.md) §8（K1 的发消息、建删 topic、重置 offset，以及 K2 的修改配置、增加 partition、删除消息 / group / group offset 和 Schema Registry 的写操作，K3 的 ACL 和 Kafka Connect 写操作），Elasticsearch 的见 [Elasticsearch 支持设计文档](2026-10-21-elasticsearch-design.md) §9（按 method + path 分级，认不出的请求算危险，通配删除先展开再按具体索引名执行，prod 上直接拒绝）。
 >
-> 所有到达服务器的写操作（SQL 里可能写入的语句、Redis 的写命令和认不出的命令、Kafka 的全部写操作）都记进审计日志，成功和失败都记；被只读拦截或在确认框里取消的不记。SQL 文本隐藏密码，不记语句参数和 Kafka 消息内容。见 [Kafka 支持设计文档](2026-10-20-kafka-design.md) §9。
+> 所有到达服务器的写操作（SQL 里可能写入的语句、Redis 的写命令和认不出的命令、Kafka 的全部写操作、Elasticsearch 的写和危险请求）都记进审计日志，成功和失败都记；被只读拦截或在确认框里取消的不记。SQL 文本隐藏密码，不记语句参数和 Kafka 消息内容。见 [Kafka 支持设计文档](2026-10-20-kafka-design.md) §9。
 
 由 `sqlx` 对语句分类：读 / 写（DML）/ DDL / 事务控制 / 其他。
 

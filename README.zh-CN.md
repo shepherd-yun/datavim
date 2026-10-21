@@ -1,6 +1,6 @@
 # datavim
 
-一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle，也能浏览和查询 Redis 和 Kafka。
+一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle，也能浏览和查询 Redis、Kafka 和 Elasticsearch。
 
 [English](README.md)
 
@@ -13,7 +13,9 @@
 - 把 CSV、TSV、xlsx 文件导入到表，或从文件推断结构新建表。
 - Kafka：topic、按 lag 排序的 consumer group，可跳转、过滤和 live tail 的消息浏览，重置 offset，producer console；
   修改 topic 配置和 partition，删除消息和 group，Schema Registry（Avro、Protobuf、JSON Schema），ACL、Kafka Connect 和消息字段打码。
-- 审计日志：记录 datavim 发给 SQL、Redis、Kafka 服务器的每个写操作（`<Space>a`）。
+- Elasticsearch 和 OpenSearch：索引、别名、data stream，按 `_id` 或 query string 查文档并高亮命中，带并发检查的编辑，
+  按条件删除，索引管理，带补全和表格视图的 REST 控制台，集群概览。
+- 审计日志：记录 datavim 发给 SQL、Redis、Kafka、Elasticsearch 服务器的每个写操作（`<Space>a`）。
 - SSH 隧道（agent、密钥、ProxyJump），生产环境保护，手动事务。
 - 自定义按键（`keymap.toml`）与颜色（`[theme]`）。
 
@@ -181,6 +183,57 @@ principal（只删这一条：所有字段都要一致），`gd` 打开 literal 
 在 Topics 上按 `o` 新建 topic，在 topic 上按 `dd` 删除（在 Empty 的 group 上按 `dd` 删除 group；group 的 lag 里按 `X` 删除
 它在这个 topic 上的 offset），
 `<Space>i` 显示集群状态（broker、副本不足的 partition）。
+
+**Elasticsearch**（7.10 到 9.x；OpenSearch 1.x / 2.x 支持核心功能）：`driver = "elasticsearch"`，`host` 是逗号分隔的节点地址
+（`http://10.0.0.1:9200,10.0.0.2`；不写协议时由 `params.tls` 决定 http 或 https，端口默认 9200），`database` 不用。datavim
+只连你写的地址（不做 sniffing），一个节点连不上时换下一个。
+
+```toml
+# 没开安全功能的内网集群
+[[connection]]
+name   = "es-dev"
+driver = "elasticsearch"
+host   = "172.16.96.161"
+
+# Docker 里的 ES 8.x：HTTPS 加 elastic 用户（密码会询问并存进钥匙串）
+[[connection]]
+name   = "es-local"
+driver = "elasticsearch"
+host   = "localhost"
+user   = "elastic"
+params = { tls = "true", tls_ca = "/path/to/http_ca.crt" }
+
+# 用 API Key 代替密码（只问一次，存为 <连接名>#apikey）
+[[connection]]
+name   = "es-prod"
+driver = "elasticsearch"
+host   = "https://es-1.internal:9243,https://es-2.internal:9243"
+env    = "prod"
+params = { auth = "apikey" }
+```
+
+`params`：`tls = "true"`、`tls_skip_verify`、`tls_ca`、`tls_cert` / `tls_key`（PEM 文件）、`auth = "apikey"`、`path_prefix`
+（集群在反向代理的子路径下）、`show_system = "true"`（显示 `.` 开头的索引）和 `page_size`（每页文档数，默认 100）。连接表单有
+`URLs`、`TLS` 和 `Auth` 字段。生产集群建议用只读角色的账号。
+
+树上显示集群版本和健康状态，下面是 Indices（按日期滚动的索引折叠成 `logs-app-* (31)`，最新的在上面；`.` 显示系统索引，`s`
+按名字、文档数、大小排序，`F` 按名字或 `*` 通配过滤）、Aliases 和 Data Streams。回车打开 Index 标签页，用 `[` / `]` 切换
+Documents、Mapping、Settings、Aliases、Stats。
+
+Documents 是命中文档的表格，`_id` 在第一列（别名或通配时第二列是 `_index`），从 mapping 里挑最多 12 列，光标往下移时自动加载
+（用 PIT 翻页，7.10 / 7.11 和 OpenSearch 用 scroll，关闭标签页时释放）。`F` 输入 Lucene query string
+（`status:paid AND user.name:"张三"`）或 `{…}` 形式的 DSL，带字段名补全和历史；`ff` `f!` `fs` `f>` `f<` `fn` `fN` 用当前格子的值
+追加条件，`fx` 清除。命中词高亮（不在显示列里的命中字段放在最后的 `+` 列），`s` 排序（text 字段用 `.keyword`），`K` 看文档
+（`za` 折叠，`n` / `N` 上下切换），`yk` `ys` `yr` `yu` 复制 `_id`、`_source`、控制台请求或 curl（不带密码和 Key），`<Space>k`
+按 `_id` 打开文档。`i` 改字段，`<Space>v` 在 `$EDITOR` 里改整篇 `_source`，`o` 新建文档，`dd` 标记删除，`<Space>w` 提交：每个写
+请求都带 `if_seq_no` / `if_primary_term`，读取之后被别人改过的文档不会被覆盖。`X` 删除条件命中的文档（`_delete_by_query`，先计数）。
+树上 `o` 新建索引，`dd` 删除索引（或一组滚动索引），`a` 菜单里可以打开、关闭、refresh、flush、清缓存、force merge。Settings 和
+topic 配置一样编辑；Aliases 用 `o` 添加、`dd` 删除。
+
+`<Space>c` 打开 REST 控制台：格式和 Kibana Dev Tools 一样（`GET orders/_search` 加 JSON body，支持 `"""` 字符串、`#` 注释、`_bulk`
+的 NDJSON），补全方法、索引、接口、Query DSL 关键字和字段名。回车执行光标所在的请求，`R` 执行全部；每个请求一个结果标签，显示
+状态码和耗时，可以看 JSON，也可以（`[` / `]`）看成 hits、`_cat` 列表或聚合 buckets 的表格（在 `_id` 上 `gd` 打开文档）。在连接上
+`<Space>i` 显示集群概览。
 
 ## 编辑表数据
 
@@ -361,6 +414,9 @@ datavim --list-workspaces
 | `:send <file>` | Kafka producer console：发送 JSON Lines 文件 |
 | `o` / `d d` / `g d` / `F` | Kafka ACL 标签页：新建 ACL / 删除这条 ACL / 打开它的 topic 或 group / 按 principal、资源类型或资源名过滤（`fx` 清除） |
 | `p` / `R` / `<Space>v` | Kafka connector 标签页：暂停或继续 / 重启（在 Tasks 里重启这个 task）/ 在 `$EDITOR` 里修改配置 |
+| `yk` / `ys` / `yr` / `yu` | Elasticsearch 文档：复制 `_id` / `_source` / 控制台请求 / curl |
+| `X` | Elasticsearch 文档：删除条件命中的全部文档 |
+| `<Space>x n` | Elasticsearch 文档：导出为 NDJSON |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |
 
@@ -462,13 +518,19 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
   发请求前会重新检查；schema 只做软删除。新建 ACL 是写操作；删除 ACL 是危险操作（在任何连接上都要输入 principal）。
   暂停、继续、重启 connector 和 task 以及修改 connector 配置也是写操作（任何连接上都按 `y` 确认，只读连接拒绝）。
   生产集群建议使用 ACL 只允许读的账号。
+- Elasticsearch：所有请求（标签页发的和控制台里手写的）都按 method 和 path 分级（`_bulk`、`_aliases`、`_delete_by_query`、
+  `_settings` 还看 body），认不出来的请求一律算危险。只读连接只放行读请求。写请求按 `y` 确认（非 prod 上 refresh、flush、清缓存
+  不确认；prod 上确认框显示请求本身）；危险请求（删除或关闭索引、按条件删除 / 更新、force merge、集群 settings…）要输入索引名；
+  删除、关闭、按条件删除的目标是通配、`_all`、多个索引或指向多个索引的别名时，先展开成索引列表给你看，执行时用展开后的名字
+  （之后新建的索引不会被动到），prod 上直接拒绝。控制台一次执行多个请求时，写请求一起确认一次，危险请求逐个确认。文档写入都带
+  `if_seq_no` / `if_primary_term`。只读检查只在一个地方：session 交给界面的 Doer。
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，
   datavim 会提示事务已丢失，而不是悄悄重连。请用 `<Space>t` 而不是 `SET autocommit = 0`。
 - 导入在一个事务里完成，只要有一行失败就什么都不写；MySQL 上导入新建的表会被删掉。
 - 每个到达服务器的写操作都记进审计日志（`<Space>a`，存在 `state.db`，保留最近 50,000 条）：可能写入的 SQL 语句、
-  Redis 的写命令和认不出的命令、Kafka 和 Schema Registry 的写操作，以及它们的结果。SQL 会隐藏密码，Redis 命令按输入
+  Redis 的写命令和认不出的命令、Kafka 和 Schema Registry 的写操作、Elasticsearch 的写请求（method 和 path，不记 body），以及它们的结果。SQL 会隐藏密码，Redis 命令按输入
   记录（密码隐藏），不记语句参数，也不记 Kafka 消息内容。被只读拦截或在确认框取消的操作不记。
 
 ## 开发

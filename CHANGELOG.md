@@ -6,6 +6,36 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Elasticsearch connections (`driver = "elasticsearch"`, Elasticsearch 7.10 to 9.x, OpenSearch 1.x / 2.x):
+  node URLs (no sniffing; the next address is tried when one cannot be reached), Basic auth or an API
+  key kept in the keychain, TLS params, `path_prefix` and SSH tunnels. The connection form has `URLs`,
+  `TLS` and `Auth` fields.
+- The Elasticsearch tree: version and health, indices with health, documents and size (dated and
+  rollover indices fold into one group, `.` shows the system ones, `s` sorts by name, documents or
+  size, `F` filters by name or pattern), aliases and data streams. `<Space>i` shows a cluster overview
+  refreshed every 10 seconds.
+- An Index tab per index, alias, pattern or data stream: Documents, Mapping, Settings, Aliases and
+  Stats. Documents pages through a PIT (a scroll on 7.10 / 7.11 and OpenSearch) and releases it when
+  the tab closes; filters take a Lucene query string or a query DSL object with field completion and
+  history, the `f` keys add the cell's value, and hits are highlighted. `K` shows a document with
+  folds, `yk` `ys` `yr` `yu` copy its `_id`, `_source`, console requests or curl (without
+  credentials), `<Space>k` opens a document by `_id` and `<Space>x n` exports NDJSON.
+- Editing documents: fields, the whole `_source` in `$EDITOR`, new documents and deletions are
+  staged and submitted with `if_seq_no` / `if_primary_term` to the hit's own index, so a document
+  changed meanwhile is not overwritten. `X` deletes what the filter matches as a task with progress.
+- Index management: create (`o`), delete (`dd`, also a rollover group), open, close, refresh,
+  flush, clear caches and force merge from the actions menu, editing dynamic settings and adding or
+  removing aliases.
+- A REST console (`<Space>c`) in Kibana Dev Tools' format with highlighting and completion of
+  methods, indices, APIs, query DSL keys and field names; each request gets a result tab shown as
+  JSON or as a table of hits, `_cat` rows or aggregation buckets.
+- Safety for Elasticsearch: every request is graded by method and path (unknown requests count as
+  dangerous) in one place in the session; read-only connections refuse writes, writes ask for `y`,
+  dangerous requests want the index typed, and a wildcard, `_all` or multi-index delete, close or
+  delete by query is expanded, shown and sent with the expanded names — refused on prod. Writes are
+  in the audit log (method and path, never the body).
+
 ## [3.1.0] - 2026-10-21
 
 ### Changed

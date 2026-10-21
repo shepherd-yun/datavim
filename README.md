@@ -1,6 +1,6 @@
 # datavim
 
-A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows. It also browses and queries Redis and Kafka.
+A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows. It also browses and queries Redis, Kafka and Elasticsearch.
 
 [中文说明](README.zh-CN.md)
 
@@ -16,7 +16,10 @@ A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys
 - Kafka: topics, consumer groups by lag, messages with jumps, filters and live tail, offset resets
   and a producer console; topic configs and partitions, deleting messages and groups, a
   Schema Registry (Avro, Protobuf and JSON Schema), ACLs, Kafka Connect and masking of message fields.
-- An audit log of every write datavim sent to SQL, Redis and Kafka servers (`<Space>a`).
+- Elasticsearch and OpenSearch: indices, aliases and data streams, documents found by `_id` or a
+  query string with hits highlighted, edited with concurrency checks, delete by query, index
+  management, a REST console with completion and table views, and a cluster overview.
+- An audit log of every write datavim sent to SQL, Redis, Kafka and Elasticsearch servers (`<Space>a`).
 - SSH tunnels (agent, keys, ProxyJump), production safeguards, manual transactions.
 - Your own keys (`keymap.toml`) and colors (`[theme]`).
 
@@ -240,6 +243,67 @@ confirmation), `dd` deletes the one under the cursor once you type its principal
 every field has to match), and `gd` opens the topic or group a literal ACL is about.
 
 
+**Elasticsearch** (7.10 to 9.x; OpenSearch 1.x / 2.x for the core features): `driver = "elasticsearch"`,
+`host` is a comma-separated list of node URLs (`http://10.0.0.1:9200,10.0.0.2`; without a scheme
+`params.tls` picks http or https, port 9200 by default) and `database` is not used. datavim talks
+only to the addresses you list (no sniffing), trying the next one when a node cannot be reached.
+
+```toml
+# an intranet cluster without security
+[[connection]]
+name   = "es-dev"
+driver = "elasticsearch"
+host   = "172.16.96.161"
+
+# Docker's ES 8.x: HTTPS and the elastic user (the password is asked for and kept in the keychain)
+[[connection]]
+name   = "es-local"
+driver = "elasticsearch"
+host   = "localhost"
+user   = "elastic"
+params = { tls = "true", tls_ca = "/path/to/http_ca.crt" }
+
+# an API key instead of a password (asked for once, kept as <connection>#apikey)
+[[connection]]
+name   = "es-prod"
+driver = "elasticsearch"
+host   = "https://es-1.internal:9243,https://es-2.internal:9243"
+env    = "prod"
+params = { auth = "apikey" }
+```
+
+`params`: `tls = "true"`, `tls_skip_verify`, `tls_ca`, `tls_cert` / `tls_key` (PEM files),
+`auth = "apikey"`, `path_prefix` (a cluster behind a proxy path), `show_system = "true"` (show
+the `.` indices) and `page_size` (documents per page, 100). The form has `URLs`, `TLS` and `Auth`
+fields. For a production cluster use an account with a read-only role.
+
+The tree lists the cluster's version and health, then Indices (dated and rollover indices fold
+into `logs-app-* (31)`, newest first; `.` shows the system indices, `s` sorts by name, documents or
+size, `F` filters by name or `*` pattern), Aliases and Data Streams. `Enter` on one opens an Index
+tab whose sections `[` / `]` switch: Documents, Mapping, Settings, Aliases and Stats.
+
+Documents is a table of the hits, `_id` first (`_index` second on an alias or pattern), with up to
+12 columns picked from the mapping, loading more as the cursor moves down (pages through a PIT, or
+a scroll on 7.10 / 7.11 and OpenSearch, released when the tab closes). `F` takes a Lucene query
+string (`status:paid AND user.name:"张三"`) or a `{…}` query DSL object, with field completion and
+history; `ff` `f!` `fs` `f>` `f<` `fn` `fN` add the cell's value, `fx` clears. Hits are highlighted
+(fields outside the columns show in a last `+` column), `s` sorts (a text field by its `.keyword`),
+`K` shows the document (`za` folds, `n` / `N` move on), `yk` `ys` `yr` `yu` copy the `_id`, the
+`_source`, console requests or curl (never a password or key), and `<Space>k` opens a document by
+`_id`. `i` edits a field, `<Space>v` the whole `_source` in `$EDITOR`, `o` writes a new document,
+`dd` marks one for deletion, `<Space>w` submits: every write carries `if_seq_no` /
+`if_primary_term`, so a document changed since you read it is not overwritten. `X` deletes what
+the filter matches (`_delete_by_query`, after a count). On the tree `o` creates an index, `dd`
+deletes one (or a rollover group), and `a` opens, closes, refreshes, flushes, clears caches or
+force-merges. Settings edit like a topic's configs; Aliases add (`o`) and remove (`dd`).
+
+`<Space>c` opens the REST console: Kibana Dev Tools' format (`GET orders/_search` and a JSON body,
+`"""` strings, `#` comments, NDJSON for `_bulk`), with completion of methods, indices, APIs,
+query DSL keys and field names. `Enter` runs the request at the cursor, `R` all of them; each gets
+a result tab with its status and time, as JSON or (`[` / `]`) as a table of the hits, a `_cat`
+list or aggregation buckets (`gd` on an `_id` opens the document). `<Space>i` on the connection
+shows the cluster overview.
+
 ## Editing table data
 
 Changes are staged: edited cells turn yellow, new rows green and rows marked for deletion red.
@@ -419,6 +483,9 @@ picks the workspace by directory.
 | `:send <file>` | Kafka producer console: send a JSON Lines file |
 | `o` / `d d` / `g d` / `F` | Kafka ACL tab: new ACLs / delete the ACL / open its topic or group / filter by principal, resource type or name (`fx` clears) |
 | `p` / `R` / `<Space>v` | Kafka connector tab: pause or resume / restart (in Tasks: the task) / edit the config in `$EDITOR` |
+| `yk` / `ys` / `yr` / `yu` | Elasticsearch documents: copy the `_id` / the `_source` / as console requests / as curl |
+| `X` | Elasticsearch documents: delete every document the filter matches |
+| `<Space>x n` | Elasticsearch documents: export as NDJSON |
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
 | `v` | Redis key tab: show a string as auto / text / JSON / hex |
@@ -560,6 +627,16 @@ with a syntax error, the cursor jumps to where the server says the error is.
   Pausing, resuming and restarting connectors and tasks and changing a connector's config are
   writes too (`y` on every connection; refused when read-only).
   For a production cluster also use an account whose ACLs only allow reading.
+- Elasticsearch: every request — the tabs' and the console's — is graded by method and path
+  (and the body of `_bulk`, `_aliases`, `_delete_by_query`, `_settings`); a request datavim does not
+  know counts as dangerous. Read-only connections refuse anything but reads. Writes ask for `y`
+  (refresh, flush and clearing caches off prod go at once; on prod the request is shown); dangerous
+  requests (deleting or closing an index, delete / update by query, force merge, cluster settings…)
+  want the index name typed; a pattern, `_all`, several indices or an alias of several indices on a
+  delete, close or delete by query is expanded first, shown, and sent with the expanded names (so
+  an index made since is never touched) — on prod it is refused. A console run confirms its writes
+  once and each dangerous request alone. Document writes carry `if_seq_no` / `if_primary_term`.
+  Every read-only check runs in one place, the Doer the session hands out.
 - `env = "prod"` frames the tab area in red and shows `[PROD]` in the status bar; every
   write or DDL statement on a prod connection asks for `y` first.
 - `UPDATE` / `DELETE` without `WHERE` asks you to type the table name before it runs.
@@ -569,7 +646,7 @@ with a syntax error, the cursor jumps to where the server says the error is.
 - Imports run in one transaction and write nothing unless every row goes in; on MySQL a table the import created is dropped again.
 - Every write that reaches a server is kept in an audit log (`<Space>a`, in `state.db`, the latest
   50,000): SQL statements that may write, Redis write and unknown commands, Kafka and Schema
-  Registry writes, with their result. It keeps SQL with passwords hidden and Redis commands as
+  Registry writes, Elasticsearch writes (method and path, never the body), with their result. It keeps SQL with passwords hidden and Redis commands as
   typed (passwords hidden), never statement parameters or Kafka message contents. Writes that
   read-only refused or that you cancelled are not in it.
 
