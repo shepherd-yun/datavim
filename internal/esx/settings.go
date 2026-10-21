@@ -1,7 +1,10 @@
 package esx
 
 import (
+	"encoding/json"
 	"path"
+	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -33,4 +36,46 @@ func DynamicSetting(key string) bool {
 		}
 	}
 	return false
+}
+
+// uncopyable are the index settings a new index cannot take from the one
+// it copies; "*" matches the rest of the key.
+var uncopyable = []string{
+	"index.uuid", "index.creation_date", "index.provided_name", "index.version.*", "index.history.uuid",
+	"index.resize.*", "index.routing.allocation.initial_recovery.*", "index.blocks.*",
+	"index.lifecycle.indexing_complete",
+}
+
+// CopyableSettings are an index's flat settings that a new index can be
+// created with, and its shard and replica counts.
+func CopyableSettings(flat map[string]json.RawMessage) (settings map[string]json.RawMessage, shards, replicas int) {
+	settings = map[string]json.RawMessage{}
+	count := func(raw json.RawMessage) int {
+		var s string
+		if json.Unmarshal(raw, &s) != nil {
+			s = string(raw)
+		}
+		n, _ := strconv.Atoi(s)
+		return n
+	}
+	for k, v := range flat {
+		switch k {
+		case "index.number_of_shards":
+			shards = count(v)
+			continue
+		case "index.number_of_replicas":
+			replicas = count(v)
+			continue
+		}
+		if slices.ContainsFunc(uncopyable, func(p string) bool {
+			if prefix, ok := strings.CutSuffix(p, "*"); ok {
+				return strings.HasPrefix(k, prefix)
+			}
+			return k == p
+		}) {
+			continue
+		}
+		settings[k] = v
+	}
+	return settings, shards, replicas
 }

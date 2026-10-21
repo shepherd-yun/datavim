@@ -52,6 +52,25 @@ func TestWriteRequests(t *testing.T) {
 		{"PutSettings", func(d Doer) error {
 			return PutSettings(ctx, d, "a", map[string]*string{"index.number_of_replicas": &replicas, "index.refresh_interval": nil})
 		}, "PUT", "a/_settings", `{"index.number_of_replicas":"0","index.refresh_interval":null}`},
+		{"CancelTask", func(d Doer) error { return CancelTask(ctx, d, "n1:7") }, "POST", "_tasks/n1:7/_cancel", ""},
+		{"Reindex", func(d Doer) error {
+			_, err := Reindex(ctx, d, ReindexSpec{Source: "a", Dest: "b", Query: json.RawMessage(`{"term":{"x":1}}`), OpType: "create", Conflicts: "proceed"})
+			return err
+		}, "POST", "_reindex?wait_for_completion=false", `{"source":{"index":"a","query":{"term":{"x":1}}},"dest":{"index":"b","op_type":"create"},"conflicts":"proceed"}`},
+		{"Reindex all", func(d Doer) error {
+			_, err := Reindex(ctx, d, ReindexSpec{Source: "a", Dest: "b", OpType: "index", Conflicts: "abort"})
+			return err
+		}, "POST", "_reindex?wait_for_completion=false", `{"source":{"index":"a"},"dest":{"index":"b","op_type":"index"},"conflicts":"abort"}`},
+		{"UpdateByQuery", func(d Doer) error {
+			_, err := UpdateByQuery(ctx, d, []string{"a", "b"}, json.RawMessage(`{"term":{"x":1}}`), "ctx._source.y = 2")
+			return err
+		}, "POST", "a,b/_update_by_query?wait_for_completion=false", `{"query":{"term":{"x":1}},"script":{"source":"ctx._source.y = 2","lang":"painless"}}`},
+		{"PutMapping", func(d Doer) error {
+			return PutMapping(ctx, d, "a", json.RawMessage(`{"n":{"type":"text"}}`))
+		}, "PUT", "a/_mapping", `{"properties":{"n":{"type":"text"}}}`},
+		{"PutClusterSettings", func(d Doer) error {
+			return PutClusterSettings(ctx, d, nil, map[string]*string{"b": &replicas})
+		}, "PUT", "_cluster/settings", `{"transient":{"b":"0"}}`},
 	}
 	for _, tc := range cases {
 		d := &fakeDoer{fn: func(Request) (Response, error) {
@@ -81,6 +100,12 @@ func TestWriteResults(t *testing.T) {
 	}
 	if id, err := DeleteByQuery(ctx, d, []string{"o"}, nil); err != nil || id != "node:1" {
 		t.Errorf("DeleteByQuery = %v %v", id, err)
+	}
+	if id, err := Reindex(ctx, d, ReindexSpec{Source: "a", Dest: "b"}); err != nil || id != "node:1" {
+		t.Errorf("Reindex = %v %v", id, err)
+	}
+	if id, err := UpdateByQuery(ctx, d, []string{"o"}, nil, "x"); err != nil || id != "node:1" {
+		t.Errorf("UpdateByQuery = %v %v", id, err)
 	}
 }
 
@@ -126,7 +151,7 @@ func TestGetTask(t *testing.T) {
 }
 
 func TestWriteFuncsListed(t *testing.T) {
-	if len(WriteFuncs) != 14 {
+	if len(WriteFuncs) != 19 {
 		t.Errorf("WriteFuncs = %v", WriteFuncs)
 	}
 	_ = fmt.Sprint

@@ -197,3 +197,28 @@ func DefaultColumns(fields []Field, maxCols int) []string {
 	}
 	return out
 }
+
+// MappingConflicts checks new mapping properties against an index's
+// fields: a new path is added; a path that exists with another type is a
+// conflict ("status: keyword → long"), which the server would refuse.
+func MappingConflicts(existing []Field, properties json.RawMessage) (added, conflicts []string, err error) {
+	var props map[string]json.RawMessage
+	if err := json.Unmarshal(properties, &props); err != nil {
+		return nil, nil, err
+	}
+	var fields []Field
+	if err := flattenProps("", props, &fields); err != nil {
+		return nil, nil, err
+	}
+	for _, f := range fields {
+		switch old := TypeFor(existing, f.Path); {
+		case old == "":
+			added = append(added, f.Path)
+		case old != f.Type:
+			conflicts = append(conflicts, f.Path+": "+old+" → "+f.Type)
+		}
+	}
+	slices.Sort(added)
+	slices.Sort(conflicts)
+	return added, conflicts, nil
+}

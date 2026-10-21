@@ -1,0 +1,7 @@
+{"orders":{"settings":{
+  "index.creation_date":"1772409600000","index.number_of_shards":"5","index.number_of_replicas":"1",
+  "index.uuid":"abc","index.provided_name":"orders","index.version.created":"7100299","index.version.upgraded":"7100299",
+  "index.history.uuid":"h","index.routing.allocation.initial_recovery._id":"n1","index.blocks.write":"true",
+  "index.resize.source.name":"x","index.lifecycle.indexing_complete":"true",
+  "index.refresh_interval":"5s","index.analysis.analyzer.my.type":"custom","index.analysis.analyzer.my.tokenizer":"standard"
+}}}

@@ -1,0 +1,6 @@
+{"tasks":[
+  {"node":"n1","id":7,"type":"transport","action":"indices:data/write/reindex","status":{"total":88000,"updated":0,"created":11000,"deleted":0,"batches":12,"version_conflicts":500,"noops":500},"description":"reindex from [orders] to [orders-v2][_doc]","start_time_in_millis":1772409600000,"running_time_in_nanos":5000000000,"cancellable":true},
+  {"node":"n1","id":9,"type":"transport","action":"indices:data/write/update/byquery","status":{"total":10,"updated":10,"created":0,"deleted":0,"version_conflicts":0,"noops":0},"description":"update-by-query [logs]","start_time_in_millis":1772409600000,"running_time_in_nanos":90000000000,"cancellable":true},
+  {"node":"n2","id":3,"type":"transport","action":"indices:data/write/bulk","description":"requests[100]","running_time_in_nanos":1000,"cancellable":false,"parent_task_id":"n1:7"},
+  {"node":"n2","id":4,"type":"transport","action":"indices:admin/forcemerge","description":"Force-merge indices [logs]","running_time_in_nanos":2000,"cancellable":false}
+]}

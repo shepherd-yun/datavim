@@ -86,6 +86,20 @@ func TestESReadOnlyRefusesEveryWrite(t *testing.T) {
 			v := "1"
 			return es.PutSettings(ctx, d, "o", map[string]*string{"index.number_of_replicas": &v})
 		},
+		"CancelTask": func(d es.Doer) error { return es.CancelTask(ctx, d, "n1:7") },
+		"Reindex": func(d es.Doer) error {
+			_, err := es.Reindex(ctx, d, es.ReindexSpec{Source: "o", Dest: "n"})
+			return err
+		},
+		"UpdateByQuery": func(d es.Doer) error {
+			_, err := es.UpdateByQuery(ctx, d, []string{"o"}, nil, "ctx._source.a = 1")
+			return err
+		},
+		"PutMapping": func(d es.Doer) error { return es.PutMapping(ctx, d, "o", json.RawMessage(`{"n":{"type":"text"}}`)) },
+		"PutClusterSettings": func(d es.Doer) error {
+			v := "1"
+			return es.PutClusterSettings(ctx, d, map[string]*string{"a": &v}, nil)
+		},
 	}
 	for _, name := range es.WriteFuncs {
 		call, ok := calls[name]
