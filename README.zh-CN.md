@@ -12,7 +12,8 @@
 - 复制与导出结果（TSV、CSV、JSON、Markdown、INSERT、xlsx），SQL 历史。
 - 把 CSV、TSV、xlsx 文件导入到表，或从文件推断结构新建表。
 - Kafka：topic、按 lag 排序的 consumer group，可跳转、过滤和 live tail 的消息浏览，重置 offset，producer console；
-  修改 topic 配置和 partition，删除消息和 group，Schema Registry（Avro、Protobuf、JSON Schema）。
+  修改 topic 配置和 partition，删除消息和 group，Schema Registry（Avro、Protobuf、JSON Schema），ACL、Kafka Connect 和消息字段打码。
+- 审计日志：记录 sqlvim 发给 SQL、Redis、Kafka 服务器的每个写操作（`<Space>a`）。
 - SSH 隧道（agent、密钥、ProxyJump），生产环境保护，手动事务。
 - 自定义按键（`keymap.toml`）与颜色（`[theme]`）。
 

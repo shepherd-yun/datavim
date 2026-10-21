@@ -14,8 +14,9 @@ A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys
 - Copy and export results (TSV, CSV, JSON, Markdown, INSERT, xlsx), SQL history.
 - Import CSV, TSV and xlsx files into a table, or into a new table inferred from the file.
 - Kafka: topics, consumer groups by lag, messages with jumps, filters and live tail, offset resets
-  and a producer console; topic configs and partitions, deleting messages and groups, and a
-  Schema Registry (Avro, Protobuf and JSON Schema).
+  and a producer console; topic configs and partitions, deleting messages and groups, a
+  Schema Registry (Avro, Protobuf and JSON Schema), ACLs, Kafka Connect and masking of message fields.
+- An audit log of every write sqlvim sent to SQL, Redis and Kafka servers (`<Space>a`).
 - SSH tunnels (agent, keys, ProxyJump), production safeguards, manual transactions.
 - Your own keys (`keymap.toml`) and colors (`[theme]`).
 
