@@ -30,3 +30,23 @@ func TestSnapshotName(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+func TestSelectIndices(t *testing.T) {
+	all := []string{"orders", "orders-old", "users", ".kibana_1", "logs-1", "logs-2"}
+	for _, tc := range []struct {
+		expr string
+		want []string
+	}{
+		{"", []string{"orders", "orders-old", "users", "logs-1", "logs-2"}},
+		{"*", []string{"orders", "orders-old", "users", "logs-1", "logs-2"}},
+		{"orders", []string{"orders"}},
+		{"logs-*, users", []string{"users", "logs-1", "logs-2"}},
+		{".kibana_1", []string{".kibana_1"}},
+		{".*,orders", []string{"orders", ".kibana_1"}},
+		{"nope", nil},
+	} {
+		if got := SelectIndices(all, tc.expr); !slices.Equal(got, tc.want) {
+			t.Errorf("%q = %v, want %v", tc.expr, got, tc.want)
+		}
+	}
+}

@@ -2,7 +2,9 @@ package esx
 
 import (
 	"fmt"
+	"path"
 	"regexp"
+	"strings"
 	"time"
 )
 
@@ -32,4 +34,32 @@ func RestoreTargets(indices []string, pattern, replacement string) ([]string, er
 // SnapshotName is the default name of a new snapshot.
 func SnapshotName(now time.Time) string {
 	return "snapshot-" + now.UTC().Format("2006.01.02-150405")
+}
+
+// SelectIndices are the names of all that expr picks, in their order:
+// expr is comma-separated names and * patterns, empty for all. A system
+// index (".") is only picked by a pattern that starts with "." too.
+func SelectIndices(all []string, expr string) []string {
+	var pats []string
+	for p := range strings.SplitSeq(expr, ",") {
+		if p = strings.TrimSpace(p); p != "" {
+			pats = append(pats, p)
+		}
+	}
+	if len(pats) == 0 {
+		pats = []string{"*"}
+	}
+	var out []string
+	for _, name := range all {
+		for _, p := range pats {
+			if strings.HasPrefix(name, ".") && !strings.HasPrefix(p, ".") {
+				continue
+			}
+			if ok, _ := path.Match(p, name); ok {
+				out = append(out, name)
+				break
+			}
+		}
+	}
+	return out
 }

@@ -119,6 +119,7 @@ type Model struct {
 	esTrees     map[string]*esTree      // what the elasticsearch connections' trees are built from
 	esFormConn  string                  // the connection the new-index, reindex and snapshot forms are for
 	esRepoEdit  esRepoEdit              // the new repository being written in $EDITOR
+	esRestore   esRestore               // the snapshot the restore form is for
 	// esReindexSource is the index the reindex form copies.
 	esReindexSource string
 	// topicFormConn is the connection the open new-topic form adds to.
@@ -268,6 +269,18 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.esIndexFormed(msg)
 	case esReindexMsg:
 		return m, m.esReindex(msg)
+	case esRestoreAskMsg:
+		return m, m.askRestore(msg)
+	case esRestoreSnapMsg:
+		return m, m.esRestoreSnap(msg)
+	case overlay.RestoreFormMsg:
+		return m, m.esRestoreFormed(msg)
+	case esRestorePlanMsg:
+		return m, m.esRestorePlanned(msg)
+	case esRestoreRunMsg:
+		return m, m.esRestoreRun(msg)
+	case esRestoreDoneMsg:
+		return m, m.esRestoreDone(msg)
 	case esOpenSnapshotMsg:
 		return m, m.openESSnapshot(msg)
 	case esSnapshotAskDeleteMsg:
