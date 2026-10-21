@@ -54,6 +54,16 @@ func (c *fakeKafkaClient) ResetOffsets(context.Context, string, []kafka.OffsetCo
 	return nil, nil
 }
 
+func (c *fakeKafkaClient) AlterTopicConfigs(context.Context, string, []kafka.ConfigChange) error {
+	c.record("AlterTopicConfigs")
+	return nil
+}
+
+func (c *fakeKafkaClient) AddPartitions(context.Context, string, int) error {
+	c.record("AddPartitions")
+	return nil
+}
+
 func (c *fakeKafkaClient) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -157,6 +167,10 @@ func callWrite(c kafka.Client, name string) error {
 	case "ResetOffsets":
 		_, err := c.ResetOffsets(ctx, "g", nil)
 		return err
+	case "AlterTopicConfigs":
+		return c.AlterTopicConfigs(ctx, "t", nil)
+	case "AddPartitions":
+		return c.AddPartitions(ctx, "t", 2)
 	}
 	panic("no call for " + name)
 }

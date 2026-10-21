@@ -55,6 +55,7 @@ type fakeKafka struct {
 	unsupported map[string]bool
 	produceErr  error
 	resetResult func([]kafka.OffsetCommit) ([]kafka.CommitResult, error)
+	alters      [][]kafka.ConfigChange // AlterTopicConfigs calls
 }
 
 func newFakeKafka() *fakeKafka {
@@ -394,6 +395,29 @@ func (c *fakeKafkaClient) ResetOffsets(_ context.Context, group string, commits 
 	}
 	k.groups[group] = d
 	return out, nil
+}
+
+func (c *fakeKafkaClient) AlterTopicConfigs(_ context.Context, topic string, changes []kafka.ConfigChange) error {
+	if c.ro {
+		return session.ErrReadOnly
+	}
+	k := c.k
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.call("AlterTopicConfigs " + topic)
+	k.alters = append(k.alters, slices.Clone(changes))
+	return k.errs["AlterTopicConfigs"]
+}
+
+func (c *fakeKafkaClient) AddPartitions(_ context.Context, topic string, total int) error {
+	if c.ro {
+		return session.ErrReadOnly
+	}
+	k := c.k
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.call(fmt.Sprintf("AddPartitions %s %d", topic, total))
+	return k.errs["AddPartitions"]
 }
 
 func (c *fakeKafkaClient) Close() {}

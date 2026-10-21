@@ -21,7 +21,10 @@ var ErrReadOnly = errors.New("read-only connection · :set noreadonly allows cha
 // kafkaWriteMethods are the kafka.Client methods that change the cluster.
 // guardedKafka overrides every one of them; a test fails when kafka.Client
 // gains a method that is in neither this list nor the tests' read list.
-var kafkaWriteMethods = []string{"Produce", "CreateTopic", "DeleteTopic", "ResetOffsets"}
+var kafkaWriteMethods = []string{
+	"Produce", "CreateTopic", "DeleteTopic", "ResetOffsets",
+	"AlterTopicConfigs", "AddPartitions",
+}
 
 // guardedKafka is the one place Kafka writes are checked against the
 // connection's read-only flag, read at call time so :set noreadonly
@@ -69,6 +72,20 @@ func (g *guardedKafka) ResetOffsets(ctx context.Context, group string, commits [
 		return nil, err
 	}
 	return g.Client.ResetOffsets(ctx, group, commits)
+}
+
+func (g *guardedKafka) AlterTopicConfigs(ctx context.Context, topic string, changes []kafka.ConfigChange) error {
+	if err := g.check(); err != nil {
+		return err
+	}
+	return g.Client.AlterTopicConfigs(ctx, topic, changes)
+}
+
+func (g *guardedKafka) AddPartitions(ctx context.Context, topic string, total int) error {
+	if err := g.check(); err != nil {
+		return err
+	}
+	return g.Client.AddPartitions(ctx, topic, total)
 }
 
 // Kafka returns the connection's client, opening it on first use. Every

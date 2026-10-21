@@ -99,6 +99,11 @@ type Client interface {
 	// ResetOffsets commits only when the group is Empty and nothing moved
 	// since the preview (ErrGroupNotEmpty, ErrGroupChanged).
 	ResetOffsets(ctx context.Context, group string, commits []OffsetCommit) ([]CommitResult, error)
+	// AlterTopicConfigs re-reads the configs, gives up with ErrConfigChanged
+	// when one of changes is no longer at Old, and sends only changes.
+	AlterTopicConfigs(ctx context.Context, topic string, changes []ConfigChange) error
+	// AddPartitions grows topic to total partitions; fewer than now is an error.
+	AddPartitions(ctx context.Context, topic string, total int) error
 
 	Close()
 }
