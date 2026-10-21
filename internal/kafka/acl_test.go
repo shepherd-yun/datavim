@@ -37,7 +37,7 @@ func TestDeleteACLsExact(t *testing.T) {
 	cl := open(t, newCluster(t))
 	lit := aclOn("User:alice", "topic", "orders", "literal")
 	pre := aclOn("User:alice", "topic", "orders", "prefixed")
-	any := aclOn("User:*", "topic", "orders", "literal")
+	wild := aclOn("User:*", "topic", "orders", "literal")
 	if err := cl.CreateACLs(ctx(t), []ACL{lit, pre, wild}); err != nil {
 		t.Fatal(err)
 	}
