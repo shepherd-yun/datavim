@@ -26,6 +26,7 @@ var ErrReadOnly = errors.New("read-only connection · :set noreadonly allows cha
 var kafkaWriteMethods = []string{
 	"Produce", "CreateTopic", "DeleteTopic", "ResetOffsets",
 	"AlterTopicConfigs", "AddPartitions", "DeleteRecords", "DeleteGroup", "DeleteGroupOffsets",
+	"CreateACLs", "DeleteACLs",
 }
 
 // guardedKafka is the one place Kafka writes are checked against the
@@ -135,6 +136,26 @@ func (g *guardedKafka) DeleteGroupOffsets(ctx context.Context, group, topic stri
 	start := time.Now()
 	out, err := g.Client.DeleteGroupOffsets(ctx, group, topic)
 	g.audit(kmsgx.OpDeleteOffsets, group, "topic "+topic, start, err)
+	return out, err
+}
+
+func (g *guardedKafka) CreateACLs(ctx context.Context, acls []kafka.ACL) error {
+	if err := g.check(); err != nil {
+		return err
+	}
+	start := time.Now()
+	err := g.Client.CreateACLs(ctx, acls)
+	g.audit(kmsgx.OpCreateACL, aclPrincipals(acls), aclsDetail(acls), start, err)
+	return err
+}
+
+func (g *guardedKafka) DeleteACLs(ctx context.Context, acls []kafka.ACL) ([]kafka.ACL, error) {
+	if err := g.check(); err != nil {
+		return nil, err
+	}
+	start := time.Now()
+	out, err := g.Client.DeleteACLs(ctx, acls)
+	g.audit(kmsgx.OpDeleteACL, aclPrincipals(acls), aclsDetail(acls), start, err)
 	return out, err
 }
 

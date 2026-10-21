@@ -113,6 +113,16 @@ type Client interface {
 	// the group must be Empty or no longer subscribe to topic.
 	DeleteGroupOffsets(ctx context.Context, group, topic string) ([]CommitResult, error)
 
+	// ACLs lists every ACL the user may describe, sorted by principal,
+	// resource type, name and operation (ErrNoAuthorizer without ACLs).
+	ACLs(ctx context.Context) ([]ACL, error)
+	// CreateACLs creates acls; an ACL with a field outside the known values
+	// is an error before any request.
+	CreateACLs(ctx context.Context, acls []ACL) error
+	// DeleteACLs deletes exactly acls (one exact filter each) and returns
+	// what the cluster deleted; more than asked for is ErrACLMismatch.
+	DeleteACLs(ctx context.Context, acls []ACL) ([]ACL, error)
+
 	Close()
 }
 

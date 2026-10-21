@@ -54,6 +54,7 @@ type fakeKafka struct {
 	readers     []*fakeReader
 	tailQ       []kafka.Record // what Poll hands out next
 	unsupported map[string]bool
+	acls        []kafka.ACL
 	produceErr  error
 	resetResult func([]kafka.OffsetCommit) ([]kafka.CommitResult, error)
 	alters      [][]kafka.ConfigChange // AlterTopicConfigs calls
@@ -454,6 +455,48 @@ func (c *fakeKafkaClient) DeleteRecords(_ context.Context, topic string, before 
 	}
 	slices.SortFunc(out, func(a, b kafka.DeleteResult) int { return int(a.Partition - b.Partition) })
 	return out, nil
+}
+
+func (c *fakeKafkaClient) ACLs(context.Context) ([]kafka.ACL, error) {
+	k := c.k
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.call("ACLs")
+	return slices.Clone(k.acls), k.errs["ACLs"]
+}
+
+func (c *fakeKafkaClient) CreateACLs(_ context.Context, acls []kafka.ACL) error {
+	if c.ro {
+		return session.ErrReadOnly
+	}
+	k := c.k
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	for _, a := range acls {
+		k.call("CreateACLs " + a.String())
+	}
+	if err := k.errs["CreateACLs"]; err != nil {
+		return err
+	}
+	k.acls = append(k.acls, acls...)
+	return nil
+}
+
+func (c *fakeKafkaClient) DeleteACLs(_ context.Context, acls []kafka.ACL) ([]kafka.ACL, error) {
+	if c.ro {
+		return nil, session.ErrReadOnly
+	}
+	k := c.k
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	for _, a := range acls {
+		k.call("DeleteACLs " + a.String())
+	}
+	if err := k.errs["DeleteACLs"]; err != nil {
+		return nil, err
+	}
+	k.acls = slices.DeleteFunc(k.acls, func(a kafka.ACL) bool { return slices.Contains(acls, a) })
+	return acls, nil
 }
 
 func (c *fakeKafkaClient) DeleteGroup(_ context.Context, group string) error {

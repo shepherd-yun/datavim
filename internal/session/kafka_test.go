@@ -17,7 +17,7 @@ import (
 // cluster. Every method must be here or in kafkaWriteMethods.
 var kafkaReadMethods = []string{
 	"Cluster", "Topics", "TopicDetail", "TopicConfigs", "Supports", "Close",
-	"Groups", "GroupDetail", "GroupsLag", "TopicGroups", "OffsetsAt",
+	"Groups", "GroupDetail", "GroupsLag", "TopicGroups", "OffsetsAt", "ACLs",
 }
 
 // fakeKafkaClient records the write calls that reach it.
@@ -77,6 +77,16 @@ func (c *fakeKafkaClient) DeleteGroup(context.Context, string) error {
 
 func (c *fakeKafkaClient) DeleteGroupOffsets(context.Context, string, string) ([]kafka.CommitResult, error) {
 	c.record("DeleteGroupOffsets")
+	return nil, nil
+}
+
+func (c *fakeKafkaClient) CreateACLs(context.Context, []kafka.ACL) error {
+	c.record("CreateACLs")
+	return nil
+}
+
+func (c *fakeKafkaClient) DeleteACLs(context.Context, []kafka.ACL) ([]kafka.ACL, error) {
+	c.record("DeleteACLs")
 	return nil, nil
 }
 
@@ -194,6 +204,11 @@ func callWrite(c kafka.Client, name string) error {
 		return c.DeleteGroup(ctx, "g")
 	case "DeleteGroupOffsets":
 		_, err := c.DeleteGroupOffsets(ctx, "g", "t")
+		return err
+	case "CreateACLs":
+		return c.CreateACLs(ctx, []kafka.ACL{{Principal: "User:a"}})
+	case "DeleteACLs":
+		_, err := c.DeleteACLs(ctx, []kafka.ACL{{Principal: "User:a"}})
 		return err
 	}
 	panic("no call for " + name)

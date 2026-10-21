@@ -329,3 +329,22 @@ func (s *auditedRedisSession) Do(ctx context.Context, args ...string) (rdb.Reply
 	}, start, err)
 	return reply, err
 }
+
+// aclPrincipals is the principals of acls, once each.
+func aclPrincipals(acls []kafka.ACL) string {
+	var ps []string
+	for _, a := range acls {
+		if !slices.Contains(ps, a.Principal) {
+			ps = append(ps, a.Principal)
+		}
+	}
+	return strings.Join(ps, ", ")
+}
+
+func aclsDetail(acls []kafka.ACL) string {
+	parts := make([]string, len(acls))
+	for i, a := range acls {
+		parts[i] = a.String()
+	}
+	return joinParts(parts, "; ")
+}
