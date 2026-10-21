@@ -101,6 +101,7 @@ type Config struct {
 	Connections []Connection
 	Settings    Settings
 	Theme       map[string]string // config.toml [theme]; ui/theme validates it
+	Masks       []MaskRule        // config.toml [[mask]]
 	Keymap      KeymapFile
 }
 
@@ -108,6 +109,7 @@ type Config struct {
 type settingsFile struct {
 	Settings
 	Theme map[string]string `toml:"theme"`
+	Mask  []MaskRule        `toml:"mask"`
 }
 
 var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432, "sqlserver": 1433, "oracle": 1521, "redis": 6379, "kafka": 9092}
@@ -140,7 +142,10 @@ func LoadIn(root, connDir string) (*Config, error) {
 	if err := decodeFile(settingsPath, &sf); err != nil {
 		return nil, err
 	}
-	cfg.Settings, cfg.Theme = sf.Settings, sf.Theme
+	cfg.Settings, cfg.Theme, cfg.Masks = sf.Settings, sf.Theme, sf.Mask
+	if err := checkMasks(cfg.Masks); err != nil {
+		return nil, fmt.Errorf("%s: %w", settingsPath, err)
+	}
 	if cfg.Settings.PageSize <= 0 {
 		return nil, fmt.Errorf("%s: page_size must be positive", settingsPath)
 	}
