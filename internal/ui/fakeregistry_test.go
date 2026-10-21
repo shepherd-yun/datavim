@@ -109,6 +109,9 @@ func (r *fakeRegistry) SchemaByID(_ context.Context, id int) (kafka.Schema, erro
 	r.call(fmt.Sprintf("SchemaByID %d", id))
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if err := r.errs["SchemaByID"]; err != nil {
+		return kafka.Schema{}, err
+	}
 	for _, s := range r.schemas {
 		if s.ID == id {
 			return s, nil

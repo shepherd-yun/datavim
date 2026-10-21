@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"strconv"
 	"strings"
 	"testing"
@@ -99,6 +100,28 @@ func TestDecodeFailureIsolated(t *testing.T) {
 	pressAll(t, m, "K")
 	if s := screen(m); strings.Contains(s, "schema ") {
 		t.Fatalf("detail of a non-wire value:\n%s", s)
+	}
+}
+
+// TestDecodeRetriesTransientFailure: a failed decode isn't kept past a
+// reload of the view, so a registry that was down decodes on <Space>r.
+func TestDecodeRetriesTransientFailure(t *testing.T) {
+	m, b, k := decodeModel(t, withRegistry(config.Connection{}))
+	setValue(k, 0, 0, avroOrder(t, 1))
+	b.registry.mu.Lock()
+	b.registry.errs["SchemaByID"] = errors.New("schema registry: 503 unavailable")
+	b.registry.mu.Unlock()
+	tt := openTopicTab(t, m, "orders")
+	if _, size := valuePreview(t, tt, 0); !strings.HasPrefix(size, "!") {
+		t.Fatalf("size %q, want a decode failure", size)
+	}
+	b.registry.mu.Lock()
+	delete(b.registry.errs, "SchemaByID")
+	b.registry.mu.Unlock()
+	pressAll(t, m, "space", "r")
+	drainAll(t, m, nil)
+	if v, _ := valuePreview(t, tt, 0); v != `{"id":1}` {
+		t.Fatalf("VALUE after a reload = %q", v)
 	}
 }
 
