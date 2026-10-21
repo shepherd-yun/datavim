@@ -89,8 +89,11 @@ func (r *fakeRegistry) Versions(_ context.Context, subject string) ([]int, error
 	return out, nil
 }
 
-func (r *fakeRegistry) Schema(_ context.Context, subject string, version int) (kafka.Schema, error) {
+func (r *fakeRegistry) Schema(ctx context.Context, subject string, version int) (kafka.Schema, error) {
 	r.call(fmt.Sprintf("Schema %s %d", subject, version))
+	if err := ctx.Err(); err != nil {
+		return kafka.Schema{}, err
+	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	var best kafka.Schema

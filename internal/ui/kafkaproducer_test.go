@@ -2,6 +2,7 @@ package ui
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -209,6 +210,22 @@ func TestProduceWithSchema(t *testing.T) {
 	js, err := kmsgx.Decode(kafka.Schema{ID: 12, Type: "AVRO", Text: orderNoteSchema}, nil, v[5:])
 	if err != nil || string(js) != `{"id":1,"note":null}` {
 		t.Fatalf("decoded = %s, %v", js, err)
+	}
+}
+
+// TestSerializeStopsWithTheTab: closing the console cancels a pending
+// serialization's registry calls.
+func TestSerializeStopsWithTheTab(t *testing.T) {
+	_, _, p := schemaProducer(t, withRegistry(config.Connection{}), "")
+	recs, err := kmsgx.ParseDraft("value-schema: orders-value\n{\"id\":1,\"note\":null}")
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := p.serialize(recs)
+	p.shutdown()()
+	msg, ok := cmd().(serializedMsg)
+	if !ok || !errors.Is(msg.err, context.Canceled) {
+		t.Fatalf("msg = %+v", msg)
 	}
 }
 

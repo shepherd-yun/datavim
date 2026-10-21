@@ -123,6 +123,10 @@ type producerTab struct {
 	draftLoaded bool     // the saved draft was read
 	appendQ     []string // drafts appendDraft got before that
 
+	// ctx ends when the tab closes: it stops reading schemas, never a send
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	pending []kmsgx.DraftRecord // checked, waiting for a confirmation
 	gen     int
 	running bool
@@ -142,6 +146,7 @@ func newProducerTab(id int, b Backend, st Store, conn, topic string, s config.Se
 		// a result line is wider than a data cell
 		editor: editor.New(), grid: grid.New(nil, max(s.MaxColumnWidth, 120)), keys: keymap.Default(),
 	}
+	t.ctx, t.cancel = context.WithCancel(context.Background())
 	t.editor.EnterInsert()
 	return t
 }
@@ -219,7 +224,10 @@ func (t *producerTab) Init() tea.Cmd {
 	}
 }
 
-func (t *producerTab) shutdown() func() { return t.saveDraft() }
+func (t *producerTab) shutdown() func() {
+	t.cancel()
+	return t.saveDraft()
+}
 
 func (t *producerTab) scheduleDraft() tea.Cmd {
 	t.draftGen++
@@ -377,9 +385,9 @@ func (t *producerTab) send(recs []kmsgx.DraftRecord, err error) tea.Cmd {
 // goroutine; one that fails stops them all.
 func (t *producerTab) serialize(recs []kmsgx.DraftRecord) tea.Cmd {
 	t.setStatus("serializing…", false)
-	id, gen, b, conn := t.id, t.gen, t.backend, t.conn
+	tabCtx, id, gen, b, conn := t.ctx, t.id, t.gen, t.backend, t.conn
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		ctx, cancel := context.WithTimeout(tabCtx, loadTimeout)
 		defer cancel()
 		out, err := serializeDrafts(ctx, b, conn, recs)
 		return serializedMsg{tabID: id, gen: gen, conn: conn, recs: out, err: err}
