@@ -555,6 +555,10 @@ func (t *producerTab) Update(msg tea.Msg) tea.Cmd {
 		if m.gen == t.gen {
 			return t.serialized(m)
 		}
+	case fileParsedMsg:
+		if m.gen == t.gen {
+			return t.fileParsed(m)
+		}
 	case draftLoadedMsg:
 		switch cur := t.editor.Value(); {
 		case m.text == "" && cur == "" && len(t.appendQ) == 0:

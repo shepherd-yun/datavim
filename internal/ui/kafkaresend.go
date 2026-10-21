@@ -3,11 +3,14 @@ package ui
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
@@ -156,4 +159,78 @@ func (t *producerTab) appendDraft(text string) tea.Cmd {
 	t.editor.SetValue(text)
 	t.editor.SetCursor(first, 0)
 	return t.scheduleDraft()
+}
+
+// fileParsedMsg is a JSON Lines file read for :send.
+type fileParsedMsg struct {
+	tabID, gen int
+	name       string
+	recs       []kmsgx.DraftRecord
+	err        error
+}
+
+func (m fileParsedMsg) TabID() int { return m.tabID }
+
+// sendFile is :send <path>: every message of a JSON Lines export, parsed
+// first, then confirmed once — even where a draft's send is not: nobody
+// read the file in the editor.
+func (t *producerTab) sendFile(path string) tea.Cmd {
+	if t.running {
+		t.setStatus("a send is already running", true)
+		return nil
+	}
+	if cfg, _ := t.backend.Connection(t.conn); cfg.IsReadOnly() {
+		t.setStatus(readOnlyHint, true)
+		return nil
+	}
+	if strings.TrimSpace(path) == "" {
+		t.setStatus(":send <file.jsonl>", true)
+		return nil
+	}
+	t.gen++
+	id, gen := t.id, t.gen
+	t.setStatus("reading "+path+"…", false)
+	return func() tea.Msg {
+		home, _ := os.UserHomeDir()
+		p := expandHome(strings.TrimSpace(path), home)
+		msg := fileParsedMsg{tabID: id, gen: gen, name: filepath.Base(p)}
+		f, err := os.Open(p)
+		if err != nil {
+			msg.err = err
+			return msg
+		}
+		defer func() { _ = f.Close() }()
+		msg.recs, msg.err = kmsgx.ParseJSONL(f)
+		return msg
+	}
+}
+
+func (t *producerTab) fileParsed(m fileParsedMsg) tea.Cmd {
+	if m.err != nil {
+		why := m.name + " " + m.err.Error()
+		if !strings.HasPrefix(m.err.Error(), "line ") {
+			why = m.err.Error()
+		}
+		t.setStatus(why, true)
+		t.grid.SetResult(textResult([]string{"RESULT"}, [][]string{{"✗ " + why}}))
+		t.log("✗ " + why)
+		return nil
+	}
+	if len(m.recs) == 0 {
+		t.setStatus(m.name+" has no messages", true)
+		return nil
+	}
+	t.pending = m.recs
+	lines := []string{fmt.Sprintf("Send %s messages from %s to %s?", groupDigits(int64(len(m.recs))), m.name, t.topic)}
+	if len(m.recs) > sendPreviewOver {
+		lines = append(lines, "The first 5:")
+		for _, r := range m.recs[:5] {
+			lines = append(lines, "  "+kmsgx.Preview(r.Key, r.KeyNull, 30)+" · "+kmsgx.Preview(r.Value, r.ValueNull, 60))
+		}
+	}
+	title := "Send messages"
+	if cfg, _ := t.backend.Connection(t.conn); cfg.Env == config.EnvProd {
+		title = "PROD · " + title
+	}
+	return openOverlay(overlay.NewConfirm(title, lines, "", produceConfirmMsg{tabID: t.id, gen: t.gen, stage: stageSend}))
 }

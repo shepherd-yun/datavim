@@ -966,6 +966,14 @@ func (m *Model) runCommand(text string) tea.Cmd {
 	if verb == "e" || verb == "edit" {
 		return m.editFile(arg)
 	}
+	if verb == "send" {
+		p, ok := m.activeTab().(*producerTab)
+		if !ok {
+			m.setStatus(":send works in a producer console", true)
+			return nil
+		}
+		return p.sendFile(arg)
+	}
 	switch verb {
 	case "w", "write", "w!", "write!", "wq":
 		c, _ := m.activeTab().(*consoleTab)

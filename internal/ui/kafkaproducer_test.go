@@ -3,6 +3,8 @@ package ui
 import (
 	"bytes"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -312,5 +314,107 @@ func TestResendTruncated(t *testing.T) {
 	}
 	if len(m.tabs) != 1 {
 		t.Fatal("a console opened")
+	}
+}
+
+// writeJSONL writes n messages as JSON Lines export writes them.
+func writeJSONL(t *testing.T, n int, bad int) string {
+	t.Helper()
+	var b strings.Builder
+	for i := range n {
+		if i+1 == bad {
+			b.WriteString("{oops\n")
+			continue
+		}
+		r := fakeRecord("orders", 0, int64(i))
+		if i == 1 {
+			r.Value = []byte{0, 0xff}
+		}
+		b.Write(kmsgx.JSON(r))
+		b.WriteString("\n")
+	}
+	path := filepath.Join(t.TempDir(), "orders.jsonl")
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func runCommandLine(t *testing.T, m *Model, cmd string) {
+	t.Helper()
+	pressAll(t, m, ":")
+	typeText(t, m, cmd)
+	pressAll(t, m, "enter")
+}
+
+func TestSendFile(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 0)
+	openProducer(t, m, "", 0)
+	path := writeJSONL(t, 3, 0)
+	runCommandLine(t, m, "send "+path)
+	c, ok := m.overlay.(*overlay.Confirm)
+	if !ok {
+		t.Fatalf("overlay = %T, status %q", m.overlay, m.status)
+	}
+	if v := flatView(c); !strings.Contains(v, "Send 3 messages from orders.jsonl to orders?") {
+		t.Fatalf("confirm:\n%s", v)
+	}
+	pressAll(t, m, "y")
+	drainAll(t, m, nil)
+	if len(k.produced) != 1 || len(k.produced[0].recs) != 3 {
+		t.Fatalf("produced = %+v", k.produced)
+	}
+	if got := k.produced[0].recs[1].Value; !bytes.Equal(got, []byte{0, 0xff}) {
+		t.Fatalf("binary value = % x", got)
+	}
+}
+
+func TestSendFilePreview(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 0)
+	openProducer(t, m, "", 0)
+	runCommandLine(t, m, "send "+writeJSONL(t, 1001, 0))
+	c, ok := m.overlay.(*overlay.Confirm)
+	if !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	v := flatView(c)
+	if !strings.Contains(v, "1,001 messages") || strings.Count(v, "k-") != 5 {
+		t.Fatalf("confirm:\n%s", v)
+	}
+}
+
+func TestSendFileBadLine(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 0)
+	p := openProducer(t, m, "", 0)
+	runCommandLine(t, m, "send "+writeJSONL(t, 3, 2))
+	if len(k.produced) != 0 || m.overlay != nil {
+		t.Fatalf("produced %+v overlay %T", k.produced, m.overlay)
+	}
+	if !strings.HasPrefix(p.status, "orders.jsonl line 2: ") || !strings.Contains(screen(m), "orders.jsonl line 2") {
+		t.Fatalf("status %q", p.status)
+	}
+}
+
+func TestSendOutsideProducer(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 0)
+	openTopicTab(t, m, "orders")
+	runCommandLine(t, m, "send x")
+	if m.status != ":send works in a producer console" {
+		t.Fatalf("status = %q", m.status)
+	}
+}
+
+func TestSendFileReadOnly(t *testing.T) {
+	on := true
+	m, _, k := newKafkaModel(t, config.Connection{ReadOnly: &on})
+	k.addTopic("orders", 1, 0, 0)
+	p := openProducer(t, m, "", 0)
+	runCommandLine(t, m, "send /nonexistent/x.jsonl")
+	if p.status != readOnlyHint || m.overlay != nil {
+		t.Fatalf("status %q overlay %T", p.status, m.overlay)
 	}
 }
