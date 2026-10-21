@@ -13,15 +13,20 @@ const (
 	KindSQL
 	KindRedis
 	KindKafka
+	KindES
 )
 
-// sql, redis and kafka are the kind sets of kinds.
+// sql, redis, kafka and es are the kind sets of kinds.
 var (
-	sql        = []Kind{KindSQL}
-	redis      = []Kind{KindRedis}
-	kafka      = []Kind{KindKafka}
-	redisKafka = []Kind{KindRedis, KindKafka}
-	sqlRedis   = []Kind{KindSQL, KindRedis}
+	sql          = []Kind{KindSQL}
+	redis        = []Kind{KindRedis}
+	kafka        = []Kind{KindKafka}
+	redisES      = []Kind{KindRedis, KindES}
+	kafkaES      = []Kind{KindKafka, KindES}
+	redisKafkaES = []Kind{KindRedis, KindKafka, KindES}
+	sqlRedis     = []Kind{KindSQL, KindRedis}
+	// sqlOnlyGrid hides a grid's SQL-only copies on the ES tabs.
+	sqlOnlyGrid = map[Action][]Kind{CopyDDL: sql, CopyAs("sql"): sql}
 )
 
 // kinds marks, per context, the actions that belong to some kinds only.
@@ -34,7 +39,7 @@ var kinds = map[Context]map[Action][]Kind{
 		CopyAs("sql"):     sql,
 		ExportAs("sql"):   sql,
 		ExportAs("jsonl"): kafka,
-		OpenKey:           redis,
+		OpenKey:           redisES,
 		Favorites:         redis,
 	},
 	Tree: {
@@ -45,34 +50,42 @@ var kinds = map[Context]map[Action][]Kind{
 		YankQualified:  sql,
 		CopyDDL:        sql,
 		RenameTable:    sqlRedis,
-		NewKey:         redisKafka,
+		NewKey:         redisKafkaES,
 		ToggleFavorite: redis,
 		BigKeys:        redis,
-		FilterPrompt:   redisKafka,
-		FilterClear:    redisKafka,
-		ToggleInternal: kafka,
-		SortGroups:     kafka,
+		FilterPrompt:   redisKafkaES,
+		FilterClear:    redisKafkaES,
+		ToggleInternal: kafkaES,
+		SortGroups:     kafkaES,
 	},
-	Grid:      {CopyDDL: sql, CopyAs("sql"): sql},
-	Results:   {CopyDDL: sql, CopyAs("sql"): sql},
-	Structure: {CopyDDL: sql},
+	ESDocs:     sqlOnlyGrid,
+	ESIndex:    sqlOnlyGrid,
+	ESSettings: sqlOnlyGrid,
+	ESServer:   sqlOnlyGrid,
+	ESResults:  sqlOnlyGrid,
+	Grid:       {CopyDDL: sql, CopyAs("sql"): sql},
+	Results:    {CopyDDL: sql, CopyAs("sql"): sql},
+	Structure:  {CopyDDL: sql},
 }
 
 // kindDescs replaces the description of a binding shared by several
 // kinds, which otherwise reads for all of them at once.
-var kindDescs = map[Context]map[Action][3]string{ // [SQL, Redis, Kafka]
+var kindDescs = map[Context]map[Action][4]string{ // [SQL, Redis, Kafka, ES]
 	Global: {
-		History:     {"SQL history", "Command history", "SQL and Redis command history"},
-		OpenConsole: {"Open console", "Open console", "Producer console for the topic"},
+		History:     {"SQL history", "Command history", "SQL and Redis command history", "Request history"},
+		OpenConsole: {"Open console", "Open console", "Producer console for the topic", "REST console"},
+		OpenKey:     {"", "", "", "Open a document by _id"},
 	},
 	Tree: {
-		Open:         {"Open: table data, a column or index in the structure, a foreign key's table", "Open the key", "Open the topic / group"},
-		EditNode:     {"Edit connection / modify table", "Edit connection", "Edit connection"},
-		DeleteNode:   {"Delete connection / drop table or view", "Delete connection / delete Redis keys", "Delete connection / delete topic / delete group / soft-delete schema version"},
-		RenameTable:  {"Rename table or view", "Rename Redis key", ""},
-		NewKey:       {"", "New Redis key", "New topic"},
-		FilterPrompt: {"", "Filter Redis keys (pattern)", "Filter topics / groups / subjects by name"},
-		FilterClear:  {"", "Clear the Redis key filter", "Clear the topic / group / subject filter"},
+		Open:           {"Open: table data, a column or index in the structure, a foreign key's table", "Open the key", "Open the topic / group", "Open the index / alias / data stream"},
+		EditNode:       {"Edit connection / modify table", "Edit connection", "Edit connection", "Edit connection"},
+		DeleteNode:     {"Delete connection / drop table or view", "Delete connection / delete Redis keys", "Delete connection / delete topic / delete group / soft-delete schema version", "Delete connection / delete index"},
+		RenameTable:    {"Rename table or view", "Rename Redis key", "", ""},
+		NewKey:         {"", "New Redis key", "New topic", "New index"},
+		FilterPrompt:   {"", "Filter Redis keys (pattern)", "Filter topics / groups / subjects by name", "Filter indices by name (* wildcard)"},
+		FilterClear:    {"", "Clear the Redis key filter", "Clear the topic / group / subject filter", "Clear the index filter"},
+		ToggleInternal: {"", "", "", "Show / hide system indices"},
+		SortGroups:     {"", "", "", "Sort indices: name / docs / size"},
 	},
 }
 

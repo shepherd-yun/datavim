@@ -283,6 +283,7 @@ func DefaultBindings() []Binding {
 		Binding{KafkaACL, keys("F"), FilterPrompt, "Filter by principal, resource type or name"},
 		Binding{KafkaACL, keys("f", "x"), FilterClear, "Clear the filter"},
 	)
+	b = append(b, esBindings()...)
 	b = append(b, gridBindings(Audit)...)
 	b = append(b,
 		Binding{Audit, keys("F"), FilterPrompt, "Search the audit log (op, object, detail)"},
@@ -316,6 +317,65 @@ func DefaultBindings() []Binding {
 		Binding{Popup, keys("shift+tab"), PrevSearchScope, "Search: previous scope"},
 	)
 	return b
+}
+
+// esBindings are the Elasticsearch tabs' keys (spec §10).
+func esBindings() []Binding {
+	var b []Binding
+	for _, ctx := range []Context{ESDocs, ESIndex, ESSettings, ESServer} {
+		b = append(b, gridBindings(ctx)...)
+		b = append(b,
+			Binding{ctx, keys("["), PrevSection, "Previous section"},
+			Binding{ctx, keys("]"), NextSection, "Next section"},
+		)
+	}
+	b = append(b,
+		Binding{ESDocs, keys("}"), LoadMore, "Load more documents (also when the cursor reaches the last row)"},
+		Binding{ESDocs, keys("s"), SortColumn, "Sort by column: asc, desc, off"},
+		Binding{ESDocs, keys("F"), FilterPrompt, "Filter: Lucene query string, or a {…} query DSL object"},
+		Binding{ESDocs, keys("f", "f"), FilterEqual, "Filter: equals this value"},
+		Binding{ESDocs, keys("f", "!"), FilterNotEqual, "Filter: not this value"},
+		Binding{ESDocs, keys("f", "s"), FilterContains, "Filter: contains… (*value*)"},
+		Binding{ESDocs, keys("f", "~"), FilterContains, "Filter: contains… (*value*)"},
+		Binding{ESDocs, keys("f", ">"), FilterGreater, "Filter: greater than…"},
+		Binding{ESDocs, keys("f", "<"), FilterLess, "Filter: less than…"},
+		Binding{ESDocs, keys("f", "n"), FilterNull, "Filter: the field is missing"},
+		Binding{ESDocs, keys("f", "N"), FilterNotNull, "Filter: the field exists"},
+		Binding{ESDocs, keys("f", "x"), FilterClear, "Clear the filter"},
+		Binding{ESDocs, keys("i"), EditCell, "Edit the field"},
+		Binding{ESDocs, keys("enter"), EditCell, "Edit the field"},
+		Binding{ESDocs, keys("o"), InsertRow, "New document (in $EDITOR)"},
+		Binding{ESDocs, keys("d", "d"), DeleteRow, "Delete the document"},
+		Binding{ESDocs, keys("u"), UndoEdit, "Undo the last change"},
+		Binding{ESDocs, keys("U"), UndoAllEdits, "Discard every change"},
+		Binding{ESDocs, keys(LeaderToken, "w"), SubmitEdits, "Submit changes (:w)"},
+		Binding{ESDocs, keys(LeaderToken, "v"), ExternalEdit, "Edit the whole _source in $EDITOR"},
+		Binding{ESDocs, keys("X"), DeleteByQuery, "Delete every document the filter matches…"},
+		Binding{ESDocs, keys("y", "k"), YankID, "Copy _id"},
+		Binding{ESDocs, keys("y", "s"), YankSource, "Copy _source (JSON)"},
+		Binding{ESDocs, keys("y", "r"), YankRequest, "Copy as console requests: GET and PUT"},
+		Binding{ESDocs, keys("y", "u"), YankCurl, "Copy as curl (no credentials)"},
+		Binding{ESIndex, keys("o"), InsertRow, "Aliases: add an alias"},
+		Binding{ESIndex, keys("d", "d"), DeleteRow, "Aliases: remove the alias"},
+		Binding{ESSettings, keys("i"), EditCell, "Edit the setting (dynamic ones)"},
+		Binding{ESSettings, keys("enter"), EditCell, "Edit the setting (dynamic ones)"},
+		Binding{ESSettings, keys("d", "d"), DeleteRow, "Back to the default"},
+		Binding{ESSettings, keys("u"), UndoEdit, "Undo the last change"},
+		Binding{ESSettings, keys("U"), UndoAllEdits, "Discard every change"},
+		Binding{ESSettings, keys(LeaderToken, "w"), SubmitEdits, "Apply the settings changes (:w)"},
+	)
+	b = append(b, gridBindings(ESResults)...)
+	return append(b,
+		Binding{ESResults, keys("H"), PrevResult, "Previous result tab: Summary, then one per request (wraps)"},
+		Binding{ESResults, keys("L"), NextResult, "Next result tab (wraps)"},
+		Binding{ESResults, keys("]"), ResultView, "Switch the response: JSON / table"},
+		Binding{ESResults, keys("["), ResultView, "Switch the response: JSON / table"},
+		Binding{ESResults, keys("}"), LoadMore, "Load more rows"},
+		Binding{ESResults, keys("g", "d"), OpenCellKey, "Open the document of this _id"},
+		Binding{ESResults, keys("y", "u"), YankCurl, "Copy the request as curl (no credentials)"},
+		Binding{ESResults, keys("ctrl+k"), FocusEditor, "Focus editor"},
+		Binding{ESResults, keys("ctrl+j"), FocusEditor, "Focus editor (wraps)"},
+	)
 }
 
 func vertical(ctx Context) []Binding {

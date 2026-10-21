@@ -48,6 +48,16 @@ const (
 	KafkaConnect Context = "kafka_connect"
 	// KafkaACL is a Kafka connection's ACL tab.
 	KafkaACL Context = "kafka_acl"
+	// ESDocs is an Elasticsearch index tab's Documents.
+	ESDocs Context = "es_docs"
+	// ESIndex is an Elasticsearch index tab's Mapping, Aliases and Stats.
+	ESIndex Context = "es_index"
+	// ESSettings is an Elasticsearch index tab's Settings, where they are edited.
+	ESSettings Context = "es_settings"
+	// ESServer is an Elasticsearch connection's cluster status tab.
+	ESServer Context = "es_server"
+	// ESResults is the result pane of an Elasticsearch REST console.
+	ESResults Context = "es_results"
 	// Audit is the audit log of writes.
 	Audit Context = "audit"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
@@ -199,6 +209,11 @@ const (
 	ResendShown        Action = "kafka.resend_shown"
 	ToggleIsolation    Action = "kafka.isolation"
 	SetCompatibility   Action = "kafka.compat"
+	DeleteByQuery      Action = "es.delete_by_query"
+	YankID             Action = "es.yank_id"
+	YankSource         Action = "es.yank_source"
+	YankRequest        Action = "es.yank_request"
+	YankCurl           Action = "es.yank_curl"
 )
 
 const (

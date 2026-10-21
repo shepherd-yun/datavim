@@ -673,3 +673,100 @@ func TestKafkaKeymapK2(t *testing.T) {
 		t.Error("the tree's compare is listed on kafka")
 	}
 }
+
+func TestESBindings(t *testing.T) {
+	k := Default()
+	for _, tc := range []struct {
+		ctx  Context
+		keys string
+		want Action
+	}{
+		{ESDocs, "y k", YankID},
+		{ESDocs, "y s", YankSource},
+		{ESDocs, "y r", YankRequest},
+		{ESDocs, "y u", YankCurl},
+		{ESDocs, "X", DeleteByQuery},
+		{ESDocs, "}", LoadMore},
+		{ESDocs, "y y", YankRow},
+		{ESDocs, "y l", YankCell},
+		{ESDocs, "]", NextSection},
+		{ESDocs, "[", PrevSection},
+		{ESDocs, "K", CellDetail},
+		{ESDocs, "s", SortColumn},
+		{ESDocs, "F", FilterPrompt},
+		{ESDocs, "f f", FilterEqual},
+		{ESDocs, "f n", FilterNull},
+		{ESDocs, "f N", FilterNotNull},
+		{ESDocs, "f >", FilterGreater},
+		{ESDocs, "f x", FilterClear},
+		{ESDocs, "i", EditCell},
+		{ESDocs, "o", InsertRow},
+		{ESDocs, "d d", DeleteRow},
+		{ESDocs, "u", UndoEdit},
+		{ESDocs, "U", UndoAllEdits},
+		{ESDocs, "space w", SubmitEdits},
+		{ESDocs, "space v", ExternalEdit},
+		{ESDocs, "space k", OpenKey},
+		{ESIndex, "]", NextSection},
+		{ESSettings, "i", EditCell},
+		{ESSettings, "space w", SubmitEdits},
+		{ESServer, "]", NextSection},
+		{ESResults, "g d", OpenCellKey},
+		{ESResults, "y u", YankCurl},
+		{ESResults, "]", ResultView},
+		{ESResults, "H", PrevResult},
+	} {
+		if a, r := k.Resolve(tc.ctx, strings.Fields(tc.keys)); a != tc.want || r != Matched {
+			t.Errorf("%s %q = %q (%v), want %q", tc.ctx, tc.keys, a, r, tc.want)
+		}
+	}
+	if a, r := k.Resolve(ESDocs, []string{"f", "l"}); r == Matched {
+		t.Errorf("fl is bound on ES documents: %s", a)
+	}
+	has := func(entries []HelpEntry, a string) bool {
+		return slices.ContainsFunc(entries, func(e HelpEntry) bool { return strings.Contains(e.Desc, a) })
+	}
+	docs := k.Help(ESDocs, KindES)
+	if !has(docs, "Open a document by _id") || has(docs, "Copy DDL") || has(docs, "INSERT") {
+		t.Errorf("ES documents help = %+v", docs)
+	}
+	descOf := func(ctx Context, kind Kind, a Action) string {
+		for _, b := range k.bindings {
+			if b.Context == ctx && b.Action == a {
+				return b.descFor(kind)
+			}
+		}
+		return ""
+	}
+	for _, tc := range []struct {
+		ctx  Context
+		kind Kind
+		a    Action
+		want string
+	}{
+		{Tree, KindES, NewKey, "New index"},
+		{Tree, KindKafka, NewKey, "New topic"},
+		{Tree, KindES, ToggleInternal, "Show / hide system indices"},
+		{Tree, KindES, SortGroups, "Sort indices: name / docs / size"},
+		{Global, KindES, History, "Request history"},
+		{Global, KindES, OpenConsole, "REST console"},
+		{Global, KindES, OpenKey, "Open a document by _id"},
+		{Global, KindRedis, OpenKey, "Open a Redis key by name"},
+	} {
+		if d := descOf(tc.ctx, tc.kind, tc.a); d != tc.want {
+			t.Errorf("%s %s on %d = %q, want %q", tc.ctx, tc.a, tc.kind, d, tc.want)
+		}
+	}
+	tree := k.Help(Tree, KindES)
+	if !has(tree, "New index") || !has(tree, "system indices") || !has(tree, "Filter indices") || has(tree, "Truncate table") {
+		t.Errorf("ES tree help = %+v", tree)
+	}
+	if has(k.Help(Global, KindES), "Starred Redis keys") {
+		t.Error("Redis favorites listed on ES")
+	}
+	for _, ctx := range []Context{ESDocs, ESIndex, ESSettings, ESServer, ESResults} {
+		if !slices.Contains(Contexts(), ctx) {
+			t.Errorf("Contexts() lacks %s", ctx)
+		}
+	}
+}

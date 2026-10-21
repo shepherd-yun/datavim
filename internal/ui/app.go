@@ -545,6 +545,8 @@ func (m *Model) connKind() keymap.Kind {
 		return keymap.KindRedis
 	case isKafka(m.backend, conn):
 		return keymap.KindKafka
+	case isES(m.backend, conn):
+		return keymap.KindES
 	}
 	return keymap.KindSQL
 }
