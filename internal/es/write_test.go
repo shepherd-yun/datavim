@@ -151,7 +151,7 @@ func TestGetTask(t *testing.T) {
 }
 
 func TestWriteFuncsListed(t *testing.T) {
-	if len(WriteFuncs) != 30 {
+	if len(WriteFuncs) != 37 {
 		t.Errorf("WriteFuncs = %v", WriteFuncs)
 	}
 	_ = fmt.Sprint

@@ -111,6 +111,15 @@ func TestESReadOnlyRefusesEveryWrite(t *testing.T) {
 		"DeletePolicy":     func(d es.Doer) error { return es.DeletePolicy(ctx, d, "p") },
 		"PutPipeline":      func(d es.Doer) error { return es.PutPipeline(ctx, d, "p", json.RawMessage(`{"processors":[]}`)) },
 		"DeletePipeline":   func(d es.Doer) error { return es.DeletePipeline(ctx, d, "p") },
+		"CreateUser": func(d es.Doer) error {
+			return es.CreateUser(ctx, d, es.SecurityES, es.User{Name: "u"}, "pw1234")
+		},
+		"UpdateUser":     func(d es.Doer) error { return es.UpdateUser(ctx, d, es.SecurityES, es.User{Name: "u"}) },
+		"SetUserEnabled": func(d es.Doer) error { return es.SetUserEnabled(ctx, d, es.SecurityES, "u", false) },
+		"ChangePassword": func(d es.Doer) error { return es.ChangePassword(ctx, d, es.SecurityES, "u", "pw1234") },
+		"DeleteUser":     func(d es.Doer) error { return es.DeleteUser(ctx, d, es.SecurityES, "u") },
+		"PutRole":        func(d es.Doer) error { return es.PutRole(ctx, d, es.SecurityES, "r", json.RawMessage(`{}`)) },
+		"DeleteRole":     func(d es.Doer) error { return es.DeleteRole(ctx, d, es.SecurityES, "r") },
 		"PutClusterSettings": func(d es.Doer) error {
 			v := "1"
 			return es.PutClusterSettings(ctx, d, map[string]*string{"a": &v}, nil)
@@ -179,6 +188,13 @@ func TestESAudit(t *testing.T) {
 	}
 	if got[1].Detail != "critical" || got[1].Object != "logs-*" {
 		t.Errorf("entry = %+v", got[1])
+	}
+	_ = es.ChangePassword(context.Background(), d, es.SecurityES, "bob", "s3cret-pw")
+	if len(got) != 3 || got[2].Op != "POST _security/user/bob/_password" {
+		t.Fatalf("audit = %+v", got)
+	}
+	if e := got[2]; strings.Contains(e.Op+e.Object+e.Detail, "s3cret-pw") {
+		t.Errorf("password in the audit: %+v", e)
 	}
 }
 

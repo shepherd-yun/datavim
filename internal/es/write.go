@@ -19,6 +19,7 @@ var WriteFuncs = []string{
 	"PutTemplate", "DeleteTemplate",
 	"CreateSnapshot", "DeleteSnapshot", "RestoreSnapshot", "PutRepository", "DeleteRepository",
 	"PutPolicy", "DeletePolicy", "PutPipeline", "DeletePipeline",
+	"CreateUser", "UpdateUser", "SetUserEnabled", "ChangePassword", "DeleteUser", "PutRole", "DeleteRole",
 }
 
 // Version is the sequence number and primary term a document was read at.
