@@ -307,6 +307,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.deleteTopic(msg)
 	case topicDeletedMsg:
 		return m, m.topicDeleted(msg)
+	case esOpenShardsMsg:
+		return m, m.openESShards(msg.conn, msg.index)
 	case openTopicSectionMsg:
 		return m, m.openTopicSection(msg)
 	case auditGotoMsg:

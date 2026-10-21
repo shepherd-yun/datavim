@@ -291,6 +291,8 @@ func (t *esIndexTab) editUpdate(msg tea.Msg) (tea.Cmd, bool) {
 		return t.write(idxAliases, "aliases updated", func(ctx context.Context, d es.Doer) error {
 			return es.UpdateAliases(ctx, d, acts)
 		}), true
+	case esMappingRunMsg:
+		return t.runMapping(m), true
 	case esSettingMsg:
 		v := m.value
 		t.stageSetting(m.key, &v)
@@ -306,8 +308,11 @@ func (t *esIndexTab) editUpdate(msg tea.Msg) (tea.Cmd, bool) {
 			return nil, true
 		}
 		t.setStatus(m.done, false)
-		if m.section == idxSettings {
+		switch m.section {
+		case idxSettings:
 			t.setEdits = nil
+		case idxMapping:
+			return tea.Batch(t.loadHead(), t.loadMapping()), true
 		}
 		return t.loadSection(m.section), true
 	}

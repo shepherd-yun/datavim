@@ -136,15 +136,15 @@ func newESServerTab(id int, b Backend, keys *keymap.Keymap, maxCol int, conn str
 	return t
 }
 
-func (t *esServerTab) ID() int                       { return t.id }
-func (t *esServerTab) Title() string                 { return t.conn + " · cluster" }
-func (t *esServerTab) Key() string                   { return esServerTabKey(t.conn) }
-func (t *esServerTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
-func (t *esServerTab) SetSize(w, h int)              { t.width, t.height = max(w, 0), max(h, 0) }
-func (t *esServerTab) Init() tea.Cmd                 { return t.load() }
-func (t *esServerTab) retryAfterPassword() tea.Cmd   { return t.load() }
-func (t *esServerTab) activeGrid() *grid.Model       { return t.grids[t.section] }
-func (t *esServerTab) Find(q string, fwd bool) bool  { return t.activeGrid().Find(q, fwd) }
+func (t *esServerTab) ID() int                        { return t.id }
+func (t *esServerTab) Title() string                  { return t.conn + " · cluster" }
+func (t *esServerTab) Key() string                    { return esServerTabKey(t.conn) }
+func (t *esServerTab) Target() (string, db.TableRef)  { return t.conn, db.TableRef{} }
+func (t *esServerTab) SetSize(w, h int)               { t.width, t.height = max(w, 0), max(h, 0) }
+func (t *esServerTab) Init() tea.Cmd                  { return t.load() }
+func (t *esServerTab) retryAfterPassword() tea.Cmd    { return t.load() }
+func (t *esServerTab) activeGrid() *grid.Model        { return t.grids[t.section] }
+func (t *esServerTab) Find(q string, fwd bool) bool   { return t.activeGrid().Find(q, fwd) }
 func (t *esServerTab) setStatus(s string, isErr bool) { t.status, t.statusE = s, isErr }
 
 func (t *esServerTab) Context() keymap.Context {

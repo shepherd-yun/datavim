@@ -116,7 +116,8 @@ type esIndexTab struct {
 	stats       []es.IndexStats
 	parts       [idxSections]esPart
 
-	docs *esDocs
+	docs    *esDocs
+	editFor esEditFor // what the $EDITOR session under way is for
 
 	mapGrid, setGrid, aliasGrid, statsGrid *grid.Model
 
@@ -354,9 +355,14 @@ func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 	case editDoneMsg:
 		return readEditedFile(t.id, m)
 	case editTextMsg:
+		edit := t.editFor
+		t.editFor = editDocs
 		if m.err != nil {
 			t.setStatus("editor: "+m.err.Error(), true)
 			return nil
+		}
+		if edit == editMapping {
+			return t.mappingEdited(m.text)
 		}
 		t.docs.edited(m.text)
 	case esPageMsg:
@@ -419,6 +425,10 @@ func (t *esIndexTab) Handle(a keymap.Action) tea.Cmd {
 		cmd, ok = t.handleAliases(a)
 	case idxSettings:
 		cmd, ok = t.handleSettings(a)
+	case idxMapping:
+		cmd, ok = t.handleMapping(a)
+	case idxStats:
+		cmd, ok = t.handleStats(a)
 	}
 	if ok {
 		return cmd
