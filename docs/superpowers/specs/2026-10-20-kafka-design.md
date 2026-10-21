@@ -419,8 +419,8 @@ Kafka 服务器端有 ACL，但那是服务器配置，sqlvim 不改。和 Redis
 | 级别 | 操作 |
 |---|---|
 | 读 | 元数据、配置、group 详情、lag、浏览消息、Schema Registry 读取 |
-| 写 | 发消息、新建 topic、修改 topic 配置、增加 partition、重置 offset、注册 schema、修改兼容级别 |
-| 危险 | 删除 topic、删除 group、删除 group 的 offset、删除消息（DeleteRecords）、软删除 schema 版本 |
+| 写 | 发消息、新建 topic、修改 topic 配置、增加 partition、重置 offset、注册 schema、修改兼容级别；K3：新建 ACL、暂停 / 继续 connector、重启 connector 或 task、修改 connector 配置 |
+| 危险 | 删除 topic、删除 group、删除 group 的 offset、删除消息（DeleteRecords）、软删除 schema 版本；K3：删除 ACL（输入 principal 确认） |
 
 ### 8.2 规则
 
@@ -448,9 +448,9 @@ Kafka 服务器端有 ACL，但那是服务器配置，sqlvim 不改。和 Redis
 ## 9. K3：治理
 
 - **ACL**：浏览（按 principal、资源类型、资源名过滤），新建和删除 ACL（删除是危险操作）。
-- **Kafka Connect**：配置 Connect 集群的 URL 后，在树上显示 connectors 和状态；可以暂停、继续、重启 connector 和 task，查看和修改配置（修改按写操作处理）。
+- **Kafka Connect**：配置 Connect 集群的 URL 后（作者的决定：一个连接可以配多个 Connect 集群，`params.connect_url = "main=http://c1:8083, cdc=https://c2:8083"`，只写一个 URL 时集群名是 `connect`），在树上显示 connectors 和状态；可以暂停、继续、重启 connector 和 task，查看和修改配置（修改按写操作处理）。
 - **消息内容打码**：在 `config.toml` 里按连接（或 env）配置规则，按 JSON 路径或 header 名把敏感字段显示成 `******`，复制和导出时也打码。只影响显示，不改变发消息。
-- **写操作审计**：所有写和危险操作（SQL、Redis、Kafka 都可以）记录到 `internal/history` 的 SQLite：时间、连接、操作、对象、结果。提供一个查看页。是否扩展到 SQL 和 Redis 在 K3 计划阶段决定。
+- **写操作审计**：所有写和危险操作（SQL、Redis、Kafka 都可以）记录到 `internal/history` 的 SQLite：时间、连接、操作、对象、结果。提供一个查看页。作者在 K3 计划阶段决定：SQL、Redis、Kafka 三种连接都记录。
 
 ## 10. 测试
 

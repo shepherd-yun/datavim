@@ -22,6 +22,36 @@ const (
 	OpDeleteSchemaVersion
 )
 
+// K3 operations, after K2's.
+const (
+	OpCreateACL Op = iota + OpDeleteSchemaVersion + 1
+	OpDeleteACL
+	OpPauseConnector
+	OpResumeConnector
+	OpRestartConnector
+	OpRestartTask
+	OpAlterConnectorConfig
+)
+
+var opNames = map[Op]string{
+	OpProduce: "produce", OpCreateTopic: "create_topic", OpDeleteTopic: "delete_topic",
+	OpResetOffsets: "reset_offsets", OpAlterConfigs: "alter_configs", OpAddPartitions: "add_partitions",
+	OpDeleteRecords: "delete_records", OpDeleteGroup: "delete_group", OpDeleteOffsets: "delete_offsets",
+	OpRegisterSchema: "register_schema", OpSetCompatibility: "set_compatibility",
+	OpDeleteSchemaVersion: "delete_schema_version", OpCreateACL: "create_acl", OpDeleteACL: "delete_acl",
+	OpPauseConnector: "pause_connector", OpResumeConnector: "resume_connector",
+	OpRestartConnector: "restart_connector", OpRestartTask: "restart_task",
+	OpAlterConnectorConfig: "alter_connector_config",
+}
+
+// String is the op's name in the audit log, such as "delete_topic".
+func (o Op) String() string {
+	if s, ok := opNames[o]; ok {
+		return s
+	}
+	return "op_unknown"
+}
+
 // Level grades an Op (design §8.1).
 type Level int
 
@@ -42,7 +72,7 @@ const (
 // LevelOf grades op.
 func LevelOf(op Op) Level {
 	switch op {
-	case OpDeleteTopic, OpDeleteRecords, OpDeleteGroup, OpDeleteOffsets, OpDeleteSchemaVersion:
+	case OpDeleteTopic, OpDeleteRecords, OpDeleteGroup, OpDeleteOffsets, OpDeleteSchemaVersion, OpDeleteACL:
 		return LevelDanger
 	}
 	return LevelWrite
