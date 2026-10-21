@@ -318,6 +318,12 @@ func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 		return t.docs.filtered(m.text)
 	case esCellMsg:
 		t.docs.cellEdited(m)
+	case esDBQPlanMsg:
+		return t.docs.dbqPlanned(m)
+	case esDBQRunMsg:
+		return t.docs.runDBQ(m)
+	case esTaskMsg:
+		return t.docs.tasked(m)
 	case esSubmitMsg:
 		return t.docs.send()
 	case esSubmittedMsg:

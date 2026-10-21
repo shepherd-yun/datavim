@@ -369,6 +369,8 @@ func (f *fakeES) answer(r es.Request) es.Response {
 			ix.info.Docs = int64(len(ix.docs))
 		}
 		return jsonResp(map[string]string{"result": "deleted"})
+	case len(segs) == 2 && segs[1] == "_delete_by_query":
+		return jsonResp(map[string]string{"task": "n:1"})
 	case r.Method != "GET":
 		return jsonResp(map[string]any{"acknowledged": true})
 	}

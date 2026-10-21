@@ -426,6 +426,8 @@ func (d *esDocs) handle(a keymap.Action) (tea.Cmd, bool) {
 			return nil, true
 		}
 		return d.reload(), true
+	case keymap.DeleteByQuery:
+		return d.deleteByQuery(), true
 	case keymap.EditCell:
 		return d.editCell(), true
 	case keymap.InsertRow:
