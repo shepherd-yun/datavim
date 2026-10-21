@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -22,15 +23,16 @@ import (
 )
 
 type cluster struct {
-	name string
-	cfg  es.Config
-	core bool // OpenSearch: the core subtests only
+	name   string
+	cfg    es.Config
+	core   bool // OpenSearch: the core subtests only
+	secure bool // security on: users and roles
 }
 
 func startES(t *testing.T, img string, secure bool) cluster {
 	t.Helper()
 	ctx := context.Background()
-	var opts []testcontainers.ContainerCustomizer
+	opts := []testcontainers.ContainerCustomizer{testcontainers.WithEnv(map[string]string{"path.repo": "/tmp/snapshots"})}
 	if secure {
 		opts = append(opts, tces.WithPassword("s3cret-pw"))
 	}
@@ -50,7 +52,7 @@ func startES(t *testing.T, img string, secure bool) cluster {
 		}
 		cfg.TLSCA = ca
 	}
-	return cluster{name: img, cfg: cfg}
+	return cluster{name: img, cfg: cfg, secure: secure}
 }
 
 func startOS(t *testing.T, img string) cluster {
@@ -296,6 +298,7 @@ func runCluster(t *testing.T, cl cluster) {
 	})
 
 	runClusterOps(t, cl, c)
+	runE3(t, cl, c)
 
 	t.Run("alias", func(t *testing.T) {
 		yes := true
@@ -546,6 +549,195 @@ func runClusterOps(t *testing.T, cl cluster, c *es.Client) {
 			t.Errorf("%s = %q", key, got)
 		}
 		if err := es.PutClusterSettings(ctx, c, map[string]*string{key: nil}, map[string]*string{key: nil}); err != nil {
+			t.Fatal(err)
+		}
+	})
+}
+
+// eventually polls cond every half second for a minute.
+func eventually(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	for range 120 {
+		if cond() {
+			return
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	t.Fatalf("timed out waiting for %s", what)
+}
+
+func count(t *testing.T, c *es.Client, index string) string {
+	t.Helper()
+	resp, err := c.Do(context.Background(), es.Request{Method: "GET", Path: "_cat/count/" + index + "?format=json&h=count"})
+	if err != nil || resp.Status != 200 {
+		return ""
+	}
+	var rows []struct{ Count string }
+	if json.Unmarshal(resp.Body, &rows) != nil || len(rows) != 1 {
+		return ""
+	}
+	return rows[0].Count
+}
+
+func runE3(t *testing.T, cl cluster, c *es.Client) {
+	ctx := context.Background()
+	t.Run("snapshots", func(t *testing.T) {
+		repos, err := es.Repositories(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cl.core {
+			return // OpenSearch: the read only
+		}
+		if len(repos) != 0 {
+			t.Fatalf("repos %+v", repos)
+		}
+		load(t, c, "dvs-a", 30)
+		load(t, c, "dvs-b", 20)
+		if err := es.PutRepository(ctx, c, "dvrepo", json.RawMessage(`{"type":"fs","settings":{"location":"/tmp/snapshots/dv"}}`)); err != nil {
+			t.Fatal(err)
+		}
+		if err := es.CreateSnapshot(ctx, c, es.NewSnapshot{Repo: "dvrepo", Name: "snap-1", Indices: []string{"dvs-a", "dvs-b"}}); err != nil {
+			t.Fatal(err)
+		}
+		var snap es.SnapshotDetail
+		eventually(t, "the snapshot", func() bool {
+			snap, err = es.GetSnapshot(ctx, c, "dvrepo", "snap-1")
+			return err == nil && snap.State == "SUCCESS"
+		})
+		if snap.SizeBytes <= 0 || len(snap.IndexNames) != 2 {
+			t.Errorf("snapshot %+v", snap)
+		}
+		if list, err := es.Snapshots(ctx, c, "dvrepo"); err != nil || len(list) != 1 || list[0].Name != "snap-1" || list[0].Indices != 2 {
+			t.Errorf("snapshots %+v %v", list, err)
+		}
+		if err := es.RestoreSnapshot(ctx, c, es.RestoreSpec{
+			Repo: "dvrepo", Name: "snap-1", Indices: []string{"dvs-a", "dvs-b"},
+			RenamePattern: "(.+)", RenameReplacement: "restored-$1",
+		}); err != nil {
+			t.Fatal(err)
+		}
+		eventually(t, "the restore", func() bool { return count(t, c, "restored-dvs-a") == "30" && count(t, c, "restored-dvs-b") == "20" })
+		if err := es.DeleteSnapshot(ctx, c, "dvrepo", "snap-1"); err != nil {
+			t.Fatal(err)
+		}
+		if list, err := es.Snapshots(ctx, c, "dvrepo"); err != nil || len(list) != 0 {
+			t.Errorf("after delete %+v %v", list, err)
+		}
+		if err := es.DeleteRepository(ctx, c, "dvrepo"); err != nil {
+			t.Fatal(err)
+		}
+		_ = es.DeleteIndices(ctx, c, []string{"dvs-a", "dvs-b", "restored-dvs-a", "restored-dvs-b"})
+	})
+	t.Run("ilm", func(t *testing.T) {
+		if cl.core {
+			return // OpenSearch has ISM, not ILM
+		}
+		if err := es.PutPolicy(ctx, c, "dv-policy", json.RawMessage(`{"policy":{"phases":{"hot":{"actions":{}},"delete":{"min_age":"30d","actions":{"delete":{}}}}}}`)); err != nil {
+			t.Fatal(err)
+		}
+		ps, err := es.Policies(ctx, c)
+		if err != nil {
+			t.Fatal(err)
+		}
+		i := slices.IndexFunc(ps, func(p es.Policy) bool { return p.Name == "dv-policy" })
+		if i < 0 || !slices.Equal(ps[i].Phases, []string{"hot", "delete"}) {
+			t.Fatalf("policies %+v", ps)
+		}
+		raw(t, c, "PUT", "dv-ilm", `{"settings":{"index.lifecycle.name":"dv-policy"}}`)
+		st, err := es.ILMExplain(ctx, c, "dv-ilm")
+		if err != nil || st["dv-ilm"].Policy != "dv-policy" {
+			t.Errorf("explain %+v %v", st, err)
+		}
+		if err := es.DeleteIndices(ctx, c, []string{"dv-ilm"}); err != nil {
+			t.Fatal(err)
+		}
+		if err := es.DeletePolicy(ctx, c, "dv-policy"); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("pipelines", func(t *testing.T) {
+		if err := es.PutPipeline(ctx, c, "dv-pipe", json.RawMessage(`{"description":"sets x","processors":[{"set":{"field":"x","value":"from-pipeline"}}]}`)); err != nil {
+			t.Fatal(err)
+		}
+		ps, err := es.Pipelines(ctx, c)
+		if err != nil || !slices.ContainsFunc(ps, func(p es.Pipeline) bool { return p.Name == "dv-pipe" && p.Processors == 1 }) {
+			t.Fatalf("pipelines %+v %v", ps, err)
+		}
+		out, err := es.SimulatePipeline(ctx, c, "dv-pipe", []esx.Hit{{Index: "i", ID: "1", Source: json.RawMessage(`{"a":1}`)}})
+		if err != nil || !strings.Contains(string(out), "from-pipeline") {
+			t.Errorf("simulate %s %v", out, err)
+		}
+		if err := es.DeletePipeline(ctx, c, "dv-pipe"); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("security", func(t *testing.T) {
+		info, _ := es.GetInfo(ctx, c)
+		api, err := es.Security(ctx, c, info)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want := es.SecurityNone
+		if cl.secure {
+			want = es.SecurityES
+		}
+		if api != want {
+			t.Fatalf("security = %v, want %v", api, want)
+		}
+		if !cl.secure {
+			return
+		}
+		login := func(pw string) error {
+			cfg := cl.cfg
+			cfg.User, cfg.Password, cfg.APIKey = "dv-user", pw, ""
+			uc, err := es.Open(cfg)
+			if err != nil {
+				return err
+			}
+			resp, err := uc.Do(ctx, es.Request{Method: "GET", Path: "_security/_authenticate"})
+			if err == nil {
+				err = es.CheckStatus(resp)
+			}
+			return err
+		}
+		if err := es.CreateUser(ctx, c, api, es.User{Name: "dv-user", Roles: []string{"viewer"}}, "first-pw1"); err != nil {
+			t.Fatal(err)
+		}
+		if err := login("first-pw1"); err != nil {
+			t.Fatalf("new user: %v", err)
+		}
+		if err := es.ChangePassword(ctx, c, api, "dv-user", "second-pw2"); err != nil {
+			t.Fatal(err)
+		}
+		if err := login("first-pw1"); !errors.Is(err, es.ErrAuthFailed) {
+			t.Errorf("old password: %v", err)
+		}
+		if err := login("second-pw2"); err != nil {
+			t.Errorf("new password: %v", err)
+		}
+		if err := es.SetUserEnabled(ctx, c, api, "dv-user", false); err != nil {
+			t.Fatal(err)
+		}
+		if err := login("second-pw2"); !errors.Is(err, es.ErrAuthFailed) {
+			t.Errorf("disabled: %v", err)
+		}
+		users, err := es.Users(ctx, c, api)
+		if err != nil || !slices.ContainsFunc(users, func(u es.User) bool { return u.Name == "dv-user" && !u.Enabled }) ||
+			!slices.ContainsFunc(users, func(u es.User) bool { return u.Name == "elastic" && u.Reserved }) {
+			t.Errorf("users %+v %v", users, err)
+		}
+		if err := es.PutRole(ctx, c, api, "dv-role", json.RawMessage(`{"cluster":["monitor"],"indices":[{"names":["dv-*"],"privileges":["read"]}]}`)); err != nil {
+			t.Fatal(err)
+		}
+		roles, err := es.Roles(ctx, c, api)
+		if err != nil || !slices.ContainsFunc(roles, func(r es.Role) bool { return r.Name == "dv-role" && r.Indices == 1 }) {
+			t.Errorf("roles %v", err)
+		}
+		if err := es.DeleteRole(ctx, c, api, "dv-role"); err != nil {
+			t.Fatal(err)
+		}
+		if err := es.DeleteUser(ctx, c, api, "dv-user"); err != nil {
 			t.Fatal(err)
 		}
 	})
