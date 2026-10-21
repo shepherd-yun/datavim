@@ -318,7 +318,7 @@ func (s *auditedRedisSession) Do(ctx context.Context, args ...string) (rdb.Reply
 		return s.Session.Do(ctx, args...)
 	}
 	start := time.Now()
-	db := s.Session.DB()
+	db := s.DB()
 	reply, err := s.Session.Do(ctx, args...)
 	object := "" // the first argument after the command (and subcommand) name
 	if i := strings.Count(name, " ") + 1; i < len(args) {
