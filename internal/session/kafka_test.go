@@ -26,6 +26,7 @@ type fakeKafkaClient struct {
 	mu     sync.Mutex
 	calls  []string
 	closed bool
+	err    error // returned by DeleteTopic when set
 }
 
 func (c *fakeKafkaClient) record(name string) {
@@ -46,7 +47,7 @@ func (c *fakeKafkaClient) CreateTopic(context.Context, kafka.NewTopic) error {
 
 func (c *fakeKafkaClient) DeleteTopic(context.Context, string) error {
 	c.record("DeleteTopic")
-	return nil
+	return c.err
 }
 
 func (c *fakeKafkaClient) ResetOffsets(context.Context, string, []kafka.OffsetCommit) ([]kafka.CommitResult, error) {
@@ -201,6 +202,7 @@ func callWrite(c kafka.Client, name string) error {
 func TestKafkaGuardRefusesWrites(t *testing.T) {
 	on := true
 	m, op, _ := setupKafka(config.Connection{ReadOnly: &on})
+	audit := recordAudit(m)
 	c, err := m.Kafka(context.Background(), "k")
 	if err != nil {
 		t.Fatal(err)
@@ -213,6 +215,9 @@ func TestKafkaGuardRefusesWrites(t *testing.T) {
 	if calls := op.clients[0].calls; len(calls) != 0 {
 		t.Fatalf("writes reached the client: %v", calls)
 	}
+	if es := audit.entries(); len(es) != 0 {
+		t.Fatalf("refused writes are audited: %+v", es)
+	}
 	if err := m.SetReadOnly("k", false); err != nil {
 		t.Fatal(err)
 	}
@@ -224,6 +229,7 @@ func TestKafkaGuardRefusesWrites(t *testing.T) {
 	if calls := op.clients[0].calls; !slices.Equal(calls, kafkaWriteMethods) {
 		t.Fatalf("calls = %v", calls)
 	}
+	audit.checkOnePerWrite(t, kafkaWriteMethods)
 	if op.clients[0].isClosed() {
 		t.Fatal("switching read-only keeps the kafka client open")
 	}
@@ -431,6 +437,7 @@ func TestRegistryMethodsClassified(t *testing.T) {
 func TestRegistryGuardRefusesWrites(t *testing.T) {
 	on := true
 	m, reg, _, _ := setupRegistry(config.Connection{ReadOnly: &on})
+	audit := recordAudit(m)
 	r, err := m.SchemaRegistry(context.Background(), "k")
 	if err != nil {
 		t.Fatal(err)
@@ -454,6 +461,7 @@ func TestRegistryGuardRefusesWrites(t *testing.T) {
 	if !slices.Equal(reg.calls, registryWriteMethods) {
 		t.Fatalf("calls = %v", reg.calls)
 	}
+	audit.checkOnePerWrite(t, registryWriteMethods)
 }
 
 func TestRegistryPasswordAsked(t *testing.T) {

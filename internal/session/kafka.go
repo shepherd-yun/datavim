@@ -4,9 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
 )
 
 // KafkaOpener opens a Kafka client; kafka.Open implements it.
@@ -50,63 +52,90 @@ func (g *guardedKafka) Produce(ctx context.Context, topic string, recs []kafka.P
 	if err := g.check(); err != nil {
 		return nil, err
 	}
-	return g.Client.Produce(ctx, topic, recs)
+	start := time.Now()
+	out, err := g.Client.Produce(ctx, topic, recs)
+	g.audit(kmsgx.OpProduce, topic, plural(len(recs), "message"), start, err)
+	return out, err
 }
 
 func (g *guardedKafka) CreateTopic(ctx context.Context, t kafka.NewTopic) error {
 	if err := g.check(); err != nil {
 		return err
 	}
-	return g.Client.CreateTopic(ctx, t)
+	start := time.Now()
+	err := g.Client.CreateTopic(ctx, t)
+	g.audit(kmsgx.OpCreateTopic, t.Name, fmt.Sprintf("%s · %s", plural(int(t.Partitions), "partition"), plural(int(t.Replication), "replica")), start, err)
+	return err
 }
 
 func (g *guardedKafka) DeleteTopic(ctx context.Context, name string) error {
 	if err := g.check(); err != nil {
 		return err
 	}
-	return g.Client.DeleteTopic(ctx, name)
+	start := time.Now()
+	err := g.Client.DeleteTopic(ctx, name)
+	g.audit(kmsgx.OpDeleteTopic, name, "", start, err)
+	return err
 }
 
 func (g *guardedKafka) ResetOffsets(ctx context.Context, group string, commits []kafka.OffsetCommit) ([]kafka.CommitResult, error) {
 	if err := g.check(); err != nil {
 		return nil, err
 	}
-	return g.Client.ResetOffsets(ctx, group, commits)
+	start := time.Now()
+	out, err := g.Client.ResetOffsets(ctx, group, commits)
+	g.audit(kmsgx.OpResetOffsets, group, resetDetail(commits), start, err)
+	return out, err
 }
 
 func (g *guardedKafka) AlterTopicConfigs(ctx context.Context, topic string, changes []kafka.ConfigChange) error {
 	if err := g.check(); err != nil {
 		return err
 	}
-	return g.Client.AlterTopicConfigs(ctx, topic, changes)
+	start := time.Now()
+	err := g.Client.AlterTopicConfigs(ctx, topic, changes)
+	g.audit(kmsgx.OpAlterConfigs, topic, configsDetail(changes), start, err)
+	return err
 }
 
 func (g *guardedKafka) AddPartitions(ctx context.Context, topic string, total int) error {
 	if err := g.check(); err != nil {
 		return err
 	}
-	return g.Client.AddPartitions(ctx, topic, total)
+	start := time.Now()
+	err := g.Client.AddPartitions(ctx, topic, total)
+	g.audit(kmsgx.OpAddPartitions, topic, "→ "+plural(total, "partition"), start, err)
+	return err
 }
 
 func (g *guardedKafka) DeleteRecords(ctx context.Context, topic string, before map[int32]int64) ([]kafka.DeleteResult, error) {
 	if err := g.check(); err != nil {
 		return nil, err
 	}
-	return g.Client.DeleteRecords(ctx, topic, before)
+	start := time.Now()
+	out, err := g.Client.DeleteRecords(ctx, topic, before)
+	g.audit(kmsgx.OpDeleteRecords, topic, deleteRecordsDetail(before), start, err)
+	return out, err
 }
 
 func (g *guardedKafka) DeleteGroup(ctx context.Context, group string) error {
 	if err := g.check(); err != nil {
 		return err
 	}
-	return g.Client.DeleteGroup(ctx, group)
+	start := time.Now()
+	err := g.Client.DeleteGroup(ctx, group)
+	g.audit(kmsgx.OpDeleteGroup, group, "", start, err)
+	return err
 }
 
 func (g *guardedKafka) DeleteGroupOffsets(ctx context.Context, group, topic string) ([]kafka.CommitResult, error) {
 	if err := g.check(); err != nil {
 		return nil, err
 	}
-	return g.Client.DeleteGroupOffsets(ctx, group, topic)
+	start := time.Now()
+	out, err := g.Client.DeleteGroupOffsets(ctx, group, topic)
+	g.audit(kmsgx.OpDeleteOffsets, group, "topic "+topic, start, err)
+	return out, err
 }
 
 // Kafka returns the connection's client, opening it on first use. Every

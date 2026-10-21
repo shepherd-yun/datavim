@@ -3,9 +3,13 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/url"
+	"strconv"
+	"time"
 
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
 )
 
 // RegistryOpener makes a Schema Registry client; kafka.OpenRegistry
@@ -82,7 +86,13 @@ func (r *guardedRegistry) Register(ctx context.Context, subject string, s kafka.
 	if err := r.g.check(); err != nil {
 		return kafka.Schema{}, err
 	}
+	start := time.Now()
 	out, err := r.Registry.Register(ctx, subject, s)
+	detail := ""
+	if err == nil {
+		detail = fmt.Sprintf("v%d · id %d", out.Version, out.ID)
+	}
+	r.g.audit(kmsgx.OpRegisterSchema, subject, detail, start, err)
 	return out, r.fail(err)
 }
 
@@ -90,14 +100,20 @@ func (r *guardedRegistry) SetCompatibility(ctx context.Context, subject, level s
 	if err := r.g.check(); err != nil {
 		return err
 	}
-	return r.fail(r.Registry.SetCompatibility(ctx, subject, level))
+	start := time.Now()
+	err := r.Registry.SetCompatibility(ctx, subject, level)
+	r.g.audit(kmsgx.OpSetCompatibility, subject, level, start, err)
+	return r.fail(err)
 }
 
 func (r *guardedRegistry) DeleteVersion(ctx context.Context, subject string, version int) error {
 	if err := r.g.check(); err != nil {
 		return err
 	}
-	return r.fail(r.Registry.DeleteVersion(ctx, subject, version))
+	start := time.Now()
+	err := r.Registry.DeleteVersion(ctx, subject, version)
+	r.g.audit(kmsgx.OpDeleteSchemaVersion, subject, "v"+strconv.Itoa(version), start, err)
+	return r.fail(err)
 }
 
 // SchemaRegistry returns the connection's Schema Registry client, made on

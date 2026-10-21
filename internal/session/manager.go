@@ -12,6 +12,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
+	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
 	"github.com/shepherd-yun/sqlvim/internal/secret"
 )
@@ -53,6 +54,9 @@ type Manager struct {
 	// RemoveConnection.
 	PersistUpdate func(old string, c config.Connection) error
 	PersistRemove func(name string) error
+	// Audit is called after every write that reached a server (session's
+	// audit wrappers); nil records nothing. It must not block for long.
+	Audit func(history.AuditEntry)
 	// Tunnels, if set, opens the SSH tunnels of connections with ssh set.
 	Tunnels Tunneler
 	// RedisOpen, if set, opens redis connections; nil makes them unavailable.
