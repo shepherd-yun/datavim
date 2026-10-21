@@ -31,8 +31,12 @@ func TestFormatDraftRoundTrip(t *testing.T) {
 		{KeyNull: true, Value: []byte("# looks like a comment")},
 		{KeyNull: true, Value: []byte("\xc3\x28")},
 		{KeyNull: true, Value: []byte("v"), Headers: []kafka.Header{
-			{Key: "a=b", Value: []byte("c")}, {Key: "x=y", Value: []byte{0xff}}, {Key: "", Value: []byte("e")},
-			{Key: " sp", Value: []byte("v")}, {Key: "n\nl", Value: []byte{}}, {Key: "\xff", Value: []byte("v")},
+			{Key: "a=b", Value: []byte("c")},
+			{Key: "x=y", Value: []byte{0xff}},
+			{Key: "", Value: []byte("e")},
+			{Key: " sp", Value: []byte("v")},
+			{Key: "n\nl", Value: []byte{}},
+			{Key: "\xff", Value: []byte("v")},
 		}},
 	}
 	for i := range recs {
