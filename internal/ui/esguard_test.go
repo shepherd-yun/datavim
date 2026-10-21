@@ -40,6 +40,7 @@ func TestConfirmES(t *testing.T) {
 		{"quiet write", dev, esPlan{Class: quiet}, "", true, "", nil},
 		{"quiet write on prod", prod, esPlan{Class: quiet, Method: "POST", Path: "orders/_refresh"}, "", false, "y", []string{"POST orders/_refresh"}},
 		{"prod write", prod, esPlan{Class: write, Method: "PUT", Path: "orders/_doc/1", Body: []byte("{\n  \"a\": 1\n}")}, "", false, "y", []string{"PUT orders/_doc/1", `"a": 1`}},
+		{"prod password write", prod, esPlan{Class: esx.Classify("PUT", "_security/user/bob", nil), Method: "PUT", Path: "_security/user/bob", Body: []byte(`{"password":"pw1"}`)}, "", false, "y", []string{"PUT _security/user/bob", "<redacted>"}},
 		{"danger", dev, esPlan{Class: danger}, "", false, "orders", []string{"type orders to confirm"}},
 		{"danger on prod", prod, esPlan{Class: danger}, "", false, "orders", nil},
 		{"critical", dev, esPlan{Class: critical, Resolved: []string{"logs-1", "logs-2"}}, "", false, "logs-*", []string{"logs-1", "logs-2", "type logs-* to confirm"}},
@@ -62,6 +63,9 @@ func TestConfirmES(t *testing.T) {
 				t.Fatalf("confirm = %T", d.confirm)
 			}
 			v := ansi.Strip(c.View(120, 40))
+			if strings.Contains(v, "pw1") {
+				t.Errorf("confirmation shows the password:\n%s", v)
+			}
 			for _, h := range tc.has {
 				if !strings.Contains(v, h) {
 					t.Errorf("confirmation lacks %q:\n%s", h, v)

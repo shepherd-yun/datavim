@@ -116,8 +116,12 @@ func Classify(method, path string, body []byte) Class {
 			return set(LevelDanger, "delete ilm policy")
 		case firstOf(rest, "_snapshot"):
 			return set(LevelDanger, "delete snapshot")
-		case firstOf(rest, "_security"):
+		case firstOf(rest, "_security"), match("_plugins/_security/api/*/*", api):
 			return set(LevelDanger, "delete security object")
+		}
+	case "PATCH":
+		if match("_plugins/_security/api/*/*", api) {
+			return set(LevelWrite, "put security object")
 		}
 	case "PUT", "POST":
 		switch {
@@ -183,7 +187,7 @@ func Classify(method, path string, body []byte) Class {
 			return set(LevelWrite, "create snapshot")
 		case match("_snapshot/*", api):
 			return set(LevelDanger, "put snapshot repository")
-		case firstOf(rest, "_security") && len(rest) >= 3:
+		case firstOf(rest, "_security") && len(rest) >= 3, match("_plugins/_security/api/*/*", api) && method == "PUT":
 			return set(LevelWrite, "put security object")
 		}
 	}
@@ -362,4 +366,22 @@ func classifyAliases(c Class, body []byte) Class {
 		c.Level = LevelCritical
 	}
 	return c
+}
+
+// SensitiveRequest reports a request whose body carries a password: it is
+// kept out of the history and the confirmations (spec §9.4).
+func SensitiveRequest(method, path string) bool {
+	method = strings.ToUpper(method)
+	api := strings.Join(splitPath(path), "/")
+	switch {
+	case match("_security/user/*/_password", api):
+		return method == "PUT" || method == "POST"
+	case match("_security/user/*", api):
+		return method == "PUT" || method == "POST"
+	case match("_plugins/_security/api/internalusers/*", api):
+		return method == "PUT" || method == "PATCH"
+	case api == "_plugins/_security/api/account":
+		return method == "PUT"
+	}
+	return false
 }

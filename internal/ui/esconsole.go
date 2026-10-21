@@ -612,14 +612,14 @@ func (t *esConsoleTab) execute() tea.Cmd {
 }
 
 // recordRequest adds a request to the history, without the body of a
-// password change.
+// request that carries a password.
 func recordRequest(st Store, conn string, r esx.Request, res esResult) {
 	if st == nil {
 		return
 	}
 	text := r.Method + " " + r.Path
 	if body := strings.TrimSpace(string(r.Body)); body != "" {
-		if strings.Contains(r.Path, "_password") {
+		if esx.SensitiveRequest(r.Method, r.Path) {
 			body = "<redacted>"
 		}
 		text += "\n" + body

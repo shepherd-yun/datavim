@@ -9,6 +9,7 @@ import (
 
 	"github.com/shepherd-yun/datavim/internal/config"
 	"github.com/shepherd-yun/datavim/internal/es"
+	"github.com/shepherd-yun/datavim/internal/esx"
 	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 )
 
@@ -258,5 +259,18 @@ func TestESConsoleComplete(t *testing.T) {
 			t.Errorf("%q: popup %v, want %q", tc.typed, got, tc.want)
 		}
 		press(t, m, "esc", "esc")
+	}
+}
+
+func TestESConsoleHistoryRedacts(t *testing.T) {
+	for _, r := range []esx.Request{
+		{Method: "PUT", Path: "_security/user/bob", Body: []byte(`{"password":"pw1"}`)},
+		{Method: "PATCH", Path: "_plugins/_security/api/internalusers/bob", Body: []byte(`[{"op":"add","path":"/password","value":"pw1"}]`)},
+	} {
+		st := &fakeStore{}
+		recordRequest(st, "search", r, esResult{})
+		if len(st.entries) != 1 || strings.Contains(st.entries[0].SQL, "pw1") || !strings.Contains(st.entries[0].SQL, "<redacted>") {
+			t.Errorf("%s %s: %+v", r.Method, r.Path, st.entries)
+		}
 	}
 }

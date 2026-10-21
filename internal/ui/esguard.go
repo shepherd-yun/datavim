@@ -61,7 +61,11 @@ func decideES(cfg config.Connection, p esPlan, ok tea.Msg) esDecision {
 		}
 		if prod && p.Method != "" {
 			lines = append(lines, "", p.Method+" "+p.Path)
-			lines = append(lines, firstLines(string(p.Body), 5)...)
+			if esx.SensitiveRequest(p.Method, p.Path) {
+				lines = append(lines, "<redacted>")
+			} else {
+				lines = append(lines, firstLines(string(p.Body), 5)...)
+			}
 		}
 		lines = append(lines, "", "y confirms · n / esc cancels")
 		return esDecision{confirm: overlay.NewConfirm(title, lines, "", ok)}

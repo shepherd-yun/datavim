@@ -63,6 +63,13 @@ func TestClassify(t *testing.T) {
 		{"PUT", "_cluster/settings", `{}`, LevelDanger, "update cluster settings", nil, false},
 		{"POST", "_reindex", `{}`, LevelWrite, "reindex", nil, false},
 		{"POST", "_foo/bar", "", LevelDanger, "unknown request", nil, false},
+		{"PATCH", "_plugins/_security/api/internalusers/bob", `[]`, LevelWrite, "put security object", nil, false},
+		{"PUT", "_plugins/_security/api/roles/r", `{}`, LevelWrite, "put security object", nil, false},
+		{"DELETE", "_plugins/_security/api/internalusers/bob", "", LevelDanger, "delete security object", nil, false},
+		{"PATCH", "_anything", "", LevelDanger, "unknown request", nil, false},
+		{"PUT", "_snapshot/r", `{}`, LevelDanger, "put snapshot repository", nil, false},
+		{"PUT", "_snapshot/r/s", `{}`, LevelWrite, "create snapshot", nil, false},
+		{"POST", "_snapshot/r/s/_restore", `{}`, LevelDanger, "restore snapshot", nil, false},
 		{"POST", "orders", "", LevelDanger, "unknown request", []string{"orders"}, false},
 	}
 	for _, tc := range cases {
@@ -127,6 +134,32 @@ func TestEveryEndpointClassified(t *testing.T) {
 		p := strings.NewReplacer("{index}", "orders", "{id}", "1").Replace(e.Path)
 		if c := Classify(e.Method, p, nil); c.Op == "unknown request" {
 			t.Errorf("%s %s is not classified", e.Method, e.Path)
+		}
+	}
+}
+
+func TestSensitiveRequest(t *testing.T) {
+	cases := []struct {
+		method, path string
+		want         bool
+	}{
+		{"PUT", "_security/user/bob", true},
+		{"POST", "_security/user/bob", true},
+		{"POST", "/_security/user/bob/_password", true},
+		{"PUT", "_security/user/bob/_password?refresh=true", true},
+		{"PUT", "_plugins/_security/api/internalusers/bob", true},
+		{"PATCH", "_plugins/_security/api/internalusers/bob", true},
+		{"PUT", "_plugins/_security/api/account", true},
+		{"GET", "_security/user", false},
+		{"GET", "_security/user/bob", false},
+		{"PUT", "_security/user/bob/_enable", false},
+		{"PUT", "_security/role/r", false},
+		{"POST", "orders/_doc", false},
+		{"DELETE", "_plugins/_security/api/internalusers/bob", false},
+	}
+	for _, tc := range cases {
+		if got := SensitiveRequest(tc.method, tc.path); got != tc.want {
+			t.Errorf("%s %s = %v, want %v", tc.method, tc.path, got, tc.want)
 		}
 	}
 }
