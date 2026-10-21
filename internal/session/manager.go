@@ -394,10 +394,11 @@ func (m *Manager) Redis(ctx context.Context, name string, n int) (rdb.Client, er
 	if err != nil {
 		return nil, err
 	}
-	c, err = m.RedisOpen(ctx, rc)
+	raw, err := m.RedisOpen(ctx, rc)
 	if err := redisOpenErr(name, err); err != nil {
 		return nil, err
 	}
+	c = &auditedRedis{Client: raw, m: m, name: name, n: n}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -425,7 +426,7 @@ func (m *Manager) RedisSession(ctx context.Context, name string, n int) (rdb.Ses
 	if err := redisOpenErr(name, err); err != nil {
 		return nil, err
 	}
-	return s, nil
+	return &auditedRedisSession{Session: s, m: m, name: name}, nil
 }
 
 // redisConn checks that name is a usable redis connection and resolves

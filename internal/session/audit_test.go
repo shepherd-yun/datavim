@@ -3,14 +3,19 @@ package session
 import (
 	"context"
 	"errors"
+	"reflect"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
@@ -277,5 +282,96 @@ func TestAuditSQLStream(t *testing.T) {
 	_ = c.Stream(ctx, "INSERT INTO t (a) VALUES (1) RETURNING id", nil, nil)
 	if es := audit.entries(); len(es) != 1 || es[0].Op != "INSERT" {
 		t.Fatalf("audit = %+v", es)
+	}
+}
+
+// redisReadMethods are the rdb.Client methods that never change the
+// server. Every method must be here or in redisWriteMethods.
+var redisReadMethods = []string{
+	"Version", "DBSize", "Databases", "Scan", "KeyInfo", "GetString", "HashPage", "ListPage", "SetPage",
+	"ZSetPage", "StreamPage", "ScanKeys", "Info", "SlowLog", "Clients", "KeySizes", "Close",
+}
+
+func TestRedisMethodsListed(t *testing.T) {
+	typ := reflect.TypeFor[rdb.Client]()
+	for i := range typ.NumMethod() {
+		name := typ.Method(i).Name
+		if !slices.Contains(redisReadMethods, name) && !slices.Contains(redisWriteMethods, name) {
+			t.Errorf("rdb.Client.%s is neither a read nor a write method: add it to redisWriteMethods (and audit it) or to redisReadMethods", name)
+		}
+	}
+}
+
+func TestAuditRedisWrites(t *testing.T) {
+	m, op, _ := setupRedis(config.Connection{})
+	audit := recordAudit(m)
+	ctx := context.Background()
+	c, err := m.Redis(ctx, "r", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Apply(ctx, redit.Plan{Key: "user:1", Cmds: [][]string{{"HSET", "user:1", "name", "a"}, {"AUTH", "pw"}}})
+	_, _ = c.Expire(ctx, "user:1", time.Minute)
+	_, _ = c.Rename(ctx, "user:1", "user:2", true)
+	_, _ = c.Unlink(ctx, "a", "b", "c")
+	_, _ = c.KillClient(ctx, 42)
+	_, _ = c.KeyInfo(ctx, "user:1")
+	if calls := op.clients[0].calls; len(calls) != len(redisWriteMethods)+1 {
+		t.Fatalf("calls = %v", calls)
+	}
+	want := []struct{ op, object, detail string }{
+		{"apply", "user:1", "HSET user:1 name a; AUTH ***"},
+		{"EXPIRE", "user:1", "1m0s"},
+		{"RENAME", "user:1", "→ user:2 (overwrite)"},
+		{"UNLINK", "a", "3 keys"},
+		{"CLIENT KILL", "42", ""},
+	}
+	es := audit.entries()
+	if len(es) != len(want) {
+		t.Fatalf("audit = %+v", es)
+	}
+	for i, w := range want {
+		e := es[i]
+		if e.Kind != history.AuditRedis || e.Database != "3" || e.Op != w.op || e.Object != w.object || e.Detail != w.detail {
+			t.Errorf("entry %d = %+v, want %q %q %q", i, e, w.op, w.object, w.detail)
+		}
+	}
+}
+
+func TestAuditRedisDo(t *testing.T) {
+	for _, tc := range []struct {
+		args       []string
+		op, object string
+		ok         bool
+	}{
+		{[]string{"GET", "k"}, "", "", false},
+		{[]string{"SET", "k", "v"}, "SET", "k", true},
+		{[]string{"AUTH", "pw"}, "", "", false},
+		{[]string{"CONFIG", "SET", "requirepass", "s3cret"}, "CONFIG SET", "", true},
+		{[]string{"FLUSHDB"}, "FLUSHDB", "", true},
+		{[]string{"MULTI"}, "MULTI", "", true},
+		{[]string{"FROBNICATE", "x"}, "FROBNICATE", "x", true},
+	} {
+		m, _ := setupRedisSession(config.Connection{})
+		audit := recordAudit(m)
+		s, err := m.RedisSession(context.Background(), "r", 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = s.Do(context.Background(), tc.args...)
+		es := audit.entries()
+		if !tc.ok {
+			if len(es) != 0 {
+				t.Errorf("%v: audited %+v", tc.args, es)
+			}
+			continue
+		}
+		if len(es) != 1 || es[0].Op != tc.op || (tc.object != "" && es[0].Object != tc.object) {
+			t.Errorf("%v: audit = %+v", tc.args, es)
+			continue
+		}
+		if strings.Contains(es[0].Detail, "s3cret") || strings.Contains(es[0].Detail, "pw") {
+			t.Errorf("%v: secret in %q", tc.args, es[0].Detail)
+		}
 	}
 }

@@ -12,6 +12,9 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
+	"github.com/shepherd-yun/sqlvim/internal/rcmd"
+	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
 	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
@@ -227,4 +230,102 @@ func (s *auditedSession) Exec(ctx context.Context, sql string, args ...any) (db.
 
 func (s *auditedSession) Stream(ctx context.Context, sql string, onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
 	return s.a.stream(ctx, s.Session, sql, onColumns, onRow)
+}
+
+// redisWriteMethods are the rdb.Client methods that change the server;
+// auditedRedis records each. A test fails when rdb.Client gains a method
+// in neither this list nor the test's read list.
+var redisWriteMethods = []string{"Apply", "Expire", "Rename", "Unlink", "KillClient"}
+
+// auditedRedis records the writes of a Redis client of db n.
+type auditedRedis struct {
+	rdb.Client
+	m    *Manager
+	name string
+	n    int
+}
+
+func (c *auditedRedis) record(op, object, detail string, start time.Time, err error) {
+	c.m.record(history.AuditEntry{
+		Conn: c.name, Kind: history.AuditRedis, Database: strconv.Itoa(c.n), Op: op, Object: object, Detail: detail,
+	}, start, err)
+}
+
+func (c *auditedRedis) Apply(ctx context.Context, p redit.Plan) error {
+	start := time.Now()
+	err := c.Client.Apply(ctx, p)
+	cmds := make([]string, len(p.Cmds))
+	for i, cmd := range p.Cmds {
+		cmds[i] = rcmd.Redact(cmd)
+	}
+	c.record("apply", p.Key, strings.Join(cmds, "; "), start, err)
+	return err
+}
+
+func (c *auditedRedis) Expire(ctx context.Context, key string, ttl time.Duration) (bool, error) {
+	start := time.Now()
+	ok, err := c.Client.Expire(ctx, key, ttl)
+	if ttl < 0 {
+		c.record("PERSIST", key, "", start, err)
+	} else {
+		c.record("EXPIRE", key, ttl.String(), start, err)
+	}
+	return ok, err
+}
+
+func (c *auditedRedis) Rename(ctx context.Context, from, to string, overwrite bool) (bool, error) {
+	start := time.Now()
+	ok, err := c.Client.Rename(ctx, from, to, overwrite)
+	detail := "→ " + to
+	if overwrite {
+		detail += " (overwrite)"
+	}
+	c.record("RENAME", from, detail, start, err)
+	return ok, err
+}
+
+func (c *auditedRedis) Unlink(ctx context.Context, keys ...string) (int64, error) {
+	start := time.Now()
+	n, err := c.Client.Unlink(ctx, keys...)
+	first := ""
+	if len(keys) > 0 {
+		first = keys[0]
+	}
+	c.record("UNLINK", first, plural(len(keys), "key"), start, err)
+	return n, err
+}
+
+func (c *auditedRedis) KillClient(ctx context.Context, id int64) (bool, error) {
+	start := time.Now()
+	ok, err := c.Client.KillClient(ctx, id)
+	c.record("CLIENT KILL", strconv.FormatInt(id, 10), "", start, err)
+	return ok, err
+}
+
+// auditedRedisSession records a console's commands that may write
+// (rcmd's Write, Dangerous and Unknown) and MULTI / EXEC / DISCARD.
+type auditedRedisSession struct {
+	rdb.Session
+	m    *Manager
+	name string
+}
+
+var redisTxCommands = map[string]bool{"MULTI": true, "EXEC": true, "DISCARD": true}
+
+func (s *auditedRedisSession) Do(ctx context.Context, args ...string) (rdb.Reply, error) {
+	level, name := rcmd.Classify(args)
+	if (level == rcmd.Read && !redisTxCommands[name]) || level == rcmd.Unsupported || s.m.Audit == nil {
+		return s.Session.Do(ctx, args...)
+	}
+	start := time.Now()
+	db := s.Session.DB()
+	reply, err := s.Session.Do(ctx, args...)
+	object := "" // the first argument after the command (and subcommand) name
+	if i := strings.Count(name, " ") + 1; i < len(args) {
+		object = args[i]
+	}
+	s.m.record(history.AuditEntry{
+		Conn: s.name, Kind: history.AuditRedis, Database: strconv.Itoa(db), Op: name, Object: object, Detail: rcmd.Redact(args),
+	}, start, err)
+	return reply, err
 }

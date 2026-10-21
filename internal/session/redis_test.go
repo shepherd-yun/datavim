@@ -10,12 +10,47 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/sqlvim/internal/redit"
 )
 
 type fakeRedisClient struct {
 	rdb.Client
 	mu     sync.Mutex
 	closed bool
+	calls  []string
+}
+
+func (c *fakeRedisClient) record(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls = append(c.calls, name)
+}
+
+func (c *fakeRedisClient) Apply(context.Context, redit.Plan) error { c.record("Apply"); return nil }
+
+func (c *fakeRedisClient) Expire(context.Context, string, time.Duration) (bool, error) {
+	c.record("Expire")
+	return true, nil
+}
+
+func (c *fakeRedisClient) Rename(context.Context, string, string, bool) (bool, error) {
+	c.record("Rename")
+	return true, nil
+}
+
+func (c *fakeRedisClient) Unlink(_ context.Context, keys ...string) (int64, error) {
+	c.record("Unlink")
+	return int64(len(keys)), nil
+}
+
+func (c *fakeRedisClient) KillClient(context.Context, int64) (bool, error) {
+	c.record("KillClient")
+	return true, nil
+}
+
+func (c *fakeRedisClient) KeyInfo(context.Context, string) (rdb.KeyInfo, error) {
+	c.record("KeyInfo")
+	return rdb.KeyInfo{}, nil
 }
 
 func (c *fakeRedisClient) Close() error {
@@ -197,6 +232,10 @@ func waitFor(t *testing.T, cond func() bool) {
 }
 
 type fakeRedisSession struct{ rdb.Session }
+
+func (s *fakeRedisSession) Do(context.Context, ...string) (rdb.Reply, error) { return rdb.Reply{}, nil }
+
+func (s *fakeRedisSession) DB() int { return 0 }
 
 // fakeSessionOpener is fakeRedisOpener for console sessions.
 type fakeSessionOpener struct {
