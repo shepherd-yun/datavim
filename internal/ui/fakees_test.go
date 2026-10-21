@@ -31,6 +31,12 @@ type fakeES struct {
 	reqs    []es.Request
 	seq     int64
 	cursors map[string]*fakeCursor // open PITs and scrolls by id
+
+	nodes     []es.Node
+	shards    []es.Shard
+	pending   []es.PendingTask
+	csettings map[string]map[string]any // scope → key → value
+	tasks     []es.Task
 }
 
 type fakeIndex struct {
@@ -244,6 +250,102 @@ func (f *fakeES) answer(r es.Request) es.Response {
 			"active_primary_shards": h.ActivePrimary, "active_shards": h.Active, "relocating_shards": h.Relocating,
 			"initializing_shards": h.Initializing, "unassigned_shards": h.Unassigned, "number_of_pending_tasks": h.PendingTasks,
 		})
+	case r.Method == "GET" && p == "_cat/nodes":
+		var rows []map[string]any
+		for _, n := range f.nodes {
+			master := "-"
+			if n.Master {
+				master = "*"
+			}
+			rows = append(rows, map[string]any{
+				"id": n.ID, "name": n.Name, "ip": n.IP, "node.role": n.Roles, "master": master, "version": n.Version,
+				"heap.percent": str(int64(n.HeapPct)), "ram.percent": str(int64(n.RAMPct)), "cpu": str(int64(n.CPUPct)),
+				"load_1m": strconv.FormatFloat(n.Load1m, 'f', 2, 64), "disk.used_percent": strconv.FormatFloat(n.DiskUsedPct, 'f', 2, 64),
+				"disk.used": str(n.DiskUsed), "disk.total": str(n.DiskTotal),
+			})
+		}
+		return jsonResp(rows)
+	case r.Method == "GET" && p == "_cat/allocation":
+		count := map[string]int{}
+		for _, s := range f.shards {
+			node := s.Node
+			if node == "" {
+				node = "UNASSIGNED"
+			}
+			count[node]++
+		}
+		var rows []map[string]any
+		for _, n := range f.nodes {
+			rows = append(rows, map[string]any{"node": n.Name, "ip": n.IP, "shards": str(int64(count[n.Name])), "disk.indices": "1000",
+				"disk.used": str(n.DiskUsed), "disk.avail": str(n.DiskTotal - n.DiskUsed), "disk.total": str(n.DiskTotal), "disk.percent": str(int64(n.DiskUsedPct))})
+		}
+		return jsonResp(rows)
+	case r.Method == "GET" && (p == "_cat/shards" || strings.HasPrefix(p, "_cat/shards/")):
+		var rows []map[string]any
+		for _, s := range f.shards {
+			if len(segs) == 3 && s.Index != segs[2] {
+				continue
+			}
+			pr := "r"
+			if s.Primary {
+				pr = "p"
+			}
+			row := map[string]any{"index": s.Index, "shard": str(int64(s.Shard)), "prirep": pr, "state": s.State, "docs": nil, "store": nil, "node": nil, "unassigned.reason": nil}
+			if s.Node != "" {
+				row["node"], row["docs"], row["store"] = s.Node, str(s.Docs), str(s.Bytes)
+			}
+			if s.Reason != "" {
+				row["unassigned.reason"] = s.Reason
+			}
+			rows = append(rows, row)
+		}
+		return jsonResp(rows)
+	case r.Method == "GET" && p == "_cluster/pending_tasks":
+		var tasks []map[string]any
+		for _, t := range f.pending {
+			tasks = append(tasks, map[string]any{"insert_order": t.Order, "priority": t.Priority, "source": t.Source, "time_in_queue": t.Waiting})
+		}
+		return jsonResp(map[string]any{"tasks": tasks})
+	case r.Method == "GET" && p == "_cluster/settings":
+		out := map[string]any{"persistent": map[string]any{}, "transient": map[string]any{}, "defaults": map[string]any{}}
+		for scope, m := range f.csettings {
+			out[scope] = m
+		}
+		return jsonResp(out)
+	case r.Method == "GET" && p == "_tasks":
+		var tasks []map[string]any
+		for _, t := range f.tasks {
+			node, id, _ := strings.Cut(t.ID, ":")
+			n, _ := strconv.Atoi(id)
+			v := map[string]any{"node": node, "id": n, "action": t.Action, "description": t.Description,
+				"running_time_in_nanos": int64(t.Running), "cancellable": t.Cancellable}
+			if t.Total >= 0 {
+				v["status"] = map[string]int64{"total": t.Total, "created": t.Done}
+			}
+			tasks = append(tasks, v)
+		}
+		return jsonResp(map[string]any{"tasks": tasks})
+	case r.Method == "GET" && len(segs) == 4 && segs[0] == "_nodes" && segs[2] == "stats":
+		for _, n := range f.nodes {
+			if n.ID == segs[1] {
+				return jsonResp(map[string]any{"nodes": map[string]any{n.ID: map[string]any{
+					"name": n.Name, "roles": []string{"data", "master"},
+					"jvm": map[string]any{"mem": map[string]int64{"heap_used_in_bytes": 1 << 30, "heap_max_in_bytes": 2 << 30, "heap_used_percent": int64(n.HeapPct)}},
+				}}})
+			}
+		}
+		return errResp(404, "fake", "no node "+segs[1])
+	case r.Method == "POST" && p == "_cluster/allocation/explain":
+		var b struct {
+			Index   string `json:"index"`
+			Shard   int    `json:"shard"`
+			Primary bool   `json:"primary"`
+		}
+		_ = json.Unmarshal(r.Body, &b)
+		return jsonResp(map[string]any{"index": b.Index, "shard": b.Shard, "primary": b.Primary, "current_state": "unassigned",
+			"allocate_explanation": "cannot allocate because allocation is not permitted to any of the nodes",
+			"node_allocation_decisions": []map[string]any{{"node_name": "es-1", "deciders": []map[string]string{
+				{"decider": "same_shard", "decision": "NO", "explanation": "a copy of this shard is already allocated to this node"}}}}})
 	case r.Method == "GET" && p == "_cluster/stats":
 		var docs int64
 		for _, ix := range f.indices {
