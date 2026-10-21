@@ -18,6 +18,7 @@ type esEditFor int
 const (
 	editDocs    esEditFor = iota // the Documents section's own edits
 	editMapping                  // new mapping fields
+	editUBQ                      // an update by query's script
 )
 
 const newFieldsTemplate = "{\n  \"new_field\": { \"type\": \"keyword\" }\n}\n"

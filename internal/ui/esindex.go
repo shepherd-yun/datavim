@@ -346,6 +346,10 @@ func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 		return t.docs.runDBQ(m)
 	case esTaskMsg:
 		return t.docs.tasked(m)
+	case esUBQPlanMsg:
+		return t.docs.ubqPlanned(m)
+	case esUBQRunMsg:
+		return t.docs.runUBQ(m)
 	case esSubmitMsg:
 		return t.docs.send()
 	case esSubmittedMsg:
@@ -361,8 +365,11 @@ func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 			t.setStatus("editor: "+m.err.Error(), true)
 			return nil
 		}
-		if edit == editMapping {
+		switch edit {
+		case editMapping:
 			return t.mappingEdited(m.text)
+		case editUBQ:
+			return t.docs.ubqEdited(m.text)
 		}
 		t.docs.edited(m.text)
 	case esPageMsg:
