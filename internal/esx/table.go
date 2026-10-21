@@ -9,11 +9,13 @@ import (
 type Hit struct {
 	Index, ID, Routing string
 	SeqNo, PrimaryTerm int64
+	Version            int64 // 0 when the response leaves it out
 	Score              *float64
 	Source             json.RawMessage
 	// Truncated: Source went over the size limit and holds a preview only
 	// (set by the es package).
-	Truncated bool
+	Truncated  bool
+	SourceSize int // the full _source's size in bytes
 	Highlight map[string][]string
 	Sort      []json.RawMessage // for search_after
 }

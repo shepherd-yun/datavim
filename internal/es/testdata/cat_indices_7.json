@@ -1,0 +1,5 @@
+[
+  {"health":"green","status":"open","index":"orders","uuid":"u1","pri":"5","rep":"1","docs.count":"8812301","docs.deleted":"12","store.size":"4400000000","pri.store.size":"2200000000","creation.date":"1772409600000"},
+  {"health":"yellow","status":"open","index":".kibana_1","uuid":"u2","pri":"1","rep":"1","docs.count":"10","docs.deleted":"0","store.size":"1000","pri.store.size":"1000","creation.date":"1772409600000"},
+  {"health":null,"status":"close","index":"users","uuid":"u3","pri":"1","rep":"1","docs.count":null,"docs.deleted":null,"store.size":null,"pri.store.size":null,"creation.date":"1772409600000"}
+]

@@ -34,3 +34,15 @@ func TestParseCell(t *testing.T) {
 		}
 	}
 }
+
+func TestDynamicSetting(t *testing.T) {
+	for k, want := range map[string]bool{
+		"index.refresh_interval": true, "number_of_replicas": true, "index.blocks.write": true,
+		"index.routing.allocation.include._tier_preference": true, "index.number_of_shards": false,
+		"index.codec": false, "index.search.slowlog.threshold.query.warn": true,
+	} {
+		if DynamicSetting(k) != want {
+			t.Errorf("%s: %v", k, !want)
+		}
+	}
+}

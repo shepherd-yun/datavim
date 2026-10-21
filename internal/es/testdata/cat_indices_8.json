@@ -1,0 +1,4 @@
+[
+  {"health":"green","status":"open","index":"orders","uuid":"u1","pri":"5","rep":"1","docs.count":"8812301","docs.deleted":"12","store.size":"4400000000","pri.store.size":"2200000000","creation.date":"1772409600000"},
+  {"health":"red","status":"close","index":"users","uuid":"u3","pri":"1","rep":"1","docs.count":"","docs.deleted":"","store.size":"","pri.store.size":"","creation.date":"1772409600000"}
+]

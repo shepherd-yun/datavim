@@ -155,11 +155,13 @@ func (c *Client) Do(ctx context.Context, r Request) (Response, error) {
 	return Response{}, lastErr
 }
 
-func (c *Client) do(ctx context.Context, base *url.URL, r Request) (Response, error) {
+func (c *Client) do(ctx context.Context, base *url.URL, r Request) (resp Response, err error) {
 	path, query, _ := strings.Cut(strings.TrimLeft(r.Path, "/"), "?")
 	u := *base
-	u.Path = strings.TrimRight(base.Path, "/") + "/" + path
-	u.RawPath = ""
+	u.RawPath = strings.TrimRight(base.EscapedPath(), "/") + "/" + path
+	if u.Path, err = url.PathUnescape(u.RawPath); err != nil {
+		u.Path, u.RawPath = u.RawPath, ""
+	}
 	u.RawQuery = query
 	var body io.Reader
 	if r.Body != nil {
@@ -182,7 +184,7 @@ func (c *Client) do(ctx context.Context, base *url.URL, r Request) (Response, er
 		req.SetBasicAuth(c.cfg.User, c.cfg.Password)
 	}
 	t0 := time.Now()
-	resp, err := c.hc.Do(req)
+	hr, err := c.hc.Do(req)
 	if err != nil {
 		var ue *url.Error
 		if errors.As(err, &ue) {
@@ -190,17 +192,17 @@ func (c *Client) do(ctx context.Context, base *url.URL, r Request) (Response, er
 		}
 		return Response{}, &connError{host: base.Host, err: err}
 	}
-	defer resp.Body.Close()
-	b, err := io.ReadAll(io.LimitReader(resp.Body, c.cfg.MaxBody+1))
+	defer hr.Body.Close()
+	b, err := io.ReadAll(io.LimitReader(hr.Body, c.cfg.MaxBody+1))
 	took := time.Since(t0)
-	slog.Debug("elasticsearch request", "method", req.Method, "path", "/"+path, "status", resp.StatusCode, "took", took)
+	slog.Debug("elasticsearch request", "method", req.Method, "path", "/"+path, "status", hr.StatusCode, "took", took)
 	if err != nil {
 		return Response{}, fmt.Errorf("elasticsearch %s: %w", base.Host, err)
 	}
 	if int64(len(b)) > c.cfg.MaxBody {
 		return Response{}, ErrTooLarge
 	}
-	return Response{Status: resp.StatusCode, Body: b, Took: took}, nil
+	return Response{Status: hr.StatusCode, Body: b, Took: took}, nil
 }
 
 // connError is a request that got no response from host.

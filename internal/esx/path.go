@@ -158,3 +158,23 @@ func CellText(v json.RawMessage, ok bool) (text string, null bool) {
 	}
 	return b.String(), false
 }
+
+// TruncateSource is a preview of a _source over limit bytes: its
+// top-level members, in order, while they fit in limit.
+func TruncateSource(src json.RawMessage, limit int) json.RawMessage {
+	obj, err := decodeObject(src)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	var keep object
+	size := 2
+	for _, m := range obj {
+		n := len(m.Key) + len(m.Val) + 4
+		if size+n > limit {
+			continue
+		}
+		size += n
+		keep = append(keep, m)
+	}
+	return keep.encode()
+}
