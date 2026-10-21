@@ -6,11 +6,13 @@ import (
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/datavim/internal/config"
 	"github.com/shepherd-yun/datavim/internal/es"
 	"github.com/shepherd-yun/datavim/internal/history"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
@@ -221,5 +223,117 @@ func TestESServerHiddenStopsSections(t *testing.T) {
 	drain(t, m, func() tea.Msg { return esServerTickMsg{tabID: id, gen: tab.gen} })
 	if len(f.sent()) != n {
 		t.Errorf("hidden but read %v", f.sent()[n:])
+	}
+}
+
+func fourShards(f *fakeES) {
+	f.shards = []es.Shard{
+		{Index: "orders", Shard: 0, Primary: true, State: "STARTED", Node: "es-1", Docs: 10, Bytes: 1000},
+		{Index: "orders", Shard: 0, State: "UNASSIGNED", Docs: -1, Bytes: -1, Reason: "INDEX_CREATED"},
+		{Index: "logs-1", Shard: 0, Primary: true, State: "STARTED", Node: "es-1", Docs: 5, Bytes: 500},
+		{Index: "logs-2", Shard: 0, Primary: true, State: "STARTED", Node: "es-1", Docs: 5, Bytes: 500},
+	}
+}
+
+func TestESServerShardsDefault(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	fourShards(f)
+	tab := openESServerTab(t, m)
+	drain(t, m, tab.setSection(secESShards))
+	if got := tab.grids[secESShards].Result().Rows; len(got) != 1 || got[0][3].Text != "UNASSIGNED" {
+		t.Fatalf("rows = %v", got)
+	}
+	press(t, m, ".")
+	if got := tab.grids[secESShards].Result().Rows; len(got) != 4 {
+		t.Fatalf("all rows = %v", got)
+	}
+	f.shards = f.shards[:1]
+	press(t, m, ".")
+	drain(t, m, tab.Handle(keymap.Refresh))
+	if s := screen(m); !strings.Contains(s, "every shard is started") {
+		t.Errorf("screen:\n%s", s)
+	}
+}
+
+func TestESServerShardsFilter(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	fourShards(f)
+	tab := openESServerTab(t, m)
+	drain(t, m, tab.setSection(secESShards))
+	press(t, m, ".", "F")
+	typeText(t, m, "logs-*")
+	press(t, m, "enter")
+	if got := tab.grids[secESShards].Result().Rows; len(got) != 2 || got[0][0].Text != "logs-1" {
+		t.Fatalf("filtered = %v", got)
+	}
+	if s := screen(m); !strings.Contains(s, "filter logs-*") {
+		t.Errorf("screen:\n%s", s)
+	}
+	press(t, m, "f", "x")
+	if got := tab.grids[secESShards].Result().Rows; len(got) != 4 {
+		t.Fatalf("cleared = %v", got)
+	}
+}
+
+func TestESServerExplain(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	fourShards(f)
+	tab := openESServerTab(t, m)
+	drain(t, m, tab.setSection(secESShards))
+	press(t, m, "enter")
+	if b := f.lastBody("POST _cluster/allocation/explain"); b != `{"index":"orders","shard":0,"primary":false}` {
+		t.Fatalf("explain body = %q", b)
+	}
+	d, ok := m.overlay.(*overlay.Detail)
+	if !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	if s := ansi.Strip(d.View(100, 30)); !strings.Contains(s, "same_shard") || !strings.Contains(s, "orders[0] r") {
+		t.Errorf("detail:\n%s", s)
+	}
+	press(t, m, "esc", ".")
+	n := len(f.sent())
+	press(t, m, "g", "g", "enter")
+	if !strings.Contains(tab.status, "only unassigned shards have an allocation explanation") {
+		t.Errorf("status = %q", tab.status)
+	}
+	for _, s := range f.sent()[n:] {
+		if strings.Contains(s, "explain") {
+			t.Errorf("sent %s", s)
+		}
+	}
+}
+
+func TestESServerNodeDetail(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	twoNodes(f)
+	tab := openESServerTab(t, m)
+	drain(t, m, tab.setSection(secESNodes))
+	press(t, m, "j", "enter")
+	if !slices.ContainsFunc(f.sent(), func(s string) bool { return strings.HasPrefix(s, "GET _nodes/n2/stats/") }) {
+		t.Fatalf("sent %v", f.sent())
+	}
+	d, ok := m.overlay.(*overlay.Detail)
+	if !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	if s := ansi.Strip(d.View(100, 30)); !strings.Contains(s, "heap") || !strings.Contains(s, "es-2") {
+		t.Errorf("detail:\n%s", s)
+	}
+}
+
+func TestOpenESShards(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	fourShards(f)
+	drain(t, m, m.openESShards("search", "orders"))
+	tab, ok := m.activeTab().(*esServerTab)
+	if !ok || tab.section != secESShards || tab.shardFilter != "orders" || !tab.shardsAll {
+		t.Fatalf("tab = %#v", m.activeTab())
+	}
+	if got := tab.grids[secESShards].Result().Rows; len(got) != 2 {
+		t.Errorf("rows = %v", got)
+	}
+	if !slices.Contains(f.sent(), "GET _cat/shards/orders?format=json&bytes=b&h=index,shard,prirep,state,docs,store,node,unassigned.reason") {
+		t.Errorf("sent %v", f.sent())
 	}
 }

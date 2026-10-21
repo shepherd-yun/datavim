@@ -13,6 +13,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/es"
 	"github.com/shepherd-yun/datavim/internal/esx"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
@@ -98,6 +99,12 @@ type esServerTab struct {
 	nodes    []es.Node
 	alloc    []es.NodeAllocation
 	pending  []es.PendingTask
+	shards   []es.Shard
+	// shardView are the Shards rows shown: not STARTED unless shardsAll,
+	// matching shardFilter.
+	shardView   []es.Shard
+	shardsAll   bool
+	shardFilter string
 	// watermark is the high disk watermark; read is whether it was tried.
 	watermark     string
 	watermarkRead bool
@@ -107,6 +114,8 @@ type esServerTab struct {
 	visible bool
 	gen     int
 	err     string
+	status  string
+	statusE bool
 
 	width, height int
 }
@@ -129,6 +138,7 @@ func (t *esServerTab) Init() tea.Cmd                 { return t.load() }
 func (t *esServerTab) retryAfterPassword() tea.Cmd   { return t.load() }
 func (t *esServerTab) activeGrid() *grid.Model       { return t.grids[t.section] }
 func (t *esServerTab) Find(q string, fwd bool) bool  { return t.activeGrid().Find(q, fwd) }
+func (t *esServerTab) setStatus(s string, isErr bool) { t.status, t.statusE = s, isErr }
 
 func (t *esServerTab) Context() keymap.Context {
 	if t.section == secESSettings {
@@ -169,6 +179,10 @@ func (t *esServerTab) load() tea.Cmd {
 	t.gen++
 	id, gen, b, conn, sec := t.id, t.gen, t.backend, t.conn, t.section
 	readWatermark := sec == secESNodes && !t.watermarkRead
+	shardIndex := ""
+	if f := t.shardFilter; f != "" && !strings.ContainsAny(f, "*?,") {
+		shardIndex = f // a concrete index: read only its shards
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 		defer cancel()
@@ -201,7 +215,7 @@ func (t *esServerTab) load() tea.Cmd {
 					out.watermark = &w
 				}
 			case secESShards:
-				out.shards, err = es.Shards(ctx, d, "")
+				out.shards, err = es.Shards(ctx, d, shardIndex)
 			case secESAllocation:
 				out.alloc, err = es.Allocation(ctx, d)
 			case secESTasks:
@@ -252,6 +266,15 @@ func (t *esServerTab) Update(msg tea.Msg) tea.Cmd {
 		if m.gen == t.gen && t.visible && !t.loading {
 			return t.load()
 		}
+	case esServerDetailMsg:
+		if m.err != nil {
+			t.setStatus(esReason(m.err), true)
+			return nil
+		}
+		return openOverlay(overlay.NewDetail(m.title, m.text))
+	case esShardFilterMsg:
+		t.shardFilter = m.text
+		return t.setSection(secESShards)
 	}
 	return nil
 }
@@ -269,6 +292,9 @@ func (t *esServerTab) apply(m esServerLoadedMsg) {
 		}
 		t.nodes, t.alloc = m.nodes, m.alloc
 		t.grids[secESNodes].ReplaceResult(t.nodesResult())
+	case secESShards:
+		t.shards = m.shards
+		t.renderShards()
 	case secESAllocation:
 		t.alloc = m.alloc
 		t.grids[secESAllocation].ReplaceResult(t.allocationResult())
@@ -279,6 +305,12 @@ func (t *esServerTab) apply(m esServerLoadedMsg) {
 }
 
 func (t *esServerTab) Handle(a keymap.Action) tea.Cmd {
+	t.status = ""
+	if t.section == secESShards {
+		if cmd, ok := t.handleShards(a); ok {
+			return cmd
+		}
+	}
 	switch a {
 	case keymap.NextSection:
 		return t.setSection(min(t.section+1, eserverSections-1))
@@ -290,8 +322,15 @@ func (t *esServerTab) Handle(a keymap.Action) tea.Cmd {
 		}
 		return nil
 	case keymap.Open:
-		if t.section == secESOverview && t.health.Status != "green" && t.health.Status != "" {
-			return t.setSection(secESShards)
+		switch t.section {
+		case secESOverview:
+			if t.health.Status != "green" && t.health.Status != "" {
+				return t.setSection(secESShards)
+			}
+		case secESNodes:
+			if r, _ := t.grids[secESNodes].Position(); r < len(t.nodes) {
+				return t.nodeDetail(t.nodes[r])
+			}
 		}
 		return nil
 	}
@@ -384,6 +423,29 @@ func (t *esServerTab) nodeMark(row, _ int) grid.Mark {
 	return grid.MarkNone
 }
 
+// renderShards fills the Shards grid from the last reading.
+func (t *esServerTab) renderShards() {
+	t.shardView = t.shardView[:0]
+	for _, s := range t.shards {
+		if (t.shardsAll || s.State != "STARTED") && (t.shardFilter == "" || indexNameMatch(t.shardFilter, s.Index)) {
+			t.shardView = append(t.shardView, s)
+		}
+	}
+	rows := make([][]string, len(t.shardView))
+	for i, s := range t.shardView {
+		pr := "r"
+		if s.Primary {
+			pr = "p"
+		}
+		docs := ""
+		if s.Docs >= 0 {
+			docs = groupDigits(s.Docs)
+		}
+		rows[i] = []string{s.Index, strconv.Itoa(s.Shard), pr, s.State, s.Node, docs, bytesCell(s.Bytes), s.Reason}
+	}
+	t.grids[secESShards].ReplaceResult(textResult([]string{"INDEX", "SHARD", "P/R", "STATE", "NODE", "DOCS", "SIZE", "REASON"}, rows))
+}
+
 func (t *esServerTab) allocationResult() *db.ResultSet {
 	rows := make([][]string, len(t.alloc))
 	for i, a := range t.alloc {
@@ -425,14 +487,29 @@ func (t *esServerTab) warning() string {
 
 // empty is what a loaded section with no rows says instead.
 func (t *esServerTab) empty() string {
-	if t.section == secESPending && len(t.pending) == 0 {
+	switch {
+	case t.section == secESPending && len(t.pending) == 0:
 		return "no pending cluster tasks"
+	case t.section == secESShards && len(t.shardView) == 0 && !t.shardsAll && t.shardFilter == "":
+		return "every shard is started"
 	}
 	return ""
 }
 
-// sectionNote is shown right of the section titles.
-func (t *esServerTab) sectionNote() string { return "" }
+// sectionNote is shown under the section titles.
+func (t *esServerTab) sectionNote() string {
+	if t.section != secESShards {
+		return ""
+	}
+	var n []string
+	if t.shardsAll {
+		n = append(n, "all shards")
+	}
+	if t.shardFilter != "" {
+		n = append(n, "filter "+t.shardFilter)
+	}
+	return strings.Join(n, " · ")
+}
 
 func (t *esServerTab) View(focused bool) string {
 	var lines []string
@@ -447,11 +524,17 @@ func (t *esServerTab) View(focused bool) string {
 			names[i] = theme.Muted.Render(n)
 		}
 	}
-	head := strings.Join(names, theme.Muted.Render(" · "))
+	lines = append(lines, strings.Join(names, theme.Muted.Render(" · ")))
 	if note := t.sectionNote(); note != "" {
-		head += "  " + theme.Muted.Render(textutil.Sanitize(note))
+		lines = append(lines, theme.Muted.Render(textutil.Sanitize(note)))
 	}
-	lines = append(lines, head)
+	if t.status != "" {
+		st := theme.Muted
+		if t.statusE {
+			st = theme.Error
+		}
+		lines = append(lines, st.Render(textutil.Sanitize(t.status)))
+	}
 	var g *grid.Model
 	switch {
 	case t.err != "":
