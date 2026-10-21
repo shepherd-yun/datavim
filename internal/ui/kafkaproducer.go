@@ -19,6 +19,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
+	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/editor"
@@ -73,7 +74,19 @@ type (
 	}
 	// produceConfirmMsg sends the messages waiting for a confirmation.
 	produceConfirmMsg struct{ tabID, gen, stage int }
+	// serializedMsg is the draft messages with their schema lines turned
+	// into wire-format bytes.
+	serializedMsg struct {
+		tabID, gen int
+		conn       string
+		recs       []kmsgx.DraftRecord
+		err        error
+	}
 )
+
+func (m serializedMsg) TabID() int               { return m.tabID }
+func (m serializedMsg) kafkaMsg()                {}
+func (m serializedMsg) failure() (string, error) { return m.conn, m.err }
 
 func (m producedMsg) TabID() int               { return m.tabID }
 func (m producedMsg) kafkaMsg()                {}
@@ -350,7 +363,99 @@ func (t *producerTab) send(recs []kmsgx.DraftRecord, err error) tea.Cmd {
 		return nil
 	}
 	t.gen++
+	if slices.ContainsFunc(recs, func(r kmsgx.DraftRecord) bool { return r.KeySchema != nil || r.ValueSchema != nil }) {
+		return t.serialize(recs)
+	}
 	t.pending = recs
+	return t.advance(stageJSON)
+}
+
+// serialize encodes the messages that name a schema, off the UI
+// goroutine; one that fails stops them all.
+func (t *producerTab) serialize(recs []kmsgx.DraftRecord) tea.Cmd {
+	t.setStatus("serializing…", false)
+	id, gen, b, conn := t.id, t.gen, t.backend, t.conn
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		defer cancel()
+		out, err := serializeDrafts(ctx, b, conn, recs)
+		return serializedMsg{tabID: id, gen: gen, conn: conn, recs: out, err: err}
+	}
+}
+
+// serializeDrafts is recs with each key / value that names a schema
+// encoded with it; every subject@version is read once.
+func serializeDrafts(ctx context.Context, b Backend, conn string, recs []kmsgx.DraftRecord) ([]kmsgx.DraftRecord, error) {
+	first := recs[slices.IndexFunc(recs, func(r kmsgx.DraftRecord) bool { return r.KeySchema != nil || r.ValueSchema != nil })]
+	reg, err := b.SchemaRegistry(ctx, conn)
+	if errors.Is(err, session.ErrNoRegistry) {
+		return nil, fmt.Errorf("line %d: %w", first.Line, err)
+	}
+	if err != nil {
+		return nil, err
+	}
+	type found struct {
+		s    kafka.Schema
+		refs map[string]kafka.Schema
+	}
+	schemas := map[string]found{}
+	get := func(spec kmsgx.SchemaSpec) (found, error) {
+		key := spec.Subject + "@" + strconv.Itoa(spec.Version)
+		if f, ok := schemas[key]; ok {
+			return f, nil
+		}
+		s, err := reg.Schema(ctx, spec.Subject, spec.Version)
+		if err != nil {
+			return found{}, err
+		}
+		refs, err := reg.Resolve(ctx, s)
+		if err != nil {
+			return found{}, err
+		}
+		schemas[key] = found{s, refs}
+		return schemas[key], nil
+	}
+	encode := func(spec *kmsgx.SchemaSpec, body []byte, null bool, side string, line int) ([]byte, error) {
+		if spec == nil || null {
+			return body, nil
+		}
+		f, err := get(*spec)
+		if err == nil {
+			body, err = kmsgx.Encode(f.s, f.refs, spec.Message, body)
+		}
+		var se *session.SecretRequiredError
+		if errors.As(err, &se) {
+			return nil, err
+		}
+		if err != nil {
+			return nil, fmt.Errorf("line %d: %s-schema %s: %w", line, side, spec, err)
+		}
+		return body, nil
+	}
+	out := slices.Clone(recs)
+	for i := range out {
+		r := &out[i]
+		if r.Key, err = encode(r.KeySchema, r.Key, r.KeyNull, "key", r.Line); err != nil {
+			return nil, err
+		}
+		if r.Value, err = encode(r.ValueSchema, r.Value, r.ValueNull, "value", r.Line); err != nil {
+			return nil, err
+		}
+		r.KeySchema, r.ValueSchema = nil, nil
+	}
+	return out, nil
+}
+
+// serialized goes on with the confirmations, or shows why a message could
+// not be serialized (nothing is sent).
+func (t *producerTab) serialized(m serializedMsg) tea.Cmd {
+	if m.err != nil {
+		t.setStatus(kafkaErr(m.err), true)
+		t.grid.SetResult(textResult([]string{"RESULT"}, [][]string{{"✗ " + kafkaErr(m.err)}}))
+		t.log("✗ " + kafkaErr(m.err))
+		return nil
+	}
+	t.pending = m.recs
 	return t.advance(stageJSON)
 }
 
@@ -442,6 +547,10 @@ func (t *producerTab) Update(msg tea.Msg) tea.Cmd {
 	case producedMsg:
 		if m.gen == t.gen {
 			t.produced(m)
+		}
+	case serializedMsg:
+		if m.gen == t.gen {
+			return t.serialized(m)
 		}
 	case draftLoadedMsg:
 		switch cur := t.editor.Value(); {

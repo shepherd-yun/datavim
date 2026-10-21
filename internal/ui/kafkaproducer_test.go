@@ -1,11 +1,14 @@
 package ui
 
 import (
+	"bytes"
 	"errors"
 	"strings"
 	"testing"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
 )
@@ -174,5 +177,68 @@ func TestProducerMissingTopicError(t *testing.T) {
 	pressAll(t, m, "enter")
 	if s := screen(m); !strings.Contains(s, "topic orders doesn't exist") {
 		t.Fatalf("screen:\n%s", s)
+	}
+}
+
+const orderNoteSchema = `{"type":"record","name":"Order","fields":[{"name":"id","type":"long"},{"name":"note","type":["null","string"],"default":null}]}`
+
+// schemaProducer is the orders producer on a connection whose registry
+// has orders-value v1 (id 12).
+func schemaProducer(t *testing.T, cfg config.Connection, text string) (*Model, *fakeKafka, *producerTab) {
+	t.Helper()
+	m, b, k := newKafkaModel(t, cfg)
+	k.addTopic("orders", 1, 0, 0)
+	b.registry = newFakeRegistry()
+	b.registry.add("orders-value", 1, 12, "AVRO", orderNoteSchema)
+	return m, k, openProducer(t, m, text, 0)
+}
+
+func TestProduceWithSchema(t *testing.T) {
+	m, k, _ := schemaProducer(t, withRegistry(config.Connection{}), "value-schema: orders-value\n{\"id\":1,\"note\":null}")
+	pressAll(t, m, "R")
+	drainAll(t, m, nil)
+	if len(k.produced) != 1 {
+		t.Fatalf("produced = %+v", k.produced)
+	}
+	v := k.produced[0].recs[0].Value
+	if !bytes.HasPrefix(v, []byte{0, 0, 0, 0, 12}) {
+		t.Fatalf("value = % x", v)
+	}
+	js, err := kmsgx.Decode(kafka.Schema{ID: 12, Type: "AVRO", Text: orderNoteSchema}, nil, v[5:])
+	if err != nil || string(js) != `{"id":1,"note":null}` {
+		t.Fatalf("decoded = %s, %v", js, err)
+	}
+}
+
+func TestProduceSchemaError(t *testing.T) {
+	m, k, p := schemaProducer(t, withRegistry(config.Connection{}), "value-schema: orders-value\n{\"id\":1}\n===\nvalue-schema: orders-value\n{\"note\":null}")
+	pressAll(t, m, "R")
+	drainAll(t, m, nil)
+	if len(k.produced) != 0 {
+		t.Fatalf("produced = %+v", k.produced)
+	}
+	if !strings.HasPrefix(p.status, "line 4: value-schema orders-value: ") {
+		t.Fatalf("status = %q", p.status)
+	}
+	if s := screen(m); !strings.Contains(s, "line 4: value-schema orders-value") {
+		t.Fatalf("screen:\n%s", s)
+	}
+}
+
+func TestProduceEncodedBody(t *testing.T) {
+	m, k, _ := schemaProducer(t, config.Connection{}, "value-encoding: base64\nAP8=")
+	pressAll(t, m, "R")
+	drainAll(t, m, nil)
+	if len(k.produced) != 1 || !bytes.Equal(k.produced[0].recs[0].Value, []byte{0, 0xff}) {
+		t.Fatalf("produced = %+v", k.produced)
+	}
+}
+
+func TestProduceSchemaNoRegistry(t *testing.T) {
+	m, k, p := schemaProducer(t, config.Connection{}, "key: k\nvalue-schema: orders-value\n{\"id\":1}")
+	pressAll(t, m, "R")
+	drainAll(t, m, nil)
+	if len(k.produced) != 0 || p.status != "line 1: no schema_registry_url for this connection" {
+		t.Fatalf("produced %+v status %q", k.produced, p.status)
 	}
 }
