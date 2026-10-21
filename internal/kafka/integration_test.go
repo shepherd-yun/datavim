@@ -22,6 +22,7 @@ import (
 
 	"github.com/testcontainers/testcontainers-go"
 	tcredpanda "github.com/testcontainers/testcontainers-go/modules/redpanda"
+	"github.com/testcontainers/testcontainers-go/network"
 	"github.com/testcontainers/testcontainers-go/wait"
 	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
@@ -44,11 +45,21 @@ func ictx(t *testing.T) context.Context {
 // startApache starts a single-node KRaft apache/kafka container and returns
 // its broker address. The advertised listener needs the mapped port, so the
 // container waits for a start script written after it is up.
-func startApache(t *testing.T, image string) string {
+func startApache(t *testing.T, image string, opts ...apacheOpts) string {
 	t.Helper()
 	const script = "/tmp/sqlvim-start.sh"
+	var o apacheOpts
+	if len(opts) > 0 {
+		o = opts[0]
+	}
+	brokerHost := "localhost"
+	extra := []testcontainers.ContainerCustomizer{testcontainers.WithEnv(o.env)}
+	if o.nw != nil {
+		brokerHost = "kafka" // other containers on the network reach the BROKER listener here
+		extra = append(extra, network.WithNetwork([]string{brokerHost}, o.nw))
+	}
 	ctx := context.Background()
-	ctr, err := testcontainers.Run(ctx, image,
+	ctr, err := testcontainers.Run(ctx, image, append([]testcontainers.ContainerCustomizer{
 		testcontainers.WithExposedPorts("9092/tcp"),
 		testcontainers.WithEnv(map[string]string{
 			"KAFKA_NODE_ID":                                  "1",
@@ -72,14 +83,14 @@ func startApache(t *testing.T, image string) string {
 				if err != nil {
 					return err
 				}
-				s := "export KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://" + endpoint + ",BROKER://localhost:19092\nexec /etc/kafka/docker/run\n"
+				s := "export KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://" + endpoint + ",BROKER://" + brokerHost + ":19092\nexec /etc/kafka/docker/run\n"
 				if err := c.CopyToContainer(ctx, []byte(s), script, 0o755); err != nil {
 					return err
 				}
 				return wait.ForLog("Kafka Server started").WithStartupTimeout(2*time.Minute).WaitUntilReady(ctx, c)
 			}},
 		}),
-	)
+	}, extra...)...)
 	testcontainers.CleanupContainer(t, ctr)
 	if err != nil {
 		t.Fatal(err)
@@ -90,6 +101,20 @@ func startApache(t *testing.T, image string) string {
 	}
 	return endpoint
 }
+
+// apacheOpts are what a test adds to startApache's container: more
+// environment (broker settings), and a network other containers join.
+type apacheOpts struct {
+	env map[string]string
+	nw  *testcontainers.DockerNetwork
+}
+
+// withAuthorizer turns ACLs on; every PLAINTEXT client is ANONYMOUS, so
+// that is the super user.
+var withAuthorizer = apacheOpts{env: map[string]string{
+	"KAFKA_AUTHORIZER_CLASS_NAME": "org.apache.kafka.metadata.authorizer.StandardAuthorizer",
+	"KAFKA_SUPER_USERS":           "User:ANONYMOUS",
+}}
 
 func startRedpanda(t *testing.T, opts ...testcontainers.ContainerCustomizer) string {
 	t.Helper()
