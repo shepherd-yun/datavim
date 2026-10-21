@@ -169,7 +169,9 @@ func TestESCreateSnapshot(t *testing.T) {
 	if _, ok := m.overlay.(*overlay.SnapshotForm); !ok {
 		t.Fatalf("overlay %T status %q", m.overlay, m.status)
 	}
-	drain(t, m, func() tea.Msg { return overlay.SnapshotFormMsg{Repo: "repo1", Name: "snap-x", Indices: []string{"orders"}} })
+	drain(t, m, func() tea.Msg {
+		return overlay.SnapshotFormMsg{Repo: "repo1", Name: "snap-x", Indices: []string{"orders"}}
+	})
 	if v := confirmText(t, m); !strings.Contains(v, "snapshot orders into repo1 as snap-x") {
 		t.Fatalf("confirm:\n%s", v)
 	}
