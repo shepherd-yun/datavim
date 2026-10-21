@@ -138,19 +138,19 @@ func (m esSnapshotTickMsg) TabID() int { return m.tabID }
 // esSnapshotTab shows one snapshot (spec §8.1), read again every interval
 // while it runs and the tab is visible.
 type esSnapshotTab struct {
-	id                   int
-	backend              Backend
-	keys                 *keymap.Keymap
-	conn, repo, name     string
-	interval             time.Duration
-	grid                 *grid.Model
-	snap                 es.SnapshotDetail
-	loaded, loading      bool
-	visible              bool
-	gen                  int
-	err, status          string
-	statusE, tickPending bool
-	width, height        int
+	id               int
+	backend          Backend
+	keys             *keymap.Keymap
+	conn, repo, name string
+	interval         time.Duration
+	grid             *grid.Model
+	snap             es.SnapshotDetail
+	loaded, loading  bool
+	visible          bool
+	gen              int
+	err              string
+	tickPending      bool
+	width, height    int
 }
 
 func (m *Model) openESSnapshot(msg esOpenSnapshotMsg) tea.Cmd {
@@ -162,17 +162,16 @@ func (m *Model) openESSnapshot(msg esOpenSnapshotMsg) tea.Cmd {
 	})
 }
 
-func (t *esSnapshotTab) ID() int                        { return t.id }
-func (t *esSnapshotTab) Title() string                  { return t.name + " · snapshot" }
-func (t *esSnapshotTab) Key() string                    { return esSnapshotTabKey(t.conn, t.repo, t.name) }
-func (t *esSnapshotTab) Context() keymap.Context        { return keymap.ESSnapshot }
-func (t *esSnapshotTab) Target() (string, db.TableRef)  { return t.conn, db.TableRef{} }
-func (t *esSnapshotTab) SetSize(w, h int)               { t.width, t.height = max(w, 0), max(h, 0) }
-func (t *esSnapshotTab) Init() tea.Cmd                  { return t.load() }
-func (t *esSnapshotTab) retryAfterPassword() tea.Cmd    { return t.load() }
-func (t *esSnapshotTab) activeGrid() *grid.Model        { return t.grid }
-func (t *esSnapshotTab) Find(q string, fwd bool) bool   { return t.grid.Find(q, fwd) }
-func (t *esSnapshotTab) setStatus(s string, isErr bool) { t.status, t.statusE = s, isErr }
+func (t *esSnapshotTab) ID() int                       { return t.id }
+func (t *esSnapshotTab) Title() string                 { return t.name + " · snapshot" }
+func (t *esSnapshotTab) Key() string                   { return esSnapshotTabKey(t.conn, t.repo, t.name) }
+func (t *esSnapshotTab) Context() keymap.Context       { return keymap.ESSnapshot }
+func (t *esSnapshotTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
+func (t *esSnapshotTab) SetSize(w, h int)              { t.width, t.height = max(w, 0), max(h, 0) }
+func (t *esSnapshotTab) Init() tea.Cmd                 { return t.load() }
+func (t *esSnapshotTab) retryAfterPassword() tea.Cmd   { return t.load() }
+func (t *esSnapshotTab) activeGrid() *grid.Model       { return t.grid }
+func (t *esSnapshotTab) Find(q string, fwd bool) bool  { return t.grid.Find(q, fwd) }
 
 func (t *esSnapshotTab) exportSource() exportSrc {
 	return exportSrc{rs: t.grid.Result(), name: t.conn + "-" + t.repo + "-" + t.name, conn: t.conn}
@@ -288,7 +287,6 @@ func (t *esSnapshotTab) result() *db.ResultSet {
 }
 
 func (t *esSnapshotTab) Handle(a keymap.Action) tea.Cmd {
-	t.status = ""
 	switch a {
 	case keymap.Refresh:
 		return t.load()
@@ -305,13 +303,6 @@ func (t *esSnapshotTab) Handle(a keymap.Action) tea.Cmd {
 
 func (t *esSnapshotTab) View(focused bool) string {
 	var lines []string
-	if t.status != "" {
-		st := theme.Muted
-		if t.statusE {
-			st = theme.Error
-		}
-		lines = append(lines, st.Render(textutil.Sanitize(t.status)))
-	}
 	switch {
 	case t.err != "":
 		lines = append(lines, theme.Error.Render(textutil.Sanitize(t.err)))

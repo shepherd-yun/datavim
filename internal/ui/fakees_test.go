@@ -441,8 +441,10 @@ func (f *fakeES) answer(r es.Request) es.Response {
 		}
 		rows := []map[string]string{}
 		for _, sn := range f.snaps[segs[2]] {
-			rows = append(rows, map[string]string{"id": sn.name, "status": sn.state, "start_epoch": "1792683000", "duration": "12s",
-				"indices": strconv.Itoa(len(sn.indices)), "total_shards": strconv.Itoa(len(sn.indices)), "failed_shards": "0"})
+			rows = append(rows, map[string]string{
+				"id": sn.name, "status": sn.state, "start_epoch": "1792683000", "duration": "12s",
+				"indices": strconv.Itoa(len(sn.indices)), "total_shards": strconv.Itoa(len(sn.indices)), "failed_shards": "0",
+			})
 		}
 		return jsonResp(rows)
 	case r.Method == "GET" && len(segs) >= 3 && segs[0] == "_snapshot":

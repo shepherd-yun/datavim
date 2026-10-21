@@ -98,8 +98,13 @@ func parseCatDuration(s string) time.Duration {
 		suffix string
 		unit   time.Duration
 	}{
-		{"nanos", time.Nanosecond}, {"micros", time.Microsecond}, {"ms", time.Millisecond},
-		{"s", time.Second}, {"m", time.Minute}, {"h", time.Hour}, {"d", 24 * time.Hour},
+		{"nanos", time.Nanosecond},
+		{"micros", time.Microsecond},
+		{"ms", time.Millisecond},
+		{"s", time.Second},
+		{"m", time.Minute},
+		{"h", time.Hour},
+		{"d", 24 * time.Hour},
 	}
 	for _, u := range units {
 		if num, ok := strings.CutSuffix(s, u.suffix); ok {
