@@ -126,7 +126,7 @@ broker 返回的 advertised 地址）都经过跳板机，所以跳板机必须�
 凭据来自 AWS 自己的凭据链（环境变量、`~/.aws`、SSO、实例角色），sqlvim 不保存 AWS 密钥。
 
 `schema_registry_url = "https://sr.internal:8081"` 配置 Schema Registry（Confluent API，Redpanda 自带的也行），basic auth
-用 `schema_registry_user`；它的 HTTP 请求同样走 SSH 隧道，使用 `tls_ca` / `tls_skip_verify`。Registry 第一次要求密码时
+用 `schema_registry_user`；它的 HTTP 请求同样走 SSH 隧道，使用同样的 TLS 参数（`tls_ca`、`tls_cert` / `tls_key`、`tls_skip_verify`）。Registry 第一次要求密码时
 才询问。连接密码以外的秘密在钥匙串里的账户是 `<连接名>#schema-registry` 和 `<连接名>#oauth`，也可以用环境变量
 `SQLVIM_PASSWORD_<名字>_SCHEMA_REGISTRY` / `SQLVIM_PASSWORD_<名字>_OAUTH` 提供。
 

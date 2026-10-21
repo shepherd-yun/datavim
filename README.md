@@ -162,7 +162,7 @@ the first time it is needed. `sasl = "aws-msk-iam"` signs in to MSK with IAM (`a
 
 `schema_registry_url = "https://sr.internal:8081"` adds a Schema Registry (the Confluent API;
 Redpanda's works too), with `schema_registry_user` for basic auth; its HTTP requests go through
-the same SSH tunnel and use `tls_ca` / `tls_skip_verify`. The registry password is asked for
+the same SSH tunnel and use the TLS params (`tls_ca`, `tls_cert` / `tls_key`, `tls_skip_verify`). The registry password is asked for
 when the registry first wants one. Secrets other than the connection password live in the
 keychain as `<connection>#schema-registry` and `<connection>#oauth`, or come from
 `SQLVIM_PASSWORD_<NAME>_SCHEMA_REGISTRY` / `SQLVIM_PASSWORD_<NAME>_OAUTH`. Expanding

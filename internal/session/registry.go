@@ -121,7 +121,8 @@ func (m *Manager) SchemaRegistry(ctx context.Context, name string) (kafka.Regist
 	}
 	rc := kafka.RegistryConfig{
 		URL: raw, User: cfg.Params["schema_registry_user"],
-		TLSCA: cfg.Params["tls_ca"], TLSSkipVerify: param(cfg, "tls_skip_verify"),
+		TLSCA: cfg.Params["tls_ca"], TLSCert: cfg.Params["tls_cert"], TLSKey: cfg.Params["tls_key"],
+		TLSSkipVerify: param(cfg, "tls_skip_verify"),
 	}
 	if rc.User != "" && !urlHasPassword(raw) {
 		if rc.Password, err = m.secretFor(name, SecretSchemaRegistry); err != nil {

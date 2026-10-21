@@ -2,13 +2,10 @@ package kafka
 
 import (
 	"context"
-	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -47,8 +44,9 @@ type Subject struct {
 // come in URL's userinfo; they never stay in the URL.
 type RegistryConfig struct {
 	URL, User, Password string
-	TLSCA               string
-	TLSSkipVerify       bool
+	// TLSCA, TLSCert and TLSKey are PEM file paths, as in Config.
+	TLSCA, TLSCert, TLSKey string
+	TLSSkipVerify          bool
 	// Dial opens every HTTP connection (an SSH tunnel); nil dials directly.
 	Dial db.DialFunc
 }
@@ -98,17 +96,9 @@ func OpenRegistry(cfg RegistryConfig) (Registry, error) {
 		}
 		u.User = nil
 	}
-	tc := &tls.Config{InsecureSkipVerify: cfg.TLSSkipVerify, MinVersion: tls.VersionTLS12} //nolint:gosec // opt-in via tls_skip_verify
-	if cfg.TLSCA != "" {
-		pem, err := os.ReadFile(expandHome(cfg.TLSCA))
-		if err != nil {
-			return nil, fmt.Errorf("schema registry tls_ca: %w", err)
-		}
-		pool := x509.NewCertPool()
-		if !pool.AppendCertsFromPEM(pem) {
-			return nil, fmt.Errorf("schema registry tls_ca: no certificates in %s", cfg.TLSCA)
-		}
-		tc.RootCAs = pool
+	tc, err := tlsConfig(Config{TLSCA: cfg.TLSCA, TLSCert: cfg.TLSCert, TLSKey: cfg.TLSKey, TLSSkipVerify: cfg.TLSSkipVerify})
+	if err != nil {
+		return nil, fmt.Errorf("schema registry: %w", err)
 	}
 	hc := &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{
 		DialContext:     baseDial(Config{Dial: cfg.Dial}),

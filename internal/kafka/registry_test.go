@@ -2,13 +2,25 @@ package kafka
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/tls"
+	"crypto/x509"
+	"crypto/x509/pkix"
+	"encoding/pem"
 	"errors"
+	"math/big"
 	"net"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/twmb/franz-go/pkg/sr"
 	"github.com/twmb/franz-go/pkg/sr/srfake"
@@ -205,4 +217,61 @@ func TestRegistrySubjectsOneRequest(t *testing.T) {
 	if err != nil || !slices.Equal(subs, want) {
 		t.Fatalf("fallback subjects = %+v, %v", subs, err)
 	}
+}
+
+// TestRegistryClientCert: tls_cert / tls_key are the registry's client
+// certificate too, for a registry behind mTLS.
+func TestRegistryClientCert(t *testing.T) {
+	srv := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[]`))
+	}))
+	srv.TLS = &tls.Config{ClientAuth: tls.RequireAnyClientCert, MinVersion: tls.VersionTLS12}
+	srv.StartTLS()
+	defer srv.Close()
+	dir := t.TempDir()
+	ca := filepath.Join(dir, "ca.pem")
+	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cert, key := clientCert(t, dir)
+
+	r := openRegistry(t, nil, RegistryConfig{URL: srv.URL, TLSCA: ca})
+	if _, err := r.Subjects(ctx(t)); err == nil {
+		t.Fatal("the server wants a client certificate")
+	}
+	r = openRegistry(t, nil, RegistryConfig{URL: srv.URL, TLSCA: ca, TLSCert: cert, TLSKey: key})
+	if subs, err := r.Subjects(ctx(t)); err != nil || len(subs) != 0 {
+		t.Fatalf("subjects = %+v, %v", subs, err)
+	}
+}
+
+// clientCert writes a self-signed client certificate and its key to dir.
+func clientCert(t *testing.T, dir string) (certFile, keyFile string) {
+	t.Helper()
+	k, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tmpl := &x509.Certificate{
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "sqlvim"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, KeyUsage: x509.KeyUsageDigitalSignature,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, tmpl, tmpl, &k.PublicKey, k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	kder, err := x509.MarshalPKCS8PrivateKey(k)
+	if err != nil {
+		t.Fatal(err)
+	}
+	certFile, keyFile = filepath.Join(dir, "client.pem"), filepath.Join(dir, "client.key")
+	if err := os.WriteFile(certFile, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(keyFile, pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: kder}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return certFile, keyFile
 }
