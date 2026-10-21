@@ -130,6 +130,9 @@ func (t *esIndexTab) simulated(m esSimulatedMsg) tea.Cmd {
 	if p := failedProcessor(m.out); p != "" {
 		title += " · failed at " + p
 	}
+	if t.docs.masked[hitKey(m.hit)] {
+		title += " · masked fields sent as ******"
+	}
 	var b bytes.Buffer
 	text := string(m.out)
 	if json.Indent(&b, m.out, "", "  ") == nil {

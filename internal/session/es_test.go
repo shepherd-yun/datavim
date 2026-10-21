@@ -120,6 +120,10 @@ func TestESReadOnlyRefusesEveryWrite(t *testing.T) {
 		"DeleteUser":     func(d es.Doer) error { return es.DeleteUser(ctx, d, es.SecurityES, "u") },
 		"PutRole":        func(d es.Doer) error { return es.PutRole(ctx, d, es.SecurityES, "r", json.RawMessage(`{}`)) },
 		"DeleteRole":     func(d es.Doer) error { return es.DeleteRole(ctx, d, es.SecurityES, "r") },
+		"UpdateDoc": func(d es.Doer) error {
+			_, err := es.UpdateDoc(ctx, d, "o", "1", "", json.RawMessage(`{"a":1}`), es.Version{})
+			return err
+		},
 		"PutClusterSettings": func(d es.Doer) error {
 			v := "1"
 			return es.PutClusterSettings(ctx, d, map[string]*string{"a": &v}, nil)

@@ -151,8 +151,26 @@ func TestGetTask(t *testing.T) {
 }
 
 func TestWriteFuncsListed(t *testing.T) {
-	if len(WriteFuncs) != 37 {
+	if len(WriteFuncs) != 38 {
 		t.Errorf("WriteFuncs = %v", WriteFuncs)
 	}
 	_ = fmt.Sprint
+}
+
+func TestUpdateDoc(t *testing.T) {
+	d := &fakeDoer{fn: func(Request) (Response, error) { return ok(`{"_seq_no":8,"_primary_term":2,"result":"updated"}`), nil }}
+	v, err := UpdateDoc(ctx, d, "users-1", "a/1", "r1", json.RawMessage(`{"name":"x"}`), Version{SeqNo: 7, PrimaryTerm: 2})
+	if err != nil || v != (Version{8, 2}) {
+		t.Fatalf("v %+v err %v", v, err)
+	}
+	r := d.requests()[0]
+	if r.Method != "POST" || r.Path != "users-1/_update/a%2F1?if_seq_no=7&if_primary_term=2&refresh=wait_for&routing=r1" || string(r.Body) != `{"doc":{"name":"x"}}` {
+		t.Errorf("req %s %s %s", r.Method, r.Path, r.Body)
+	}
+	d = &fakeDoer{fn: func(Request) (Response, error) {
+		return Response{Status: 409, Body: []byte(`{"error":{"type":"version_conflict_engine_exception","reason":"x"},"status":409}`)}, nil
+	}}
+	if _, err := UpdateDoc(ctx, d, "u", "1", "", json.RawMessage(`{}`), Version{}); !errors.Is(err, ErrConflict) {
+		t.Errorf("409: %v", err)
+	}
 }

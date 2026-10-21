@@ -40,6 +40,7 @@ func (m *Model) openESConsole(conn string) tea.Cmd {
 	return m.openTab(esConsoleTabKey(conn), rec, func(id int) tab {
 		t := newESConsoleTab(id, m.backend, m.store, conn, m.settings, m.timings)
 		t.keys = m.keys
+		t.masker = m.esMaskerFor(conn)
 		t.treeNames = func() []string { return m.esTreeNames(conn) }
 		return t
 	})
@@ -54,6 +55,7 @@ type esResult struct {
 	lines   []string   // the JSON, indented
 	table   *esx.Table // the table view, made when first shown
 	asTable bool
+	masked  bool // documents in the response were masked
 }
 
 func (r esResult) failed() bool { return r.err != nil || r.resp.Status >= 300 }
@@ -124,6 +126,7 @@ type esConsoleTab struct {
 	indexNames []string            // nil until read
 	fieldCache map[string][]string // field names by index, until a refresh
 
+	masker  *esx.Masker // masks the documents of the responses
 	run     *esRun
 	running bool
 	cancel  context.CancelFunc
@@ -589,7 +592,7 @@ func (t *esConsoleTab) execute() tea.Cmd {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	t.running, t.cancel, t.started = true, cancel, time.Now()
-	b, conn, id, gen, st := t.backend, t.conn, t.id, t.gen, t.store
+	b, conn, id, gen, st, mk := t.backend, t.conn, t.id, t.gen, t.store, t.masker
 	return tea.Batch(func() tea.Msg {
 		defer cancel()
 		out := esConsoleRunMsg{tabID: id, conn: conn, gen: gen}
@@ -601,6 +604,9 @@ func (t *esConsoleTab) execute() tea.Cmd {
 		for _, r := range reqs {
 			res := esResult{req: r}
 			res.resp, res.err = d.Do(ctx, es.Request{Method: r.Method, Path: r.Path, Body: r.Body, NDJSON: r.NDJSON})
+			if res.err == nil {
+				res.resp.Body, res.masked = mk.MaskResponse(res.resp.Body)
+			}
 			out.results = append(out.results, res)
 			recordRequest(st, conn, r, res)
 			if ctx.Err() != nil {
@@ -908,10 +914,15 @@ func (t *esConsoleTab) resultsTitle() string {
 		return "Summary"
 	case c.err != nil:
 		return "Error"
-	case c.asTable:
-		return fmt.Sprintf("%d · %s · %s rows", c.resp.Status, c.resp.Took.Round(time.Millisecond), groupDigits(int64(len(c.table.Rows))))
 	}
-	return fmt.Sprintf("%d · %s", c.resp.Status, c.resp.Took.Round(time.Millisecond))
+	s := fmt.Sprintf("%d · %s", c.resp.Status, c.resp.Took.Round(time.Millisecond))
+	if c.asTable {
+		s += " · " + groupDigits(int64(len(c.table.Rows))) + " rows"
+	}
+	if c.masked {
+		s += " · masked"
+	}
+	return s
 }
 
 func (t *esConsoleTab) statusLine() string {

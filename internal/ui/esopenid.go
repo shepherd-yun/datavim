@@ -117,7 +117,8 @@ func (m *Model) idFound(msg esIDFoundMsg) tea.Cmd {
 	case len(msg.hits) == 0:
 		m.setStatus("no document with _id "+msg.id+" in "+where, true)
 	case len(msg.hits) == 1:
-		m.overlay = newESDocDetailOf(m.keys, msg.hits[0])
+		h, _ := m.esMaskerFor(msg.conn).MaskHit(msg.hits[0])
+		m.overlay = newESDocDetailOf(m.keys, h)
 	default:
 		// the same _id in several indices: list them
 		cmd := m.openIndex(msg.conn, msg.target, msg.kind)

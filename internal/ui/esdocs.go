@@ -101,6 +101,7 @@ type esDocs struct {
 	creates  int                  // new documents staged so far
 	editing  string               // the document $EDITOR has open; "" a new one
 	editPath string               // that temp file
+	masked   map[string]bool      // the documents (docKey) shown with masked fields
 }
 
 func newESDocs(t *esIndexTab) *esDocs {
@@ -264,7 +265,16 @@ func (d *esDocs) paged(m esPageMsg) tea.Cmd {
 	}
 	d.done = m.page.Done
 	row, col := d.grid.Position()
-	d.hits = append(d.hits, m.page.Hits...)
+	for _, h := range m.page.Hits {
+		h, masked := t.masker.MaskHit(h)
+		if masked {
+			if d.masked == nil {
+				d.masked = map[string]bool{}
+			}
+			d.masked[hitKey(h)] = true
+		}
+		d.hits = append(d.hits, h)
+	}
 	if over := len(d.hits) - d.limit; over > 0 {
 		d.hits = d.hits[over:]
 		d.dropped += over

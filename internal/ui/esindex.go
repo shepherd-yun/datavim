@@ -119,7 +119,8 @@ type esIndexTab struct {
 	parts       [idxSections]esPart
 
 	docs    *esDocs
-	editFor esEditFor // what the $EDITOR session under way is for
+	editFor esEditFor   // what the $EDITOR session under way is for
+	masker  *esx.Masker // the [[mask]] rules of the connection; nil: none
 
 	mapGrid, setGrid, aliasGrid, statsGrid *grid.Model
 
@@ -168,6 +169,7 @@ func (m *Model) openIndex(conn, target string, kind targetKind) tea.Cmd {
 	return m.openTab(esIndexTabKey(conn, target), rec, func(id int) tab {
 		t := newESIndexTab(id, m.backend, m.keys, m.settings, conn, target, kind)
 		t.store = m.store
+		t.masker = m.esMaskerFor(conn)
 		return t
 	})
 }

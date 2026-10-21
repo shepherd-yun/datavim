@@ -20,6 +20,7 @@ var WriteFuncs = []string{
 	"CreateSnapshot", "DeleteSnapshot", "RestoreSnapshot", "PutRepository", "DeleteRepository",
 	"PutPolicy", "DeletePolicy", "PutPipeline", "DeletePipeline",
 	"CreateUser", "UpdateUser", "SetUserEnabled", "ChangePassword", "DeleteUser", "PutRole", "DeleteRole",
+	"UpdateDoc",
 }
 
 // Version is the sequence number and primary term a document was read at.
@@ -54,6 +55,31 @@ func PutDoc(ctx context.Context, d Doer, index, id, routing string, src json.Raw
 	resp, err := do(ctx, d, Request{
 		Method: "PUT", Path: docPath(index, id) + "?" + encodeQuery(q, "if_seq_no", "if_primary_term", "refresh", "routing"),
 		Body: src,
+	})
+	if err != nil {
+		return Version{}, err
+	}
+	var r struct {
+		SeqNo       int64 `json:"_seq_no"`
+		PrimaryTerm int64 `json:"_primary_term"`
+	}
+	err = json.Unmarshal(resp.Body, &r)
+	return Version{r.SeqNo, r.PrimaryTerm}, err
+}
+
+// UpdateDoc merges partial into a document only if it is still at v; a
+// newer document is ErrConflict.
+func UpdateDoc(ctx context.Context, d Doer, index, id, routing string, partial json.RawMessage, v Version) (Version, error) {
+	q := v.query()
+	q.Set("refresh", "wait_for")
+	q.Set("routing", routing)
+	body, err := json.Marshal(map[string]json.RawMessage{"doc": partial})
+	if err != nil {
+		return Version{}, err
+	}
+	resp, err := do(ctx, d, Request{
+		Method: "POST", Path: indexPath(index) + "/_update/" + url.PathEscape(id) + "?" + encodeQuery(q, "if_seq_no", "if_primary_term", "refresh", "routing"),
+		Body: body,
 	})
 	if err != nil {
 		return Version{}, err

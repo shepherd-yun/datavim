@@ -187,6 +187,10 @@ func (d *esDocs) editCell() tea.Cmd {
 		t.setStatus("only _source fields can be edited", true)
 		return nil
 	}
+	if t.masker.Covers(h.Index, col) {
+		t.setStatus("masked fields cannot be edited", true)
+		return nil
+	}
 	if c := d.changes[hitKey(h)]; c != nil && c.kind == chDelete {
 		t.setStatus("the document is marked for deletion; undo it first", true)
 		return nil
@@ -288,6 +292,10 @@ func (d *esDocs) externalEdit(create bool) tea.Cmd {
 	}
 	if r := d.editRefusal(h); r != "" {
 		t.setStatus(r, true)
+		return nil
+	}
+	if d.masked[hitKey(h)] {
+		t.setStatus("this document has masked fields: edit single fields instead", true)
 		return nil
 	}
 	d.editing = hitKey(h)
@@ -405,6 +413,10 @@ func (d *esDocs) submit() tea.Cmd {
 		p.Method, p.Path, p.Body = "POST", first.hit.Index+"/_doc", []byte(textutil.PrettyJSON(string(first.src)))
 	default:
 		p.Method, p.Path, p.Body = "PUT", first.hit.Index+"/_doc/"+first.hit.ID, []byte(textutil.PrettyJSON(string(first.src)))
+		if d.masked[hitKey(first.hit)] {
+			partial, _ := d.partial(first)
+			p.Method, p.Path, p.Body = "POST", first.hit.Index+"/_update/"+first.hit.ID, []byte(textutil.PrettyJSON(`{"doc":`+string(partial)+`}`))
+		}
 	}
 	cfg, _ := t.backend.Connection(t.conn)
 	return confirmESCmd(cfg, p, esSubmitMsg{tabID: t.id}, t.setStatus)
@@ -417,15 +429,36 @@ func requestCount(n int) string {
 	return fmt.Sprintf("%d requests", n)
 }
 
+// partial is the fields an edit of a masked document changed: only they
+// are sent, so the masked values are never written back.
+func (d *esDocs) partial(c *esChange) (json.RawMessage, error) {
+	fields := make([]string, len(c.fields))
+	for i, f := range c.fields {
+		fields[i] = f.field
+	}
+	return esx.PartialDoc(c.src, fields)
+}
+
 // send writes the changes one by one: each edit and delete only if the
 // document is still at the version read, to the hit's own index.
 func (d *esDocs) send() tea.Cmd {
 	t := d.tab
 	keys := slices.Clone(d.order)
 	changes := map[string]*esChange{}
+	partials := map[string]json.RawMessage{} // the edits of masked documents
 	for _, k := range keys {
-		if c := d.changes[k]; c != nil {
-			changes[k] = c
+		c := d.changes[k]
+		if c == nil {
+			continue
+		}
+		changes[k] = c
+		if c.kind == chEdit && d.masked[k] {
+			p, err := d.partial(c)
+			if err != nil {
+				t.setStatus(err.Error(), true)
+				return nil
+			}
+			partials[k] = p
 		}
 	}
 	b, conn, id, tabCtx := t.backend, t.conn, t.id, t.ctx
@@ -448,7 +481,11 @@ func (d *esDocs) send() tea.Cmd {
 			v := es.Version{SeqNo: h.SeqNo, PrimaryTerm: h.PrimaryTerm}
 			switch c.kind {
 			case chEdit:
-				_, err = es.PutDoc(ctx, d, h.Index, h.ID, h.Routing, c.src, v)
+				if p, ok := partials[k]; ok {
+					_, err = es.UpdateDoc(ctx, d, h.Index, h.ID, h.Routing, p, v)
+				} else {
+					_, err = es.PutDoc(ctx, d, h.Index, h.ID, h.Routing, c.src, v)
+				}
 			case chCreate:
 				_, err = es.CreateDoc(ctx, d, h.Index, h.ID, c.src)
 			case chDelete:
