@@ -44,6 +44,8 @@ const (
 	KafkaConfig Context = "kafka_config"
 	// KafkaSchema is a Schema Registry subject's tab.
 	KafkaSchema Context = "kafka_schema"
+	// KafkaConnect is a Kafka Connect connector's tab.
+	KafkaConnect Context = "kafka_connect"
 	// KafkaACL is a Kafka connection's ACL tab.
 	KafkaACL Context = "kafka_acl"
 	// Audit is the audit log of writes.
@@ -146,6 +148,8 @@ const (
 	ToggleFavorite     Action = "redis.favorite"
 	Favorites          Action = "redis.favorites"
 	AuditLog           Action = "audit"
+	PauseResume        Action = "kafka.connect_pause"
+	RestartConnector   Action = "kafka.connect_restart"
 	BigKeys            Action = "redis.bigkeys"
 	FilterEqual        Action = "filter.eq"
 	FilterNotEqual     Action = "filter.ne"

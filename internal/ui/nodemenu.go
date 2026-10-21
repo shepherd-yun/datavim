@@ -111,7 +111,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			entries = append(entries[:1], append([]entry{{keymap.ServerInfo, "Server status"}}, entries[1:]...)...)
 		}
 	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker,
-		tree.KindSchemaSubject, tree.KindSchemaVersion:
+		tree.KindSchemaSubject, tree.KindSchemaVersion, tree.KindKafkaACLs, tree.KindConnectCluster, tree.KindConnector:
 		entries = kafkaMenu(n)
 	case tree.KindDatabase, tree.KindSchema:
 		entries = []entry{
@@ -225,6 +225,10 @@ func kafkaMenu(n *tree.Node) []menuEntry {
 		entries = append(entries, menuEntry{keymap.Open, "Open subject"})
 	case tree.KindSchemaVersion:
 		entries = append(entries, menuEntry{keymap.Open, "Open this version"})
+	case tree.KindKafkaACLs:
+		entries = append(entries, menuEntry{keymap.Open, "Open the ACLs"})
+	case tree.KindConnector:
+		entries = append(entries, menuEntry{keymap.Open, "Open connector"})
 	}
 	switch n.Section {
 	case secTopics:
@@ -252,7 +256,7 @@ func kafkaMenu(n *tree.Node) []menuEntry {
 func isKafkaNode(n *tree.Node) bool {
 	switch n.Kind {
 	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker,
-		tree.KindSchemaSubject, tree.KindSchemaVersion:
+		tree.KindSchemaSubject, tree.KindSchemaVersion, tree.KindKafkaACLs, tree.KindConnectCluster, tree.KindConnector:
 		return true
 	}
 	return false

@@ -41,6 +41,8 @@ type kafkaTree struct {
 	groups               []kafka.Group
 	subjects             []kafka.Subject
 	registry             bool              // the connection has a Schema Registry
+	connect              []connectCluster  // its Kafka Connect clusters; nil until read
+	connectOn            bool              // the connection has a connect_url
 	errs                 map[string]string // section -> why it could not load
 	lag                  map[string]int64
 	showInternal, byName bool
@@ -181,6 +183,8 @@ func (m *Model) kafkaTreeLoaded(msg kafkaTreeMsg) tea.Cmd {
 	st.gen++
 	st.cluster, st.topics, st.groups, st.errs = msg.cluster, msg.topics, msg.groups, msg.errs
 	st.subjects, st.registry = msg.subjects, msg.registry
+	cfg, _ := m.backend.Connection(n.Conn)
+	st.connectOn = cfg.Params["connect_url"] != ""
 	m.buildKafkaTree(n.Conn)
 	if o := m.userPrompt(msg.prompt); o != nil && m.overlay == nil {
 		m.overlay = o
@@ -190,7 +194,7 @@ func (m *Model) kafkaTreeLoaded(msg kafkaTreeMsg) tea.Cmd {
 		m.selectNewTopic(n.Conn, st.selectTopic)
 		st.selectTopic = ""
 	}
-	return m.lagCmd(n.Conn, st, 0)
+	return tea.Batch(m.lagCmd(n.Conn, st, 0), m.connectCmd(n.Conn, st))
 }
 
 // lagGroups are the groups whose lag can be computed, by name.
@@ -320,6 +324,9 @@ func (m *Model) buildKafkaTree(conn string) {
 	if st.registry {
 		subjects := buildSubjectNodes(conn, filterSubjects(st.subjects, st.filter[secSchemas]))
 		sections = append(sections, m.kafkaSection(conn, secSchemas, "Schema Registry", len(subjects), subjects))
+	}
+	if st.connectOn {
+		sections = append(sections, m.connectSection(conn, st))
 	}
 	sections = append(sections, &tree.Node{Kind: tree.KindKafkaACLs, Conn: conn, Section: secACLs, Key: secACLs, Name: "ACLs"})
 	var reopen func([]*tree.Node)
@@ -612,6 +619,9 @@ func (m *Model) kafkaTreeAction(a keymap.Action, n *tree.Node) (tea.Cmd, bool) {
 		switch n.Kind {
 		case tree.KindKafkaACLs:
 			return m.openACLs(n.Conn), true
+		case tree.KindConnector:
+			cluster, name := connectorOf(n)
+			return m.openConnector(n.Conn, cluster, name), true
 		case tree.KindTopic:
 			return m.openTopic(n.Conn, n.Key), true
 		case tree.KindKafkaGroup:

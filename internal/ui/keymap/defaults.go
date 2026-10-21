@@ -259,6 +259,14 @@ func DefaultBindings() []Binding {
 		Binding{KafkaSchema, keys("c"), SetCompatibility, "Set the compatibility level…"},
 		Binding{KafkaSchema, keys("d", "d"), DeleteNode, "Soft-delete the version"},
 	)
+	b = append(b, gridBindings(KafkaConnect)...)
+	b = append(b,
+		Binding{KafkaConnect, keys("["), PrevSection, "Previous section"},
+		Binding{KafkaConnect, keys("]"), NextSection, "Next section"},
+		Binding{KafkaConnect, keys("p"), PauseResume, "Pause / resume the connector"},
+		Binding{KafkaConnect, keys("R"), RestartConnector, "Restart the connector and its failed tasks (Tasks: this task)"},
+		Binding{KafkaConnect, keys(LeaderToken, "v"), ExternalEdit, "Edit the config in $EDITOR"},
+	)
 	b = append(b, gridBindings(KafkaACL)...)
 	b = append(b,
 		Binding{KafkaACL, keys("o"), NewKey, "New ACL…"},

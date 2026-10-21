@@ -34,8 +34,11 @@ func (m *Model) secretPrompt(err error) overlay.Overlay {
 	}
 	cfg, _ := m.backend.Connection(se.Conn)
 	title, label := "Schema Registry", "Password for "+cfg.Params["schema_registry_user"]+":"
-	if se.Kind == session.SecretOAuth {
+	switch se.Kind {
+	case session.SecretOAuth:
 		title, label = "OAuth", "Client secret for "+cfg.Params["oauth_client_id"]+":"
+	case session.SecretConnect:
+		title, label = "Kafka Connect", "Password for "+cfg.Params["connect_user"]+":"
 	}
 	if se.Wrong {
 		label = "Wrong. " + label

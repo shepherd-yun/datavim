@@ -244,6 +244,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resetTimes(msg)
 	case overlay.TopicFormMsg:
 		m.topicFormed(msg)
+	case kafkaConnectMsg:
+		m.kafkaConnectLoaded(msg)
 	case aclNewMsg:
 		m.aclFormFor(msg)
 	case overlay.ACLFormMsg:

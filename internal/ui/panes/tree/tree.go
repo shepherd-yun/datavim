@@ -34,9 +34,11 @@ const (
 	KindTopic
 	KindKafkaGroup
 	KindBroker
-	KindSchemaSubject // a Schema Registry subject; Key is its name
-	KindSchemaVersion // Key is "subject\x00version", Name "v3"
-	KindKafkaACLs     // the ACLs line of a kafka connection: a leaf that opens the ACL tab
+	KindSchemaSubject  // a Schema Registry subject; Key is its name
+	KindSchemaVersion  // Key is "subject\x00version", Name "v3"
+	KindKafkaACLs      // the ACLs line of a kafka connection: a leaf that opens the ACL tab
+	KindConnectCluster // a Kafka Connect cluster; Key is its name
+	KindConnector      // Key is "cluster\x00name"
 )
 
 // Group tells the groups under a table apart.
@@ -77,7 +79,7 @@ type Node struct {
 func (n *Node) Parent() *Node { return n.parent }
 func (n *Node) Expandable() bool {
 	switch n.Kind {
-	case KindGroup, KindRedisDB, KindKeyFolder, KindKafkaSection, KindTopicFolder, KindSchemaSubject:
+	case KindGroup, KindRedisDB, KindKeyFolder, KindKafkaSection, KindTopicFolder, KindSchemaSubject, KindConnectCluster:
 		return true
 	}
 	return n.Kind <= KindView
@@ -503,7 +505,8 @@ func icon(n *Node, style IconStyle) string {
 		return arrow + " •"
 	case KindView:
 		return arrow + " ◦"
-	case KindColumn, KindKey, KindForeignKey, KindIndex, KindTopic, KindKafkaGroup, KindBroker, KindSchemaVersion:
+	case KindColumn, KindKey, KindForeignKey, KindIndex, KindTopic, KindKafkaGroup, KindBroker, KindSchemaVersion,
+		KindKafkaACLs, KindConnector:
 		return "·"
 	}
 	return arrow
@@ -540,6 +543,8 @@ func nerdGlyph(n *Node) string {
 			return "\U000f0849" // md-account_group
 		case "schemas":
 			return "\U000f0169" // md-code_json
+		case "connect":
+			return "\U000f0337" // md-lan_connect
 		}
 		return "\U000f0369" // md-message_text
 	case KindTopic:
@@ -550,6 +555,10 @@ func nerdGlyph(n *Node) string {
 		return "\U000f048b" // md-server
 	case KindSchemaSubject, KindSchemaVersion:
 		return "\U000f0169" // md-code_json
+	case KindKafkaACLs:
+		return "\U000f0341" // md-lock
+	case KindConnectCluster, KindConnector:
+		return "\U000f0337" // md-lan_connect
 	case KindGroup, KindKeyFolder, KindTopicFolder:
 		if n.Expanded {
 			return "\U000f0770" // md-folder_open
