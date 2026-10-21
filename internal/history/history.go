@@ -30,6 +30,8 @@ const (
 	// group: Name is its name.
 	RecentKafkaTopic = "kafka_topic"
 	RecentKafkaGroup = "kafka_group"
+	// RecentKafkaSubject is a Schema Registry subject's tab.
+	RecentKafkaSubject = "kafka_subject"
 )
 
 // Favorite is a starred Redis key; Name is rcmd.Quote(key).

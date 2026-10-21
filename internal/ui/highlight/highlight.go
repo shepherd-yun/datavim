@@ -1,4 +1,5 @@
-// Package highlight splits SQL into colored spans using Chroma.
+// Package highlight splits SQL (and JSON / Protobuf schemas) into colored
+// spans using Chroma.
 package highlight
 
 import (
@@ -229,4 +230,50 @@ func Redis(src string) []Span {
 func isNumber(s string) bool {
 	_, err := strconv.ParseFloat(s, 64)
 	return err == nil && s != "" && strings.IndexFunc(s, func(r rune) bool { return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' }) < 0
+}
+
+// codeLexers are the lexers of Code, by language name.
+var codeLexers = map[string]chroma.Lexer{
+	"json":     lexer("json"),
+	"protobuf": lexer("protobuf"),
+}
+
+// Code classifies src in lang ("json" or "protobuf"). Like SQL, the spans
+// cover src exactly; an unknown language or text Chroma cannot reproduce
+// is all Plain.
+func Code(src, lang string) []Span {
+	if src == "" {
+		return nil
+	}
+	plain := []Span{{Start: 0, End: len(src), Class: Plain}}
+	l := codeLexers[lang]
+	if l == nil {
+		return plain
+	}
+	it, err := l.Tokenise(&chroma.TokeniseOptions{State: "root"}, src)
+	if err != nil {
+		return plain
+	}
+	var out []Span
+	off := 0
+	for t := it(); t != chroma.EOF; t = it() {
+		end := off + len(t.Value)
+		if end > len(src) || src[off:end] != t.Value {
+			return plain
+		}
+		if end == off {
+			continue
+		}
+		c := classOf(t.Type)
+		if n := len(out); n > 0 && out[n-1].Class == c {
+			out[n-1].End = end
+		} else {
+			out = append(out, Span{Start: off, End: end, Class: c})
+		}
+		off = end
+	}
+	if off < len(src) {
+		out = append(out, Span{Start: off, End: len(src), Class: Plain})
+	}
+	return out
 }

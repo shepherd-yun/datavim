@@ -1,6 +1,7 @@
 package highlight
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -208,5 +209,28 @@ func TestHighlightRedis(t *testing.T) {
 		if got := class(src, spans, tc.text); got != tc.want {
 			t.Errorf("%q = %v, want %v (spans %+v)", tc.text, got, tc.want, spans)
 		}
+	}
+}
+
+func TestCode(t *testing.T) {
+	src := `{"a": 1, "b": "x", "c": true}`
+	spans := Code(src, "json")
+	var classes []Class
+	end := 0
+	for _, s := range spans {
+		if s.Start != end {
+			t.Fatalf("gap before %+v", s)
+		}
+		end = s.End
+		classes = append(classes, s.Class)
+	}
+	if end != len(src) || !slices.Contains(classes, Number) || !slices.Contains(classes, String) {
+		t.Fatalf("json spans = %+v", spans)
+	}
+	if spans := Code("syntax = \"proto3\";\nmessage Order { int64 id = 1; }", "protobuf"); !slices.ContainsFunc(spans, func(s Span) bool { return s.Class == Keyword }) {
+		t.Fatalf("protobuf spans = %+v", spans)
+	}
+	if spans := Code("x", "nope"); len(spans) != 1 || spans[0].Class != Plain {
+		t.Fatalf("unknown language = %+v", spans)
 	}
 }
