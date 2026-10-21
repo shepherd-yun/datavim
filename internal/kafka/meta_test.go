@@ -268,3 +268,44 @@ func TestFormatVersionGuess(t *testing.T) {
 		}
 	}
 }
+
+func TestBrokerMapRewritesDial(t *testing.T) {
+	c := newCluster(t)
+	var mu sync.Mutex
+	var dialed []string
+	cfg := Config{
+		Brokers:   []string{"advertised:9092"},
+		BrokerMap: map[string]string{"advertised:9092": c.ListenAddrs()[0]},
+		Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			mu.Lock()
+			dialed = append(dialed, addr)
+			mu.Unlock()
+			var d net.Dialer
+			return d.DialContext(ctx, network, addr)
+		},
+	}
+	cl, err := Open(ctx(t), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	mu.Lock()
+	defer mu.Unlock()
+	if slices.Contains(dialed, "advertised:9092") || !slices.Contains(dialed, c.ListenAddrs()[0]) {
+		t.Fatalf("dialed = %v", dialed)
+	}
+}
+
+func TestClientOptsSASL(t *testing.T) {
+	if _, err := clientOpts(Config{SASL: "oauth"}); err == nil {
+		t.Error("oauth without OAuth: want an error")
+	}
+	if _, err := clientOpts(Config{SASL: "aws-msk-iam"}); err == nil {
+		t.Error("aws-msk-iam without AWS: want an error")
+	}
+	_, err := clientOpts(Config{SASL: "gssapi"})
+	want := `kafka sasl "gssapi" is not supported (want plain, scram-sha-256, scram-sha-512, oauth or aws-msk-iam)`
+	if err == nil || err.Error() != want {
+		t.Errorf("gssapi err = %v, want %q", err, want)
+	}
+}

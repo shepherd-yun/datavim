@@ -25,6 +25,8 @@ import (
 	"github.com/twmb/franz-go/pkg/kerr"
 	"github.com/twmb/franz-go/pkg/kgo"
 	"github.com/twmb/franz-go/pkg/kmsg"
+	"github.com/twmb/franz-go/pkg/sasl/aws"
+	"github.com/twmb/franz-go/pkg/sasl/oauth"
 	"github.com/twmb/franz-go/pkg/sasl/plain"
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 
@@ -34,7 +36,7 @@ import (
 // Config is what Open and OpenReader need.
 type Config struct {
 	Brokers        []string // host:port
-	SASL           string   // "", "plain", "scram-sha-256" or "scram-sha-512"
+	SASL           string   // "", "plain", "scram-sha-256", "scram-sha-512", "oauth" or "aws-msk-iam"
 	User, Password string
 	TLS            bool
 	TLSSkipVerify  bool
@@ -44,6 +46,10 @@ type Config struct {
 	// Dial opens every broker connection (an SSH tunnel); nil dials
 	// directly. TLS runs on top of the connection it returns.
 	Dial db.DialFunc
+	// BrokerMap is the address to dial for an advertised host:port.
+	BrokerMap map[string]string
+	OAuth     *OAuthConfig // SASL "oauth"
+	AWS       *AWSConfig   // SASL "aws-msk-iam"
 }
 
 var (
@@ -175,8 +181,22 @@ func clientOpts(cfg Config) ([]kgo.Opt, error) {
 		opts = append(opts, kgo.SASL(scram.Auth{User: cfg.User, Pass: cfg.Password}.AsSha256Mechanism()))
 	case "scram-sha-512":
 		opts = append(opts, kgo.SASL(scram.Auth{User: cfg.User, Pass: cfg.Password}.AsSha512Mechanism()))
+	case "oauth":
+		if cfg.OAuth == nil {
+			return nil, errors.New("kafka sasl oauth: no token url / client id")
+		}
+		opts = append(opts, kgo.SASL(oauth.Oauth(oauthAuth(cfg, baseDial(cfg)))))
+	case "aws-msk-iam":
+		if cfg.AWS == nil {
+			return nil, errors.New("kafka sasl aws-msk-iam: no aws settings")
+		}
+		fn, err := awsAuth(context.Background(), *cfg.AWS)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, kgo.SASL(aws.ManagedStreamingIAM(fn)))
 	default:
-		return nil, fmt.Errorf("kafka sasl %q is not supported yet (want plain, scram-sha-256 or scram-sha-512)", cfg.SASL)
+		return nil, fmt.Errorf("kafka sasl %q is not supported (want plain, scram-sha-256, scram-sha-512, oauth or aws-msk-iam)", cfg.SASL)
 	}
 	return opts, nil
 }
@@ -185,10 +205,15 @@ func clientOpts(cfg Config) ([]kgo.Opt, error) {
 // TLS on top when cfg.TLS: kgo cannot combine its own TLS with a custom
 // dialer.
 func dialer(cfg Config) (func(ctx context.Context, network, host string) (net.Conn, error), error) {
-	base := cfg.Dial
-	if base == nil {
-		d := &net.Dialer{Timeout: 10 * time.Second}
-		base = d.DialContext
+	tunnel := baseDial(cfg)
+	base := tunnel
+	if len(cfg.BrokerMap) > 0 {
+		base = func(ctx context.Context, network, host string) (net.Conn, error) {
+			if to, ok := cfg.BrokerMap[host]; ok {
+				host = to
+			}
+			return tunnel(ctx, network, host)
+		}
 	}
 	if !cfg.TLS {
 		return base, nil
@@ -215,6 +240,16 @@ func dialer(cfg Config) (func(ctx context.Context, network, host string) (net.Co
 		}
 		return t, nil
 	}, nil
+}
+
+// baseDial is cfg.Dial, or a direct dial: every connection, brokers'
+// and HTTP ones, goes through it.
+func baseDial(cfg Config) db.DialFunc {
+	if cfg.Dial != nil {
+		return cfg.Dial
+	}
+	d := &net.Dialer{Timeout: 10 * time.Second}
+	return d.DialContext
 }
 
 func tlsConfig(cfg Config) (*tls.Config, error) {
