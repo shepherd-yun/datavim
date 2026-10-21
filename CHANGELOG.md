@@ -6,13 +6,17 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.0.0] - 2026-10-21
+
 ### Changed
 - **Renamed to datavim.** The command is `datavim`, Homebrew installs it with
   `brew install shepherd-yun/tap/datavim`, and the repository is now
   `github.com/shepherd-yun/datavim`. On first start the old `~/.config/sqlvim` and
   `~/.local/state/sqlvim` directories are moved to `datavim`, and passwords saved in the
   keychain under `sqlvim` are moved over the first time they are used. `SQLVIM_*`
-  environment variables still work, but `DATAVIM_*` ones are now preferred.
+  environment variables still work, but `DATAVIM_*` ones are now preferred. The `sqlvim` cask
+  is gone from the tap, so Homebrew users switch with `brew uninstall sqlvim` and
+  `brew install shepherd-yun/tap/datavim`.
 
 ### Added
 - Masking Kafka messages: `[[mask]]` rules in `config.toml` (by `connections` or `env`, `topics`
@@ -547,7 +551,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v2.4.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.0.0...HEAD
+[3.0.0]: https://github.com/shepherd-yun/datavim/compare/v2.4.0...v3.0.0
 [2.4.0]: https://github.com/shepherd-yun/datavim/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/shepherd-yun/datavim/compare/v2.2.0...v2.3.0
 [2.2.0]: https://github.com/shepherd-yun/datavim/compare/v2.1.1...v2.2.0
