@@ -15,6 +15,7 @@ import (
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/rdb"
 	"github.com/shepherd-yun/sqlvim/internal/secret"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
 // ErrPasswordRequired means no password is known; ask the user.
@@ -354,13 +355,14 @@ func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, err
 	if err != nil {
 		return nil, err
 	}
-	c, err = drv.Open(ctx, db.ConnConfig{
+	raw, err := drv.Open(ctx, db.ConnConfig{
 		Host: cfg.Host, Port: cfg.Port, User: cfg.User, Password: pw,
 		Database: database, Params: cfg.Params, ReadOnly: cfg.IsReadOnly(), Dial: dial,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("connect %s: %w", name, err)
 	}
+	c = &auditedConn{Conn: raw, a: sqlAudit{m: m, name: name, database: database, dialect: sqlx.DialectOf(cfg.Driver)}}
 
 	m.mu.Lock()
 	defer m.mu.Unlock()

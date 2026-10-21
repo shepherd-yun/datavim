@@ -63,6 +63,7 @@ type fakeDriver struct {
 	err    error
 	// release, if set, makes Close wait until it is closed.
 	release chan struct{}
+	conn    db.Conn // returned by Open when set
 }
 
 func (d *fakeDriver) Name() string         { return d.name }
@@ -73,6 +74,9 @@ func (d *fakeDriver) Open(_ context.Context, cfg db.ConnConfig) (db.Conn, error)
 	d.opens = append(d.opens, cfg)
 	if d.err != nil {
 		return nil, d.err
+	}
+	if d.conn != nil {
+		return d.conn, nil
 	}
 	return &fakeConn{release: d.release, done: make(chan struct{})}, nil
 }
@@ -130,7 +134,7 @@ func TestSetPasswordClosesOpenConns(t *testing.T) {
 	sec.m["local"] = "old"
 	c, _ := m.Conn(context.Background(), "local", "")
 	_ = m.SetPassword("local", "new", false)
-	if !c.(*fakeConn).waitClosed() {
+	if !c.(*auditedConn).Conn.(*fakeConn).waitClosed() {
 		t.Error("existing conns must be closed so the new password is used")
 	}
 }
@@ -242,7 +246,7 @@ func TestResetClosesOnlyThatConnection(t *testing.T) {
 	a, _ := m.Conn(ctx, "local", "app")
 	b, _ := m.Conn(ctx, "local", "other")
 	m.Reset("local")
-	if !a.(*fakeConn).waitClosed() || !b.(*fakeConn).waitClosed() {
+	if !a.(*auditedConn).Conn.(*fakeConn).waitClosed() || !b.(*auditedConn).Conn.(*fakeConn).waitClosed() {
 		t.Fatal("all databases of the connection are closed")
 	}
 	c, _ := m.Conn(ctx, "local", "app")
@@ -338,7 +342,7 @@ func TestSetReadOnly(t *testing.T) {
 	if cfg, _ := m.Connection("local"); !cfg.IsReadOnly() {
 		t.Fatal("Connection reflects the override")
 	}
-	if !c1.(*fakeConn).waitClosed() {
+	if !c1.(*auditedConn).Conn.(*fakeConn).waitClosed() {
 		t.Fatal("open connections are closed so the server-side guard follows")
 	}
 	if _, err := m.Conn(ctx, "local", ""); err != nil {
@@ -406,7 +410,7 @@ func TestSetReadOnlyDoesNotWaitForBorrowedSessions(t *testing.T) {
 		t.Fatalf("a new read-only pool is opened: %+v", drv.opens)
 	}
 	close(drv.release) // the console returns its session
-	if !c.(*fakeConn).waitClosed() {
+	if !c.(*auditedConn).Conn.(*fakeConn).waitClosed() {
 		t.Fatal("the retired pool closes once its sessions are back")
 	}
 }
@@ -450,7 +454,7 @@ func TestUpdateConnection(t *testing.T) {
 	if !ok || c.Host != "h2" || !c.IsReadOnly() || c.Params["sslmode"] != "disable" || c.Params["tls"] != "true" {
 		t.Fatalf("laptop = %+v; readonly and params are kept", c)
 	}
-	if !c1.(*fakeConn).waitClosed() {
+	if !c1.(*auditedConn).Conn.(*fakeConn).waitClosed() {
 		t.Fatal("connections to the old settings are closed")
 	}
 	if sec.m["laptop"] != "pw" || sec.m["local"] != "" {
@@ -528,7 +532,7 @@ func TestRemoveConnection(t *testing.T) {
 	if _, ok := sec.m["local"]; ok {
 		t.Fatal("the saved password is deleted")
 	}
-	if !c1.(*fakeConn).waitClosed() {
+	if !c1.(*auditedConn).Conn.(*fakeConn).waitClosed() {
 		t.Fatal("open connections are closed")
 	}
 	if err := m.RemoveConnection("local"); err == nil {

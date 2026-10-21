@@ -18,8 +18,10 @@ func TestAudit(t *testing.T) {
 	s, _ := open(t)
 	base := time.Date(2026, 10, 21, 9, 0, 0, 0, time.UTC)
 	addAudits(t, s,
-		AuditEntry{Time: base, Conn: "pg", Kind: AuditSQL, Database: "app", Op: "UPDATE", Object: "users",
-			Detail: "UPDATE users SET a = '50%' WHERE id = 1 · 1 rows", Duration: 3 * time.Millisecond},
+		AuditEntry{
+			Time: base, Conn: "pg", Kind: AuditSQL, Database: "app", Op: "UPDATE", Object: "users",
+			Detail: "UPDATE users SET a = '50%' WHERE id = 1 · 1 rows", Duration: 3 * time.Millisecond,
+		},
 		AuditEntry{Time: base.Add(time.Minute), Conn: "k", Kind: AuditKafka, Op: "delete_topic", Object: "orders_v1", Err: "kafka: permission denied"},
 		AuditEntry{Time: base.Add(2 * time.Minute), Conn: "k", Kind: AuditKafka, Op: "produce", Object: "orders", Detail: "3 messages"},
 	)

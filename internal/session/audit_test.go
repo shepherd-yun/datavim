@@ -8,8 +8,10 @@ import (
 	"testing"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/sqlvim/internal/sqlx"
 )
 
 // auditLog collects what a Manager audits.
@@ -127,5 +129,153 @@ func TestClipDetail(t *testing.T) {
 	}
 	if clipDetail("short") != "short" {
 		t.Fatal("short text changed")
+	}
+}
+
+func TestAuditSQLKinds(t *testing.T) {
+	for _, tc := range []struct {
+		sql        string
+		d          sqlx.Dialect
+		inTx       bool
+		op, object string
+		ok         bool
+	}{
+		{"SELECT 1", sqlx.Postgres, false, "", "", false},
+		{"UPDATE t SET a=1 WHERE id=2", sqlx.Postgres, false, "UPDATE", "t", true},
+		{"create table x(id int)", sqlx.MySQL, false, "CREATE", "", true},
+		{"SELECT 1; DELETE FROM t", sqlx.Postgres, false, "DELETE", "t", true},
+		{"COMMIT", sqlx.Postgres, true, "COMMIT", "", true},
+		{"COMMIT", sqlx.Postgres, false, "", "", false},
+		{"EXEC sp_help", sqlx.SQLServer, false, "", "", false},
+		{"EXEC dbo.purge", sqlx.SQLServer, false, "EXEC", "", true},
+		{"SHOW TABLES", sqlx.MySQL, false, "", "", false},
+		{"USE app", sqlx.MySQL, false, "", "", false},
+	} {
+		op, object, ok := auditSQL(tc.sql, tc.d, tc.inTx)
+		if ok != tc.ok || op != tc.op || (tc.object != "" && object != tc.object) {
+			t.Errorf("auditSQL(%q, inTx=%v) = %q %q %v, want %q %q %v", tc.sql, tc.inTx, op, object, ok, tc.op, tc.object, tc.ok)
+		}
+	}
+}
+
+// sqlConn is a db.Conn whose Querier calls succeed (or fail with err).
+type sqlConn struct {
+	fakeConn
+	err error
+}
+
+func (c *sqlConn) Exec(context.Context, string, ...any) (db.ExecResult, error) {
+	return db.ExecResult{RowsAffected: 1}, c.err
+}
+
+func (c *sqlConn) Query(context.Context, string, ...any) (*db.ResultSet, error) {
+	return &db.ResultSet{}, c.err
+}
+
+func (c *sqlConn) Stream(context.Context, string, func([]db.ColumnInfo), func([]db.Value) error) error {
+	return c.err
+}
+
+func (c *sqlConn) Session(context.Context) (db.Session, error) { return &sqlSession{conn: c}, nil }
+
+type sqlSession struct {
+	db.Session
+	conn *sqlConn
+}
+
+func (s *sqlSession) Exec(ctx context.Context, q string, args ...any) (db.ExecResult, error) {
+	return s.conn.Exec(ctx, q, args...)
+}
+
+func setupSQL(t *testing.T) (*Manager, *sqlConn, *auditLog) {
+	t.Helper()
+	m, drv, sec := setup(true)
+	sec.m["local"] = "pw"
+	c := &sqlConn{fakeConn: fakeConn{done: make(chan struct{})}}
+	drv.conn = c
+	return m, c, recordAudit(m)
+}
+
+func TestAuditSQLExec(t *testing.T) {
+	m, _, audit := setupSQL(t)
+	ctx := context.Background()
+	c, err := m.Conn(ctx, "local", "db1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Exec(ctx, "UPDATE t SET pw='x' WHERE id=1"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Query(ctx, "SELECT * FROM t WHERE id = $1", 7); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Exec(ctx, "ALTER USER bob IDENTIFIED BY 'tiger'"); err != nil {
+		t.Fatal(err)
+	}
+	es := audit.entries()
+	if len(es) != 2 {
+		t.Fatalf("audit = %+v", es)
+	}
+	if e := es[0]; e.Kind != history.AuditSQL || e.Conn != "local" || e.Database != "db1" || e.Op != "UPDATE" ||
+		e.Object != "t" || !strings.HasSuffix(e.Detail, " · 1 rows") {
+		t.Fatalf("entry = %+v", e)
+	}
+	if strings.Contains(es[1].Detail, "tiger") {
+		t.Fatalf("password in the audit: %q", es[1].Detail)
+	}
+}
+
+func TestAuditSQLSession(t *testing.T) {
+	m, _, audit := setupSQL(t)
+	ctx := context.Background()
+	c, err := m.Conn(ctx, "local", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := c.Session(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{"BEGIN", "UPDATE t SET a = 1 WHERE id = 1", "SELECT 1", "ROLLBACK"} {
+		if _, err := s.Exec(ctx, q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var ops []string
+	for _, e := range audit.entries() {
+		ops = append(ops, e.Op)
+	}
+	if strings.Join(ops, ",") != "BEGIN,UPDATE,ROLLBACK" {
+		t.Fatalf("ops = %v", ops)
+	}
+}
+
+func TestAuditSQLError(t *testing.T) {
+	m, raw, audit := setupSQL(t)
+	raw.err = errors.New("permission denied for table t")
+	ctx := context.Background()
+	c, err := m.Conn(ctx, "local", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Exec(ctx, "DELETE FROM t WHERE id = 1"); !errors.Is(err, raw.err) {
+		t.Fatalf("err = %v", err)
+	}
+	if es := audit.entries(); len(es) != 1 || es[0].Err != "permission denied for table t" || strings.Contains(es[0].Detail, "rows") {
+		t.Fatalf("audit = %+v", es)
+	}
+}
+
+func TestAuditSQLStream(t *testing.T) {
+	m, _, audit := setupSQL(t)
+	ctx := context.Background()
+	c, err := m.Conn(ctx, "local", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = c.Stream(ctx, "SELECT * FROM t", nil, nil)
+	_ = c.Stream(ctx, "INSERT INTO t (a) VALUES (1) RETURNING id", nil, nil)
+	if es := audit.entries(); len(es) != 1 || es[0].Op != "INSERT" {
+		t.Fatalf("audit = %+v", es)
 	}
 }
