@@ -157,6 +157,20 @@ func TestDeleteGroupNotEmpty(t *testing.T) {
 	}
 }
 
+// TestDeleteGroupOffsetsSubscribed: brokers refuse each partition of a
+// subscribed topic, which is one ErrGroupSubscribed, not per-partition results.
+func TestDeleteGroupOffsetsSubscribed(t *testing.T) {
+	c := newCluster(t)
+	fill(t, c, "orders", 3, 2)
+	commit(t, c, "billing", kadm.Offset{Topic: "orders", Partition: 0, At: 1, LeaderEpoch: -1})
+	consume(t, c, "billing", "orders")
+	cl := open(t, c)
+	res, err := cl.DeleteGroupOffsets(ctx(t), "billing", "orders")
+	if !errors.Is(err, ErrGroupSubscribed) {
+		t.Fatalf("res = %+v, err = %v, want ErrGroupSubscribed", res, err)
+	}
+}
+
 func TestDeleteGroupOffsets(t *testing.T) {
 	c := newCluster(t, kfake.SeedTopics(1, "refunds"))
 	fill(t, c, "orders", 3, 2)

@@ -211,7 +211,8 @@ func (c *client) DeleteGroupOffsets(ctx context.Context, group, topic string) ([
 		case !ok:
 			out[i].Err = errors.New("no answer for this partition")
 		case errors.Is(perr, kerr.GroupSubscribedToTopic):
-			out[i].Err = ErrGroupSubscribed
+			// brokers check the subscription per topic: no partition was deleted
+			return nil, ErrGroupSubscribed
 		case perr != nil:
 			out[i].Err = wrap(ctx, perr, what)
 		}
