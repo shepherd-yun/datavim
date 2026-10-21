@@ -546,10 +546,10 @@ func TestNormalizeKafka(t *testing.T) {
 		{"ipv6", Connection{Name: "k", Driver: "kafka", Host: "[::1]:9094,[::2]"}, []string{"[::1]:9094", "[::2]:9092"}, ""},
 		{"scram", Connection{Name: "k", Driver: "kafka", User: "app", Params: map[string]string{"sasl": "scram-sha-512"}}, []string{"localhost:9092"}, ""},
 		{
-			"oauth not yet",
-			Connection{Name: "k", Driver: "kafka", User: "app", Params: map[string]string{"sasl": "oauth"}},
+			"gssapi not supported",
+			Connection{Name: "k", Driver: "kafka", User: "app", Params: map[string]string{"sasl": "gssapi"}},
 			nil,
-			`connection "k": kafka sasl "oauth" is not supported yet (want plain, scram-sha-256 or scram-sha-512)`,
+			`connection "k": kafka sasl "gssapi" is not supported (want plain, scram-sha-256, scram-sha-512, oauth or aws-msk-iam)`,
 		},
 		{
 			"sasl needs user",
@@ -579,6 +579,63 @@ func TestNormalizeKafka(t *testing.T) {
 	}
 	if c, _ := Normalize(Connection{Name: "k", Driver: "kafka"}); c.Port != 9092 {
 		t.Fatalf("port = %d", c.Port)
+	}
+}
+
+func TestNormalizeKafkaK2(t *testing.T) {
+	oauth := func(extra map[string]string) map[string]string {
+		p := map[string]string{"sasl": "oauth", "oauth_token_url": "https://idp/token", "oauth_client_id": "cid"}
+		maps.Copy(p, extra)
+		return p
+	}
+	for _, tc := range []struct {
+		name    string
+		params  map[string]string
+		wantTLS string // "" means params.tls left unset
+		err     string
+	}{
+		{"oauth needs no user", oauth(nil), "", ""},
+		{"oauth needs a token url", map[string]string{"sasl": "oauth", "oauth_client_id": "cid"}, "", `connection "k": kafka sasl oauth needs params.oauth_token_url`},
+		{"oauth needs a client id", map[string]string{"sasl": "oauth", "oauth_token_url": "https://idp/token"}, "", `connection "k": kafka sasl oauth needs params.oauth_client_id`},
+		{"msk iam needs no user and turns tls on", map[string]string{"sasl": "aws-msk-iam"}, "true", ""},
+		{"msk iam keeps tls false", map[string]string{"sasl": "aws-msk-iam", "tls": "false"}, "false", ""},
+		{"broker map", map[string]string{"broker_map": "b1:9092=127.0.0.1:19092"}, "", ""},
+		{"bad broker map", map[string]string{"broker_map": "b1:9092"}, "", `connection "k": params.broker_map: want host:port=host:port, …`},
+		{"registry url", map[string]string{"schema_registry_url": "https://sr:8081"}, "", ""},
+		{"bad registry url", map[string]string{"schema_registry_url": "sr:8081"}, "", `connection "k": params.schema_registry_url must start with http:// or https://`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Normalize(Connection{Name: "k", Driver: "kafka", Params: tc.params})
+			if tc.err != "" {
+				if err == nil || err.Error() != tc.err {
+					t.Fatalf("err = %v, want %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := c.Params["tls"]; got != tc.wantTLS {
+				t.Fatalf("tls = %q, want %q", got, tc.wantTLS)
+			}
+		})
+	}
+}
+
+func TestKafkaBrokerMap(t *testing.T) {
+	m, err := KafkaBrokerMap(Connection{Params: map[string]string{"broker_map": "b1:9092=127.0.0.1:19092, b2:9092 = 127.0.0.1:19093"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"b1:9092": "127.0.0.1:19092", "b2:9092": "127.0.0.1:19093"}
+	if !maps.Equal(m, want) {
+		t.Fatalf("map = %v, want %v", m, want)
+	}
+	if _, err := KafkaBrokerMap(Connection{Params: map[string]string{"broker_map": "b1:9092"}}); err == nil {
+		t.Fatal("want an error for a pair without =")
+	}
+	if m, err := KafkaBrokerMap(Connection{}); m != nil || err != nil {
+		t.Fatalf("empty = %v, %v", m, err)
 	}
 }
 

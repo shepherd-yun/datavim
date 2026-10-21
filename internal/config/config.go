@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"net"
 	"os"
 	"path/filepath"
@@ -206,13 +207,9 @@ func Normalize(c Connection) (Connection, error) {
 		}
 	}
 	if c.Driver == "kafka" {
-		switch mech := c.Params["sasl"]; mech {
-		case "", "plain", "scram-sha-256", "scram-sha-512":
-			if mech != "" && c.User == "" {
-				return c, fmt.Errorf("connection %q: kafka sasl needs a user", c.Name)
-			}
-		default:
-			return c, fmt.Errorf("connection %q: kafka sasl %q is not supported yet (want plain, scram-sha-256 or scram-sha-512)", c.Name, mech)
+		var err error
+		if c, err = normalizeKafka(c); err != nil {
+			return c, err
 		}
 	}
 	c.SSH = strings.TrimSpace(c.SSH)
@@ -227,6 +224,66 @@ func Normalize(c Connection) (Connection, error) {
 		return c, fmt.Errorf("connection %q: unknown env %q (want dev, staging or prod)", c.Name, c.Env)
 	}
 	return c, nil
+}
+
+func normalizeKafka(c Connection) (Connection, error) {
+	switch mech := c.Params["sasl"]; mech {
+	case "", "plain", "scram-sha-256", "scram-sha-512":
+		if mech != "" && c.User == "" {
+			return c, fmt.Errorf("connection %q: kafka sasl needs a user", c.Name)
+		}
+	case "oauth":
+		for _, k := range []string{"oauth_token_url", "oauth_client_id"} {
+			if c.Params[k] == "" {
+				return c, fmt.Errorf("connection %q: kafka sasl oauth needs params.%s", c.Name, k)
+			}
+		}
+	case "aws-msk-iam":
+		// MSK's IAM listener only takes TLS.
+		if _, ok := c.Params["tls"]; !ok {
+			p := maps.Clone(c.Params)
+			p["tls"] = "true"
+			c.Params = p
+		}
+	default:
+		return c, fmt.Errorf("connection %q: kafka sasl %q is not supported (want plain, scram-sha-256, scram-sha-512, oauth or aws-msk-iam)", c.Name, mech)
+	}
+	if _, err := KafkaBrokerMap(c); err != nil {
+		return c, fmt.Errorf("connection %q: %w", c.Name, err)
+	}
+	if u := c.Params["schema_registry_url"]; u != "" && !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+		return c, fmt.Errorf("connection %q: params.schema_registry_url must start with http:// or https://", c.Name)
+	}
+	return c, nil
+}
+
+// KafkaBrokerMap parses params.broker_map, "from=to" pairs of host:port
+// separated by commas: the address to dial for each advertised one.
+func KafkaBrokerMap(c Connection) (map[string]string, error) {
+	v := strings.TrimSpace(c.Params["broker_map"])
+	if v == "" {
+		return nil, nil
+	}
+	errFormat := errors.New("params.broker_map: want host:port=host:port, …")
+	m := make(map[string]string)
+	for pair := range strings.SplitSeq(v, ",") {
+		pair = strings.TrimSpace(pair)
+		if pair == "" {
+			continue
+		}
+		from, to, ok := strings.Cut(pair, "=")
+		from, to = strings.TrimSpace(from), strings.TrimSpace(to)
+		if !ok {
+			return nil, errFormat
+		}
+		for _, a := range []string{from, to} {
+			if _, _, err := net.SplitHostPort(a); err != nil {
+				return nil, errFormat
+			}
+		}
+		m[from] = to
+	}
+	return m, nil
 }
 
 // RedisDB is a redis connection's default db number; Normalize has
