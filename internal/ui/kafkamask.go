@@ -21,8 +21,8 @@ var maskedPart = []byte(`"` + kmsgx.Masked + `"`)
 
 // maskIn masks recs as they enter the view, so nothing past this point
 // sees what the rules hide. dec is their decoding when known (a search
-// decodes before it returns); otherwise a wire-format part that a path
-// rule reaches is Masked until decodedUpdate masks its decoded JSON.
+// decodes before it returns); otherwise a wire-format part a rule covers
+// is Masked until decodedUpdate masks its decoded JSON.
 // Parts in the wire format lose their bytes, so they count as masked.
 func (t *topicTab) maskIn(recs []kafka.Record, dec map[recID]decodedRec) []kafka.Record {
 	v := t.msgs
@@ -38,8 +38,10 @@ func (t *topicTab) maskIn(recs []kafka.Record, dec map[recID]decodedRec) []kafka
 	for i, r := range recs {
 		id := recID{r.Partition, r.Offset}
 		d, known := dec[id]
-		wireKey := reg && mk.Pending(true) && inWire(r.Key, r.KeyNull)
-		wireValue := reg && mk.Pending(false) && inWire(r.Value, r.ValueNull)
+		// a wire part a rule covers is decoded later, from the raw bytes:
+		// that decode must be masked too, whole rule or path
+		wireKey := reg && mk.Covers(true) && inWire(r.Key, r.KeyNull)
+		wireValue := reg && mk.Covers(false) && inWire(r.Value, r.ValueNull)
 		probe := r // the wire parts are done below; the rest, and headers, here
 		if wireKey {
 			probe.Key = []byte("null")

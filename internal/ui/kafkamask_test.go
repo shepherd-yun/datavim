@@ -195,3 +195,41 @@ func TestMaskNoRule(t *testing.T) {
 		t.Fatalf("VALUE = %q", v)
 	}
 }
+
+// TestMaskWholeWireValue: a rule on the whole value, a value in the wire
+// format: the decode that comes back must not bring the fields back.
+func TestMaskWholeWireValue(t *testing.T) {
+	cfg := withRegistry(config.Connection{Env: config.EnvProd})
+	m, b, k := newKafkaModel(t, cfg)
+	m.SetMasks([]config.MaskRule{{Env: "prod", Fields: []string{"value", "key"}}})
+	const schema = `{"type":"record","name":"Order","fields":[{"name":"phone","type":"string"}]}`
+	b.registry = newFakeRegistry()
+	b.registry.add("orders-value", 1, 12, "AVRO", schema)
+	wire, err := kmsgx.Encode(kafka.Schema{ID: 12, Type: "AVRO", Text: schema}, nil, "", []byte(`{"phone":"5550100"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	k.addTopic("orders", 1, 0, 2)
+	r := fakeRecord("orders", 0, 1)
+	r.Key, r.Value = wire, wire
+	k.setRecord(r)
+	tt := openMessages(t, m, "orders")
+	v, _ := valuePreview(t, tt, 1)
+	cursorOn(t, tt, 0, 1)
+	text, _, _ := tt.yankText(yankValue(t, tt))
+	row, _, _ := tt.yankText(keymap.YankRow)
+	var decoded strings.Builder
+	for _, d := range tt.msgs.decoded {
+		if d.Value != nil {
+			decoded.Write(d.Value.JSON)
+		}
+		if d.Key != nil {
+			decoded.Write(d.Key.JSON)
+		}
+	}
+	for name, s := range map[string]string{"VALUE": v, "yl": text, "yy": row, "decoded": decoded.String(), "screen": screen(m)} {
+		if leaks(s) {
+			t.Errorf("%s shows the phone: %s", name, s)
+		}
+	}
+}

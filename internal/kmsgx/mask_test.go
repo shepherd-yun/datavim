@@ -143,6 +143,13 @@ func TestPending(t *testing.T) {
 	if !paths.Pending(false) || paths.Pending(true) {
 		t.Fatal("value path: Pending wrong")
 	}
+	if !paths.Covers(false) || paths.Covers(true) {
+		t.Fatal("value path: Covers wrong")
+	}
+	whole := NewMasker([]config.MaskRule{{Env: "prod", Fields: []string{"key"}}}, "k", "prod", "t")
+	if !whole.Covers(true) || whole.Covers(false) || whole.Pending(true) {
+		t.Fatal("whole key: Covers / Pending wrong")
+	}
 	headers := NewMasker([]config.MaskRule{{Env: "prod", Headers: []string{"h"}}}, "k", "prod", "t")
 	if headers.Pending(false) || headers.Pending(true) {
 		t.Fatal("header rule: pending")

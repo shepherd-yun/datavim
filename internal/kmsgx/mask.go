@@ -68,6 +68,18 @@ func NewMasker(rules []config.MaskRule, conn, env, topic string) *Masker {
 	return &m
 }
 
+// Covers reports whether a rule hides something of the key (or value):
+// all of it or a path in it.
+func (m *Masker) Covers(key bool) bool {
+	if m == nil {
+		return false
+	}
+	if key {
+		return m.key.any()
+	}
+	return m.value.any()
+}
+
 // Pending reports whether a part needs its decoded JSON before Mask can
 // show it (a path rule, on a part in the wire format): show it as Masked
 // until then.
