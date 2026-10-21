@@ -114,6 +114,8 @@ type esIndexTab struct {
 	stats       []es.IndexStats
 	parts       [idxSections]esPart
 
+	docs *esDocs
+
 	mapGrid, setGrid, aliasGrid, statsGrid *grid.Model
 
 	status  string
@@ -133,6 +135,7 @@ func newESIndexTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, co
 	}
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 	t.setGrid.SetMarks(t.settingMark)
+	t.docs = newESDocs(t)
 	return t
 }
 
@@ -160,15 +163,20 @@ func (t *esIndexTab) Target() (string, db.TableRef) { return t.conn, db.TableRef
 func (t *esIndexTab) SetSize(w, h int)              { t.width, t.height = max(w, 0), max(h, 0) }
 func (t *esIndexTab) Init() tea.Cmd                 { return tea.Batch(t.loadHead(), t.loadMapping()) }
 
+// shutdown cancels the loads and releases the Documents cursor when the
+// tab closes or datavim quits.
 func (t *esIndexTab) shutdown() func() {
 	t.cancel()
-	return func() {}
+	return t.docs.close()
 }
 
 func (t *esIndexTab) setStatus(s string, isErr bool) { t.status, t.statusE = s, isErr }
 
 func (t *esIndexTab) retryAfterPassword() tea.Cmd {
 	cmds := []tea.Cmd{t.loadHead(), t.loadMapping()}
+	if !t.docs.loaded && t.mapping.loaded {
+		cmds = append(cmds, t.docs.reload())
+	}
 	if t.section >= idxSettings {
 		cmds = append(cmds, t.loadSection(t.section))
 	}
@@ -186,7 +194,7 @@ func (t *esIndexTab) activeGrid() *grid.Model {
 	case idxStats:
 		return t.statsGrid
 	}
-	return nil
+	return t.docs.grid
 }
 
 func (t *esIndexTab) Find(q string, forward bool) bool {
@@ -195,15 +203,18 @@ func (t *esIndexTab) Find(q string, forward bool) bool {
 }
 
 func (t *esIndexTab) exportSource() exportSrc {
-	g := t.activeGrid()
-	if g == nil {
-		return exportSrc{}
+	if t.section == idxDocuments {
+		return exportSrc{rs: t.docs.grid.Result(), jsonl: t.docs.ndjson(), name: t.target, conn: t.conn}
 	}
-	return exportSrc{rs: g.Result(), name: t.target + "-" + strings.ToLower(idxSectionNames[t.section]), conn: t.conn}
+	return exportSrc{rs: t.activeGrid().Result(), name: t.target + "-" + strings.ToLower(idxSectionNames[t.section]), conn: t.conn}
 }
 
-// yankText copies the whole mapping as JSON on the Mapping section.
+// yankText copies a document on the Documents section, the whole
+// mapping as JSON on the Mapping section.
 func (t *esIndexTab) yankText(a keymap.Action) (text, what string, ok bool) {
+	if t.section == idxDocuments {
+		return t.docs.yankText(a)
+	}
 	if a != keymap.YankRow || t.section != idxMapping || t.rawMappings == nil {
 		return "", "", false
 	}
@@ -300,6 +311,8 @@ func (t *esIndexTab) loadSection(s indexSection) tea.Cmd {
 
 func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
+	case esPageMsg:
+		return t.docs.paged(m)
 	case esHeadMsg:
 		t.head = esPart{loaded: m.err == nil}
 		if m.err != nil {
@@ -314,11 +327,17 @@ func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 		t.mapping = esPart{loaded: m.err == nil}
 		if m.err != nil {
 			t.mapping.err = esReason(m.err)
+			if !t.docs.started {
+				return t.docs.reload() // documents without the mapping's columns
+			}
 			return nil
 		}
 		t.rawMappings, t.mappings = m.raw, m.fields
 		t.fields = esx.MergeMappings(m.fields)
 		t.mapGrid.ReplaceResult(t.mappingResult())
+		if !t.docs.started {
+			return t.docs.reload() // the default columns and sort come from the mapping
+		}
 	case esSectionMsg:
 		p := &t.parts[m.section]
 		*p = esPart{loaded: m.err == nil}
@@ -343,6 +362,11 @@ func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 
 func (t *esIndexTab) Handle(a keymap.Action) tea.Cmd {
 	t.status = ""
+	if t.section == idxDocuments {
+		if cmd, ok := t.docs.handle(a); ok {
+			return cmd
+		}
+	}
 	switch a {
 	case keymap.NextSection:
 		return t.setSection(min(t.section+1, idxSections-1))
@@ -535,7 +559,20 @@ func (t *esIndexTab) View(focused bool) string {
 	}
 	switch t.section {
 	case idxDocuments:
-		lines = append(lines, theme.Muted.Render("loading…"))
+		d := t.docs
+		switch {
+		case d.err != "":
+			lines = append(lines, theme.Error.Render(textutil.Sanitize(d.err)))
+		case !d.loaded:
+			lines = append(lines, theme.Muted.Render("loading…"))
+		default:
+			lines = append(lines, theme.Muted.Render(textutil.Sanitize(d.header())))
+			if len(d.hits) == 0 {
+				lines = append(lines, theme.Muted.Render("no documents"))
+			} else {
+				g = d.grid
+			}
+		}
 	case idxMapping:
 		note(t.mapping, len(t.fields) == 0, "no fields", t.mapGrid)
 	case idxSettings:

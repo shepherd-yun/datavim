@@ -44,6 +44,7 @@ func DefaultBindings() []Binding {
 		{"s", "sql", "Export as SQL"},
 		{"x", "xlsx", "Export as xlsx"},
 		{"l", "jsonl", "Export messages as JSON Lines"},
+		{"n", "ndjson", "Export documents as NDJSON"},
 	} {
 		b = append(b, Binding{Global, keys(LeaderToken, "x", e.key), ExportAs(e.format), e.desc})
 	}

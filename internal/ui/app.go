@@ -479,6 +479,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if r := orphanReader(msg); r != nil {
 			return m, func() tea.Msg { _ = r.Close(); return nil }
 		}
+		if c := orphanCursor(msg); c != nil {
+			return m, func() tea.Msg { releaseCursor(c); return nil }
+		}
 	}
 	return m, nil
 }
@@ -653,7 +656,7 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	case keymap.FullScreen, keymap.ExitFullScreen:
 		m.full = a == keymap.FullScreen
 		m.layout()
-	case keymap.YankCell, keymap.YankRow:
+	case keymap.YankCell, keymap.YankRow, keymap.YankID, keymap.YankSource, keymap.YankRequest, keymap.YankCurl:
 		return m.yank(a)
 	case keymap.GlobalSearch:
 		return m.openSearch()

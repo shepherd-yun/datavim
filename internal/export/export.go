@@ -23,6 +23,8 @@ const (
 	// JSONL is one JSON object per line. A row whose only column is a
 	// JSON-typed object is written as that object (a Kafka message).
 	JSONL Format = "jsonl"
+	// NDJSON is JSONL under the name Elasticsearch uses: one document per line.
+	NDJSON Format = "ndjson"
 )
 
 // Label is the human name shown in messages.
@@ -42,6 +44,8 @@ func (f Format) Label() string {
 		return "Excel"
 	case JSONL:
 		return "JSON Lines"
+	case NDJSON:
+		return "NDJSON"
 	}
 	return string(f)
 }
@@ -75,7 +79,7 @@ func New(f Format, w io.Writer, o Options) (Writer, error) {
 		return newInsert(w, o), nil
 	case XLSX:
 		return newXLSX(w)
-	case JSONL:
+	case JSONL, NDJSON:
 		return newJSONL(w), nil
 	}
 	return nil, fmt.Errorf("unknown export format %q", f)

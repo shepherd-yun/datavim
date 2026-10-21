@@ -51,8 +51,9 @@ type exportSrc struct {
 	wholeLabel string // the scope choice's second option, e.g. "Whole key (12,345 fields)"
 	escaped    int    // cells of rs written escaped, for the status
 	note       string // added to the status, e.g. " · includes unsaved changes"
-	// jsonl, when set, is what JSON Lines exports instead of rs (Kafka
-	// messages in full rather than their previews).
+	// jsonl, when set, is what JSON Lines and NDJSON export instead of rs
+	// (Kafka messages, Elasticsearch documents: in full rather than their
+	// previews).
 	jsonl *db.ResultSet
 }
 
@@ -263,7 +264,7 @@ func exportCmd(b Backend, src exportSrc, f export.Format, whole bool, path strin
 		}
 		if !whole {
 			rs := src.rs
-			if f == export.JSONL && src.jsonl != nil {
+			if (f == export.JSONL || f == export.NDJSON) && src.jsonl != nil {
 				rs = src.jsonl
 			}
 			err := export.ToFile(path, f, src.opts, func(w export.Writer) error { return export.WriteRows(w, rs) })

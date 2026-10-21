@@ -133,3 +133,16 @@ func TestJSONL(t *testing.T) {
 		t.Fatal(JSONL.Label())
 	}
 }
+
+func TestNDJSON(t *testing.T) {
+	docs := &db.ResultSet{
+		Columns: []db.ColumnInfo{{Name: "document", DatabaseType: "JSON"}},
+		Rows:    [][]db.Value{{{Text: `{"_index":"o","_id":"1","_source":{"a":1}}`}}},
+	}
+	if got, err := Encode(NDJSON, docs, Options{}); err != nil || got != "{\"_index\":\"o\",\"_id\":\"1\",\"_source\":{\"a\":1}}\n" {
+		t.Fatalf("got %q, %v", got, err)
+	}
+	if NDJSON.Label() != "NDJSON" {
+		t.Fatal(NDJSON.Label())
+	}
+}

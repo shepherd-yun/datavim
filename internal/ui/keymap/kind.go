@@ -21,6 +21,7 @@ var (
 	sql          = []Kind{KindSQL}
 	redis        = []Kind{KindRedis}
 	kafka        = []Kind{KindKafka}
+	es           = []Kind{KindES}
 	redisES      = []Kind{KindRedis, KindES}
 	kafkaES      = []Kind{KindKafka, KindES}
 	redisKafkaES = []Kind{KindRedis, KindKafka, KindES}
@@ -32,15 +33,16 @@ var (
 // kinds marks, per context, the actions that belong to some kinds only.
 var kinds = map[Context]map[Action][]Kind{
 	Global: {
-		OpenStructure:     sql,
-		OpenFullStructure: sql,
-		CopyDDL:           sql,
-		ToggleTx:          sql,
-		CopyAs("sql"):     sql,
-		ExportAs("sql"):   sql,
-		ExportAs("jsonl"): kafka,
-		OpenKey:           redisES,
-		Favorites:         redis,
+		OpenStructure:      sql,
+		OpenFullStructure:  sql,
+		CopyDDL:            sql,
+		ToggleTx:           sql,
+		CopyAs("sql"):      sql,
+		ExportAs("sql"):    sql,
+		ExportAs("jsonl"):  kafka,
+		ExportAs("ndjson"): es,
+		OpenKey:            redisES,
+		Favorites:          redis,
 	},
 	Tree: {
 		TruncateTable:  sql,
