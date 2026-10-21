@@ -111,6 +111,7 @@ type esIndexTab struct {
 	mapping     esPart
 
 	settingList []es.Setting
+	setEdits    []settingEdit // staged in the Settings section, in order
 	aliases     []es.Alias
 	stats       []es.IndexStats
 	parts       [idxSections]esPart
@@ -135,7 +136,7 @@ func newESIndexTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, co
 		aliasGrid: grid.New(nil, s.MaxColumnWidth), statsGrid: grid.New(nil, s.MaxColumnWidth),
 	}
 	t.ctx, t.cancel = context.WithCancel(context.Background())
-	t.setGrid.SetMarks(t.settingMark)
+	t.setGrid.SetMarks(t.settingsMark)
 	t.docs = newESDocs(t)
 	return t
 }
@@ -313,6 +314,9 @@ func (t *esIndexTab) loadSection(s indexSection) tea.Cmd {
 }
 
 func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
+	if cmd, ok := t.editUpdate(msg); ok {
+		return cmd
+	}
 	switch m := msg.(type) {
 	case esFilterMsg:
 		return t.docs.filtered(m.text)
@@ -389,10 +393,18 @@ func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 
 func (t *esIndexTab) Handle(a keymap.Action) tea.Cmd {
 	t.status = ""
-	if t.section == idxDocuments {
-		if cmd, ok := t.docs.handle(a); ok {
-			return cmd
-		}
+	var cmd tea.Cmd
+	ok := false
+	switch t.section {
+	case idxDocuments:
+		cmd, ok = t.docs.handle(a)
+	case idxAliases:
+		cmd, ok = t.handleAliases(a)
+	case idxSettings:
+		cmd, ok = t.handleSettings(a)
+	}
+	if ok {
+		return cmd
 	}
 	switch a {
 	case keymap.NextSection:
@@ -499,7 +511,7 @@ func (t *esIndexTab) settingsResult() *db.ResultSet {
 		if s.Default {
 			def = "default"
 		}
-		rows[i] = []string{s.Key, s.Value, def, kind}
+		rows[i] = []string{s.Key, t.settingValue(s), def, kind}
 	}
 	return textResult([]string{"setting", "value", "", "kind"}, rows)
 }

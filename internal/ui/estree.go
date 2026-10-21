@@ -437,6 +437,9 @@ func (m *Model) openESNode(n *tree.Node) tea.Cmd {
 }
 
 func (m *Model) esTreeAction(a keymap.Action, n *tree.Node) (tea.Cmd, bool) {
+	if cmd, ok := m.esTreeWrite(a, n); ok {
+		return cmd, true
+	}
 	st := m.esTrees[n.Conn]
 	switch a {
 	case keymap.ToggleInternal:

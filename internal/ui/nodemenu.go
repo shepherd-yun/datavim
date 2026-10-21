@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"strings"
+
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/datavim/internal/rcmd"
@@ -13,6 +15,7 @@ import (
 // menuItem is one entry of the tree's actions menu.
 type menuItem struct {
 	action keymap.Action
+	msg    tea.Msg // sent instead of action when set (an entry with no key)
 	desc   string
 	keys   string   // as bound in the keymap; empty when unbound
 	seq    []string // the keys as key events read; nil when unbound
@@ -22,6 +25,7 @@ type menuItem struct {
 type menuEntry struct {
 	a    keymap.Action
 	desc string
+	msg  tea.Msg // an entry without an action of its own
 }
 
 // menuPickedMsg runs the action picked in the actions menu.
@@ -34,89 +38,89 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 	switch n.Kind {
 	case tree.KindRedisDB:
 		entries = []entry{
-			{keymap.OpenConsole, "Open console"},
-			{keymap.NewKey, "New key"},
-			{keymap.OpenKey, "Open key by name…"},
+			{a: keymap.OpenConsole, desc: "Open console"},
+			{a: keymap.NewKey, desc: "New key"},
+			{a: keymap.OpenKey, desc: "Open key by name…"},
 		}
 		entries = append(entries, m.redisFilterEntries(n)...)
 		entries = append(entries,
-			entry{keymap.BigKeys, "Analyze big keys…"},
-			entry{keymap.Favorites, "Starred keys"},
-			entry{keymap.ServerInfo, "Server status"},
-			entry{keymap.Refresh, "Refresh"},
-			entry{keymap.DeleteNode, "Delete keys…"},
+			entry{a: keymap.BigKeys, desc: "Analyze big keys…"},
+			entry{a: keymap.Favorites, desc: "Starred keys"},
+			entry{a: keymap.ServerInfo, desc: "Server status"},
+			entry{a: keymap.Refresh, desc: "Refresh"},
+			entry{a: keymap.DeleteNode, desc: "Delete keys…"},
 		)
 	case tree.KindKeyFolder:
 		entries = []entry{
-			{keymap.Open, "Expand / collapse"},
-			{keymap.OpenConsole, "Open console"},
-			{keymap.NewKey, "New key"},
-			{keymap.OpenKey, "Open key by name…"},
+			{a: keymap.Open, desc: "Expand / collapse"},
+			{a: keymap.OpenConsole, desc: "Open console"},
+			{a: keymap.NewKey, desc: "New key"},
+			{a: keymap.OpenKey, desc: "Open key by name…"},
 		}
 		entries = append(entries, m.redisFilterEntries(n)...)
 		entries = append(entries,
-			entry{keymap.BigKeys, "Analyze big keys…"},
-			entry{keymap.Favorites, "Starred keys"},
-			entry{keymap.ServerInfo, "Server status"},
-			entry{keymap.Refresh, "Refresh"},
-			entry{keymap.DeleteNode, "Delete keys under " + rcmd.Escape(n.Key) + "…"},
+			entry{a: keymap.BigKeys, desc: "Analyze big keys…"},
+			entry{a: keymap.Favorites, desc: "Starred keys"},
+			entry{a: keymap.ServerInfo, desc: "Server status"},
+			entry{a: keymap.Refresh, desc: "Refresh"},
+			entry{a: keymap.DeleteNode, desc: "Delete keys under " + rcmd.Escape(n.Key) + "…"},
 		)
 	case tree.KindRedisKey:
 		entries = []entry{
-			{keymap.Open, "Open"},
-			{keymap.ToggleFavorite, "Star / unstar"},
-			{keymap.RenameTable, "Rename key"},
-			{keymap.OpenConsole, "Open console"},
-			{keymap.NewKey, "New key"},
-			{keymap.OpenKey, "Open key by name…"},
+			{a: keymap.Open, desc: "Open"},
+			{a: keymap.ToggleFavorite, desc: "Star / unstar"},
+			{a: keymap.RenameTable, desc: "Rename key"},
+			{a: keymap.OpenConsole, desc: "Open console"},
+			{a: keymap.NewKey, desc: "New key"},
+			{a: keymap.OpenKey, desc: "Open key by name…"},
 		}
 		entries = append(entries, m.redisFilterEntries(n)...)
 		entries = append(entries,
-			entry{keymap.BigKeys, "Analyze big keys…"},
-			entry{keymap.Favorites, "Starred keys"},
-			entry{keymap.ServerInfo, "Server status"},
-			entry{keymap.Refresh, "Refresh"},
-			entry{keymap.DeleteNode, "Delete key"},
+			entry{a: keymap.BigKeys, desc: "Analyze big keys…"},
+			entry{a: keymap.Favorites, desc: "Starred keys"},
+			entry{a: keymap.ServerInfo, desc: "Server status"},
+			entry{a: keymap.Refresh, desc: "Refresh"},
+			entry{a: keymap.DeleteNode, desc: "Delete key"},
 		)
 	case tree.KindMore:
 		if k, ok := redisKeyOf(n); ok {
 			if sc := m.scans[k]; sc != nil && !sc.running && !sc.capped && !sc.done {
-				entries = append(entries, entry{keymap.Open, "Load more keys"})
+				entries = append(entries, entry{a: keymap.Open, desc: "Load more keys"})
 			}
 		}
 		entries = append(entries, m.redisFilterEntries(n)...)
-		entries = append(entries, entry{keymap.Refresh, "Refresh"})
+		entries = append(entries, entry{a: keymap.Refresh, desc: "Refresh"})
 	case tree.KindConn:
 		entries = []entry{
-			{keymap.OpenConsole, "Open console"},
-			{keymap.EditNode, "Edit connection"},
-			{keymap.Password, "Enter password"},
-			{keymap.Refresh, "Refresh"},
-			{keymap.DeleteNode, "Delete connection"},
+			{a: keymap.OpenConsole, desc: "Open console"},
+			{a: keymap.EditNode, desc: "Edit connection"},
+			{a: keymap.Password, desc: "Enter password"},
+			{a: keymap.Refresh, desc: "Refresh"},
+			{a: keymap.DeleteNode, desc: "Delete connection"},
 		}
 		switch {
 		case isRedis(m.backend, n.Conn):
 			entries = append(entries[:1], append([]entry{
-				{keymap.ServerInfo, "Server status"},
-				{keymap.OpenKey, "Open key by name…"},
-				{keymap.Favorites, "Starred keys"},
+				{a: keymap.ServerInfo, desc: "Server status"},
+				{a: keymap.OpenKey, desc: "Open key by name…"},
+				{a: keymap.Favorites, desc: "Starred keys"},
 			}, entries[1:]...)...)
 		case isES(m.backend, n.Conn):
 			entries = append([]entry{
-				{keymap.OpenConsole, "REST console"},
-				{keymap.OpenKey, "Open document by _id…"},
-				{keymap.ServerInfo, "Cluster status"},
-				{keymap.ToggleInternal, "Show / hide system indices"},
-				{keymap.SortGroups, "Sort indices: name / docs / size"},
+				{a: keymap.OpenConsole, desc: "REST console"},
+				{a: keymap.OpenKey, desc: "Open document by _id…"},
+				{a: keymap.ServerInfo, desc: "Cluster status"},
+				{a: keymap.ToggleInternal, desc: "Show / hide system indices"},
+				{a: keymap.SortGroups, desc: "Sort indices: name / docs / size"},
 			}, entries[1:]...)
 		case isKafka(m.backend, n.Conn):
 			entries = append([]entry{
-				{keymap.ServerInfo, "Cluster status"},
-				{keymap.ToggleInternal, "Show / hide internal topics"},
-				{keymap.SortGroups, "Sort consumer groups: by lag / by name"},
+				{a: keymap.ServerInfo, desc: "Cluster status"},
+				{a: keymap.ToggleInternal, desc: "Show / hide internal topics"},
+				{a: keymap.SortGroups, desc: "Sort consumer groups: by lag / by name"},
 			}, entries[1:]...)
 		default:
-			entries = append(entries[:1], append([]entry{{keymap.ServerInfo, "Server status"}}, entries[1:]...)...)
+			entries = append(entries[:1], append([]entry{{a: keymap.ServerInfo, desc: "Server status"}}, entries[1:]...)...)
 		}
 	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker,
 		tree.KindSchemaSubject, tree.KindSchemaVersion, tree.KindKafkaACLs, tree.KindConnectCluster, tree.KindConnector:
@@ -125,15 +129,15 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 		entries = esMenu(n)
 	case tree.KindDatabase, tree.KindSchema:
 		entries = []entry{
-			{keymap.OpenConsole, "Open console"},
-			{keymap.ServerInfo, "Server status"},
-			{keymap.Refresh, "Refresh"},
+			{a: keymap.OpenConsole, desc: "Open console"},
+			{a: keymap.ServerInfo, desc: "Server status"},
+			{a: keymap.Refresh, desc: "Refresh"},
 		}
 		if cfg, _ := m.backend.Connection(n.Conn); n.Kind == tree.KindSchema || !sqlx.DialectOf(cfg.Driver).Features().Schemas {
-			entries = append(entries, entry{keymap.ImportData, "Create table from file…"})
+			entries = append(entries, entry{a: keymap.ImportData, desc: "Create table from file…"})
 		}
 		if _, problem := m.compareSideOf(n); problem == "" {
-			entries = append(entries, entry{keymap.MarkCompare, "Mark for compare"}, entry{keymap.Compare, "Compare with the marked one"})
+			entries = append(entries, entry{a: keymap.MarkCompare, desc: "Mark for compare"}, entry{a: keymap.Compare, desc: "Compare with the marked one"})
 		}
 	case tree.KindTable, tree.KindView:
 		obj := "table"
@@ -141,52 +145,56 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 			obj = "view"
 		}
 		entries = []entry{
-			{keymap.Open, "Open data"},
-			{keymap.OpenStructure, "Columns"},
-			{keymap.OpenFullStructure, "Open structure"},
+			{a: keymap.Open, desc: "Open data"},
+			{a: keymap.OpenStructure, desc: "Columns"},
+			{a: keymap.OpenFullStructure, desc: "Open structure"},
 		}
 		if n.Kind == tree.KindTable {
-			entries = append(entries, entry{keymap.EditNode, "Modify table"})
-			entries = append(entries, entry{keymap.ImportData, "Import data from file…"})
+			entries = append(entries, entry{a: keymap.EditNode, desc: "Modify table"})
+			entries = append(entries, entry{a: keymap.ImportData, desc: "Import data from file…"})
 		}
 		entries = append(entries,
-			entry{keymap.CopyDDL, "Copy DDL"},
-			entry{keymap.OpenConsole, "Open console"},
-			entry{keymap.RenameTable, "Rename " + obj},
+			entry{a: keymap.CopyDDL, desc: "Copy DDL"},
+			entry{a: keymap.OpenConsole, desc: "Open console"},
+			entry{a: keymap.RenameTable, desc: "Rename " + obj},
 		)
 
 		if n.Kind == tree.KindTable {
 			entries = append(entries,
-				entry{keymap.MarkCompare, "Mark for compare"},
-				entry{keymap.Compare, "Compare with the marked one"},
-				entry{keymap.TruncateTable, "Truncate table"},
+				entry{a: keymap.MarkCompare, desc: "Mark for compare"},
+				entry{a: keymap.Compare, desc: "Compare with the marked one"},
+				entry{a: keymap.TruncateTable, desc: "Truncate table"},
 			)
 		}
-		entries = append(entries, entry{keymap.DeleteNode, "Drop " + obj})
+		entries = append(entries, entry{a: keymap.DeleteNode, desc: "Drop " + obj})
 	case tree.KindGroup:
-		entries = []entry{{keymap.Open, "Expand / collapse"}, {keymap.Refresh, "Refresh"}}
+		entries = []entry{{a: keymap.Open, desc: "Expand / collapse"}, {a: keymap.Refresh, desc: "Refresh"}}
 		if n.Table().Kind == tree.KindTable {
-			entries = append(entries, entry{keymap.EditNode, "Modify table"})
+			entries = append(entries, entry{a: keymap.EditNode, desc: "Modify table"})
 		}
 	case tree.KindColumn, tree.KindKey, tree.KindIndex:
 		obj := map[tree.Kind]string{tree.KindColumn: "column", tree.KindKey: "key", tree.KindIndex: "index"}[n.Kind]
-		entries = []entry{{keymap.Open, "Show in structure"}}
+		entries = []entry{{a: keymap.Open, desc: "Show in structure"}}
 		if n.Table().Kind == tree.KindTable {
-			entries = append(entries, entry{keymap.EditNode, "Modify " + obj}, entry{keymap.DeleteNode, "Drop " + obj})
+			entries = append(entries, entry{a: keymap.EditNode, desc: "Modify " + obj}, entry{a: keymap.DeleteNode, desc: "Drop " + obj})
 		}
-		entries = append(entries, entry{keymap.Refresh, "Refresh"})
+		entries = append(entries, entry{a: keymap.Refresh, desc: "Refresh"})
 	case tree.KindForeignKey:
-		entries = []entry{{keymap.Open, "Go to " + n.Ref.Name}, {keymap.Refresh, "Refresh"}}
+		entries = []entry{{a: keymap.Open, desc: "Go to " + n.Ref.Name}, {a: keymap.Refresh, desc: "Refresh"}}
 	}
 	if n.Kind != tree.KindMore {
-		entries = append(entries, entry{keymap.YankName, "Copy name"})
+		entries = append(entries, entry{a: keymap.YankName, desc: "Copy name"})
 	}
 	if n.Kind != tree.KindConn && !isRedisNode(n) {
-		entries = append(entries, entry{keymap.YankQualified, "Copy qualified name"})
+		entries = append(entries, entry{a: keymap.YankQualified, desc: "Copy qualified name"})
 	}
 	items := make([]menuItem, len(entries))
 	for i, e := range entries {
 		seq := m.keys.SeqFor(keymap.Tree, e.a)
+		if e.msg != nil {
+			items[i] = menuItem{msg: e.msg, desc: e.desc}
+			continue
+		}
 		items[i] = menuItem{action: e.a, desc: e.desc, keys: m.keys.Display(seq), seq: seq}
 	}
 	return items
@@ -195,10 +203,10 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 // redisFilterEntries are the key filter's entries for a node of a redis db:
 // clearing it only while one is set.
 func (m *Model) redisFilterEntries(n *tree.Node) []menuEntry {
-	out := []menuEntry{{keymap.FilterPrompt, "Filter keys…"}}
+	out := []menuEntry{{a: keymap.FilterPrompt, desc: "Filter keys…"}}
 	if k, ok := redisKeyOf(n); ok {
 		if s := m.scans[k]; s != nil && s.pattern != "" {
-			out = append(out, menuEntry{keymap.FilterClear, "Clear the filter (" + rcmd.Escape(s.pattern) + ")"})
+			out = append(out, menuEntry{a: keymap.FilterClear, desc: "Clear the filter (" + rcmd.Escape(s.pattern) + ")"})
 		}
 	}
 	return out
@@ -217,6 +225,9 @@ func (m *Model) openNodeMenu() {
 		entries[i] = overlay.MenuItem{Keys: it.seq, Label: it.keys, Desc: it.desc}
 	}
 	m.overlay = overlay.NewMenu(n.Name, entries, func(i int) tea.Msg {
+		if items[i].msg != nil {
+			return items[i].msg
+		}
 		return menuPickedMsg{action: items[i].action}
 	})
 }
@@ -226,38 +237,38 @@ func kafkaMenu(n *tree.Node) []menuEntry {
 	var entries []menuEntry
 	switch n.Kind {
 	case tree.KindTopic:
-		entries = append(entries, menuEntry{keymap.Open, "Open topic"}, menuEntry{keymap.OpenConsole, "Producer console"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open topic"}, menuEntry{a: keymap.OpenConsole, desc: "Producer console"})
 	case tree.KindKafkaGroup:
-		entries = append(entries, menuEntry{keymap.Open, "Open group"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open group"})
 	case tree.KindTopicFolder:
-		entries = append(entries, menuEntry{keymap.Open, "Expand / collapse"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Expand / collapse"})
 	case tree.KindSchemaSubject:
-		entries = append(entries, menuEntry{keymap.Open, "Open subject"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open subject"})
 	case tree.KindSchemaVersion:
-		entries = append(entries, menuEntry{keymap.Open, "Open this version"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open this version"})
 	case tree.KindKafkaACLs:
-		entries = append(entries, menuEntry{keymap.Open, "Open the ACLs"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open the ACLs"})
 	case tree.KindConnector:
-		entries = append(entries, menuEntry{keymap.Open, "Open connector"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open connector"})
 	}
 	switch n.Section {
 	case secTopics:
-		entries = append(entries, menuEntry{keymap.NewKey, "New topic…"}, menuEntry{keymap.FilterPrompt, "Filter topics…"},
-			menuEntry{keymap.FilterClear, "Clear the topic filter"}, menuEntry{keymap.ToggleInternal, "Show / hide internal topics"})
+		entries = append(entries, menuEntry{a: keymap.NewKey, desc: "New topic…"}, menuEntry{a: keymap.FilterPrompt, desc: "Filter topics…"},
+			menuEntry{a: keymap.FilterClear, desc: "Clear the topic filter"}, menuEntry{a: keymap.ToggleInternal, desc: "Show / hide internal topics"})
 	case secGroups:
-		entries = append(entries, menuEntry{keymap.FilterPrompt, "Filter groups…"}, menuEntry{keymap.FilterClear, "Clear the group filter"},
-			menuEntry{keymap.SortGroups, "Sort: by lag / by name"})
+		entries = append(entries, menuEntry{a: keymap.FilterPrompt, desc: "Filter groups…"}, menuEntry{a: keymap.FilterClear, desc: "Clear the group filter"},
+			menuEntry{a: keymap.SortGroups, desc: "Sort: by lag / by name"})
 	case secSchemas:
-		entries = append(entries, menuEntry{keymap.FilterPrompt, "Filter subjects…"}, menuEntry{keymap.FilterClear, "Clear the subject filter"})
+		entries = append(entries, menuEntry{a: keymap.FilterPrompt, desc: "Filter subjects…"}, menuEntry{a: keymap.FilterClear, desc: "Clear the subject filter"})
 	}
-	entries = append(entries, menuEntry{keymap.ServerInfo, "Cluster status"}, menuEntry{keymap.Refresh, "Refresh"})
+	entries = append(entries, menuEntry{a: keymap.ServerInfo, desc: "Cluster status"}, menuEntry{a: keymap.Refresh, desc: "Refresh"})
 	switch n.Kind {
 	case tree.KindTopic:
-		entries = append(entries, menuEntry{keymap.DeleteNode, "Delete topic…"})
+		entries = append(entries, menuEntry{a: keymap.DeleteNode, desc: "Delete topic…"})
 	case tree.KindKafkaGroup:
-		entries = append(entries, menuEntry{keymap.DeleteNode, "Delete group…"})
+		entries = append(entries, menuEntry{a: keymap.DeleteNode, desc: "Delete group…"})
 	case tree.KindSchemaVersion:
-		entries = append(entries, menuEntry{keymap.DeleteNode, "Soft-delete version…"})
+		entries = append(entries, menuEntry{a: keymap.DeleteNode, desc: "Soft-delete version…"})
 	}
 	return entries
 }
@@ -267,19 +278,23 @@ func esMenu(n *tree.Node) []menuEntry {
 	var entries []menuEntry
 	switch n.Kind {
 	case tree.KindESIndex:
-		entries = append(entries, menuEntry{keymap.Open, "Open index"}, menuEntry{keymap.OpenKey, "Open document by _id…"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open index"}, menuEntry{a: keymap.OpenKey, desc: "Open document by _id…"})
+		entries = append(entries, esIndexMenu(n.Conn, n.Key, strings.Contains(n.Detail, "[closed]"))...)
+		entries = append(entries, menuEntry{a: keymap.DeleteNode, desc: "Delete index…"})
 	case tree.KindESAlias:
-		entries = append(entries, menuEntry{keymap.Open, "Open alias"}, menuEntry{keymap.OpenKey, "Open document by _id…"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open alias"}, menuEntry{a: keymap.OpenKey, desc: "Open document by _id…"})
 	case tree.KindDataStream:
-		entries = append(entries, menuEntry{keymap.Open, "Open data stream"}, menuEntry{keymap.OpenKey, "Open document by _id…"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open data stream"}, menuEntry{a: keymap.OpenKey, desc: "Open document by _id…"})
 	case tree.KindIndexFolder:
-		entries = append(entries, menuEntry{keymap.Open, "Expand / collapse"})
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Expand / collapse"},
+			menuEntry{desc: "Open " + n.Key + "* as one tab", msg: openIndexMsg{conn: n.Conn, target: n.Key + "*", kind: targetPattern}},
+			menuEntry{a: keymap.DeleteNode, desc: "Delete these indices…"})
 	}
 	if n.Section == esSecIndices {
-		entries = append(entries, menuEntry{keymap.FilterPrompt, "Filter indices…"}, menuEntry{keymap.FilterClear, "Clear the index filter"},
-			menuEntry{keymap.ToggleInternal, "Show / hide system indices"}, menuEntry{keymap.SortGroups, "Sort: name / docs / size"})
+		entries = append(entries, menuEntry{a: keymap.NewKey, desc: "New index…"}, menuEntry{a: keymap.FilterPrompt, desc: "Filter indices…"}, menuEntry{a: keymap.FilterClear, desc: "Clear the index filter"},
+			menuEntry{a: keymap.ToggleInternal, desc: "Show / hide system indices"}, menuEntry{a: keymap.SortGroups, desc: "Sort: name / docs / size"})
 	}
-	return append(entries, menuEntry{keymap.OpenConsole, "REST console"}, menuEntry{keymap.ServerInfo, "Cluster status"}, menuEntry{keymap.Refresh, "Refresh"})
+	return append(entries, menuEntry{a: keymap.OpenConsole, desc: "REST console"}, menuEntry{a: keymap.ServerInfo, desc: "Cluster status"}, menuEntry{a: keymap.Refresh, desc: "Refresh"})
 }
 
 // isESNode reports whether n is a node under an elasticsearch connection.

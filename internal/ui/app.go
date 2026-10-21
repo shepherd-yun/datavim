@@ -117,6 +117,7 @@ type Model struct {
 	scans       map[redisDBKey]*keyScan // the key scans behind the redis db nodes
 	kafkaTrees  map[string]*kafkaTree   // what the kafka connections' trees are built from
 	esTrees     map[string]*esTree      // what the elasticsearch connections' trees are built from
+	esFormConn  string                  // the connection the new-index form is for
 	// topicFormConn is the connection the open new-topic form adds to.
 	topicFormConn string
 	// aclFormTab is the ACL tab the open new-ACL form adds to.
@@ -250,6 +251,18 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.openIndex(msg.conn, msg.target, msg.kind)
 	case esOpenIDMsg:
 		return m, m.lookUpID(msg)
+	case esIndexOpMsg:
+		return m, m.esIndexOp(msg)
+	case esForceMergeMsg:
+		return m, m.esForceMerge(msg)
+	case esDeletePlanMsg:
+		return m, m.esDeletePlanned(msg)
+	case esIndexRunMsg:
+		return m, m.esIndexRun(msg)
+	case esIndexDoneMsg:
+		return m, m.esIndexDone(msg)
+	case overlay.IndexFormMsg:
+		return m, m.esIndexFormed(msg)
 	case esIDFoundMsg:
 		return m, m.idFound(msg)
 	case openTopicAtMsg:
