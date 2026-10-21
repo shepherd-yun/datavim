@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.2.0] - 2026-10-22
+
 ### Added
 - Elasticsearch connections (`driver = "elasticsearch"`, Elasticsearch 7.10 to 9.x, OpenSearch 1.x / 2.x):
   node URLs (no sniffing; the next address is tried when one cannot be reached), Basic auth or an API
@@ -638,7 +640,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.1.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.2.0...HEAD
+[3.2.0]: https://github.com/shepherd-yun/datavim/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/shepherd-yun/datavim/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/shepherd-yun/datavim/compare/v2.4.0...v3.0.0
 [2.4.0]: https://github.com/shepherd-yun/datavim/compare/v2.3.0...v2.4.0
