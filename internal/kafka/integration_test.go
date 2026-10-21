@@ -171,9 +171,7 @@ func coreSuite(t *testing.T, cfg Config, kip848 bool) {
 		t.Fatalf("cluster = %+v, %v", info, err)
 	}
 	t.Logf("version guess %q", info.Version)
-	if err := cl.CreateTopic(ctx, NewTopic{Name: "orders", Partitions: 3, Replication: -1}); err != nil {
-		t.Fatal(err)
-	}
+	createTopic(t, cl, NewTopic{Name: "orders", Partitions: 3, Replication: -1})
 	topics, err := cl.Topics(ctx)
 	if err != nil || !slices.ContainsFunc(topics, func(tp Topic) bool { return tp.Name == "orders" && tp.Partitions == 3 }) {
 		t.Fatalf("topics = %+v, %v", topics, err)
@@ -293,6 +291,26 @@ func coreSuite(t *testing.T, cfg Config, kip848 bool) {
 	}
 }
 
+// createTopic creates nt and waits until the cluster serves it: KRaft
+// brokers answer "doesn't exist" for a moment after CreateTopics returns.
+func createTopic(t *testing.T, cl Client, nt NewTopic) {
+	t.Helper()
+	if err := cl.CreateTopic(ictx(t), nt); err != nil {
+		t.Fatal(err)
+	}
+	var err error
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(200 * time.Millisecond) {
+		if _, err = cl.TopicDetail(ictx(t), nt.Name); err == nil {
+			if _, err = cl.TopicConfigs(ictx(t), nt.Name); err == nil {
+				return
+			}
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("topic %s after create: %v", nt.Name, err)
+		}
+	}
+}
+
 // alterConfig sets name (or, delete, removes its override) from what it is now.
 func alterConfig(t *testing.T, cl Client, topic, name, value string, del bool) {
 	t.Helper()
@@ -312,9 +330,7 @@ func k2Suite(t *testing.T, cfg Config) {
 	}
 	defer cl.Close()
 	ctx := ictx(t)
-	if err := cl.CreateTopic(ctx, NewTopic{Name: "k2", Partitions: 3, Replication: -1}); err != nil {
-		t.Fatal(err)
-	}
+	createTopic(t, cl, NewTopic{Name: "k2", Partitions: 3, Replication: -1})
 
 	// configs: changing one leaves the other override alone; delete goes back to the default
 	alterConfig(t, cl, "k2", "retention.ms", "3600000", false)
@@ -406,9 +422,7 @@ func k2Suite(t *testing.T, cfg Config) {
 	kcl.Close()
 	// offsets on a second topic keep the group alive once those on k2 are
 	// gone (Kafka 3 and Redpanda drop an Empty group without offsets)
-	if err := cl.CreateTopic(ctx, NewTopic{Name: "k2-tx", Partitions: 1, Replication: -1}); err != nil {
-		t.Fatal(err)
-	}
+	createTopic(t, cl, NewTopic{Name: "k2-tx", Partitions: 1, Replication: -1})
 	akcl, err := kgo.NewClient(kgo.SeedBrokers(cfg.Brokers...))
 	if err != nil {
 		t.Fatal(err)
