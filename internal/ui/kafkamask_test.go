@@ -233,3 +233,16 @@ func TestMaskWholeWireValue(t *testing.T) {
 		}
 	}
 }
+
+// TestMaskFromGroup: the topic tab gd opens from a group masks too.
+func TestMaskFromGroup(t *testing.T) {
+	m, _, _ := maskModel(t, config.Connection{})
+	drainAll(t, m, m.openTopicAt("events", "orders", kmsgx.Position{}, "billing"))
+	tt, ok := m.activeTab().(*topicTab)
+	if !ok {
+		t.Fatalf("active tab = %T", m.activeTab())
+	}
+	if v, _ := valuePreview(t, tt, 1); leaks(v) || !strings.Contains(tt.msgsHeader(), "masked") {
+		t.Fatalf("VALUE = %q, header %q", v, tt.msgsHeader())
+	}
+}

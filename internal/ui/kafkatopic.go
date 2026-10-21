@@ -125,11 +125,15 @@ func newTopicTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, conn
 // openTopic opens (or shows) the tab of topic on conn.
 func (m *Model) openTopic(conn, topic string) tea.Cmd {
 	rec := history.Recent{Kind: history.RecentKafkaTopic, Conn: conn, Name: topic}
-	return m.openTab(topicTabKey(conn, topic), rec, func(id int) tab {
-		t := newTopicTab(id, m.backend, m.keys, m.settings, conn, topic)
-		t.msgs.masker = m.maskerFor(conn, topic)
-		return t
-	})
+	return m.openTab(topicTabKey(conn, topic), rec, func(id int) tab { return m.newTopicTab(id, conn, topic) })
+}
+
+// newTopicTab is a topic tab with the connection's [[mask]] rules: every
+// topic tab the model opens is made here.
+func (m *Model) newTopicTab(id int, conn, topic string) *topicTab {
+	t := newTopicTab(id, m.backend, m.keys, m.settings, conn, topic)
+	t.msgs.masker = m.maskerFor(conn, topic)
+	return t
 }
 
 func (t *topicTab) ID() int       { return t.id }

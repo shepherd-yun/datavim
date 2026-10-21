@@ -398,7 +398,7 @@ func (m *Model) openTopicAt(conn, topic string, pos kmsgx.Position, from string)
 	}
 	rec := history.Recent{Kind: history.RecentKafkaTopic, Conn: conn, Name: topic}
 	return m.openTab(key, rec, func(id int) tab {
-		t := newTopicTab(id, m.backend, m.keys, m.settings, conn, topic)
+		t := m.newTopicTab(id, conn, topic)
 		t.msgs.pos, t.msgs.from = pos, from
 		return t
 	})
