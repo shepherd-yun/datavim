@@ -484,6 +484,25 @@ func TestRegistryPasswordAsked(t *testing.T) {
 	}
 }
 
+// TestRegistryURLPasswordNotAsked: a refused password that is written in
+// schema_registry_url is an error to fix there, not a prompt (an answer
+// would never be used).
+func TestRegistryURLPasswordNotAsked(t *testing.T) {
+	m, reg, _, _ := setupRegistry(config.Connection{Params: map[string]string{
+		"schema_registry_user": "sr-user", "schema_registry_url": "http://u:pw@sr:8081",
+	}})
+	r, err := m.SchemaRegistry(context.Background(), "k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	reg.authErr = true
+	_, err = r.Subjects(context.Background())
+	var se *SecretRequiredError
+	if errors.As(err, &se) || !errors.Is(err, kafka.ErrRegistryAuth) {
+		t.Fatalf("err = %v, want ErrRegistryAuth without a prompt", err)
+	}
+}
+
 func TestRegistryCached(t *testing.T) {
 	m, _, cfgs, _ := setupRegistry(config.Connection{})
 	for range 2 {

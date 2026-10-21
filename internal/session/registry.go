@@ -31,8 +31,8 @@ func (r *guardedRegistry) fail(err error) error {
 		return err
 	}
 	cfg, ok := r.g.m.Connection(r.g.name)
-	if !ok || cfg.Params["schema_registry_user"] == "" {
-		return err
+	if !ok || cfg.Params["schema_registry_user"] == "" || urlHasPassword(cfg.Params["schema_registry_url"]) {
+		return err // nothing to ask: the password is written in the URL
 	}
 	m := r.g.m
 	m.mu.Lock()
