@@ -46,3 +46,29 @@ func TestCellText(t *testing.T) {
 		}
 	}
 }
+
+func TestSetPath(t *testing.T) {
+	cases := []struct {
+		src, path, v, want string
+	}{
+		{`{"z":1,"user":{"name":"a","age":3},"b":2}`, "user.name", `"x"`, `{"z":1,"user":{"name":"x","age":3},"b":2}`},
+		{`{"a.b":1,"c":2}`, "a.b", `2`, `{"a.b":2,"c":2}`},
+		{`{"a.b":1,"a":{"b":5}}`, "a.b", `2`, `{"a.b":2,"a":{"b":5}}`},
+		{`{"c":1}`, "a.b.c", `true`, `{"c":1,"a":{"b":{"c":true}}}`},
+		{`{"a":{"x":1}}`, "a.b", `null`, `{"a":{"x":1,"b":null}}`},
+		{`{"a":{"x":1}}`, "a", `{"y":2}`, `{"a":{"y":2}}`},
+		{`{"a":1.50,"b":"中"}`, "c", `3`, `{"a":1.50,"b":"中","c":3}`},
+	}
+	for _, tc := range cases {
+		got, err := SetPath([]byte(tc.src), tc.path, []byte(tc.v))
+		if err != nil || string(got) != tc.want {
+			t.Errorf("SetPath(%s, %s) = %s, %v; want %s", tc.src, tc.path, got, err, tc.want)
+		}
+	}
+	if _, err := SetPath([]byte(`{"a":[1]}`), "a.b", []byte("1")); err == nil {
+		t.Error("set inside an array: no error")
+	}
+	if _, err := SetPath([]byte(`{"a":1}`), "a.b", []byte("1")); err == nil {
+		t.Error("set below a scalar: no error")
+	}
+}
