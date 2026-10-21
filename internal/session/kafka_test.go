@@ -85,7 +85,7 @@ type fakeKafkaOpener struct {
 	clients    []*fakeKafkaClient
 	readers    int
 	authFailed bool
-	err        error // returned by the next opens when set
+	err        error  // returned by the next opens when set
 	during     func() // runs inside the next open, once
 }
 
