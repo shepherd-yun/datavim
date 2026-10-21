@@ -565,7 +565,7 @@ func TestNormalizeRedis(t *testing.T) {
 			t.Errorf("Database %q: err = %v", bad, err)
 		}
 	}
-	if _, err := Normalize(Connection{Name: "x", Driver: "sqlite"}); err == nil || !strings.Contains(err.Error(), "redis or kafka") {
+	if _, err := Normalize(Connection{Name: "x", Driver: "sqlite"}); err == nil || !strings.Contains(err.Error(), "redis, kafka or elasticsearch") {
 		t.Errorf("unknown driver err = %v", err)
 	}
 }
@@ -836,5 +836,44 @@ func TestKafkaConnectClusters(t *testing.T) {
 	}
 	if _, err := Normalize(conn("ftp://c1")); err == nil || !strings.Contains(err.Error(), `connection "k": params.connect_url`) {
 		t.Fatalf("Normalize: %v", err)
+	}
+}
+
+func TestNormalizeES(t *testing.T) {
+	cases := []struct {
+		name   string
+		c      Connection
+		urls   []string
+		errHas string
+	}{
+		{"defaults", Connection{Name: "e", Driver: "elasticsearch"}, []string{"http://localhost:9200"}, ""},
+		{"list", Connection{Name: "e", Driver: "elasticsearch", Host: "10.0.0.1, https://es2:9243/"}, []string{"http://10.0.0.1:9200", "https://es2:9243"}, ""},
+		{"tls", Connection{Name: "e", Driver: "elasticsearch", Host: "es", Params: map[string]string{"tls": "true"}}, []string{"https://es:9200"}, ""},
+		{"path prefix", Connection{Name: "e", Driver: "elasticsearch", Params: map[string]string{"path_prefix": "es/"}}, []string{"http://localhost:9200/es"}, ""},
+		{"apikey", Connection{Name: "e", Driver: "elasticsearch", Params: map[string]string{"auth": "apikey"}}, []string{"http://localhost:9200"}, ""},
+		{"bad auth", Connection{Name: "e", Driver: "elasticsearch", Params: map[string]string{"auth": "oauth"}}, nil, `connection "e": elasticsearch auth "oauth" is not supported (want apikey or leave it empty)`},
+		{"bad page size", Connection{Name: "e", Driver: "elasticsearch", Params: map[string]string{"page_size": "0"}}, nil, "page_size"},
+		{"bad url", Connection{Name: "e", Driver: "elasticsearch", Host: "http://"}, nil, "url"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, err := Normalize(tc.c)
+			if tc.errHas != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.errHas) {
+					t.Fatalf("err = %v, want it to contain %q", err, tc.errHas)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.Port != 9200 {
+				t.Errorf("Port = %d", c.Port)
+			}
+			urls, err := ESURLs(c)
+			if err != nil || !slices.Equal(urls, tc.urls) {
+				t.Errorf("ESURLs = %v, %v; want %v", urls, err, tc.urls)
+			}
+		})
 	}
 }

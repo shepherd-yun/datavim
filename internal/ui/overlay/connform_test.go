@@ -217,7 +217,7 @@ func TestConnFormReadOnly(t *testing.T) {
 
 func TestConnFormOracleServiceLabel(t *testing.T) {
 	f := NewConnForm(keymap.Default())
-	o, msg := send(t, f, "o", "tab", "left", "left", "left", "tab") // driver: mysql -> oracle (before redis, kafka)
+	o, msg := send(t, f, "o", "tab", "left", "left", "left", "left", "tab") // driver: mysql -> oracle (before redis, kafka, elasticsearch)
 	if o == nil || msg != nil {
 		t.Fatal("form closed")
 	}
@@ -239,7 +239,7 @@ func TestConnFormOracleServiceLabel(t *testing.T) {
 
 func TestConnFormRedis(t *testing.T) {
 	f := NewConnForm(keymap.Default())
-	o, msg := send(t, f, "r", "tab", "left", "left", "tab") // driver: mysql -> redis (before kafka)
+	o, msg := send(t, f, "r", "tab", "left", "left", "left", "tab") // driver: mysql -> redis (before kafka, elasticsearch)
 	if o == nil || msg != nil {
 		t.Fatal("form closed")
 	}
@@ -259,7 +259,7 @@ func TestConnFormKafka(t *testing.T) {
 	if v := ansi.Strip(f.View(80, 30)); strings.Contains(v, "SASL") || strings.Contains(v, "Brokers") {
 		t.Fatalf("mysql shows the kafka fields:\n%s", v)
 	}
-	o, msg := send(t, f, "k", "tab", "left", "tab") // driver: mysql -> kafka (last)
+	o, msg := send(t, f, "k", "tab", "left", "left", "tab") // driver: mysql -> kafka (before elasticsearch)
 	if o == nil || msg != nil {
 		t.Fatal("form closed")
 	}
@@ -304,5 +304,39 @@ func TestConnFormKafka(t *testing.T) {
 	_, msg = send(t, f, "ctrl+s")
 	if p := msg.(ConnFormMsg).Conn.Params; p != nil {
 		t.Fatalf("mysql params = %v", p)
+	}
+}
+
+func TestConnFormES(t *testing.T) {
+	f := NewConnForm(keymap.Default())
+	o, msg := send(t, f, "e", "tab", "left", "tab") // driver: mysql -> elasticsearch (last)
+	if o == nil || msg != nil {
+		t.Fatal("form closed")
+	}
+	v := ansi.Strip(f.View(80, 30))
+	if !strings.Contains(v, "URLs") || strings.Contains(v, "Database") || strings.Contains(v, "SASL") ||
+		!strings.Contains(v, "TLS") || !strings.Contains(v, "Auth") {
+		t.Fatalf("elasticsearch form:\n%s", v)
+	}
+	// host, port, user, password -> TLS (Database is hidden)
+	_, msg = send(t, f, "tab", "tab", "tab", "tab",
+		"left", "tab", // TLS: off -> on, skip verify (last)
+		"right", // Auth: basic -> api key
+		"ctrl+s")
+	c := msg.(ConnFormMsg).Conn
+	want := map[string]string{"tls": "true", "tls_skip_verify": "true", "auth": "apikey"}
+	if c.Driver != "elasticsearch" || c.Port != 9200 || !maps.Equal(c.Params, want) {
+		t.Fatalf("conn = %+v", c)
+	}
+
+	orig := config.Connection{Name: "e", Driver: "elasticsearch", Params: map[string]string{"auth": "apikey", "page_size": "50"}}
+	f = NewEditConnForm(keymap.Default(), orig)
+	if v := ansi.Strip(f.View(80, 30)); !strings.Contains(v, "‹ api key ›") || !strings.Contains(v, "‹ off ›") {
+		t.Fatalf("edit form shows the elasticsearch settings:\n%s", v)
+	}
+	f.cur = ffAuth
+	_, msg = send(t, f, "left", "ctrl+s") // api key -> basic
+	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, map[string]string{"page_size": "50"}) {
+		t.Fatalf("edited params = %v", p)
 	}
 }

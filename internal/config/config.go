@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"maps"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"slices"
@@ -112,7 +113,7 @@ type settingsFile struct {
 	Mask  []MaskRule        `toml:"mask"`
 }
 
-var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432, "sqlserver": 1433, "oracle": 1521, "redis": 6379, "kafka": 9092}
+var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432, "sqlserver": 1433, "oracle": 1521, "redis": 6379, "kafka": 9092, "elasticsearch": 9200}
 
 type connectionsFile struct {
 	Connections []Connection `toml:"connection"`
@@ -199,7 +200,7 @@ func Normalize(c Connection) (Connection, error) {
 	}
 	port, ok := defaultPorts[c.Driver]
 	if !ok {
-		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql, postgres, sqlserver, oracle, redis or kafka)", c.Name, c.Driver)
+		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql, postgres, sqlserver, oracle, redis, kafka or elasticsearch)", c.Name, c.Driver)
 	}
 	if c.Port == 0 {
 		c.Port = port
@@ -215,6 +216,11 @@ func Normalize(c Connection) (Connection, error) {
 	if c.Driver == "kafka" {
 		var err error
 		if c, err = normalizeKafka(c); err != nil {
+			return c, err
+		}
+	}
+	if c.Driver == "elasticsearch" {
+		if err := checkES(c); err != nil {
 			return c, err
 		}
 	}
@@ -264,6 +270,57 @@ func normalizeKafka(c Connection) (Connection, error) {
 		return c, fmt.Errorf("connection %q: %w", c.Name, err)
 	}
 	return c, nil
+}
+
+func checkES(c Connection) error {
+	if a := c.Params["auth"]; a != "" && a != "apikey" {
+		return fmt.Errorf("connection %q: elasticsearch auth %q is not supported (want apikey or leave it empty)", c.Name, a)
+	}
+	if v, ok := c.Params["page_size"]; ok {
+		if n, err := strconv.Atoi(v); err != nil || n < 1 {
+			return fmt.Errorf("connection %q: params.page_size must be a positive number, got %q", c.Name, v)
+		}
+	}
+	if _, err := ESURLs(c); err != nil {
+		return fmt.Errorf("connection %q: %w", c.Name, err)
+	}
+	return nil
+}
+
+// ESURLs is an elasticsearch connection's node list: Host split at
+// commas, each with a scheme (https when params.tls is "true") and Port
+// added where missing, and params.path_prefix appended.
+func ESURLs(c Connection) ([]string, error) {
+	scheme := "http://"
+	if c.Params["tls"] == "true" {
+		scheme = "https://"
+	}
+	prefix := strings.Trim(c.Params["path_prefix"], "/")
+	if prefix != "" {
+		prefix = "/" + prefix
+	}
+	var out []string
+	for h := range strings.SplitSeq(c.Host, ",") {
+		h = strings.TrimSpace(h)
+		if h == "" {
+			continue
+		}
+		if !httpURL(h) {
+			h = scheme + h
+		}
+		u, err := url.Parse(strings.TrimRight(h, "/"))
+		if err != nil || u.Hostname() == "" {
+			return nil, fmt.Errorf("bad elasticsearch url %q", h)
+		}
+		if u.Port() == "" {
+			u.Host = net.JoinHostPort(u.Hostname(), strconv.Itoa(c.Port))
+		}
+		out = append(out, u.String()+prefix)
+	}
+	if len(out) == 0 {
+		return nil, errors.New("elasticsearch needs at least one url")
+	}
+	return out, nil
 }
 
 func httpURL(u string) bool {

@@ -41,7 +41,8 @@ const (
 	ffEncrypt // SQL Server only
 	ffTrust   // SQL Server only
 	ffSASL    // Kafka only
-	ffTLS     // Kafka only
+	ffTLS     // Kafka and Elasticsearch
+	ffAuth    // Elasticsearch only
 	ffSSH
 	ffEnv
 	ffReadOnly
@@ -72,6 +73,9 @@ var saslChoices = []string{"none", "plain", "scram-sha-256", "scram-sha-512"}
 // kafkaTLSChoices map to params.tls and params.tls_skip_verify.
 var kafkaTLSChoices = []string{"off", "on", "on, skip verify"}
 
+// esAuthChoices map to elasticsearch's params.auth: basic leaves it out.
+var esAuthChoices = []string{"basic", "api key"}
+
 // readOnlyChoices set readonly; auto leaves it out, so env decides.
 var readOnlyChoices = []string{"auto", "yes", "no"}
 
@@ -79,7 +83,7 @@ var readOnlyChoices = []string{"auto", "yes", "no"}
 func NewConnForm(keys *keymap.Keymap) *ConnForm {
 	return &ConnForm{keys: keys, fields: []formField{
 		ffName:     {label: "Name"},
-		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver", "oracle", "redis", "kafka"}},
+		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver", "oracle", "redis", "kafka", "elasticsearch"}},
 		ffHost:     {label: "Host", input: newField("localhost")},
 		ffPort:     {label: "Port"},
 		ffUser:     {label: "User"},
@@ -89,6 +93,7 @@ func NewConnForm(keys *keymap.Keymap) *ConnForm {
 		ffTrust:    {label: "Trust cert", choices: []string{"no", "yes"}},
 		ffSASL:     {label: "SASL", choices: saslChoices},
 		ffTLS:      {label: "TLS", choices: kafkaTLSChoices},
+		ffAuth:     {label: "Auth", choices: esAuthChoices},
 		ffSSH:      {label: "SSH host"},
 		ffEnv:      {label: "Env", choices: []string{"dev", "staging", "prod"}},
 		ffReadOnly: {label: "Read-only", choices: readOnlyChoices},
@@ -132,6 +137,8 @@ func NewEditConnForm(keys *keymap.Keymap, c config.Connection) *ConnForm {
 	}
 	if c.Driver == "kafka" {
 		choose(ffSASL, c.Params["sasl"])
+	}
+	if c.Driver == "kafka" || c.Driver == "elasticsearch" {
 		switch {
 		case c.Params["tls"] != "true":
 		case c.Params["tls_skip_verify"] == "true":
@@ -139,6 +146,9 @@ func NewEditConnForm(keys *keymap.Keymap, c config.Connection) *ConnForm {
 		default:
 			choose(ffTLS, kafkaTLSChoices[1])
 		}
+	}
+	if c.Driver == "elasticsearch" && c.Params["auth"] == "apikey" {
+		choose(ffAuth, "api key")
 	}
 	return f
 }
@@ -158,10 +168,14 @@ func (f *ConnForm) shown(i int) bool {
 	switch i {
 	case ffEncrypt, ffTrust:
 		return f.value(ffDriver) == "sqlserver"
-	case ffSASL, ffTLS:
+	case ffSASL:
 		return f.value(ffDriver) == "kafka"
+	case ffTLS:
+		return f.value(ffDriver) == "kafka" || f.value(ffDriver) == "elasticsearch"
+	case ffAuth:
+		return f.value(ffDriver) == "elasticsearch"
 	case ffDatabase:
-		return f.value(ffDriver) != "kafka"
+		return f.value(ffDriver) != "kafka" && f.value(ffDriver) != "elasticsearch"
 	}
 	return true
 }
@@ -256,8 +270,8 @@ func (f *ConnForm) submitReadOnly() *bool {
 	return nil
 }
 
-// submitParams are the edited connection's params with the SQL Server and
-// Kafka fields applied: default, no, none and off remove their key.
+// submitParams are the edited connection's params with the SQL Server,
+// Kafka and Elasticsearch fields applied: default, no, none and off remove their key.
 func (f *ConnForm) submitParams() map[string]string {
 	p := maps.Clone(f.params)
 	if p == nil {
@@ -275,18 +289,26 @@ func (f *ConnForm) submitParams() map[string]string {
 			p["TrustServerCertificate"] = "true"
 		}
 	}
-	if f.value(ffDriver) == "kafka" {
-		delete(p, "sasl")
+	if d := f.value(ffDriver); d == "kafka" || d == "elasticsearch" {
 		delete(p, "tls")
 		delete(p, "tls_skip_verify")
-		if s := f.value(ffSASL); s != "none" {
-			p["sasl"] = s
-		}
 		if t := f.fields[ffTLS].choice; t > 0 {
 			p["tls"] = "true"
 			if t == 2 {
 				p["tls_skip_verify"] = "true"
 			}
+		}
+	}
+	if f.value(ffDriver) == "kafka" {
+		delete(p, "sasl")
+		if s := f.value(ffSASL); s != "none" {
+			p["sasl"] = s
+		}
+	}
+	if f.value(ffDriver) == "elasticsearch" {
+		delete(p, "auth")
+		if f.value(ffAuth) == "api key" {
+			p["auth"] = "apikey"
 		}
 	}
 	if len(p) == 0 {
@@ -313,6 +335,9 @@ func (f *ConnForm) View(width, _ int) string {
 		}
 		if i == ffHost && f.value(ffDriver) == "kafka" {
 			name = "Brokers" // host[:port], comma-separated
+		}
+		if i == ffHost && f.value(ffDriver) == "elasticsearch" {
+			name = "URLs" // [scheme://]host[:port], comma-separated
 		}
 		label := fmt.Sprintf("%-14s", name)
 		switch {
