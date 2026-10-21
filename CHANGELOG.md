@@ -52,6 +52,28 @@ All notable changes to this project are documented here. The format follows
   as JSON, `<Space>v` edits it in `$EDITOR`, `dd` deletes it.
 - Mapping: `o` adds fields in `$EDITOR`; a field whose type would change is refused before anything
   is sent. `gd` on Stats opens the index's shards on the cluster tab.
+- Snapshots in the Elasticsearch tree: repositories, and their snapshots read when one is expanded
+  (a repository that can't be read fails only its own node). A snapshot's tab shows its state, size,
+  indices and failures, following a running one. `o` takes a snapshot (of chosen indices or all),
+  `dd` deletes a snapshot or unregisters a repository, and the connection's actions menu registers a
+  repository written in `$EDITOR`. Restore (`R` on the snapshot tab, or the menu) picks indices and a
+  rename pattern (`restored-$1` by default) and refuses targets that exist and are open; it never
+  restores the cluster's global state.
+- ILM Policies in the Elasticsearch tree (not on OpenSearch): phases and how many indices use one;
+  `Enter` shows the JSON, `<Space>v` edits it, `dd` deletes it. Stats shows each index's ILM policy,
+  phase and action, and the error of a failed step.
+- Ingest Pipelines in the tree, viewed, edited and deleted the same way; `<Space>p` in Documents runs
+  one on the selected document with `_simulate` (the index's default and final pipelines first).
+- Users and Roles sections on the cluster tab when the security features are on (Elasticsearch
+  `_security` and OpenSearch's security plugin): `o` creates a user, `i` changes its roles, `x`
+  enables or disables it, `P` changes its password, `dd` deletes it; roles open as JSON to edit or
+  delete. Built-in users and roles are protected. Passwords are typed in hidden fields and never
+  reach a confirmation, the history, the audit log or the log; console requests carrying a
+  password are kept in the history as `<redacted>`.
+- `[[mask]]` covers Elasticsearch: `indices` (globs) and `fields = ["_source.<path>"]` mask document
+  fields in Documents, a document opened by `_id`, copies, exports and the console's `_search` /
+  `_mget` / `_doc` responses. A masked field can't be edited, and editing another field of the same
+  document sends only the changed fields with `_update`.
 
 ## [3.1.0] - 2026-10-21
 

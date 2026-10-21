@@ -18,8 +18,10 @@ A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys
   Schema Registry (Avro, Protobuf and JSON Schema), ACLs, Kafka Connect and masking of message fields.
 - Elasticsearch and OpenSearch: indices, aliases and data streams, documents found by `_id` or a
   query string with hits highlighted, edited with concurrency checks, delete by query, index
-  management, update by query and reindex, index templates, a REST console with completion and
-  table views, and a cluster tab with nodes, shards (why one is unassigned), tasks and settings.
+  management, update by query and reindex, index templates, ILM policies and ingest pipelines
+  (with `_simulate`), snapshots and restores, a REST console with completion and table views, a
+  cluster tab with nodes, shards (why one is unassigned), tasks, settings, users and roles, and
+  masking of document fields.
 - An audit log of every write datavim sent to SQL, Redis, Kafka and Elasticsearch servers (`<Space>a`).
 - SSH tunnels (agent, keys, ProxyJump), production safeguards, manual transactions.
 - Your own keys (`keymap.toml`) and colors (`[theme]`).
@@ -509,7 +511,11 @@ picks the workspace by directory.
 | `o` / `g d` | Elasticsearch index tab: add mapping fields in `$EDITOR` / on Stats, open the index's shards |
 | `Enter` / `.` / `F` / `d d` | Elasticsearch cluster tab: node details, why a shard is unassigned / all shards / filter shards / cancel the task |
 | `i` / `d d` / `<Space>w` / `.` | Elasticsearch cluster settings: edit / back to the default / apply / show the defaults |
-| `<Space>v` / `y y` | Elasticsearch template tab: edit in `$EDITOR` / copy the JSON |
+| `<Space>v` / `y y` | Elasticsearch template, ILM policy, pipeline and role tabs: edit in `$EDITOR` / copy the JSON |
+| `<Space>p` | Elasticsearch documents: run an ingest pipeline on the selected document (`_simulate`) |
+| `o` / `d d` | Elasticsearch tree: new snapshot (on a repository) or repository (on Snapshots) / delete a snapshot, repository, ILM policy or pipeline |
+| `R` / `d d` / `<Space>r` | Elasticsearch snapshot tab: restore / delete / reload |
+| `o` / `i` / `x` / `P` / `d d` | Elasticsearch cluster tab, Users: new user / change roles / enable or disable / change the password / delete (`Enter` on Roles opens the role) |
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
 | `v` | Redis key tab: show a string as auto / text / JSON / hex |
@@ -580,6 +586,27 @@ detail in every format (hex and base64 too), copies, exports, the file `<Space>v
 what filters and searches match. A part a path reaches that is not JSON is masked whole, and a
 Schema Registry value waits masked until it is decoded. The messages on the cluster are not
 changed; masked messages can't be copied to a producer console (`p` / `P` leave them out).
+
+**Masking Elasticsearch documents** — the same `[[mask]]` tables take `indices` and `_source` paths
+(a rule is for Kafka or for Elasticsearch, not both):
+
+```toml
+[[mask]]
+connections = ["es-prod"]          # or env = "prod"
+indices = ["users*", "accounts"]   # globs; leave out for every index
+fields = ["_source.password", "_source.cards[].number"]
+```
+
+Masked fields show as `"******"` in Documents, a document opened with `<Space>k`, the detail,
+copies, exports and the console's `_search`, `_mget` and `GET <index>/_doc/<id>` responses (other
+responses are shown as they come). A masked field can't be edited and a masked document can't be
+rewritten in `$EDITOR`; changing another field of it sends only that field with `_update`. Only the
+display changes: the console still sends what you write.
+
+**Elasticsearch snapshots** — the Snapshots node lists each repository's snapshots when it is
+expanded, without their size (reading it takes a request per snapshot, slow on S3); the snapshot's
+tab shows it. A restore never restores the cluster's global state and refuses an index that exists
+and is open: close or delete it, or restore under a rename.
 
 **Ghostty** — map Cmd shortcuts to leader keys with
 [docs/examples/ghostty.conf](docs/examples/ghostty.conf), e.g. `keybind = cmd+e=text:\x20e`.
@@ -660,7 +687,10 @@ with a syntax error, the cursor jumps to where the server says the error is.
   delete, close or delete by query is expanded first, shown, and sent with the expanded names (so
   an index made since is never touched) — on prod it is refused. A console run confirms its writes
   once and each dangerous request alone. Document writes carry `if_seq_no` / `if_primary_term`.
-  Every read-only check runs in one place, the Doer the session hands out.
+  Every read-only check runs in one place, the Doer the session hands out. Restoring a snapshot,
+  deleting a snapshot, repository, ILM policy, pipeline, user or role, and registering a repository
+  want the object's name typed. A new user's password and a password change are typed hidden and
+  never shown in a confirmation, the history, the audit log or the log.
 - `env = "prod"` frames the tab area in red and shows `[PROD]` in the status bar; every
   write or DDL statement on a prod connection asks for `y` first.
 - `UPDATE` / `DELETE` without `WHERE` asks you to type the table name before it runs.

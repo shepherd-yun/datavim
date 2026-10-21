@@ -14,8 +14,9 @@
 - Kafka：topic、按 lag 排序的 consumer group，可跳转、过滤和 live tail 的消息浏览，重置 offset，producer console；
   修改 topic 配置和 partition，删除消息和 group，Schema Registry（Avro、Protobuf、JSON Schema），ACL、Kafka Connect 和消息字段打码。
 - Elasticsearch 和 OpenSearch：索引、别名、data stream，按 `_id` 或 query string 查文档并高亮命中，带并发检查的编辑，
-  按条件删除和按条件更新，reindex，索引模板，索引管理，带补全和表格视图的 REST 控制台，以及有节点、分片（未分配的原因）、
-  任务和集群 settings 的集群状态页。
+  按条件删除和按条件更新，reindex，索引模板，ILM 策略和 ingest pipeline（可以 `_simulate`），快照和恢复，索引管理，
+  带补全和表格视图的 REST 控制台，有节点、分片（未分配的原因）、任务、集群 settings、用户和角色的集群状态页，
+  以及文档字段打码。
 - 审计日志：记录 datavim 发给 SQL、Redis、Kafka、Elasticsearch 服务器的每个写操作（`<Space>a`）。
 - SSH 隧道（agent、密钥、ProxyJump），生产环境保护，手动事务。
 - 自定义按键（`keymap.toml`）与颜色（`[theme]`）。
@@ -434,7 +435,11 @@ datavim --list-workspaces
 | `o` / `g d` | Elasticsearch 索引标签页：在 `$EDITOR` 里加 mapping 字段 / 在 Stats 里打开这个索引的分片 |
 | `Enter` / `.` / `F` / `d d` | Elasticsearch 集群状态页：节点详情、分片未分配的原因 / 全部分片 / 过滤分片 / 取消任务 |
 | `i` / `d d` / `<Space>w` / `.` | Elasticsearch 集群 settings：修改 / 恢复默认 / 提交 / 显示默认值 |
-| `<Space>v` / `y y` | Elasticsearch 模板标签页：在 `$EDITOR` 里修改 / 复制 JSON |
+| `<Space>v` / `y y` | Elasticsearch 模板、ILM 策略、pipeline 和角色标签页：在 `$EDITOR` 里修改 / 复制 JSON |
+| `<Space>p` | Elasticsearch 文档：对选中的文档运行一个 ingest pipeline（`_simulate`） |
+| `o` / `d d` | Elasticsearch 树：新建快照（在仓库上）或仓库（在 Snapshots 上）/ 删除快照、仓库、ILM 策略或 pipeline |
+| `R` / `d d` / `<Space>r` | Elasticsearch 快照标签页：恢复 / 删除 / 重新读取 |
+| `o` / `i` / `x` / `P` / `d d` | Elasticsearch 集群状态页的 Users：新建用户 / 改角色 / 启用或禁用 / 改密码 / 删除（Roles 上回车打开角色） |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |
 
@@ -485,6 +490,24 @@ headers = ["authorization", "x-user-*"]
 每个元素，`*` 表示任意键（键名里含 `.` 的字段不支持）。被打码的值在表格、详情的每种格式（包括 hex 和 base64）、复制、导出、
 `<Space>v` 打开的文件里都显示为 `"******"`，过滤和查找也只匹配打码后的内容。路径规则覆盖的部分不是 JSON 时整体打码，
 Schema Registry 的值在解码完成前也先打码。集群上的消息不会改变；被打码的消息不能复制到 producer console（`p` / `P` 会跳过）。
+
+**Elasticsearch 文档打码** —— 同样的 `[[mask]]` 表可以写 `indices` 和 `_source` 路径（一条规则要么给 Kafka，要么给
+Elasticsearch，不能混用）：
+
+```toml
+[[mask]]
+connections = ["es-prod"]          # 或者 env = "prod"
+indices = ["users*", "accounts"]   # glob；不写表示所有索引
+fields = ["_source.password", "_source.cards[].number"]
+```
+
+被打码的字段在 Documents、`<Space>k` 打开的文档、详情、复制、导出，以及控制台里 `_search`、`_mget` 和
+`GET <index>/_doc/<id>` 的响应里都显示为 `"******"`（其他响应原样显示）。被打码的字段不能编辑，含有被打码字段的文档
+不能在 `$EDITOR` 里整篇改写；改同一篇文档的其他字段时只用 `_update` 发送改了的字段。打码只影响显示：控制台照样发出你写的请求。
+
+**Elasticsearch 快照** —— Snapshots 节点在展开某个仓库时才列出它的快照，列表里不显示大小（大小要对每个快照单独请求，
+仓库在 S3 上时很慢），快照标签页里能看到。恢复时从不恢复集群的全局状态；目标索引已存在且是打开的会被拒绝：先关闭或删除它，
+或者改名恢复。
 
 **Ghostty** —— 用 [docs/examples/ghostty.conf](docs/examples/ghostty.conf) 把 Cmd 快捷键映射到 leader 键，
 例如 `keybind = cmd+e=text:\x20e`。
@@ -541,7 +564,8 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
   不确认；prod 上确认框显示请求本身）；危险请求（删除或关闭索引、按条件删除 / 更新、force merge、集群 settings…）要输入索引名；
   删除、关闭、按条件删除的目标是通配、`_all`、多个索引或指向多个索引的别名时，先展开成索引列表给你看，执行时用展开后的名字
   （之后新建的索引不会被动到），prod 上直接拒绝。控制台一次执行多个请求时，写请求一起确认一次，危险请求逐个确认。文档写入都带
-  `if_seq_no` / `if_primary_term`。只读检查只在一个地方：session 交给界面的 Doer。
+  `if_seq_no` / `if_primary_term`。只读检查只在一个地方：session 交给界面的 Doer。恢复快照，删除快照、仓库、ILM 策略、
+  pipeline、用户或角色，以及注册仓库，都要输入对象名确认。新建用户和改密码时密码用隐藏输入，不出现在确认框、历史、审计日志和日志里。
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，
