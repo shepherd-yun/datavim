@@ -33,6 +33,7 @@ type Template struct {
 	Name     string
 	Patterns []string // none for a component template
 	Priority int      // a composable template's priority, a legacy one's order
+	System   bool     // the cluster's own: "." name or _meta.managed
 	// Body is the definition as PUT takes it back.
 	Body json.RawMessage
 }
@@ -82,7 +83,7 @@ type templateHead struct {
 func parseTemplates(k TemplateKind, body []byte) ([]Template, error) {
 	var out []Template
 	add := func(name string, raw json.RawMessage) error {
-		t := Template{Kind: k, Name: name, Body: raw}
+		t := Template{Kind: k, Name: name, Body: raw, System: systemObject(name, raw)}
 		if k != TemplateComponent {
 			var h templateHead
 			if err := json.Unmarshal(raw, &h); err != nil {

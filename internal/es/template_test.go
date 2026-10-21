@@ -82,3 +82,23 @@ func TestPutDeleteTemplate(t *testing.T) {
 		}
 	}
 }
+
+func TestTemplatesSystem(t *testing.T) {
+	d := &fakeDoer{table: map[string]Response{
+		"GET _index_template": ok(`{"index_templates":[
+			{"name":"logs","index_template":{"index_patterns":["logs-*-*"],"_meta":{"managed":true}}},
+			{"name":"mine","index_template":{"index_patterns":["mine-*"]}}]}`),
+		"GET _template": ok(`{".monitoring-es":{"order":0,"index_patterns":[".monitoring-es-*"]}}`),
+	}}
+	got, err := Templates(ctx, d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sys := map[string]bool{}
+	for _, tp := range got {
+		sys[tp.Name] = tp.System
+	}
+	if !reflect.DeepEqual(sys, map[string]bool{"logs": true, "mine": false, ".monitoring-es": true}) {
+		t.Errorf("system = %v", sys)
+	}
+}

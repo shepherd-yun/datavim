@@ -107,6 +107,10 @@ func TestESReadOnlyRefusesEveryWrite(t *testing.T) {
 		},
 		"PutRepository":    func(d es.Doer) error { return es.PutRepository(ctx, d, "r", json.RawMessage(`{"type":"fs"}`)) },
 		"DeleteRepository": func(d es.Doer) error { return es.DeleteRepository(ctx, d, "r") },
+		"PutPolicy":        func(d es.Doer) error { return es.PutPolicy(ctx, d, "p", json.RawMessage(`{"policy":{}}`)) },
+		"DeletePolicy":     func(d es.Doer) error { return es.DeletePolicy(ctx, d, "p") },
+		"PutPipeline":      func(d es.Doer) error { return es.PutPipeline(ctx, d, "p", json.RawMessage(`{"processors":[]}`)) },
+		"DeletePipeline":   func(d es.Doer) error { return es.DeletePipeline(ctx, d, "p") },
 		"PutClusterSettings": func(d es.Doer) error {
 			v := "1"
 			return es.PutClusterSettings(ctx, d, map[string]*string{"a": &v}, nil)

@@ -18,6 +18,7 @@ var WriteFuncs = []string{
 	"CancelTask", "Reindex", "UpdateByQuery", "PutMapping", "PutClusterSettings",
 	"PutTemplate", "DeleteTemplate",
 	"CreateSnapshot", "DeleteSnapshot", "RestoreSnapshot", "PutRepository", "DeleteRepository",
+	"PutPolicy", "DeletePolicy", "PutPipeline", "DeletePipeline",
 }
 
 // Version is the sequence number and primary term a document was read at.
