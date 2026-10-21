@@ -323,7 +323,7 @@ func DefaultBindings() []Binding {
 // esBindings are the Elasticsearch tabs' keys (spec §10).
 func esBindings() []Binding {
 	var b []Binding
-	for _, ctx := range []Context{ESDocs, ESIndex, ESSettings, ESServer} {
+	for _, ctx := range []Context{ESDocs, ESIndex, ESSettings, ESServer, ESClusterSettings} {
 		b = append(b, gridBindings(ctx)...)
 		b = append(b,
 			Binding{ctx, keys("["), PrevSection, "Previous section"},
@@ -356,7 +356,9 @@ func esBindings() []Binding {
 		Binding{ESDocs, keys("y", "s"), YankSource, "Copy _source (JSON)"},
 		Binding{ESDocs, keys("y", "r"), YankRequest, "Copy as console requests: GET and PUT"},
 		Binding{ESDocs, keys("y", "u"), YankCurl, "Copy as curl (no credentials)"},
-		Binding{ESIndex, keys("o"), InsertRow, "Aliases: add an alias"},
+		Binding{ESDocs, keys(LeaderToken, "u"), UpdateByQuery, "Update every document the filter matches (painless in $EDITOR)…"},
+		Binding{ESIndex, keys("o"), InsertRow, "Add: an alias (Aliases), fields in $EDITOR (Mapping)"},
+		Binding{ESIndex, keys("g", "d"), OpenCellKey, "Stats: this index's shards on the cluster tab"},
 		Binding{ESIndex, keys("d", "d"), DeleteRow, "Aliases: remove the alias"},
 		Binding{ESSettings, keys("i"), EditCell, "Edit the setting (dynamic ones)"},
 		Binding{ESSettings, keys("enter"), EditCell, "Edit the setting (dynamic ones)"},
@@ -364,6 +366,28 @@ func esBindings() []Binding {
 		Binding{ESSettings, keys("u"), UndoEdit, "Undo the last change"},
 		Binding{ESSettings, keys("U"), UndoAllEdits, "Discard every change"},
 		Binding{ESSettings, keys(LeaderToken, "w"), SubmitEdits, "Apply the settings changes (:w)"},
+		Binding{ESServer, keys("enter"), Open, "Nodes: node details · Shards: why it is unassigned · Overview: the unhealthy shards"},
+		Binding{ESServer, keys("."), ToggleInternal, "Shards: all / only not STARTED"},
+		Binding{ESServer, keys("F"), FilterPrompt, "Shards: filter by index (* pattern)"},
+		Binding{ESServer, keys("f", "x"), FilterClear, "Shards: clear the filter"},
+		Binding{ESServer, keys("d", "d"), KillClient, "Tasks: cancel the task"},
+		Binding{ESClusterSettings, keys("i"), EditCell, "Edit the setting (persistent unless it is transient)"},
+		Binding{ESClusterSettings, keys("enter"), EditCell, "Edit the setting (persistent unless it is transient)"},
+		Binding{ESClusterSettings, keys("d", "d"), DeleteRow, "Remove the setting (back to the default)"},
+		Binding{ESClusterSettings, keys("u"), UndoEdit, "Undo the last change"},
+		Binding{ESClusterSettings, keys("U"), UndoAllEdits, "Discard every change"},
+		Binding{ESClusterSettings, keys(LeaderToken, "w"), SubmitEdits, "Apply the cluster settings changes (:w)"},
+		Binding{ESClusterSettings, keys("."), ToggleInternal, "Show / hide the defaults"},
+	)
+	for _, g := range gridBindings(ESTemplate) {
+		if g.Action == YankRow {
+			g.Desc = "Copy the template (JSON)"
+		}
+		b = append(b, g)
+	}
+	b = append(b,
+		Binding{ESTemplate, keys(LeaderToken, "v"), ExternalEdit, "Edit the template in $EDITOR"},
+		Binding{ESTemplate, keys(LeaderToken, "r"), Refresh, "Reload the template"},
 	)
 	b = append(b, gridBindings(ESResults)...)
 	return append(b,

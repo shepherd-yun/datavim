@@ -764,9 +764,57 @@ func TestESBindings(t *testing.T) {
 	if has(k.Help(Global, KindES), "Starred Redis keys") {
 		t.Error("Redis favorites listed on ES")
 	}
-	for _, ctx := range []Context{ESDocs, ESIndex, ESSettings, ESServer, ESResults} {
+	for _, ctx := range []Context{ESDocs, ESIndex, ESSettings, ESServer, ESResults, ESClusterSettings, ESTemplate} {
 		if !slices.Contains(Contexts(), ctx) {
 			t.Errorf("Contexts() lacks %s", ctx)
 		}
+	}
+}
+
+func TestESE2Bindings(t *testing.T) {
+	k := Default()
+	for _, tc := range []struct {
+		ctx  Context
+		keys string
+		want Action
+	}{
+		{ESServer, "enter", Open},
+		{ESServer, ".", ToggleInternal},
+		{ESServer, "F", FilterPrompt},
+		{ESServer, "f x", FilterClear},
+		{ESServer, "d d", KillClient},
+		{ESClusterSettings, "]", NextSection},
+		{ESClusterSettings, "[", PrevSection},
+		{ESClusterSettings, "i", EditCell},
+		{ESClusterSettings, "enter", EditCell},
+		{ESClusterSettings, "d d", DeleteRow},
+		{ESClusterSettings, "u", UndoEdit},
+		{ESClusterSettings, "U", UndoAllEdits},
+		{ESClusterSettings, "space w", SubmitEdits},
+		{ESClusterSettings, ".", ToggleInternal},
+		{ESClusterSettings, "j", Down},
+		{ESTemplate, "space v", ExternalEdit},
+		{ESTemplate, "y y", YankRow},
+		{ESTemplate, "space r", Refresh},
+		{ESTemplate, "/", Search},
+		{ESDocs, "space u", UpdateByQuery},
+		{ESIndex, "g d", OpenCellKey},
+		{ESIndex, "o", InsertRow},
+	} {
+		if a, r := k.Resolve(tc.ctx, strings.Fields(tc.keys)); a != tc.want || r != Matched {
+			t.Errorf("%s %q = %q (%v), want %q", tc.ctx, tc.keys, a, r, tc.want)
+		}
+	}
+	has := func(entries []HelpEntry, s string) bool {
+		return slices.ContainsFunc(entries, func(e HelpEntry) bool { return strings.Contains(e.Desc, s) })
+	}
+	if docs := k.Help(ESDocs, KindES); !has(docs, "Update every document") {
+		t.Errorf("ES documents help lacks update by query")
+	}
+	if srv := k.Help(ESServer, KindES); !has(srv, "cancel the task") || !has(srv, "why it is unassigned") {
+		t.Errorf("ES server help = %+v", srv)
+	}
+	if tpl := k.Help(ESTemplate, KindES); !has(tpl, "Copy the template (JSON)") || has(tpl, "Copy row") || has(tpl, "Copy DDL") {
+		t.Errorf("ES template help = %+v", tpl)
 	}
 }

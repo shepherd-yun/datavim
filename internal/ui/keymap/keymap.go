@@ -58,6 +58,10 @@ const (
 	ESServer Context = "es_server"
 	// ESResults is the result pane of an Elasticsearch REST console.
 	ESResults Context = "es_results"
+	// ESClusterSettings is the Settings section of an Elasticsearch cluster status tab.
+	ESClusterSettings Context = "es_cluster_settings"
+	// ESTemplate is an Elasticsearch index template tab.
+	ESTemplate Context = "es_template"
 	// Audit is the audit log of writes.
 	Audit Context = "audit"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
@@ -210,6 +214,7 @@ const (
 	ToggleIsolation    Action = "kafka.isolation"
 	SetCompatibility   Action = "kafka.compat"
 	DeleteByQuery      Action = "es.delete_by_query"
+	UpdateByQuery      Action = "es.update_by_query"
 	YankID             Action = "es.yank_id"
 	YankSource         Action = "es.yank_source"
 	YankRequest        Action = "es.yank_request"
