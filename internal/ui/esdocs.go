@@ -78,6 +78,10 @@ type esDocs struct {
 	hits     []esx.Hit
 	cols     []string
 	query    string // the filter as typed: a query string or a {…} DSL object
+	// prevQuery is the filter before the prompt's, put back when the
+	// server refuses the new one (fromPrompt).
+	prevQuery  string
+	fromPrompt bool
 	sortCol  string // the column sorted on, "" for the default order
 	sortDesc bool
 	total    int64
@@ -93,7 +97,9 @@ type esDocs struct {
 }
 
 func newESDocs(t *esIndexTab) *esDocs {
-	return &esDocs{tab: t, grid: grid.New(nil, t.settings.MaxColumnWidth), limit: esDocLimit}
+	d := &esDocs{tab: t, grid: grid.New(nil, t.settings.MaxColumnWidth), limit: esDocLimit}
+	d.grid.SetHighlight(d.cellWords)
+	return d
 }
 
 // pageSize is the connection's params.page_size, 100 by default.
@@ -230,6 +236,11 @@ func (d *esDocs) paged(m esPageMsg) tea.Cmd {
 	}
 	d.loading = false
 	if m.err != nil {
+		if reason, ok := queryRefused(m.err); ok && d.fromPrompt {
+			failed := d.query
+			d.query, d.fromPrompt = d.prevQuery, false
+			return tea.Batch(d.reload(), d.prompt(failed, reason))
+		}
 		if errors.Is(m.err, es.ErrCursorExpired) {
 			t.setStatus("the result cursor expired; reloading from the top", true)
 			return d.reload()
@@ -239,6 +250,7 @@ func (d *esDocs) paged(m esPageMsg) tea.Cmd {
 	}
 	d.loaded = true
 	if m.first {
+		d.fromPrompt = false
 		d.cursor, d.total, d.exact = m.cursor, m.page.Total, m.page.TotalExact
 		d.cols = d.columns()
 	}
@@ -294,19 +306,41 @@ func cell(h esx.Hit, col string) db.Value {
 	return db.Value{Text: text, Null: null}
 }
 
+// result is the hits as rows; with search hits in fields that are not
+// columns, a last "+" column names them.
 func (d *esDocs) result() *db.ResultSet {
+	extra := make([]string, len(d.hits))
+	anyExtra := false
+	for r, h := range d.hits {
+		extra[r] = extraHits(h, d.cols)
+		anyExtra = anyExtra || extra[r] != ""
+	}
 	rs := &db.ResultSet{Columns: make([]db.ColumnInfo, len(d.cols)), Rows: make([][]db.Value, len(d.hits))}
 	for i, c := range d.cols {
 		rs.Columns[i] = db.ColumnInfo{Name: c, DatabaseType: esx.TypeFor(d.tab.fields, c)}
 	}
+	if anyExtra {
+		rs.Columns = append(rs.Columns, db.ColumnInfo{Name: "+"})
+	}
 	for r, h := range d.hits {
-		row := make([]db.Value, len(d.cols))
+		row := make([]db.Value, len(d.cols), len(rs.Columns))
 		for i, c := range d.cols {
 			row[i] = cell(h, c)
+		}
+		if anyExtra {
+			row = append(row, db.Value{Text: extra[r]})
 		}
 		rs.Rows[r] = row
 	}
 	return rs
+}
+
+// cellWords are the search hits to mark in a cell.
+func (d *esDocs) cellWords(row, col int) []string {
+	if row >= len(d.hits) || col >= len(d.cols) {
+		return nil
+	}
+	return hitWords(d.hits[row], d.cols[col])
 }
 
 // selected is the hit under the cursor.
@@ -383,6 +417,11 @@ func (d *esDocs) handle(a keymap.Action) (tea.Cmd, bool) {
 			return nil, true
 		}
 		return d.reload(), true
+	case keymap.FilterPrompt:
+		return d.prompt(d.query, ""), true
+	case keymap.FilterEqual, keymap.FilterNotEqual, keymap.FilterContains, keymap.FilterGreater,
+		keymap.FilterLess, keymap.FilterNull, keymap.FilterNotNull, keymap.FilterClear:
+		return d.cellFilter(a), true
 	case keymap.CellDetail:
 		if row < len(d.hits) {
 			return openOverlay(newESDocDetail(t, row)), true
@@ -488,11 +527,11 @@ func highlightWords(h esx.Hit) []string {
 
 // markWords draws the words in s in the search highlight color.
 func markWords(s string, words []string) string {
-	if len(words) == 0 || s == "" {
+	lower := strings.ToLower(s)
+	if len(words) == 0 || len(lower) != len(s) {
 		return s
 	}
 	var b strings.Builder
-	lower := strings.ToLower(s)
 	for i := 0; i < len(s); {
 		hit := ""
 		for _, w := range words {

@@ -573,6 +573,25 @@ type fakeStore struct {
 	favorites []history.Favorite   // oldest first
 	audits    []history.AuditEntry // oldest first; ID is index+1
 	auditQs   []history.AuditQuery
+	filters   map[string][]string // newest first
+}
+
+func (s *fakeStore) AddFilter(key, text string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.filters == nil {
+		s.filters = map[string][]string{}
+	}
+	l := slices.DeleteFunc(s.filters[key], func(t string) bool { return t == text })
+	s.filters[key] = append([]string{text}, l...)
+	return nil
+}
+
+func (s *fakeStore) Filters(key string, limit int) ([]string, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	l := s.filters[key]
+	return slices.Clone(l[:min(limit, len(l))]), nil
 }
 
 func (s *fakeStore) AddAudit(e history.AuditEntry) error {

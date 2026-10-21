@@ -347,3 +347,23 @@ func TestPositionAndSetCursor(t *testing.T) {
 		t.Fatal("but no cells")
 	}
 }
+
+func TestHighlightWords(t *testing.T) {
+	m := New(rs(), 40)
+	m.SetSize(80, 10)
+	m.SetHighlight(func(row, col int) []string {
+		if row == 2 && col == 1 {
+			return []string{"OB"}
+		}
+		return nil
+	})
+	out := m.View(false)
+	if !strings.Contains(out, theme.Visual.Render("ob")) {
+		t.Fatalf("no highlighted word in:\n%s", out)
+	}
+	for _, l := range strings.Split(ansi.Strip(out), "\n") {
+		if w := ansi.StringWidth(l); w != 80 {
+			t.Errorf("line %q has width %d", l, w)
+		}
+	}
+}

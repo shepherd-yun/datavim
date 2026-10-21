@@ -153,6 +153,10 @@ func TestCheckStatus(t *testing.T) {
 			t.Errorf("%d %s: %v", tc.status, tc.body, err)
 		}
 	}
+	var ae *APIError
+	if err := CheckStatus(Response{Status: 404, Body: []byte(cases[2].body)}); !errors.As(err, &ae) || ae.RootReason != "no such index [x]" {
+		t.Errorf("root reason: %+v", ae)
+	}
 	if err := CheckStatus(Response{Status: 201}); err != nil {
 		t.Errorf("201: %v", err)
 	}

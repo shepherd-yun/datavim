@@ -94,6 +94,7 @@ type esPart struct {
 type esIndexTab struct {
 	id       int
 	backend  Backend
+	store    Store // the filter history
 	keys     *keymap.Keymap
 	settings config.Settings
 	conn     string
@@ -143,7 +144,9 @@ func newESIndexTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, co
 func (m *Model) openIndex(conn, target string, kind targetKind) tea.Cmd {
 	rec := history.Recent{Kind: history.RecentESIndex, Conn: conn, Name: target}
 	return m.openTab(esIndexTabKey(conn, target), rec, func(id int) tab {
-		return newESIndexTab(id, m.backend, m.keys, m.settings, conn, target, kind)
+		t := newESIndexTab(id, m.backend, m.keys, m.settings, conn, target, kind)
+		t.store = m.store
+		return t
 	})
 }
 
@@ -311,6 +314,8 @@ func (t *esIndexTab) loadSection(s indexSection) tea.Cmd {
 
 func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
+	case esFilterMsg:
+		return t.docs.filtered(m.text)
 	case esPageMsg:
 		return t.docs.paged(m)
 	case esHeadMsg:

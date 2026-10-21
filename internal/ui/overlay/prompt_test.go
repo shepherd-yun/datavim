@@ -97,3 +97,30 @@ func TestPromptValidate(t *testing.T) {
 		t.Fatalf("msg=%#v", msg)
 	}
 }
+
+func TestPromptHistory(t *testing.T) {
+	p := NewPrompt("Filter", "q", "typed", textMsg, WithHistory([]string{"newest", "older"}))
+	send(t, p, "up")
+	if p.input.String() != "newest" {
+		t.Fatalf("up = %q", p.input.String())
+	}
+	send(t, p, "up", "up")
+	if p.input.String() != "older" {
+		t.Fatalf("up up = %q", p.input.String())
+	}
+	send(t, p, "down", "down")
+	if p.input.String() != "typed" {
+		t.Fatalf("back down = %q", p.input.String())
+	}
+}
+
+func TestPromptWithError(t *testing.T) {
+	p := NewPrompt("Filter", "q", "a:(", textMsg, WithError("parse_exception: bad"))
+	if v := ansi.Strip(p.View(80, 20)); !strings.Contains(v, "parse_exception: bad") || !strings.Contains(v, "a:(") {
+		t.Fatalf("view:\n%s", v)
+	}
+	send(t, p, "x")
+	if v := ansi.Strip(p.View(80, 20)); strings.Contains(v, "parse_exception") {
+		t.Fatalf("error kept after an edit:\n%s", v)
+	}
+}

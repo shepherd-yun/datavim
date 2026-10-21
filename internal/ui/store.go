@@ -2,7 +2,8 @@ package ui
 
 import "github.com/shepherd-yun/datavim/internal/history"
 
-// Store keeps SQL history, console drafts, recently opened tabs, starred Redis keys and the audit log;
+// Store keeps SQL history, console drafts, recently opened tabs, starred
+// Redis keys, the audit log and the Elasticsearch filter history;
 // *history.Store implements it.
 type Store interface {
 	AddHistory(e history.Entry) error
@@ -16,4 +17,6 @@ type Store interface {
 	Favorites() ([]history.Favorite, error)
 	AddAudit(e history.AuditEntry) error
 	Audit(q history.AuditQuery) ([]history.AuditEntry, error)
+	AddFilter(key, text string) error
+	Filters(key string, limit int) ([]string, error)
 }

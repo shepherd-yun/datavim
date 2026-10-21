@@ -24,6 +24,7 @@ type APIError struct {
 	Status       int
 	Type, Reason string
 	RootTypes    []string // root_cause types
+	RootReason   string   // the first root cause's reason
 	Raw          []byte
 }
 
@@ -83,7 +84,8 @@ func CheckStatus(resp Response) error {
 			Type      string `json:"type"`
 			Reason    string `json:"reason"`
 			RootCause []struct {
-				Type string `json:"type"`
+				Type   string `json:"type"`
+				Reason string `json:"reason"`
 			} `json:"root_cause"`
 		}
 		var s string
@@ -94,6 +96,9 @@ func CheckStatus(resp Response) error {
 			e.Type, e.Reason = obj.Type, obj.Reason
 			for _, r := range obj.RootCause {
 				e.RootTypes = append(e.RootTypes, r.Type)
+			}
+			if len(obj.RootCause) > 0 {
+				e.RootReason = obj.RootCause[0].Reason
 			}
 		}
 	}

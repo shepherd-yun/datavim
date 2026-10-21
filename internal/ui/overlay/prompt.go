@@ -21,6 +21,13 @@ type PromptOption func(*Prompt)
 // WithCompleter makes tab complete the word before the cursor.
 func WithCompleter(c Completer) PromptOption { return func(p *Prompt) { p.complete = c } }
 
+// WithHistory gives up / down the earlier inputs, newest first.
+func WithHistory(h []string) PromptOption { return func(p *Prompt) { p.history = h } }
+
+// WithError shows err under the input until it is edited (a server
+// refused the text).
+func WithError(err string) PromptOption { return func(p *Prompt) { p.err = err } }
+
 // WithValidate checks the text on enter; an error keeps the prompt open.
 func WithValidate(v func(string) error) PromptOption { return func(p *Prompt) { p.validate = v } }
 
@@ -41,6 +48,9 @@ type Prompt struct {
 	popup        *complete.Model
 	popStart     int    // where the completed word starts
 	err          string // the last validation error, until the next edit
+	history      []string
+	histAt       int    // 0 is the typed text, n the nth history entry
+	typed        string // the text before the history was entered
 }
 
 // NewPrompt builds a prompt; submit turns the entered text into a message.
@@ -87,6 +97,24 @@ func (p *Prompt) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 	case "tab":
 		if p.complete != nil {
 			p.suggest()
+			return p, nil
+		}
+	case "up", "down":
+		if len(p.history) > 0 {
+			if p.histAt == 0 {
+				p.typed = p.input.String()
+			}
+			if key == "up" {
+				p.histAt = min(p.histAt+1, len(p.history))
+			} else {
+				p.histAt = max(p.histAt-1, 0)
+			}
+			text := p.typed
+			if p.histAt > 0 {
+				text = p.history[p.histAt-1]
+			}
+			p.input = newField(text)
+			p.err = ""
 			return p, nil
 		}
 	}

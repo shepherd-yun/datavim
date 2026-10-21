@@ -41,6 +41,7 @@ type Model struct {
 	rowOff, colOff int
 	width, height  int
 	marks          func(row, col int) Mark
+	words          func(row, col int) []string
 	sortCol        string
 	sortDesc       bool
 }
@@ -84,6 +85,10 @@ func (m *Model) SetMarks(f func(row, col int) Mark) {
 	m.marks = f
 	m.measure()
 }
+
+// SetHighlight marks the words f gives for a cell (search hits) in the
+// highlight color; nil marks none.
+func (m *Model) SetHighlight(f func(row, col int) []string) { m.words = f }
 
 // SetSort shows which column the rows are sorted by ("" for none).
 func (m *Model) SetSort(col string, desc bool) {
@@ -266,7 +271,12 @@ func (m *Model) View(focused bool) string {
 					style = style.Underline(true)
 				}
 			}
-			cells[i] = style.Render(textutil.Fit(text, m.widths[c]))
+			fitted := textutil.Fit(text, m.widths[c])
+			if m.words != nil && (r != m.row || c != m.col) {
+				cells[i] = renderWords(style, fitted, m.words(r, c))
+			} else {
+				cells[i] = style.Render(fitted)
+			}
 		}
 		lines = append(lines, strings.Join(cells, sepStyled))
 	}
@@ -408,4 +418,37 @@ func (m *Model) Find(q string, forward bool) bool {
 		}
 	}
 	return false
+}
+
+// renderWords renders text in style with words (ignoring case) in the
+// highlight color.
+func renderWords(style lipgloss.Style, text string, words []string) string {
+	lower := strings.ToLower(text)
+	if len(words) == 0 || len(lower) != len(text) {
+		return style.Render(text)
+	}
+	var b strings.Builder
+	plain := 0
+	for i := 0; i < len(text); {
+		n := 0
+		for _, w := range words {
+			if w != "" && strings.HasPrefix(lower[i:], strings.ToLower(w)) && len(w) > n {
+				n = len(w)
+			}
+		}
+		if n == 0 {
+			i++
+			continue
+		}
+		if plain < i {
+			b.WriteString(style.Render(text[plain:i]))
+		}
+		b.WriteString(theme.Visual.Render(text[i : i+n]))
+		i += n
+		plain = i
+	}
+	if plain < len(text) {
+		b.WriteString(style.Render(text[plain:]))
+	}
+	return b.String()
 }
