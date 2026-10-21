@@ -421,3 +421,22 @@ func TestOpenESTasks(t *testing.T) {
 		t.Fatalf("tab = %#v", m.activeTab())
 	}
 }
+
+func TestESServerShardsFilterPartialName(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	fourShards(f)
+	f.routes["GET _cat/shards/ord"] = func(es.Request) es.Response {
+		return errResp(404, "index_not_found_exception", "no such index [ord]")
+	}
+	tab := openESServerTab(t, m)
+	drain(t, m, tab.setSection(secESShards))
+	press(t, m, ".", "F")
+	typeText(t, m, "ord")
+	press(t, m, "enter")
+	if tab.err != "" {
+		t.Fatalf("err = %q", tab.err)
+	}
+	if got := tab.grids[secESShards].Result().Rows; len(got) != 2 || got[0][0].Text != "orders" {
+		t.Errorf("rows = %v", got)
+	}
+}

@@ -48,7 +48,7 @@ func (t *esServerTab) handleShards(a keymap.Action) (tea.Cmd, bool) {
 		return openOverlay(overlay.NewPrompt("Filter shards", "Index name contains (or a * pattern)", t.shardFilter,
 			func(text string) tea.Msg { return esShardFilterMsg{tabID: id, text: strings.TrimSpace(text)} })), true
 	case keymap.FilterClear:
-		t.shardFilter = ""
+		t.shardFilter, t.shardIndex = "", ""
 		return t.setSection(secESShards), true
 	case keymap.Open:
 		r, _ := t.grids[secESShards].Position()
@@ -120,7 +120,7 @@ func (m *Model) openESShards(conn, index string) tea.Cmd {
 	if !ok || t.conn != conn {
 		return cmd
 	}
-	t.shardFilter, t.shardsAll = index, true
+	t.shardFilter, t.shardIndex, t.shardsAll = index, index, true
 	return tea.Batch(cmd, t.setSection(secESShards))
 }
 

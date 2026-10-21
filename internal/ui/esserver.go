@@ -111,6 +111,9 @@ type esServerTab struct {
 	shardView   []es.Shard
 	shardsAll   bool
 	shardFilter string
+	// shardIndex is the one index whose shards are read, set when the tab
+	// was opened on an index's shards; the typed filter applies locally.
+	shardIndex string
 	// watermark is the high disk watermark; read is whether it was tried.
 	watermark     string
 	watermarkRead bool
@@ -186,10 +189,7 @@ func (t *esServerTab) load() tea.Cmd {
 	t.gen++
 	id, gen, b, conn, sec := t.id, t.gen, t.backend, t.conn, t.section
 	readWatermark := sec == secESNodes && !t.watermarkRead
-	shardIndex := ""
-	if f := t.shardFilter; f != "" && !strings.ContainsAny(f, "*?,") {
-		shardIndex = f // a concrete index: read only its shards
-	}
+	shardIndex := t.shardIndex
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 		defer cancel()
@@ -287,7 +287,7 @@ func (t *esServerTab) Update(msg tea.Msg) tea.Cmd {
 	case esTaskCancelledMsg:
 		return t.taskCancelled(m)
 	case esShardFilterMsg:
-		t.shardFilter = m.text
+		t.shardFilter, t.shardIndex = m.text, ""
 		return t.setSection(secESShards)
 	}
 	return nil
