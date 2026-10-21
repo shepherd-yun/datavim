@@ -14,7 +14,8 @@ A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys
 - Copy and export results (TSV, CSV, JSON, Markdown, INSERT, xlsx), SQL history.
 - Import CSV, TSV and xlsx files into a table, or into a new table inferred from the file.
 - Kafka: topics, consumer groups by lag, messages with jumps, filters and live tail, offset resets
-  and a producer console.
+  and a producer console; topic configs and partitions, deleting messages and groups, and a
+  Schema Registry (Avro, Protobuf and JSON Schema).
 - SSH tunnels (agent, keys, ProxyJump), production safeguards, manual transactions.
 - Your own keys (`keymap.toml`) and colors (`[theme]`).
 
@@ -149,7 +150,22 @@ params = { sasl = "scram-sha-512", tls = "true" }
 kept in the keychain like any other), `tls = "true"`, `tls_skip_verify`, `tls_ca`, `tls_cert` and
 `tls_key` (PEM files, for mTLS), `client_id` (default `sqlvim`) and `show_internal = "true"`. The
 form has `SASL` and `TLS` fields. Through an SSH tunnel every broker connection goes through the
-bastion, including the brokers' advertised addresses, so the bastion must reach them. Expanding
+bastion, including the brokers' advertised addresses, so the bastion must reach them.
+`broker_map = "b-1.internal:9092=localhost:19092, …"` dials another address for an advertised
+broker (port forwards, NAT).
+
+`sasl = "oauth"` logs in with an OAuth client-credentials token: `oauth_token_url` and
+`oauth_client_id` are required, `oauth_scope` is optional, and the client secret is asked for
+the first time it is needed. `sasl = "aws-msk-iam"` signs in to MSK with IAM (`aws_region`,
+`aws_profile`, TLS on by default): the credentials come from AWS's own chain (environment,
+`~/.aws`, SSO, instance role) and sqlvim never stores AWS keys.
+
+`schema_registry_url = "https://sr.internal:8081"` adds a Schema Registry (the Confluent API;
+Redpanda's works too), with `schema_registry_user` for basic auth; its HTTP requests go through
+the same SSH tunnel and use `tls_ca` / `tls_skip_verify`. The registry password is asked for
+when the registry first wants one. Secrets other than the connection password live in the
+keychain as `<connection>#schema-registry` and `<connection>#oauth`, or come from
+`SQLVIM_PASSWORD_<NAME>_SCHEMA_REGISTRY` / `SQLVIM_PASSWORD_<NAME>_OAUTH`. Expanding
 the connection lists Brokers, Topics (folders by the name before the first `.` `-` `_`; `.`
 shows the internal ones) and Consumer Groups, sorted by lag (`s` sorts by name), lagging groups
 in red; `F` / `fx` filter topics or groups by name.
@@ -157,7 +173,9 @@ in red; `F` / `fx` filter topics or groups by name.
 `Enter` on a topic opens its tab, `[` / `]` switch between Messages, Partitions, Config and
 Consumers. Messages shows the newest 200 messages of all partitions by time (one partition: by
 offset); moving past the first or last row loads 200 more per partition, and a view keeps at most
-10,000. `t` jumps: `latest`, `earliest`, `-500` (the last 500 of each partition), `p1:1180002`,
+10,000. It reads `read_committed` (messages of aborted transactions are hidden); `I` switches to
+`read_uncommitted`. Keys and values in the Schema Registry wire format are decoded to JSON; one
+whose schema can't be read is shown as hex with the reason. `t` jumps: `latest`, `earliest`, `-500` (the last 500 of each partition), `p1:1180002`,
 an offset of the current partition, `p1,p3` (only those partitions) or `@2026-10-20 09:12` /
 `@09:12` / `@-15m`, with a preview as you type; an offset retention already deleted is said so
 and offers the earliest one. `T` starts and pauses live tail (it stops while the tab is hidden).
@@ -167,7 +185,14 @@ cell in full, `c` shows the headers column and `<Space>v` opens the value in `$E
 with `key = ord-1`, `value ~ sku`, `header.source = checkout`, `value.user.id = 42`, `partition`,
 `offset`, `ts > 09:12`, `size > 1000`, joined with `and` / `or`; `ff` `f!` `fs` add the cell
 under the cursor, `fx` clears; with a filter `n` / `N` search on past what is loaded (up to
-100,000 messages, `Ctrl-c` stops). `<Space>xl` exports the messages as JSON Lines.
+100,000 messages, `Ctrl-c` stops). `<Space>xl` exports the messages as JSON Lines. `p` copies
+the message under the cursor and `P` every shown message to a producer console (pick this or
+another topic) so they can be sent again byte for byte; `X` deletes the messages up to the one
+under the cursor.
+
+In Partitions, `o` adds partitions and `X` deletes the messages before an offset. In Config, `i`
+edits a value, `dd` goes back to the default, `u` / `U` undo, and `<Space>w` applies only the
+changed configs (it gives up if someone else changed them since).
 
 `Enter` on a group opens its lag (refreshed every 5 seconds while shown; `↑` marks a lag that
 grew, `*` a partition never committed) and members. `gd` on a lag row opens the topic at the
@@ -177,9 +202,20 @@ offsets: this partition, the topic or every topic, to `next` (skip the stuck mes
 works only on an empty group (stop the consumers first) and gives up if the group changed since
 the preview. `<Space>c` on a topic opens a producer console: each message is optional `key:`,
 `partition:` and `header: name=value` lines, then the body; `key: null` is a null key, a body of
-`null` a tombstone, and `===` separates messages. `Enter` sends the message under the cursor (or
-the selection), `R` all of them, and the result shows each partition and offset. `o` on Topics
-creates a topic, `dd` on a topic deletes it, and `<Space>i` shows the cluster status (brokers,
+`null` a tombstone, and `===` separates messages. `key-encoding:` / `value-encoding: base64` (or
+`hex`) and `header-base64: name=<base64>` carry binary data, and `key-schema:` /
+`value-schema: orders-value[@3][#shop.Order]` serialize the JSON body with that subject's
+schema (the latest version by default; `#` picks a Protobuf message). `Enter` sends the message
+under the cursor (or the selection), `R` all of them, and the result shows each partition and
+offset. `:send orders.jsonl` sends a JSON Lines export after one confirmation (over 1,000
+messages it shows the first five).
+
+With a Schema Registry the tree also lists its subjects and their versions. `Enter` on one opens
+a Schema tab: the versions (`Enter` shows one, `m` marks one and `C` diffs it with the marked or
+the latest), `<Space>v` registers a new version written in `$EDITOR` after a compatibility
+check, `c` sets the compatibility level and `dd` soft-deletes a version. `o` on Topics
+creates a topic, `dd` on a topic deletes it (on an empty group: deletes the group; in a group's
+lag `X` deletes its offsets on that topic), and `<Space>i` shows the cluster status (brokers,
 under-replicated partitions).
 
 
@@ -350,6 +386,13 @@ picks the workspace by directory.
 | `g d` | Kafka group tab: open the message the group is stuck on (in the messages, back to the group) |
 | `R` | Kafka group tab: reset offsets |
 | `<Space>x l` | Kafka messages: export as JSON Lines |
+| `p` / `P` / `I` | Kafka messages: copy the message / every shown message to a producer console / read_committed or read_uncommitted |
+| `X` | Kafka messages, partitions and group lag: delete messages up to this one / before an offset / the group's offsets on the topic |
+| `o` | Kafka topic partitions: add partitions |
+| `i` / `d d` / `<Space>w` | Kafka topic config: edit a value / back to the default / apply the changes |
+| `m` / `C` / `c` | Kafka schema tab: mark a version / diff with the marked one or the latest / set the compatibility level |
+| `<Space>v` / `d d` | Kafka schema tab: register a new version in `$EDITOR` / soft-delete the version |
+| `:send <file>` | Kafka producer console: send a JSON Lines file |
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
 | `v` | Redis key tab: show a string as auto / text / JSON / hex |
@@ -464,6 +507,10 @@ with a syntax error, the cursor jumps to where the server says the error is.
   creating and deleting topics and resetting offsets; on prod writes ask for `y` and resetting
   offsets wants the group name typed; deleting a topic wants its name typed on every connection.
   Offsets are reset only on an empty group, and not at all if the group changed since the preview.
+  The same rules cover config changes, adding partitions and registering schemas (writes), and
+  deleting messages, groups, group offsets and schema versions (dangerous: the topic, group or
+  subject name is typed on every connection). Groups and their offsets are deleted only while
+  the group is empty, checked again right before the request; schemas are only ever soft-deleted.
   For a production cluster also use an account whose ACLs only allow reading.
 - `env = "prod"` frames the tab area in red and shows `[PROD]` in the status bar; every
   write or DDL statement on a prod connection asks for `y` first.

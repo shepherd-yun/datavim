@@ -66,7 +66,7 @@ func DefaultBindings() []Binding {
 		Binding{Tree, keys("left"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("p"), Password, "Enter password"},
 		Binding{Tree, keys("e"), EditNode, "Edit connection / modify table"},
-		Binding{Tree, keys("d", "d"), DeleteNode, "Delete connection / drop table or view / delete Redis keys or a topic"},
+		Binding{Tree, keys("d", "d"), DeleteNode, "Delete connection / drop table or view / delete Redis keys, a topic, a group or a schema version"},
 		Binding{Tree, keys("r"), RenameTable, "Rename table, view or Redis key"},
 		Binding{Tree, keys("T"), TruncateTable, "Truncate table"},
 		Binding{Tree, keys("a"), NodeActions, "Actions on the selected node"},

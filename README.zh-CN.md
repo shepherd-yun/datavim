@@ -11,7 +11,8 @@
 - `<Space><Space>` 搜索所有表、视图、列和函数；`<Space>f` 重新打开最近的 tab。
 - 复制与导出结果（TSV、CSV、JSON、Markdown、INSERT、xlsx），SQL 历史。
 - 把 CSV、TSV、xlsx 文件导入到表，或从文件推断结构新建表。
-- Kafka：topic、按 lag 排序的 consumer group，可跳转、过滤和 live tail 的消息浏览，重置 offset，producer console。
+- Kafka：topic、按 lag 排序的 consumer group，可跳转、过滤和 live tail 的消息浏览，重置 offset，producer console；
+  修改 topic 配置和 partition，删除消息和 group，Schema Registry（Avro、Protobuf、JSON Schema）。
 - SSH 隧道（agent、密钥、ProxyJump），生产环境保护，手动事务。
 - 自定义按键（`keymap.toml`）与颜色（`[theme]`）。
 
@@ -117,28 +118,55 @@ params = { sasl = "scram-sha-512", tls = "true" }
 `params`：`sasl`（`plain`、`scram-sha-256` 或 `scram-sha-512`；密码和其他连接一样会询问并存进钥匙串）、
 `tls = "true"`、`tls_skip_verify`、`tls_ca`、`tls_cert` 和 `tls_key`（PEM 文件，用于 mTLS）、`client_id`（默认
 `sqlvim`）和 `show_internal = "true"`。连接表单里有 `SASL` 和 `TLS` 两项。走 SSH 隧道时，所有 broker 连接（包括
-broker 返回的 advertised 地址）都经过跳板机，所以跳板机必须能访问这些地址。展开连接后列出 Brokers、Topics（按名字里
+broker 返回的 advertised 地址）都经过跳板机，所以跳板机必须能访问这些地址。
+`broker_map = "b-1.internal:9092=localhost:19092, …"` 让某个 advertised broker 改连另一个地址（端口转发、NAT）。
+
+`sasl = "oauth"` 用 OAuth client credentials 取 token 登录：必须配 `oauth_token_url` 和 `oauth_client_id`，`oauth_scope`
+可选，client secret 在第一次用到时询问。`sasl = "aws-msk-iam"` 用 IAM 登录 MSK（`aws_region`、`aws_profile`，默认开 TLS）：
+凭据来自 AWS 自己的凭据链（环境变量、`~/.aws`、SSO、实例角色），sqlvim 不保存 AWS 密钥。
+
+`schema_registry_url = "https://sr.internal:8081"` 配置 Schema Registry（Confluent API，Redpanda 自带的也行），basic auth
+用 `schema_registry_user`；它的 HTTP 请求同样走 SSH 隧道，使用 `tls_ca` / `tls_skip_verify`。Registry 第一次要求密码时
+才询问。连接密码以外的秘密在钥匙串里的账户是 `<连接名>#schema-registry` 和 `<连接名>#oauth`，也可以用环境变量
+`SQLVIM_PASSWORD_<名字>_SCHEMA_REGISTRY` / `SQLVIM_PASSWORD_<名字>_OAUTH` 提供。
+
+展开连接后列出 Brokers、Topics（按名字里
 第一个 `.` `-` `_` 之前的前缀分文件夹；`.` 显示内部 topic）和 Consumer Groups，按 lag 从大到小排序（`s` 改为按名字），
 有积压的 group 标红；`F` / `fx` 按名字过滤 topic 或 group。
 
 在 topic 上按 `Enter` 打开标签页，`[` / `]` 在 Messages、Partitions、Config、Consumers 之间切换。Messages 按时间显示所有
 partition 最新的 200 条（只看一个 partition 时按 offset）；光标越过第一行或最后一行时每个 partition 再加载 200 条，一个视图
-最多保留 10,000 条。`t` 跳转：`latest`、`earliest`、`-500`（每个 partition 的最后 500 条）、`p1:1180002`、当前 partition 的
+最多保留 10,000 条。默认按 `read_committed` 读取（被 abort 的事务消息不显示），`I` 切换到 `read_uncommitted`。
+Schema Registry 线格式的 key 和 value 会解码成 JSON；取不到 schema 的那条按 hex 显示并注明原因。`t` 跳转：`latest`、`earliest`、`-500`（每个 partition 的最后 500 条）、`p1:1180002`、当前 partition 的
 offset、`p1,p3`（只看这些 partition）或 `@2026-10-20 09:12` / `@09:12` / `@-15m`，输入时显示预览；offset 已被 retention
 删除时会明确提示，并提供跳到 earliest。`T` 开启 / 暂停 live tail（标签页不可见时自动停止）。`K` 查看消息——key、headers
 以及按 auto / text / JSON / hex / base64（`v` 切换）显示的 value（超过 1 MB 的只保留前 1 MB）——`yy` 以 JSON 复制整条
 消息（二进制用 base64），`yl` 复制单元格的完整内容，`c` 显示 headers 列，`<Space>v` 用 `$EDITOR` 打开 value。`F` 过滤：
 `key = ord-1`、`value ~ sku`、`header.source = checkout`、`value.user.id = 42`、`partition`、`offset`、`ts > 09:12`、
 `size > 1000`，用 `and` / `or` 连接；`ff` `f!` `fs` 用光标处的单元格追加条件，`fx` 清除；有过滤时 `n` / `N` 会继续向后
-（向前）查找未加载的消息（最多 100,000 条，`Ctrl-c` 停止）。`<Space>xl` 把消息导出为 JSON Lines。
+（向前）查找未加载的消息（最多 100,000 条，`Ctrl-c` 停止）。`<Space>xl` 把消息导出为 JSON Lines。`p` 把光标所在的
+消息、`P` 把显示的全部消息复制到 producer console（可选这个或另一个 topic），以便逐字节原样重发；`X` 删除到光标这条为止的消息。
+
+Partitions 部分按 `o` 增加 partition，`X` 删除某个 offset 之前的消息。Config 部分 `i` 修改值，`dd` 恢复默认值，`u` / `U`
+撤销，`<Space>w` 只提交改动过的配置（预览之后别人改过这些配置就放弃）。
 
 在 group 上按 `Enter` 打开 lag（显示时每 5 秒刷新；`↑` 表示 lag 变大，`*` 表示从未提交过）和成员。在 lag 的一行上按 `gd`
 打开 topic 并定位到 group 的 committed offset——也就是卡住的那条消息——在那里再按 `gd` 回到 group。`R` 重置 offset：
 范围是这个 partition、这个 topic 或所有 topic，目标是 `next`（跳过卡住的消息）、`earliest`、`latest`、某个 offset、`@时间`
 或 `+N` / `-N`，执行前预览每个 partition。只能在 group 为 Empty 时重置（先停掉消费者），预览之后 group 有变化就放弃。
 在 topic 上按 `<Space>c` 打开 producer console：每条消息由可选的 `key:`、`partition:`、`header: name=value` 行和正文组成；
-`key: null` 表示 key 为 null，正文只有 `null` 表示 tombstone，消息之间用 `===` 分隔。`Enter` 发送光标所在的消息（或选中的
-消息），`R` 发送全部，结果区显示每条的 partition 和 offset。在 Topics 上按 `o` 新建 topic，在 topic 上按 `dd` 删除，
+`key: null` 表示 key 为 null，正文只有 `null` 表示 tombstone，消息之间用 `===` 分隔。`key-encoding:` / `value-encoding: base64`（或 `hex`）和
+`header-base64: name=<base64>` 用来写二进制数据，`key-schema:` / `value-schema: orders-value[@3][#shop.Order]` 用这个
+subject 的 schema 序列化 JSON 正文（默认最新版本；`#` 指定 Protobuf message）。`Enter` 发送光标所在的消息（或选中的
+消息），`R` 发送全部，结果区显示每条的 partition 和 offset。`:send orders.jsonl` 发送一个 JSON Lines 导出文件，确认一次
+（超过 1,000 条时先显示前 5 条）。
+
+配置了 Schema Registry 时，树里还会列出 subject 和它们的版本。在上面按 `Enter` 打开 Schema 标签页：版本列表（`Enter` 查看
+某个版本，`m` 标记、`C` 与标记的或最新的版本对比），`<Space>v` 在 `$EDITOR` 里写新版本、检查兼容性后注册，`c` 修改兼容级别，
+`dd` 软删除一个版本。
+
+在 Topics 上按 `o` 新建 topic，在 topic 上按 `dd` 删除（在 Empty 的 group 上按 `dd` 删除 group；group 的 lag 里按 `X` 删除
+它在这个 topic 上的 offset），
 `<Space>i` 显示集群状态（broker、副本不足的 partition）。
 
 ## 编辑表数据
@@ -308,6 +336,13 @@ sqlvim --list-workspaces
 | `g d` | Kafka group 标签页：打开 group 卡住的那条消息（在消息里按则回到 group） |
 | `R` | Kafka group 标签页：重置 offset |
 | `<Space>x l` | Kafka 消息：导出为 JSON Lines |
+| `p` / `P` / `I` | Kafka 消息：复制这条 / 显示的全部消息到 producer console / read_committed 或 read_uncommitted |
+| `X` | Kafka 消息、partition 和 group lag：删除到这条为止的消息 / 某个 offset 之前的消息 / group 在这个 topic 上的 offset |
+| `o` | Kafka topic 的 Partitions：增加 partition |
+| `i` / `d d` / `<Space>w` | Kafka topic 的 Config：修改值 / 恢复默认值 / 提交改动 |
+| `m` / `C` / `c` | Kafka Schema 标签页：标记版本 / 与标记的或最新的版本对比 / 修改兼容级别 |
+| `<Space>v` / `d d` | Kafka Schema 标签页：在 `$EDITOR` 里注册新版本 / 软删除这个版本 |
+| `:send <file>` | Kafka producer console：发送 JSON Lines 文件 |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |
 
@@ -388,7 +423,9 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
 - Kafka：浏览消息时直接读取 partition，从不加入 consumer group、不提交 offset、不创建 topic（发消息到不存在的 topic
   会报错）。只读连接拒绝发消息、新建和删除 topic、重置 offset；prod 连接上的写操作按 `y` 确认，重置 offset 要输入
   group 名；删除 topic 在任何连接上都要输入 topic 名。只有 group 为 Empty 时才能重置 offset，预览之后 group 有变化
-  就放弃。生产集群建议使用 ACL 只允许读的账号。
+  就放弃。修改配置、增加 partition、注册 schema（写操作）以及删除消息、group、group 的 offset 和 schema 版本（危险操作：
+  在任何连接上都要输入 topic、group 或 subject 名）遵守同样的规则。group 和它的 offset 只在 group 为 Empty 时删除，
+  发请求前会重新检查；schema 只做软删除。生产集群建议使用 ACL 只允许读的账号。
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，

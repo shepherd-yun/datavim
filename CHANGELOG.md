@@ -6,6 +6,36 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Kafka K2. The topic tab's Config section edits configs as staged changes (`i` edits, `dd`
+  goes back to the default, `u` / `U` undo, `<Space>w` applies only what changed, and gives up
+  if someone changed those configs since the preview); `o` in Partitions adds partitions; `X`
+  deletes messages before an offset (in Partitions) or up to the message under the cursor (in
+  Messages). `dd` in the tree deletes an empty consumer group and `X` in a group's lag deletes
+  its offsets on that topic. With `params.schema_registry_url` (and `schema_registry_user`) the
+  tree lists the Schema Registry's subjects and versions, messages in the Confluent wire format
+  are decoded from Avro, Protobuf and JSON Schema (a schema that can't be read shows that
+  message as hex with the reason, the others still decode), and `Enter` on a subject opens a
+  Schema tab: versions, `m` / `C` to diff two of them, `<Space>v` to register a new version in
+  `$EDITOR` after a compatibility check, `c` to set the compatibility level and `dd` to
+  soft-delete a version. The producer console takes `key-schema:` / `value-schema:`
+  `subject[@version][#message]` lines to serialize a JSON body, `key-encoding:` /
+  `value-encoding: base64|hex` and `header-base64:` for binary data. `p` / `P` in Messages copy
+  the message under the cursor / every shown message to a producer console (of this or another
+  topic) to send them again byte for byte, and `:send <file.jsonl>` in a producer console sends
+  a JSON Lines export after one confirmation. `I` switches a message view between
+  read_committed and read_uncommitted. Connections take `params.broker_map` (dial another
+  address for an advertised broker), `sasl = "oauth"` (client credentials: `oauth_token_url`,
+  `oauth_client_id`, `oauth_scope`) and `sasl = "aws-msk-iam"` (`aws_region`, `aws_profile`,
+  AWS's own credential chain). The registry password and the OAuth client secret are asked for
+  the first time they are needed and kept in the keychain. Read-only connections refuse every
+  K2 write; deleting messages, groups, group offsets and schema versions wants the topic, group
+  or subject name typed on every connection, and prod asks before the other writes.
+
+### Changed
+- Kafka message views read `read_committed` by default, so messages of aborted transactions are
+  no longer shown (`I` shows them again).
+
 ## [2.4.0] - 2026-10-21
 
 ### Added

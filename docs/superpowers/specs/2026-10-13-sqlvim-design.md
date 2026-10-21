@@ -203,7 +203,7 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 
 ### 5.3 生产库保护
 
-> Redis 的对应规则见 [Redis 支持设计文档](2026-10-16-redis-design.md) §7，Kafka 的见 [Kafka 支持设计文档](2026-10-20-kafka-design.md) §8。
+> Redis 的对应规则见 [Redis 支持设计文档](2026-10-16-redis-design.md) §7，Kafka 的见 [Kafka 支持设计文档](2026-10-20-kafka-design.md) §8（K1 的发消息、建删 topic、重置 offset，以及 K2 的修改配置、增加 partition、删除消息 / group / group offset 和 Schema Registry 的写操作）。
 
 由 `sqlx` 对语句分类：读 / 写（DML）/ DDL / 事务控制 / 其他。
 
