@@ -113,7 +113,7 @@ func Open(path string) (*Store, error) {
 		return nil, err
 	}
 	sqldb.SetMaxOpenConns(1) // a single writer; also keeps :memory: one database
-	for _, stmt := range schema {
+	for _, stmt := range append(schema, auditSchema...) {
 		if _, err := sqldb.Exec(stmt); err != nil {
 			_ = sqldb.Close()
 			return nil, err
