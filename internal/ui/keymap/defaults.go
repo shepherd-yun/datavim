@@ -259,6 +259,12 @@ func DefaultBindings() []Binding {
 		Binding{KafkaSchema, keys("c"), SetCompatibility, "Set the compatibility level…"},
 		Binding{KafkaSchema, keys("d", "d"), DeleteNode, "Soft-delete the version"},
 	)
+	b = append(b, gridBindings(KafkaACL)...)
+	b = append(b,
+		Binding{KafkaACL, keys("o"), NewKey, "New ACL…"},
+		Binding{KafkaACL, keys("d", "d"), DeleteRow, "Delete the ACL"},
+		Binding{KafkaACL, keys("g", "d"), OpenCellKey, "Open the topic or group"},
+	)
 	b = append(b, gridBindings(Audit)...)
 	b = append(b,
 		Binding{Audit, keys("F"), FilterPrompt, "Search the audit log (op, object, detail)"},

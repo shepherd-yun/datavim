@@ -36,6 +36,7 @@ const (
 	KindBroker
 	KindSchemaSubject // a Schema Registry subject; Key is its name
 	KindSchemaVersion // Key is "subject\x00version", Name "v3"
+	KindKafkaACLs     // the ACLs line of a kafka connection: a leaf that opens the ACL tab
 )
 
 // Group tells the groups under a table apart.

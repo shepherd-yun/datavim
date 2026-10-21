@@ -118,8 +118,10 @@ type Model struct {
 	kafkaTrees  map[string]*kafkaTree   // what the kafka connections' trees are built from
 	// topicFormConn is the connection the open new-topic form adds to.
 	topicFormConn string
-	bulk          *bulkDelete // the running pattern delete, or nil
-	bulkGen       int
+	// aclFormTab is the ACL tab the open new-ACL form adds to.
+	aclFormTab int
+	bulk       *bulkDelete // the running pattern delete, or nil
+	bulkGen    int
 }
 
 // registerUser is a tab or popup with a vim editor.
@@ -242,6 +244,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.resetTimes(msg)
 	case overlay.TopicFormMsg:
 		m.topicFormed(msg)
+	case aclNewMsg:
+		m.aclFormFor(msg)
+	case overlay.ACLFormMsg:
+		return m, m.aclFormed(msg)
 	case createTopicMsg:
 		return m, m.createTopic(msg)
 	case topicCreatedMsg:

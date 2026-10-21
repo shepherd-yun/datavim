@@ -138,7 +138,7 @@ func TestKafkaTreeExpand(t *testing.T) {
 	}
 	pressAll(t, m, "l")
 	root := m.tree.Roots()[0]
-	if got := names(root.Children); !slices.Equal(got, []string{"Brokers (2)", "Topics (1)", "Consumer Groups (150)"}) {
+	if got := names(root.Children); !slices.Equal(got, []string{"Brokers (2)", "Topics (1)", "Consumer Groups (150)", "ACLs"}) {
 		t.Fatalf("sections = %v", got)
 	}
 	if len(k.lagCalls) != 2 || len(k.lagCalls[0]) != 100 || len(k.lagCalls[1]) != 50 {
@@ -259,7 +259,7 @@ func TestKafkaPasswordPrompt(t *testing.T) {
 	}
 	typeText(t, m, "pw")
 	pressAll(t, m, "enter")
-	if root := m.tree.Roots()[0]; len(root.Children) != 3 {
+	if root := m.tree.Roots()[0]; len(root.Children) != 4 {
 		t.Fatalf("after the password: %+v", root.Children)
 	}
 }
@@ -282,7 +282,7 @@ func TestSecretPromptRetries(t *testing.T) {
 	if !slices.Equal(b.secrets, []string{"events:oauth:s"}) {
 		t.Fatalf("SetSecret calls = %v", b.secrets)
 	}
-	if root := m.tree.Roots()[0]; len(root.Children) != 3 {
+	if root := m.tree.Roots()[0]; len(root.Children) != 4 {
 		t.Fatalf("after the secret: %+v", root.Children)
 	}
 }
@@ -307,7 +307,7 @@ func registryTree(t *testing.T) (*Model, *fakeBackend, *fakeRegistry) {
 func TestTreeSchemaSection(t *testing.T) {
 	m, _, _ := registryTree(t)
 	root := m.tree.Roots()[0]
-	if got := names(root.Children); len(got) != 4 || got[3] != "Schema Registry (2)" {
+	if got := names(root.Children); len(got) != 5 || got[3] != "Schema Registry (2)" || got[4] != "ACLs" {
 		t.Fatalf("sections = %v", got)
 	}
 	subs := section(t, m, "events", secSchemas).Children
@@ -318,7 +318,7 @@ func TestTreeSchemaSection(t *testing.T) {
 	m2, _, _ := newKafkaModel(t, config.Connection{})
 	m2.setFocus(focusTree)
 	pressAll(t, m2, "l")
-	if got := names(m2.tree.Roots()[0].Children); len(got) != 3 {
+	if got := names(m2.tree.Roots()[0].Children); !slices.Equal(got, []string{"Brokers (2)", "Topics (0)", "Consumer Groups (0)", "ACLs"}) {
 		t.Fatalf("without a registry: %v", got)
 	}
 }

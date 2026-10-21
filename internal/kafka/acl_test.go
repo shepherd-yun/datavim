@@ -70,6 +70,9 @@ func TestCreateACLInvalid(t *testing.T) {
 	} {
 		a := ok
 		tc(&a)
+		if a.Validate() == nil {
+			t.Errorf("Validate(%+v) = nil", a)
+		}
 		if err := cl.CreateACLs(ctx(t), []ACL{ok, a}); err == nil {
 			t.Errorf("CreateACLs(%+v) is not an error", a)
 		}

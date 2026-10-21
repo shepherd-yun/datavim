@@ -44,6 +44,8 @@ const (
 	KafkaConfig Context = "kafka_config"
 	// KafkaSchema is a Schema Registry subject's tab.
 	KafkaSchema Context = "kafka_schema"
+	// KafkaACL is a Kafka connection's ACL tab.
+	KafkaACL Context = "kafka_acl"
 	// Audit is the audit log of writes.
 	Audit Context = "audit"
 	// Popup holds the keys popups read themselves (they bypass the keymap):

@@ -10,7 +10,7 @@ import (
 func Contexts() []Context {
 	return []Context{
 		Global, Tree, Grid, Structure, Console, Results, Diff, Import, RedisKey, RedisResults, RedisServer, DBServer, RedisBigKeys,
-		KafkaTopic, KafkaMessages, KafkaGroup, KafkaProduceResults, KafkaServer, KafkaConfig, KafkaSchema, Audit, Popup,
+		KafkaTopic, KafkaMessages, KafkaGroup, KafkaProduceResults, KafkaServer, KafkaConfig, KafkaSchema, KafkaACL, Audit, Popup,
 	}
 }
 

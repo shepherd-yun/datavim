@@ -321,6 +321,7 @@ func (m *Model) buildKafkaTree(conn string) {
 		subjects := buildSubjectNodes(conn, filterSubjects(st.subjects, st.filter[secSchemas]))
 		sections = append(sections, m.kafkaSection(conn, secSchemas, "Schema Registry", len(subjects), subjects))
 	}
+	sections = append(sections, &tree.Node{Kind: tree.KindKafkaACLs, Conn: conn, Section: secACLs, Key: secACLs, Name: "ACLs"})
 	var reopen func([]*tree.Node)
 	reopen = func(nodes []*tree.Node) {
 		for _, c := range nodes {
@@ -609,6 +610,8 @@ func (m *Model) kafkaTreeAction(a keymap.Action, n *tree.Node) (tea.Cmd, bool) {
 		m.setStatus("only topics, groups, schema versions (and the connection) can be deleted here", true)
 	case keymap.Open:
 		switch n.Kind {
+		case tree.KindKafkaACLs:
+			return m.openACLs(n.Conn), true
 		case tree.KindTopic:
 			return m.openTopic(n.Conn, n.Key), true
 		case tree.KindKafkaGroup:

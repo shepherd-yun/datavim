@@ -62,6 +62,12 @@ func oneOf(field, v string, allowed []string) error {
 	return nil
 }
 
+// Validate reports a field outside the known values, as CreateACLs would.
+func (a ACL) Validate() error {
+	_, err := a.toWire()
+	return err
+}
+
 // toWire checks a and maps it to the protocol's enums.
 func (a ACL) toWire() (wireACL, error) {
 	var w wireACL

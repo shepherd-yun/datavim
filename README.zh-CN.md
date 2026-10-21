@@ -166,6 +166,9 @@ subject 的 schema 序列化 JSON 正文（默认最新版本；`#` 指定 Proto
 某个版本，`m` 标记、`C` 与标记的或最新的版本对比），`<Space>v` 在 `$EDITOR` 里写新版本、检查兼容性后注册，`c` 修改兼容级别，
 `dd` 软删除一个版本。
 
+连接下的 `ACLs` 列出集群的 ACL。`o` 新建（每个 operation 一条，确认后创建），`dd` 删除光标所在的 ACL，需要输入它的
+principal（只删这一条：所有字段都要一致），`gd` 打开 literal ACL 对应的 topic 或 group。
+
 在 Topics 上按 `o` 新建 topic，在 topic 上按 `dd` 删除（在 Empty 的 group 上按 `dd` 删除 group；group 的 lag 里按 `X` 删除
 它在这个 topic 上的 offset），
 `<Space>i` 显示集群状态（broker、副本不足的 partition）。
@@ -345,6 +348,7 @@ sqlvim --list-workspaces
 | `m` / `C` / `c` | Kafka Schema 标签页：标记版本 / 与标记的或最新的版本对比 / 修改兼容级别 |
 | `<Space>v` / `d d` | Kafka Schema 标签页：在 `$EDITOR` 里注册新版本 / 软删除这个版本 |
 | `:send <file>` | Kafka producer console：发送 JSON Lines 文件 |
+| `o` / `d d` / `g d` | Kafka ACL 标签页：新建 ACL / 删除这条 ACL / 打开它的 topic 或 group |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |
 
@@ -427,7 +431,8 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
   group 名；删除 topic 在任何连接上都要输入 topic 名。只有 group 为 Empty 时才能重置 offset，预览之后 group 有变化
   就放弃。修改配置、增加 partition、注册 schema（写操作）以及删除消息、group、group 的 offset 和 schema 版本（危险操作：
   在任何连接上都要输入 topic、group 或 subject 名）遵守同样的规则。group 和它的 offset 只在 group 为 Empty 时删除，
-  发请求前会重新检查；schema 只做软删除。生产集群建议使用 ACL 只允许读的账号。
+  发请求前会重新检查；schema 只做软删除。新建 ACL 是写操作；删除 ACL 是危险操作（在任何连接上都要输入 principal）。
+  生产集群建议使用 ACL 只允许读的账号。
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，

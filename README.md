@@ -219,6 +219,10 @@ creates a topic, `dd` on a topic deletes it (on an empty group: deletes the grou
 lag `X` deletes its offsets on that topic), and `<Space>i` shows the cluster status (brokers,
 under-replicated partitions).
 
+`ACLs` under the connection lists the cluster's ACLs. `o` adds some (one per operation, after a
+confirmation), `dd` deletes the one under the cursor once you type its principal (only that ACL:
+every field has to match), and `gd` opens the topic or group a literal ACL is about.
+
 
 ## Editing table data
 
@@ -395,6 +399,7 @@ picks the workspace by directory.
 | `m` / `C` / `c` | Kafka schema tab: mark a version / diff with the marked one or the latest / set the compatibility level |
 | `<Space>v` / `d d` | Kafka schema tab: register a new version in `$EDITOR` / soft-delete the version |
 | `:send <file>` | Kafka producer console: send a JSON Lines file |
+| `o` / `d d` / `g d` | Kafka ACL tab: new ACLs / delete the ACL / open its topic or group |
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
 | `v` | Redis key tab: show a string as auto / text / JSON / hex |
@@ -513,6 +518,7 @@ with a syntax error, the cursor jumps to where the server says the error is.
   deleting messages, groups, group offsets and schema versions (dangerous: the topic, group or
   subject name is typed on every connection). Groups and their offsets are deleted only while
   the group is empty, checked again right before the request; schemas are only ever soft-deleted.
+  Creating ACLs is a write; deleting one is dangerous (its principal is typed on every connection).
   For a production cluster also use an account whose ACLs only allow reading.
 - `env = "prod"` frames the tab area in red and shows `[PROD]` in the status bar; every
   write or DDL statement on a prod connection asks for `y` first.
