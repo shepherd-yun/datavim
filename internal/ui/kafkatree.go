@@ -596,8 +596,10 @@ func (m *Model) kafkaTreeAction(a keymap.Action, n *tree.Node) (tea.Cmd, bool) {
 			return m.askDeleteTopic(n), true
 		case tree.KindKafkaGroup:
 			return m.askDeleteGroup(n), true
+		case tree.KindSchemaVersion:
+			return m.askSoftDelete(n), true
 		}
-		m.setStatus("only topics, groups (and the connection) can be deleted here", true)
+		m.setStatus("only topics, groups, schema versions (and the connection) can be deleted here", true)
 	case keymap.Open:
 		switch n.Kind {
 		case tree.KindTopic:

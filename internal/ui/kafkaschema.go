@@ -73,6 +73,7 @@ type schemaTab struct {
 	mark     int // the version m marked, 0 none
 	diff     []string
 	diffName string
+	editPath string // the temp file of the last $EDITOR run
 	scroll   [schemaSections]int // the first line shown of Schema and Diff
 
 	status  string
@@ -193,6 +194,9 @@ func (t *schemaTab) cursorVersion() (kafka.Schema, bool) {
 }
 
 func (t *schemaTab) Update(msg tea.Msg) tea.Cmd {
+	if cmd, ok := t.schemaOpsUpdate(msg); ok {
+		return cmd
+	}
 	if m, ok := msg.(subjectLoadedMsg); ok {
 		t.loading = false
 		if m.err != nil {
@@ -224,6 +228,9 @@ func (t *schemaTab) versionsResult() *db.ResultSet {
 
 func (t *schemaTab) Handle(a keymap.Action) tea.Cmd {
 	t.status = ""
+	if cmd, ok := t.handleSchemaOps(a); ok {
+		return cmd
+	}
 	switch a {
 	case keymap.NextSection:
 		t.section = min(t.section+1, schemaSections-1)

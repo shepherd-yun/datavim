@@ -248,3 +248,17 @@ func TestPreviewAndConfirmMarkDangerLines(t *testing.T) {
 		t.Fatalf("confirm:\n%q", v)
 	}
 }
+
+func TestConfirmBlocked(t *testing.T) {
+	c := NewConfirm("Register schema", []string{"NOT compatible"}, "", "ok", WithBlocked("can't be registered"))
+	o, cmd := c.HandleKey(uitest.Key("y"))
+	if o == nil || cmd != nil {
+		t.Fatal("y confirmed a blocked box")
+	}
+	if v := c.View(80, 20); !strings.Contains(v, "can't be registered") || strings.Contains(v, "y confirm") {
+		t.Fatalf("view:\n%s", v)
+	}
+	if o, _ := c.HandleKey(uitest.Key("esc")); o != nil {
+		t.Fatal("esc keeps the box")
+	}
+}

@@ -246,6 +246,14 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.createTopic(msg)
 	case topicCreatedMsg:
 		return m, m.topicCreated(msg)
+	case softDeleteAskMsg:
+		return m, m.softDeleteAsked(msg)
+	case softDeleteMsg:
+		return m, m.softDelete(msg)
+	case versionDeletedMsg:
+		return m, m.versionDeleted(msg)
+	case kafkaTreeStaleMsg:
+		return m, m.reloadKafkaTree(msg.conn)
 	case deleteGroupAskMsg:
 		return m, m.deleteGroupAsked(msg)
 	case deleteGroupMsg:

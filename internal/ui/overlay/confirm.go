@@ -31,6 +31,12 @@ func (c *Confirm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 	if key == "esc" {
 		return nil, nil
 	}
+	if c.opts.blocked != "" {
+		if key == "n" || key == "N" || key == "q" || key == "enter" {
+			return nil, nil
+		}
+		return c, nil
+	}
 	if c.expect == "" {
 		switch key {
 		case "y", "Y":
@@ -56,9 +62,12 @@ func (c *Confirm) View(width, height int) string {
 	w := max(min(width-4, 80), 20)
 	body := c.opts.wrapLines(c.lines, w-2)
 	body = append(body, "")
-	if c.expect == "" {
+	switch {
+	case c.opts.blocked != "":
+		body = append(body, theme.Error.Render(c.opts.blocked), theme.Muted.Render("esc close"))
+	case c.expect == "":
 		body = append(body, theme.Muted.Render("y confirm · n/esc cancel"))
-	} else {
+	default:
 		body = append(body, "Type "+theme.Title.Render(textutil.Sanitize(c.expect))+" to continue:",
 			"> "+c.input.View(w-4))
 		if c.wrong {

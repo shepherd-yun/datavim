@@ -10,7 +10,16 @@ import (
 // BoxOption changes a Preview or a Confirm.
 type BoxOption func(*boxOptions)
 
-type boxOptions struct{ danger map[int]bool }
+type boxOptions struct {
+	danger  map[int]bool
+	blocked string // a Confirm that can't be confirmed, and why
+}
+
+// WithBlocked makes a Confirm one that only closes: why replaces its
+// confirm key.
+func WithBlocked(why string) BoxOption {
+	return func(o *boxOptions) { o.blocked = why }
+}
 
 // WithDanger shows lines (0-based, before wrapping) in the error color.
 func WithDanger(lines ...int) BoxOption {
