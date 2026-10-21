@@ -96,6 +96,10 @@ func TestESReadOnlyRefusesEveryWrite(t *testing.T) {
 			return err
 		},
 		"PutMapping": func(d es.Doer) error { return es.PutMapping(ctx, d, "o", json.RawMessage(`{"n":{"type":"text"}}`)) },
+		"PutTemplate": func(d es.Doer) error {
+			return es.PutTemplate(ctx, d, es.TemplateComposable, "t", json.RawMessage(`{"index_patterns":["x"]}`))
+		},
+		"DeleteTemplate": func(d es.Doer) error { return es.DeleteTemplate(ctx, d, es.TemplateLegacy, "t") },
 		"PutClusterSettings": func(d es.Doer) error {
 			v := "1"
 			return es.PutClusterSettings(ctx, d, map[string]*string{"a": &v}, nil)
