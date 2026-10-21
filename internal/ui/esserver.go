@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -36,10 +37,12 @@ const (
 	secESTasks
 	secESPending
 	secESSettings
+	secESUsers // with the cluster's security features only
+	secESRoles
 	eserverSections
 )
 
-var eserverSectionNames = [eserverSections]string{"Overview", "Nodes", "Shards", "Allocation", "Tasks", "Pending", "Settings"}
+var eserverSectionNames = [eserverSections]string{"Overview", "Nodes", "Shards", "Allocation", "Tasks", "Pending", "Settings", "Users", "Roles"}
 
 func esServerTabKey(conn string) string { return "eserver\x00" + conn }
 
@@ -69,6 +72,10 @@ type esServerLoadedMsg struct {
 	tasks     []es.Task
 	pending   []es.PendingTask
 	settings  []es.ClusterSetting
+	security  *es.SecurityAPI // found on the first reading only
+	users     []es.User
+	roles     []es.Role
+	secErr    string // Users / Roles could not be read: why
 	err       error
 }
 
@@ -120,6 +127,12 @@ type esServerTab struct {
 	// watermark is the high disk watermark; read is whether it was tried.
 	watermark     string
 	watermarkRead bool
+	// security is the cluster's user and role API, found once.
+	security     es.SecurityAPI
+	securityRead bool
+	users        []es.User
+	roles        []es.Role
+	secErr       [eserverSections]string // Users / Roles: why they could not be read
 
 	loaded  bool
 	loading bool
@@ -139,6 +152,7 @@ func newESServerTab(id int, b Backend, keys *keymap.Keymap, maxCol int, conn str
 	}
 	t.grids[secESNodes].SetMarks(t.nodeMark)
 	t.grids[secESSettings].SetMarks(t.clusterMark)
+	t.grids[secESUsers].SetMarks(t.userMark)
 	return t
 }
 
@@ -193,6 +207,7 @@ func (t *esServerTab) load() tea.Cmd {
 	id, gen, b, conn, sec := t.id, t.gen, t.backend, t.conn, t.section
 	readWatermark := sec == secESNodes && !t.watermarkRead
 	shardIndex := t.shardIndex
+	probe, api := !t.securityRead, t.security
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 		defer cancel()
@@ -201,6 +216,14 @@ func (t *esServerTab) load() tea.Cmd {
 			var err error
 			if out.health, err = es.ClusterHealth(ctx, d); err != nil {
 				return err
+			}
+			if probe {
+				info, _ := b.ESInfo(conn)
+				found, err := es.Security(ctx, d, info)
+				if err != nil {
+					found = es.SecurityNone // shown as if off rather than failing the tab
+				}
+				out.security, api = &found, found
 			}
 			switch sec {
 			case secESOverview:
@@ -234,6 +257,18 @@ func (t *esServerTab) load() tea.Cmd {
 				out.pending, err = es.PendingTasks(ctx, d)
 			case secESSettings:
 				out.settings, err = es.ClusterSettings(ctx, d)
+			case secESUsers, secESRoles:
+				if api == es.SecurityNone {
+					return nil
+				}
+				if sec == secESUsers {
+					out.users, err = es.Users(ctx, d, api)
+				} else {
+					out.roles, err = es.Roles(ctx, d, api)
+				}
+				if errors.Is(err, es.ErrForbidden) {
+					out.secErr, err = "permission denied", nil
+				}
 			}
 			return err
 		})
@@ -256,6 +291,9 @@ func clusterSettingValue(set []es.ClusterSetting, key string) string {
 
 func (t *esServerTab) Update(msg tea.Msg) tea.Cmd {
 	if cmd, ok := t.clusterUpdate(msg); ok {
+		return cmd
+	}
+	if cmd, ok := t.securityUpdate(msg); ok {
 		return cmd
 	}
 	switch m := msg.(type) {
@@ -298,6 +336,9 @@ func (t *esServerTab) Update(msg tea.Msg) tea.Cmd {
 
 func (t *esServerTab) apply(m esServerLoadedMsg) {
 	t.health = m.health
+	if m.security != nil {
+		t.security, t.securityRead = *m.security, true
+	}
 	t.loadedAt[m.section] = true
 	switch m.section {
 	case secESOverview:
@@ -324,7 +365,30 @@ func (t *esServerTab) apply(m esServerLoadedMsg) {
 	case secESPending:
 		t.pending = m.pending
 		t.grids[secESPending].ReplaceResult(t.pendingResult())
+	case secESUsers:
+		t.users, t.secErr[secESUsers] = m.users, m.secErr
+		t.grids[secESUsers].ReplaceResult(t.usersResult())
+	case secESRoles:
+		t.roles, t.secErr[secESRoles] = m.roles, m.secErr
+		t.grids[secESRoles].ReplaceResult(t.rolesResult())
 	}
+}
+
+// sectionShown reports a section the tab offers: Users and Roles only
+// when the cluster has its security features on.
+func (t *esServerTab) sectionShown(s eserverSection) bool {
+	return s != secESUsers && s != secESRoles || t.security != es.SecurityNone
+}
+
+// step is the next shown section from t.section in direction dir (±1),
+// or t.section at either end.
+func (t *esServerTab) step(dir int) eserverSection {
+	for s := int(t.section) + dir; s >= 0 && s < int(eserverSections); s += dir {
+		if t.sectionShown(eserverSection(s)) {
+			return eserverSection(s)
+		}
+	}
+	return t.section
 }
 
 func (t *esServerTab) Handle(a keymap.Action) tea.Cmd {
@@ -339,11 +403,16 @@ func (t *esServerTab) Handle(a keymap.Action) tea.Cmd {
 			return cmd
 		}
 	}
+	if t.section == secESUsers || t.section == secESRoles {
+		if cmd, ok := t.handleSecurity(a); ok {
+			return cmd
+		}
+	}
 	switch a {
 	case keymap.NextSection:
-		return t.setSection(min(t.section+1, eserverSections-1))
+		return t.setSection(t.step(1))
 	case keymap.PrevSection:
-		return t.setSection(max(t.section-1, 0))
+		return t.setSection(t.step(-1))
 	case keymap.Refresh:
 		if !t.loading {
 			return t.load()
@@ -527,6 +596,8 @@ func (t *esServerTab) empty() string {
 		return "no long-running tasks"
 	case t.section == secESShards && len(t.shardView) == 0 && !t.shardsAll && t.shardFilter == "":
 		return "every shard is started"
+	case (t.section == secESUsers || t.section == secESRoles) && t.secErr[t.section] != "":
+		return t.secErr[t.section]
 	}
 	return ""
 }
@@ -554,12 +625,14 @@ func (t *esServerTab) View(focused bool) string {
 	if w := t.warning(); w != "" && t.loaded {
 		lines = append(lines, theme.Error.Render(textutil.Sanitize(w)))
 	}
-	names := make([]string, eserverSections)
+	var names []string
 	for i, n := range eserverSectionNames {
-		if eserverSection(i) == t.section {
-			names[i] = theme.Title.Render(n)
-		} else {
-			names[i] = theme.Muted.Render(n)
+		switch {
+		case !t.sectionShown(eserverSection(i)):
+		case eserverSection(i) == t.section:
+			names = append(names, theme.Title.Render(n))
+		default:
+			names = append(names, theme.Muted.Render(n))
 		}
 	}
 	lines = append(lines, strings.Join(names, theme.Muted.Render(" · ")))

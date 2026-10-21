@@ -67,7 +67,8 @@ type User struct {
 	Metadata     json.RawMessage // ES; sent back as it is on update
 }
 
-func userPath(api SecurityAPI, name string) string {
+// UserPath is the REST path of a user.
+func UserPath(api SecurityAPI, name string) string {
 	if api == SecurityOpenSearch {
 		return osSecurity + "internalusers/" + url.PathEscape(name)
 	}
@@ -161,11 +162,11 @@ type patchOp struct {
 // CreateUser creates a user with a password.
 func CreateUser(ctx context.Context, d Doer, api SecurityAPI, u User, password string) error {
 	if api == SecurityOpenSearch {
-		return put(ctx, d, "PUT", userPath(api, u.Name), map[string]any{
+		return put(ctx, d, "PUT", UserPath(api, u.Name), map[string]any{
 			"password": password, "opendistro_security_roles": orEmpty(u.Roles), "backend_roles": orEmpty(u.BackendRoles),
 		})
 	}
-	return put(ctx, d, "PUT", userPath(api, u.Name), map[string]any{
+	return put(ctx, d, "PUT", UserPath(api, u.Name), map[string]any{
 		"password": password, "roles": orEmpty(u.Roles), "full_name": u.FullName, "email": u.Email,
 	})
 }
@@ -174,7 +175,7 @@ func CreateUser(ctx context.Context, d Doer, api SecurityAPI, u User, password s
 // keeping the password.
 func UpdateUser(ctx context.Context, d Doer, api SecurityAPI, u User) error {
 	if api == SecurityOpenSearch {
-		return put(ctx, d, "PATCH", userPath(api, u.Name), []patchOp{
+		return put(ctx, d, "PATCH", UserPath(api, u.Name), []patchOp{
 			{"add", "/opendistro_security_roles", orEmpty(u.Roles)},
 			{"add", "/backend_roles", orEmpty(u.BackendRoles)},
 		})
@@ -183,7 +184,7 @@ func UpdateUser(ctx context.Context, d Doer, api SecurityAPI, u User) error {
 	if len(u.Metadata) > 0 {
 		body["metadata"] = u.Metadata
 	}
-	return put(ctx, d, "PUT", userPath(api, u.Name), body)
+	return put(ctx, d, "PUT", UserPath(api, u.Name), body)
 }
 
 // SetUserEnabled enables or disables an ES user; OpenSearch has no such
@@ -196,21 +197,21 @@ func SetUserEnabled(ctx context.Context, d Doer, api SecurityAPI, name string, e
 	if enabled {
 		action = "/_enable"
 	}
-	_, err := do(ctx, d, Request{Method: "PUT", Path: userPath(api, name) + action})
+	_, err := do(ctx, d, Request{Method: "PUT", Path: UserPath(api, name) + action})
 	return err
 }
 
 // ChangePassword sets a user's password.
 func ChangePassword(ctx context.Context, d Doer, api SecurityAPI, name, password string) error {
 	if api == SecurityOpenSearch {
-		return put(ctx, d, "PATCH", userPath(api, name), []patchOp{{"add", "/password", password}})
+		return put(ctx, d, "PATCH", UserPath(api, name), []patchOp{{"add", "/password", password}})
 	}
-	return put(ctx, d, "POST", userPath(api, name)+"/_password", map[string]string{"password": password})
+	return put(ctx, d, "POST", UserPath(api, name)+"/_password", map[string]string{"password": password})
 }
 
 // DeleteUser deletes a user.
 func DeleteUser(ctx context.Context, d Doer, api SecurityAPI, name string) error {
-	_, err := do(ctx, d, Request{Method: "DELETE", Path: userPath(api, name)})
+	_, err := do(ctx, d, Request{Method: "DELETE", Path: UserPath(api, name)})
 	return err
 }
 

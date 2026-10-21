@@ -42,6 +42,9 @@ type fakeES struct {
 	pipelines map[string]string // pipeline name → its definition
 	repos     []es.Repository
 	snaps     map[string][]*fakeSnap // repo → its snapshots, newest first
+	security  es.SecurityAPI         // the user and role API the cluster has
+	users     map[string]string      // name → its GET entry
+	roles     map[string]string      // name → its GET entry
 }
 
 type fakeSnap struct {
@@ -404,6 +407,25 @@ func (f *fakeES) answer(r es.Request) es.Response {
 	case r.Method == "GET" && p == "_ingest/pipeline":
 		out := map[string]json.RawMessage{}
 		for n, v := range f.pipelines {
+			out[n] = json.RawMessage(v)
+		}
+		return jsonResp(out)
+	case r.Method == "GET" && p == "_xpack":
+		return jsonResp(map[string]any{"features": map[string]any{"security": map[string]bool{"available": true, "enabled": f.security == es.SecurityES}}})
+	case r.Method == "GET" && p == "_plugins/_security/api/account":
+		if f.security != es.SecurityOpenSearch {
+			return es.Response{Status: 400, Body: []byte(`{"error":"no handler found for uri [/_plugins/_security/api/account] and method [GET]"}`)}
+		}
+		return jsonResp(map[string]string{"user_name": "admin"})
+	case r.Method == "GET" && (p == "_security/user" || p == "_plugins/_security/api/internalusers"):
+		out := map[string]json.RawMessage{}
+		for n, v := range f.users {
+			out[n] = json.RawMessage(v)
+		}
+		return jsonResp(out)
+	case r.Method == "GET" && (p == "_security/role" || p == "_plugins/_security/api/roles"):
+		out := map[string]json.RawMessage{}
+		for n, v := range f.roles {
 			out[n] = json.RawMessage(v)
 		}
 		return jsonResp(out)

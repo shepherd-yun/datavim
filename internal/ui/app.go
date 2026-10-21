@@ -305,6 +305,13 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.openESObject(msg)
 	case esTreeReloadMsg:
 		return m, m.reloadESTree(msg.conn)
+	case overlay.UserFormMsg:
+		if st, ok := m.activeTab().(*esServerTab); ok {
+			return m, st.userFormed(msg)
+		}
+		return m, nil
+	case esAskDeleteObjectMsg:
+		return m, m.askDeleteObject(msg.conn, msg.key, msg.api)
 	case esServerReloadMsg:
 		for _, t := range m.tabs {
 			if st, ok := t.(*esServerTab); ok && st.conn == msg.conn {
