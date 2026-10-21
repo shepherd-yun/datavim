@@ -117,7 +117,8 @@ type Model struct {
 	scans       map[redisDBKey]*keyScan // the key scans behind the redis db nodes
 	kafkaTrees  map[string]*kafkaTree   // what the kafka connections' trees are built from
 	esTrees     map[string]*esTree      // what the elasticsearch connections' trees are built from
-	esFormConn  string                  // the connection the new-index and reindex forms are for
+	esFormConn  string                  // the connection the new-index, reindex and snapshot forms are for
+	esRepoEdit  esRepoEdit              // the new repository being written in $EDITOR
 	// esReindexSource is the index the reindex form copies.
 	esReindexSource string
 	// topicFormConn is the connection the open new-topic form adds to.
@@ -267,6 +268,26 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.esIndexFormed(msg)
 	case esReindexMsg:
 		return m, m.esReindex(msg)
+	case esOpenSnapshotMsg:
+		return m, m.openESSnapshot(msg)
+	case esSnapshotAskDeleteMsg:
+		return m, m.askDeleteSnapshot(msg)
+	case overlay.SnapshotFormMsg:
+		return m, m.esSnapshotFormed(msg)
+	case esNewRepoMsg:
+		return m, m.askNewRepo(msg.conn)
+	case esRepoNamedMsg:
+		return m, m.esRepoNamed(msg)
+	case esRepoEditFileMsg:
+		return m, m.esRepoEditFile(msg)
+	case esRepoEditDoneMsg:
+		return m, esRepoEditRead(msg)
+	case esRepoEditedMsg:
+		return m, m.esRepoEdited(msg)
+	case esSnapshotWriteMsg:
+		return m, m.esSnapshotWrite(msg)
+	case esSnapshotDoneMsg:
+		return m, m.esSnapshotDone(msg)
 	case esOpenObjectMsg:
 		return m, m.openESObject(msg)
 	case esTreeReloadMsg:

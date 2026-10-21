@@ -158,7 +158,7 @@ func TestESTemplateDelete(t *testing.T) {
 	if slices.ContainsFunc(m.tabs, func(x tab) bool { return x == tab(tt) }) {
 		t.Error("the template's tab is still open")
 	}
-	if n := len(f.sent()); f.sent()[n-1] != "GET _ingest/pipeline" {
+	if !treeRereadAfter(f.sent(), "DELETE _template/old") {
 		t.Errorf("tree not reread: %v", f.sent())
 	}
 }
@@ -312,7 +312,7 @@ func TestESPipelineDelete(t *testing.T) {
 	if slices.Contains(m.tabs, pt) {
 		t.Error("the pipeline's tab is still open")
 	}
-	if n := len(f.sent()); !strings.HasPrefix(f.sent()[n-1], "GET _ingest/pipeline") {
+	if !treeRereadAfter(f.sent(), "DELETE _ingest/pipeline/p1") {
 		t.Errorf("tree not reread: %v", f.sent())
 	}
 }
@@ -349,4 +349,10 @@ func TestESTemplateWorkspaceKey(t *testing.T) {
 			t.Errorf("%s = %v %q", key, k, name)
 		}
 	}
+}
+
+// treeRereadAfter reports the tree read again after the request req.
+func treeRereadAfter(sent []string, req string) bool {
+	i := slices.Index(sent, req)
+	return i >= 0 && slices.Contains(sent[i:], "GET _cluster/health")
 }

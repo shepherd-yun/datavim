@@ -51,6 +51,8 @@ const (
 	KindESTemplate // an index template; Key is "<kind>/<name>"
 	KindESPolicy   // an ILM policy; Key is "ilm/<name>"
 	KindESPipeline // an ingest pipeline; Key is "pipeline/<name>"
+	KindESRepo     // a snapshot repository; Key is its name; its snapshots load when expanded
+	KindESSnapshot // Key is "<repo>/<name>"
 )
 
 // Group tells the groups under a table apart.
@@ -92,7 +94,7 @@ func (n *Node) Parent() *Node { return n.parent }
 func (n *Node) Expandable() bool {
 	switch n.Kind {
 	case KindGroup, KindRedisDB, KindKeyFolder, KindKafkaSection, KindTopicFolder, KindSchemaSubject, KindConnectCluster,
-		KindESSection, KindIndexFolder:
+		KindESSection, KindIndexFolder, KindESRepo:
 		return true
 	}
 	return n.Kind <= KindView
@@ -519,7 +521,7 @@ func icon(n *Node, style IconStyle) string {
 	case KindView:
 		return arrow + " ◦"
 	case KindColumn, KindKey, KindForeignKey, KindIndex, KindTopic, KindKafkaGroup, KindBroker, KindSchemaVersion,
-		KindKafkaACLs, KindConnector, KindESIndex, KindESAlias, KindDataStream, KindESTemplate, KindESPolicy, KindESPipeline:
+		KindKafkaACLs, KindConnector, KindESIndex, KindESAlias, KindDataStream, KindESTemplate, KindESPolicy, KindESPipeline, KindESSnapshot:
 		return "·"
 	}
 	return arrow
@@ -582,10 +584,14 @@ func nerdGlyph(n *Node) string {
 			return "\U000f0369" // md-message_text
 		case "templates", "policies", "pipelines":
 			return "\U000f0219" // md-file_document
+		case "snapshots":
+			return "\U000f0167" // md-content_save
 		}
 		return "\U000f04eb" // md-table
 	case KindESTemplate, KindESPolicy, KindESPipeline:
 		return "\U000f0219" // md-file_document
+	case KindESRepo, KindESSnapshot:
+		return "\U000f0167" // md-content_save
 	case KindESIndex:
 		return "\U000f04eb" // md-table
 	case KindESAlias:

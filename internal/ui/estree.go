@@ -54,6 +54,7 @@ type esTree struct {
 	templates  []es.Template
 	policies   []es.Policy // none on OpenSearch
 	pipelines  []es.Pipeline
+	repos      []es.Repository
 	errs       map[string]string // section -> why it could not load
 	showSystem bool
 	sortBy     esSort
@@ -133,6 +134,7 @@ type esTreeMsg struct {
 	templates []es.Template
 	policies  []es.Policy
 	pipelines []es.Pipeline
+	repos     []es.Repository
 	errs      map[string]string
 	err       error
 }
@@ -171,6 +173,10 @@ func loadESTree(b Backend, n *tree.Node) tea.Cmd {
 			if msg.pipelines, err = es.Pipelines(ctx, d); esSectionErr(msg.errs, esSecPipelines, err) != nil {
 				return err
 			}
+			// no repositories, or none we may see: no Snapshots node
+			if msg.repos, err = es.Repositories(ctx, d); err != nil && !errors.Is(err, es.ErrForbidden) && !errors.Is(err, es.ErrUnsupported) {
+				msg.errs[esSecSnapshots] = esReason(err)
+			}
 			return nil
 		})
 		msg.info, _ = b.ESInfo(conn)
@@ -206,7 +212,7 @@ func (m *Model) esTreeLoaded(msg esTreeMsg) tea.Cmd {
 		m.esTrees[n.Conn] = st
 	}
 	st.info, st.health, st.indices, st.aliases, st.streams, st.errs = msg.info, msg.health, msg.indices, msg.aliases, msg.streams, msg.errs
-	st.templates, st.policies, st.pipelines = msg.templates, msg.policies, msg.pipelines
+	st.templates, st.policies, st.pipelines, st.repos = msg.templates, msg.policies, msg.pipelines, msg.repos
 	m.buildESTree(n.Conn)
 	return nil
 }
@@ -270,10 +276,13 @@ func (m *Model) buildESTree(conn string) {
 	}
 	pipelines := buildPipelineNodes(conn, st)
 	sections = append(sections, sec(esSecPipelines, "Ingest Pipelines", len(pipelines), pipelines))
+	if len(st.repos) > 0 || st.errs[esSecSnapshots] != "" {
+		sections = append(sections, sec(esSecSnapshots, "Snapshots", len(st.repos), buildRepoNodes(conn, st.repos)))
+	}
 	var reopen func([]*tree.Node)
 	reopen = func(nodes []*tree.Node) {
 		for _, c := range nodes {
-			if open[refOf(c)] {
+			if open[refOf(c)] && c.Kind != tree.KindESRepo { // its snapshots load again when expanded
 				c.Expanded = true
 			}
 			reopen(c.Children)
@@ -511,6 +520,10 @@ func (m *Model) openESNode(n *tree.Node) tea.Cmd {
 	switch n.Kind {
 	case tree.KindESTemplate, tree.KindESPolicy, tree.KindESPipeline:
 		msg := esOpenObjectMsg{conn: n.Conn, key: n.Key}
+		return func() tea.Msg { return msg }
+	case tree.KindESSnapshot:
+		repo, name := parseSnapshotKey(n.Key)
+		msg := esOpenSnapshotMsg{conn: n.Conn, repo: repo, name: name}
 		return func() tea.Msg { return msg }
 	}
 	msg := openIndexMsg{conn: n.Conn, target: n.Key}

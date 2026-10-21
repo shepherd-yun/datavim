@@ -47,13 +47,14 @@ type timings struct {
 	// group and kserver refresh a Kafka group tab and a Kafka cluster
 	// status tab; 0 turns it off.
 	group, kserver time.Duration
-	// eserver refreshes an Elasticsearch cluster status tab; 0 turns it off.
-	eserver time.Duration
+	// eserver refreshes an Elasticsearch cluster status tab, esnapshot a
+	// running snapshot's tab; 0 turns it off.
+	eserver, esnapshot time.Duration
 }
 
 var defaultTimings = timings{
 	tick: 100 * time.Millisecond, draft: time.Second, server: statusInterval,
-	group: 5 * time.Second, kserver: 10 * time.Second, eserver: 10 * time.Second,
+	group: 5 * time.Second, kserver: 10 * time.Second, eserver: 10 * time.Second, esnapshot: 2 * time.Second,
 }
 
 var spinner = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}

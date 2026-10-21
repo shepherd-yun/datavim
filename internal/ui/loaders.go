@@ -34,6 +34,9 @@ func loadChildren(b Backend, n *tree.Node) tea.Cmd {
 	if kind == tree.KindSchemaSubject {
 		return loadSubjectVersions(b, n)
 	}
+	if kind == tree.KindESRepo {
+		return loadESSnapshots(b, n)
+	}
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
 		defer cancel()

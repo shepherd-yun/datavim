@@ -251,6 +251,9 @@ func (m *Model) esIndexDone(msg esIndexDoneMsg) tea.Cmd {
 func (m *Model) esTreeWrite(a keymap.Action, n *tree.Node) (tea.Cmd, bool) {
 	switch a {
 	case keymap.NewKey:
+		if n.Section == esSecSnapshots {
+			return m.newSnapshotOn(n), true
+		}
 		return m.newIndexForm(n), true
 	case keymap.DeleteNode:
 		switch n.Kind {
@@ -260,8 +263,10 @@ func (m *Model) esTreeWrite(a keymap.Action, n *tree.Node) (tea.Cmd, bool) {
 			return m.askDeleteIndex(n), true
 		case tree.KindESTemplate, tree.KindESPolicy, tree.KindESPipeline:
 			return m.askDeleteObject(n.Conn, n.Key, es.SecurityNone), true
+		case tree.KindESRepo, tree.KindESSnapshot:
+			return m.askDeleteSnapshotNode(n), true
 		}
-		m.setStatus("only indices, templates, ILM policies, pipelines (and the connection) can be deleted here", true)
+		m.setStatus("only indices, templates, ILM policies, pipelines, snapshots, repositories (and the connection) can be deleted here", true)
 		return nil, true
 	}
 	return nil, false

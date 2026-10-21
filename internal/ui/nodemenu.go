@@ -112,6 +112,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 				{a: keymap.ServerInfo, desc: "Cluster status"},
 				{a: keymap.ToggleInternal, desc: "Show / hide system indices"},
 				{a: keymap.SortGroups, desc: "Sort indices: name / docs / size"},
+				{desc: "New snapshot repository…", msg: esNewRepoMsg{conn: n.Conn}},
 			}, entries[1:]...)
 		case isKafka(m.backend, n.Conn):
 			entries = append([]entry{
@@ -126,7 +127,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 		tree.KindSchemaSubject, tree.KindSchemaVersion, tree.KindKafkaACLs, tree.KindConnectCluster, tree.KindConnector:
 		entries = kafkaMenu(n)
 	case tree.KindESSection, tree.KindIndexFolder, tree.KindESIndex, tree.KindESAlias, tree.KindDataStream, tree.KindESTemplate,
-		tree.KindESPolicy, tree.KindESPipeline:
+		tree.KindESPolicy, tree.KindESPipeline, tree.KindESRepo, tree.KindESSnapshot:
 		entries = esMenu(n)
 	case tree.KindDatabase, tree.KindSchema:
 		entries = []entry{
@@ -292,6 +293,18 @@ func esMenu(n *tree.Node) []menuEntry {
 		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open ILM policy"}, menuEntry{a: keymap.DeleteNode, desc: "Delete ILM policy…"})
 	case tree.KindESPipeline:
 		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open pipeline"}, menuEntry{a: keymap.DeleteNode, desc: "Delete pipeline…"})
+	case tree.KindESRepo:
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Expand / collapse"}, menuEntry{a: keymap.NewKey, desc: "New snapshot…"},
+			menuEntry{a: keymap.DeleteNode, desc: "Delete repository…"})
+	case tree.KindESSnapshot:
+		repo, name := parseSnapshotKey(n.Key)
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open snapshot"},
+			menuEntry{desc: "Restore…", msg: esRestoreAskMsg{conn: n.Conn, repo: repo, name: name}},
+			menuEntry{a: keymap.NewKey, desc: "New snapshot…"}, menuEntry{a: keymap.DeleteNode, desc: "Delete snapshot…"})
+	case tree.KindESSection:
+		if n.Section == esSecSnapshots {
+			entries = append(entries, menuEntry{a: keymap.NewKey, desc: "New snapshot repository…"})
+		}
 	case tree.KindIndexFolder:
 		entries = append(entries, menuEntry{a: keymap.Open, desc: "Expand / collapse"},
 			menuEntry{desc: "Open " + n.Key + "* as one tab", msg: openIndexMsg{conn: n.Conn, target: n.Key + "*", kind: targetPattern}},
@@ -308,7 +321,7 @@ func esMenu(n *tree.Node) []menuEntry {
 func isESNode(n *tree.Node) bool {
 	switch n.Kind {
 	case tree.KindESSection, tree.KindIndexFolder, tree.KindESIndex, tree.KindESAlias, tree.KindDataStream, tree.KindESTemplate,
-		tree.KindESPolicy, tree.KindESPipeline:
+		tree.KindESPolicy, tree.KindESPipeline, tree.KindESRepo, tree.KindESSnapshot:
 		return true
 	}
 	return false

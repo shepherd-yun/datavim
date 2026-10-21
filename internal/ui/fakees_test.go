@@ -40,6 +40,23 @@ type fakeES struct {
 	templates []es.Template
 	policies  map[string]string // ILM policy name → its GET _ilm/policy entry
 	pipelines map[string]string // pipeline name → its definition
+	repos     []es.Repository
+	snaps     map[string][]*fakeSnap // repo → its snapshots, newest first
+}
+
+type fakeSnap struct {
+	name, state string
+	indices     []string
+	size, done  int64
+}
+
+func (f *fakeES) snap(repo, name string) *fakeSnap {
+	for _, s := range f.snaps[repo] {
+		if s.name == name {
+			return s
+		}
+	}
+	return nil
 }
 
 type fakeIndex struct {
@@ -390,6 +407,39 @@ func (f *fakeES) answer(r es.Request) es.Response {
 			out[n] = json.RawMessage(v)
 		}
 		return jsonResp(out)
+	case r.Method == "GET" && p == "_snapshot":
+		out := map[string]any{}
+		for _, rp := range f.repos {
+			out[rp.Name] = map[string]any{"type": rp.Type, "settings": rp.Settings}
+		}
+		return jsonResp(out)
+	case r.Method == "GET" && len(segs) == 3 && segs[0] == "_cat" && segs[1] == "snapshots":
+		if _, ok := f.snaps[segs[2]]; !ok {
+			return errResp(404, "repository_missing_exception", "["+segs[2]+"] missing")
+		}
+		rows := []map[string]string{}
+		for _, sn := range f.snaps[segs[2]] {
+			rows = append(rows, map[string]string{"id": sn.name, "status": sn.state, "start_epoch": "1792683000", "duration": "12s",
+				"indices": strconv.Itoa(len(sn.indices)), "total_shards": strconv.Itoa(len(sn.indices)), "failed_shards": "0"})
+		}
+		return jsonResp(rows)
+	case r.Method == "GET" && len(segs) >= 3 && segs[0] == "_snapshot":
+		sn := f.snap(segs[1], segs[2])
+		if sn == nil {
+			return errResp(404, "snapshot_missing_exception", segs[1]+":"+segs[2]+" is missing")
+		}
+		if len(segs) == 4 && segs[3] == "_status" {
+			stats := map[string]any{"total": map[string]int64{"size_in_bytes": sn.size}}
+			if sn.state == "IN_PROGRESS" {
+				stats["processed"] = map[string]int64{"size_in_bytes": sn.done}
+			}
+			return jsonResp(map[string]any{"snapshots": []map[string]any{{"snapshot": sn.name, "stats": stats}}})
+		}
+		return jsonResp(map[string]any{"snapshots": []map[string]any{{
+			"snapshot": sn.name, "version": f.info.Version, "indices": sn.indices, "data_streams": []string{},
+			"include_global_state": false, "state": sn.state, "start_time_in_millis": 1792683000000, "end_time_in_millis": 1792683012000,
+			"duration_in_millis": 12000, "failures": []any{}, "shards": map[string]int{"total": len(sn.indices), "failed": 0, "successful": len(sn.indices)},
+		}}})
 	case r.Method == "HEAD" && len(segs) == 1:
 		if len(f.resolve(p)) == 0 {
 			return es.Response{Status: 404}
