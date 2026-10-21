@@ -236,12 +236,15 @@ type connectorTab struct {
 	err                 string
 	status              string
 	statusE             bool
+	settings            config.Settings
+	editPath            string            // the temp file <space>v edits
+	editOld             map[string]string // the config the edit started from
 
 	width, height int
 }
 
 func newConnectorTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, conn, cluster, name string, interval time.Duration) *connectorTab {
-	t := &connectorTab{id: id, backend: b, keys: keys, conn: conn, cluster: cluster, name: name, interval: interval}
+	t := &connectorTab{id: id, backend: b, keys: keys, conn: conn, cluster: cluster, name: name, interval: interval, settings: s}
 	for i := range t.grids {
 		t.grids[i] = grid.New(nil, s.MaxColumnWidth)
 	}
@@ -302,6 +305,9 @@ func (t *connectorTab) load() tea.Cmd {
 }
 
 func (t *connectorTab) Update(msg tea.Msg) tea.Cmd {
+	if cmd, ok := t.opsUpdate(msg); ok {
+		return cmd
+	}
 	switch m := msg.(type) {
 	case connectorLoadedMsg:
 		if m.gen != t.gen {

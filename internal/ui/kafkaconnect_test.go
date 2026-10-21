@@ -1,9 +1,12 @@
 package ui
 
 import (
+	"os"
 	"strings"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
@@ -171,6 +174,173 @@ func TestSensitiveConnectKey(t *testing.T) {
 	} {
 		if got := sensitiveConnectKey(k); got != want {
 			t.Errorf("sensitiveConnectKey(%q) = %v", k, got)
+		}
+	}
+}
+
+func TestConnectorPauseResume(t *testing.T) {
+	m, _, c := connectModel(t, "http://c1:8083")
+	openConnector(t, m)
+	pressAll(t, m, "p")
+	conf, ok := m.overlay.(*overlay.Confirm)
+	if !ok || !strings.Contains(flatView(conf), "Pause orders-sink?") {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	pressAll(t, m, "y")
+	if got := c.callsOf("Pause "); len(got) != 1 || got[0] != "Pause orders-sink" {
+		t.Fatalf("calls = %v", c.calls)
+	}
+	// the tab read the connector again: now PAUSED, so p resumes
+	pressAll(t, m, "p")
+	if conf, ok := m.overlay.(*overlay.Confirm); !ok || !strings.Contains(flatView(conf), "Resume orders-sink?") {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	pressAll(t, m, "y")
+	if got := c.callsOf("Resume "); len(got) != 1 {
+		t.Fatalf("calls = %v", c.calls)
+	}
+}
+
+func TestConnectorPauseReadOnly(t *testing.T) {
+	on := true
+	m, b, _ := newKafkaModel(t, config.Connection{ReadOnly: &on, Params: map[string]string{"connect_url": "http://c1:8083"}})
+	c := b.addConnect("connect")
+	c.connectors = []kafka.Connector{sinkConnector()}
+	ct := openConnector(t, m)
+	pressAll(t, m, "p")
+	if m.overlay != nil || !strings.Contains(ct.status, "read-only") || len(c.callsOf("Pause")) != 0 {
+		t.Fatalf("overlay %T status %q calls %v", m.overlay, ct.status, c.calls)
+	}
+}
+
+func TestConnectorRestart(t *testing.T) {
+	m, _, c := connectModel(t, "http://c1:8083")
+	openConnector(t, m)
+	pressAll(t, m, "R")
+	if conf, ok := m.overlay.(*overlay.Confirm); !ok || !strings.Contains(flatView(conf), "Restart orders-sink and its failed tasks?") {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	pressAll(t, m, "y")
+	pressAll(t, m, "]", "G", "R")
+	if conf, ok := m.overlay.(*overlay.Confirm); !ok || !strings.Contains(flatView(conf), "Restart task 2 of orders-sink?") {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	pressAll(t, m, "y")
+	if got := c.callsOf("Restart"); !slicesEqual(got, []string{"Restart orders-sink", "RestartTask orders-sink 2"}) {
+		t.Fatalf("calls = %v", got)
+	}
+}
+
+func slicesEqual(a, b []string) bool { return strings.Join(a, "\n") == strings.Join(b, "\n") }
+
+// editConnectorTo runs <space>v with an editor that writes text.
+func editConnectorTo(t *testing.T, m *Model, ct *connectorTab, text string) {
+	t.Helper()
+	pressAll(t, m, "space", "v")
+	if ct.editPath == "" {
+		t.Fatalf("no temp file; status %q", ct.status)
+	}
+	before, err := os.ReadFile(ct.editPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(before), "s3cret") {
+		t.Fatalf("the password is in the temp file:\n%s", before)
+	}
+	if text == "" {
+		text = string(before)
+	} else {
+		text = strings.ReplaceAll(text, "{{file}}", string(before))
+	}
+	if err := os.WriteFile(ct.editPath, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	id, path := ct.id, ct.editPath
+	drainAll(t, m, func() tea.Msg { return editDoneMsg{tabID: id, path: path} })
+}
+
+func TestConnectorEditConfig(t *testing.T) {
+	m, _, c := connectModel(t, "http://c1:8083")
+	ct := openConnector(t, m)
+	pressAll(t, m, "space", "v")
+	text, _ := os.ReadFile(ct.editPath)
+	edited := strings.Replace(string(text), `"tasks.max": "3"`, `"tasks.max": "5"`, 1)
+	editConnectorTo(t, m, ct, edited)
+	conf, ok := m.overlay.(*overlay.Confirm)
+	if !ok {
+		t.Fatalf("overlay = %T, status %q", m.overlay, ct.status)
+	}
+	v := flatView(conf)
+	if !strings.Contains(v, "tasks.max 3 → 5") || strings.Contains(v, "connection.password") || strings.Contains(v, "topics") {
+		t.Fatalf("confirm:\n%s", v)
+	}
+	pressAll(t, m, "y")
+	if c.setCfg == nil || c.setCfg["connection.password"] != "s3cret" || c.setCfg["tasks.max"] != "5" || c.setOld["tasks.max"] != "3" {
+		t.Fatalf("SetConfig(old %v, cfg %v)", c.setOld, c.setCfg)
+	}
+	if got := c.callsOf("Validate "); len(got) != 1 || got[0] != "Validate FileStreamSink" {
+		t.Fatalf("Validate calls = %v", got)
+	}
+}
+
+func TestConnectorEditSensitiveChanged(t *testing.T) {
+	m, _, c := connectModel(t, "http://c1:8083")
+	ct := openConnector(t, m)
+	pressAll(t, m, "space", "v")
+	text, _ := os.ReadFile(ct.editPath)
+	edited := strings.Replace(string(text), `"connection.password": "******"`, `"connection.password": "n3w"`, 1)
+	editConnectorTo(t, m, ct, edited)
+	v := flatView(m.overlay.(*overlay.Confirm))
+	if !strings.Contains(v, "connection.password (changed)") || strings.Contains(v, "n3w") {
+		t.Fatalf("confirm:\n%s", v)
+	}
+	pressAll(t, m, "y")
+	if c.setCfg["connection.password"] != "n3w" {
+		t.Fatalf("cfg = %v", c.setCfg)
+	}
+}
+
+func TestConnectorEditInvalid(t *testing.T) {
+	m, _, c := connectModel(t, "http://c1:8083")
+	c.problems = []kafka.ConfigProblem{{Name: "file", Errors: []string{"Missing required configuration"}}}
+	ct := openConnector(t, m)
+	pressAll(t, m, "space", "v")
+	text, _ := os.ReadFile(ct.editPath)
+	editConnectorTo(t, m, ct, strings.Replace(string(text), `"tasks.max": "3"`, `"tasks.max": "4"`, 1))
+	conf, ok := m.overlay.(*overlay.Confirm)
+	if !ok || !strings.Contains(flatView(conf), "file: Missing required configuration") {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	pressAll(t, m, "y")
+	if len(c.callsOf("SetConfig")) != 0 {
+		t.Fatal("an invalid config was sent")
+	}
+}
+
+func TestConnectorEditChanged(t *testing.T) {
+	m, _, c := connectModel(t, "http://c1:8083")
+	c.errs["SetConfig"] = kafka.ErrConnectorChanged
+	ct := openConnector(t, m)
+	pressAll(t, m, "space", "v")
+	text, _ := os.ReadFile(ct.editPath)
+	editConnectorTo(t, m, ct, strings.Replace(string(text), `"tasks.max": "3"`, `"tasks.max": "4"`, 1))
+	pressAll(t, m, "y")
+	if !strings.Contains(ct.status, "connector config changed since you opened it; review again") {
+		t.Fatalf("status = %q", ct.status)
+	}
+}
+
+func TestConnectorEditRefused(t *testing.T) {
+	for _, tc := range []struct{ text, want string }{
+		{"{{file}}", "no changes"},
+		{"{\n  \"tasks.max\": 3,\n", "line"},
+		{`{"connector.class": "FileStreamSink", "new.password": "******"}`, "new.password: type the value, not ******"},
+	} {
+		m, _, c := connectModel(t, "http://c1:8083")
+		ct := openConnector(t, m)
+		editConnectorTo(t, m, ct, tc.text)
+		if m.overlay != nil || !strings.Contains(ct.status, tc.want) || len(c.callsOf("Validate")) != 0 {
+			t.Errorf("%q: overlay %T status %q", tc.text, m.overlay, ct.status)
 		}
 	}
 }

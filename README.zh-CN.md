@@ -130,6 +130,14 @@ broker 返回的 advertised 地址）都经过跳板机，所以跳板机必须�
 才询问。连接密码以外的秘密在钥匙串里的账户是 `<连接名>#schema-registry` 和 `<连接名>#oauth`，也可以用环境变量
 `SQLVIM_PASSWORD_<名字>_SCHEMA_REGISTRY` / `SQLVIM_PASSWORD_<名字>_OAUTH` 提供。
 
+`connect_url = "main=http://connect-1:8083, cdc=https://connect-2:8083"` 配置 Kafka Connect 集群（只写一个 URL 时集群名是
+`connect`），basic auth 用 `connect_user`（所有集群共用）；集群第一次要求密码时才询问，存在钥匙串的 `<连接名>#connect`
+（环境变量 `SQLVIM_PASSWORD_<名字>_CONNECT`）。它们的 HTTP 请求同样走 SSH 隧道。树上的 Kafka Connect 部分列出 connector
+（有多个集群时按集群分组）、状态和运行中的 task 数，失败的标红；`Enter` 打开 connector：Status、Tasks（`K` 查看 task 的
+trace）和 Config，密码、secret、token、key 显示成 `******`。`p` 暂停或继续，`R` 重启 connector 和它失败的 task（在 Tasks
+部分是重启光标所在的 task），`<Space>v` 在 `$EDITOR` 里以 JSON 修改配置：先由集群校验，确认框列出改动，`******` 表示保留原值，
+如果期间别人改了配置就不提交。
+
 展开连接后列出 Brokers、Topics（按名字里
 第一个 `.` `-` `_` 之前的前缀分文件夹；`.` 显示内部 topic）和 Consumer Groups，按 lag 从大到小排序（`s` 改为按名字），
 有积压的 group 标红；`F` / `fx` 按名字过滤 topic 或 group。
@@ -349,6 +357,7 @@ sqlvim --list-workspaces
 | `<Space>v` / `d d` | Kafka Schema 标签页：在 `$EDITOR` 里注册新版本 / 软删除这个版本 |
 | `:send <file>` | Kafka producer console：发送 JSON Lines 文件 |
 | `o` / `d d` / `g d` | Kafka ACL 标签页：新建 ACL / 删除这条 ACL / 打开它的 topic 或 group |
+| `p` / `R` / `<Space>v` | Kafka connector 标签页：暂停或继续 / 重启（在 Tasks 里重启这个 task）/ 在 `$EDITOR` 里修改配置 |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |
 
@@ -432,6 +441,7 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
   就放弃。修改配置、增加 partition、注册 schema（写操作）以及删除消息、group、group 的 offset 和 schema 版本（危险操作：
   在任何连接上都要输入 topic、group 或 subject 名）遵守同样的规则。group 和它的 offset 只在 group 为 Empty 时删除，
   发请求前会重新检查；schema 只做软删除。新建 ACL 是写操作；删除 ACL 是危险操作（在任何连接上都要输入 principal）。
+  暂停、继续、重启 connector 和 task 以及修改 connector 配置也是写操作（任何连接上都按 `y` 确认，只读连接拒绝）。
   生产集群建议使用 ACL 只允许读的账号。
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。

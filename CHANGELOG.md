@@ -7,6 +7,14 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Kafka Connect: `params.connect_url` (`name=url` items separated by commas, or one URL) adds
+  Connect clusters to a Kafka connection, with `connect_user` for basic auth (the password is asked
+  for and kept as `<connection>#connect`); requests go through the SSH tunnel. The tree lists
+  the connectors with their state and running tasks (failed ones in red), and `Enter` opens a
+  connector tab: Status, Tasks (`K` shows a trace) and Config, sensitive values as `******`. `p`
+  pauses or resumes, `R` restarts the connector and its failed tasks (in Tasks: one task), and
+  `<Space>v` edits the config as JSON in `$EDITOR`, validated by the cluster and confirmed key by
+  key; `******` keeps the old value, and a config someone changed meanwhile is not overwritten.
 - Kafka ACLs: `ACLs` under a Kafka connection in the tree opens the cluster's ACLs (principal,
   host, resource, pattern, operation, permission). `o` adds ACLs from a form (one per operation),
   `dd` deletes the ACL under the cursor after you type its principal, and `gd` opens the topic or

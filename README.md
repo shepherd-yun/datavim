@@ -165,7 +165,21 @@ Redpanda's works too), with `schema_registry_user` for basic auth; its HTTP requ
 the same SSH tunnel and use the TLS params (`tls_ca`, `tls_cert` / `tls_key`, `tls_skip_verify`). The registry password is asked for
 when the registry first wants one. Secrets other than the connection password live in the
 keychain as `<connection>#schema-registry` and `<connection>#oauth`, or come from
-`SQLVIM_PASSWORD_<NAME>_SCHEMA_REGISTRY` / `SQLVIM_PASSWORD_<NAME>_OAUTH`. Expanding
+`SQLVIM_PASSWORD_<NAME>_SCHEMA_REGISTRY` / `SQLVIM_PASSWORD_<NAME>_OAUTH`.
+
+`connect_url = "main=http://connect-1:8083, cdc=https://connect-2:8083"` adds Kafka Connect
+clusters (one bare URL is the cluster `connect`), with `connect_user` for basic auth on all of
+them; the password is asked for when a cluster first wants it and kept as
+`<connection>#connect` (`SQLVIM_PASSWORD_<NAME>_CONNECT`). Their HTTP requests go through the
+SSH tunnel too. The tree's Kafka Connect section lists the connectors (under each cluster when
+there are several) with their state and running tasks, failed ones in red; `Enter` opens a
+connector: Status, Tasks (`K` shows a task's trace) and Config, with passwords, secrets, tokens
+and keys shown as `******`. `p` pauses or resumes it, `R` restarts it with its failed tasks (in
+Tasks: the task under the cursor), and `<Space>v` edits the config in `$EDITOR` as JSON: the
+cluster validates it first, the confirmation lists what changes, `******` keeps the old value,
+and nothing is sent if someone changed the config meanwhile.
+
+Expanding
 the connection lists Brokers, Topics (folders by the name before the first `.` `-` `_`; `.`
 shows the internal ones) and Consumer Groups, sorted by lag (`s` sorts by name), lagging groups
 in red; `F` / `fx` filter topics or groups by name.
@@ -400,6 +414,7 @@ picks the workspace by directory.
 | `<Space>v` / `d d` | Kafka schema tab: register a new version in `$EDITOR` / soft-delete the version |
 | `:send <file>` | Kafka producer console: send a JSON Lines file |
 | `o` / `d d` / `g d` | Kafka ACL tab: new ACLs / delete the ACL / open its topic or group |
+| `p` / `R` / `<Space>v` | Kafka connector tab: pause or resume / restart (in Tasks: the task) / edit the config in `$EDITOR` |
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
 | `v` | Redis key tab: show a string as auto / text / JSON / hex |
@@ -519,6 +534,8 @@ with a syntax error, the cursor jumps to where the server says the error is.
   subject name is typed on every connection). Groups and their offsets are deleted only while
   the group is empty, checked again right before the request; schemas are only ever soft-deleted.
   Creating ACLs is a write; deleting one is dangerous (its principal is typed on every connection).
+  Pausing, resuming and restarting connectors and tasks and changing a connector's config are
+  writes too (`y` on every connection; refused when read-only).
   For a production cluster also use an account whose ACLs only allow reading.
 - `env = "prod"` frames the tab area in red and shows `[PROD]` in the status bar; every
   write or DDL statement on a prod connection asks for `y` first.
