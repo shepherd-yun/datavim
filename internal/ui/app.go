@@ -246,6 +246,12 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.createTopic(msg)
 	case topicCreatedMsg:
 		return m, m.topicCreated(msg)
+	case deleteGroupAskMsg:
+		return m, m.deleteGroupAsked(msg)
+	case deleteGroupMsg:
+		return m, m.deleteGroup(msg)
+	case groupDeletedMsg:
+		return m, m.groupDeleted(msg)
 	case deleteTopicAskMsg:
 		m.deleteTopicAsked(msg)
 	case deleteTopicMsg:

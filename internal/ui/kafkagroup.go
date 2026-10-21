@@ -185,6 +185,10 @@ func (t *groupTab) Update(msg tea.Msg) tea.Cmd {
 		return t.reset(m)
 	case groupResetDoneMsg:
 		return t.resetDone(m)
+	case groupDelOffsetsMsg:
+		return t.deleteOffsets(m.topic)
+	case groupDelOffsetsDoneMsg:
+		return t.offsetsDeleted(m)
 	}
 	return nil
 }
@@ -287,6 +291,8 @@ func (t *groupTab) Handle(a keymap.Action) tea.Cmd {
 		return t.gotoStuck()
 	case keymap.ResetOffsets:
 		return t.askReset()
+	case keymap.DeleteOffsets:
+		return t.askDeleteOffsets()
 	}
 	if cmd, ok := gridAction(t.activeGrid(), a); ok {
 		return cmd
