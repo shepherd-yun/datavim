@@ -1,0 +1,24 @@
+{
+  "snapshots" : [
+    {
+      "snapshot" : "s1",
+      "uuid" : "abc",
+      "repository" : "repo1",
+      "version_id" : 8150099,
+      "version" : "8.15.0",
+      "indices" : [ "orders", "users" ],
+      "data_streams" : [ "logs-app" ],
+      "include_global_state" : false,
+      "state" : "IN_PROGRESS",
+      "start_time" : "2026-10-22T15:30:00.000Z",
+      "start_time_in_millis" : 1792683000000,
+      "end_time_in_millis" : 0,
+      "duration_in_millis" : 0,
+      "failures" : [ ],
+      "shards" : { "total" : 0, "failed" : 0, "successful" : 0 },
+      "feature_states" : [ ]
+    }
+  ],
+  "total" : 1,
+  "remaining" : 0
+}

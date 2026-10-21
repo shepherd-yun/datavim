@@ -100,6 +100,13 @@ func TestESReadOnlyRefusesEveryWrite(t *testing.T) {
 			return es.PutTemplate(ctx, d, es.TemplateComposable, "t", json.RawMessage(`{"index_patterns":["x"]}`))
 		},
 		"DeleteTemplate": func(d es.Doer) error { return es.DeleteTemplate(ctx, d, es.TemplateLegacy, "t") },
+		"CreateSnapshot": func(d es.Doer) error { return es.CreateSnapshot(ctx, d, es.NewSnapshot{Repo: "r", Name: "s"}) },
+		"DeleteSnapshot": func(d es.Doer) error { return es.DeleteSnapshot(ctx, d, "r", "s") },
+		"RestoreSnapshot": func(d es.Doer) error {
+			return es.RestoreSnapshot(ctx, d, es.RestoreSpec{Repo: "r", Name: "s"})
+		},
+		"PutRepository":    func(d es.Doer) error { return es.PutRepository(ctx, d, "r", json.RawMessage(`{"type":"fs"}`)) },
+		"DeleteRepository": func(d es.Doer) error { return es.DeleteRepository(ctx, d, "r") },
 		"PutClusterSettings": func(d es.Doer) error {
 			v := "1"
 			return es.PutClusterSettings(ctx, d, map[string]*string{"a": &v}, nil)

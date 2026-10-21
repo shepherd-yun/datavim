@@ -1,0 +1,23 @@
+{
+  "snapshots" : [
+    {
+      "snapshot" : "s1",
+      "uuid" : "abc",
+      "version_id" : 7100299,
+      "version" : "7.10.2",
+      "indices" : [ "users", "orders" ],
+      "data_streams" : [ ],
+      "include_global_state" : true,
+      "state" : "PARTIAL",
+      "start_time" : "2026-10-22T15:30:00.000Z",
+      "start_time_in_millis" : 1792683000000,
+      "end_time" : "2026-10-22T15:30:12.000Z",
+      "end_time_in_millis" : 1792683012000,
+      "duration_in_millis" : 12000,
+      "failures" : [
+        { "index" : "orders", "index_uuid" : "x", "shard_id" : 1, "reason" : "IndexShardSnapshotFailedException[boom]", "node_id" : "n1", "status" : "INTERNAL_SERVER_ERROR" }
+      ],
+      "shards" : { "total" : 4, "failed" : 1, "successful" : 3 }
+    }
+  ]
+}
