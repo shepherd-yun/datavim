@@ -106,6 +106,22 @@ func plural(n int, what string) string {
 // session; the audit leaves them out.
 var readOther = map[string]bool{"USE": true, "SHOW": true, "DESCRIBE": true, "DESC": true, "EXPLAIN": true}
 
+// savepoint reports SAVEPOINT, RELEASE [SAVEPOINT] and ROLLBACK TO
+// [SAVEPOINT]: bookkeeping inside a transaction (an import takes one per
+// batch) whose BEGIN and COMMIT or ROLLBACK the audit keeps.
+func savepoint(stmt string) bool {
+	f := strings.Fields(strings.ToUpper(stmt))
+	switch {
+	case len(f) == 0:
+		return false
+	case f[0] == "SAVEPOINT", f[0] == "RELEASE":
+		return true
+	case f[0] == "ROLLBACK" && len(f) > 1 && f[1] == "TO":
+		return true
+	}
+	return false
+}
+
 // auditSQL reports whether sql may write and the entry's Op and Object:
 // the first statement in it of Kind Write or DDL, or Other that is not
 // SafeOther. Tx statements count only in a Session (inTx).
@@ -115,7 +131,7 @@ func auditSQL(sql string, d sqlx.Dialect, inTx bool) (op, object string, ok bool
 		switch info.Kind {
 		case sqlx.Write, sqlx.DDL:
 		case sqlx.Tx:
-			if !inTx {
+			if !inTx || savepoint(info.SQL) {
 				continue
 			}
 		case sqlx.Other:

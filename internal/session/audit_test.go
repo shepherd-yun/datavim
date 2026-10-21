@@ -155,6 +155,12 @@ func TestAuditSQLKinds(t *testing.T) {
 		{"EXEC dbo.purge", sqlx.SQLServer, false, "EXEC", "", true},
 		{"SHOW TABLES", sqlx.MySQL, false, "", "", false},
 		{"USE app", sqlx.MySQL, false, "", "", false},
+		// an import's savepoints around each batch: bookkeeping inside a
+		// transaction whose BEGIN and COMMIT / ROLLBACK are recorded
+		{"SAVEPOINT sqlvim_import", sqlx.Postgres, true, "", "", false},
+		{"RELEASE SAVEPOINT sqlvim_import", sqlx.Postgres, true, "", "", false},
+		{"ROLLBACK TO SAVEPOINT sqlvim_import", sqlx.MySQL, true, "", "", false},
+		{"ROLLBACK", sqlx.MySQL, true, "ROLLBACK", "", true},
 	} {
 		op, object, ok := auditSQL(tc.sql, tc.d, tc.inTx)
 		if ok != tc.ok || op != tc.op || (tc.object != "" && object != tc.object) {
