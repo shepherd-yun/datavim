@@ -27,6 +27,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/ui/panes/complete"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/editor"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/textview"
 	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
 	"github.com/shepherd-yun/datavim/internal/ui/vimedit"
@@ -123,11 +124,14 @@ type consoleTab struct {
 	popup      *complete.Model // completion popup; nil when closed
 	popStart   int             // byte offset the popup's word starts at
 
-	editor       *editor.Model
-	grid         *grid.Model
-	onResults    bool
-	showMessages bool
-	messages     []string
+	editor    *editor.Model
+	grid      *grid.Model
+	msgView   *textview.Model // a statement tab's message
+	onResults bool
+	messages  []string
+	stmts     []stmtResult // the statements of the latest run, a result tab each
+	tabs      resultTabs
+	loaded    int // the statement whose rows the grid holds; -1 for none
 
 	res       *editableResult            // the result on screen, with its staged changes
 	shown     resultFilter               // the statement and filter of the result on screen
@@ -167,10 +171,10 @@ func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn strin
 		id: id, backend: b, store: st, conn: conn, ns: ns, dialect: d,
 		maxRows: s.MaxRows, timings: tm, editorCmd: s.EditorCommand(os.Getenv),
 		catalogs: catalogs, metaKey: key, defNS: defaultNamespace(cfg, key, ns),
-		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), keys: keymap.Default(),
+		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), msgView: textview.New(), keys: keymap.Default(),
+		loaded: -1,
 	}
 	t.editor.SetHighlighter(highlight.NewHighlighter(d).Spans)
-	t.editor.EnterInsert() // a console opens ready to type
 	t.res = &editableResult{
 		id: id, backend: b, conn: conn, dialect: d, keys: t.keys, keyCtx: keymap.Results,
 		grid: t.grid, host: t, readOnly: "run a query first",
@@ -272,7 +276,14 @@ func (t *consoleTab) Mode() string {
 }
 
 func (t *consoleTab) Find(q string, forward bool) bool {
-	if t.grid.Find(q, forward) {
+	found := false
+	switch {
+	case t.dataShown():
+		found = t.grid.Find(q, forward)
+	case t.curStmt() != nil:
+		found = t.msgView.Find(q, forward)
+	}
+	if found {
 		t.onResults = true
 		return true
 	}
@@ -298,7 +309,8 @@ func (t *consoleTab) fit() {
 	t.editorH, t.resultsH = splitHeights(t.height, t.full, t.onResults)
 	t.fitOnResults = t.onResults
 	t.editor.SetSize(t.width, t.editorH)
-	t.grid.SetSize(t.width, t.resultsH)
+	t.grid.SetSize(t.width, max(t.resultsH-1, 0)) // the result tabs take a row
+	t.msgView.SetSize(t.width, max(t.resultsH-1, 0))
 }
 
 // splitHeights divides the height h inside a console's frame between the
@@ -448,23 +460,32 @@ func (t *consoleTab) Handle(a keymap.Action) tea.Cmd {
 	case keymap.FocusEditor:
 		t.onResults = false
 		return nil
-	case keymap.ToggleMessages:
-		t.showMessages = !t.showMessages
+	case keymap.ToggleMessages, keymap.ResultView:
+		return t.toggleView()
+	case keymap.PrevResult, keymap.NextResult:
+		d := 1
+		if a == keymap.PrevResult {
+			d = -1
+		}
+		return t.selectResult(t.tabs.step(d))
+	}
+	if !t.onResults {
+		return t.editorAction(a)
+	}
+	if !t.dataShown() {
+		msgViewAction(t.msgView, a)
 		return nil
 	}
-	if t.onResults {
-		if cmd, ok := gridAction(t.grid, a); ok {
-			return cmd
-		}
-		if cmd, ok := t.res.handle(a); ok {
-			return cmd
-		}
-		if a == keymap.LoadMore {
-			return t.loadMore()
-		}
-		return nil
+	if cmd, ok := gridAction(t.grid, a); ok {
+		return tea.Batch(cmd, t.autoMore(a))
 	}
-	return t.editorAction(a)
+	if cmd, ok := t.res.handle(a); ok {
+		return cmd
+	}
+	if a == keymap.LoadMore {
+		return t.loadMore()
+	}
+	return nil
 }
 
 // editorAction runs the keymap's console actions; vimedit handles the
@@ -825,16 +846,11 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 		}
 		t.log("✗ " + text)
 		t.setStatus(text, true)
-		t.showMessages = true
+		t.tabs.cur = 0
 		return nil
 	}
-	var shown *runner.Result
 	for i := range m.results {
-		r := &m.results[i]
-		t.log(describe(r))
-		if r.Err == nil && r.Rows != nil {
-			shown = r
-		}
+		t.log(describe(&m.results[i]))
 	}
 	if len(m.results) == 0 {
 		t.setStatus("canceled", true)
@@ -842,21 +858,13 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 	}
 	last := m.results[len(m.results)-1]
 	var meta tea.Cmd
-	if shown != nil {
-		t.shown = resultFilter{base: shown.SQL}
-		if m.filter != nil {
-			t.shown = *m.filter
-		}
-		t.res.failedWhere = ""
-		meta = t.resetResult(shown.Rows)
-		if m.more {
-			t.grid.ReplaceResult(t.res.table.Result())
-		} else {
-			t.grid.SetResult(t.res.table.Result())
-		}
-		t.last, t.lastLimit = shown, m.limit
-	} else if m.filter != nil && last.Err != nil {
-		t.res.failedWhere = m.filter.where
+	switch {
+	case m.more || m.filter != nil:
+		meta = t.rerunDone(m, last)
+	case m.text == "":
+		t.tabs.cur = 0 // COMMIT / ROLLBACK: the statements on screen stay
+	default:
+		meta = t.newResults(m)
 	}
 	switch {
 	case last.Err != nil:
@@ -869,23 +877,157 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 			status = fmt.Sprintf("statement %d/%d failed: %s", n, m.total, status)
 		}
 		t.setStatus(status, true)
-		// A failed re-read of the shown result (filter, load more) keeps
-		// its rows on screen.
-		t.showMessages = t.showMessages || m.filter == nil
-	case shown == nil || len(shown.Rows.Columns) == 0:
+	case !hasRows(last):
 		t.setStatus(fmt.Sprintf("%d statement(s) ok", len(m.results)), false)
-		t.showMessages = true
-	default:
-		t.showMessages = false
-		if m.note != "" {
-			t.setStatus(m.note, false)
-		}
+	case m.note != "":
+		t.setStatus(m.note, false)
 	}
 	recorded := m.results
 	if m.began && len(recorded) > 0 {
 		recorded = recorded[1:] // the injected BEGIN is not history
 	}
 	return tea.Batch(t.record(recorded), t.staleCatalog(m.results), meta)
+}
+
+// stmtResult is a statement of the latest run, shown in a result tab.
+type stmtResult struct {
+	res   runner.Result
+	shown resultFilter // the statement and filter its rows came from
+	limit int
+	asMsg bool // the tab shows the message rather than the rows
+}
+
+// hasRows reports a result with rows to show.
+func hasRows(r runner.Result) bool { return r.Err == nil && r.Rows != nil && len(r.Rows.Columns) > 0 }
+
+// newResults makes a result tab for each statement of the run (the
+// injected BEGIN aside) and shows the failed statement, else the last one
+// with rows, else Summary when several ran.
+func (t *consoleTab) newResults(m runDoneMsg) tea.Cmd {
+	results := m.results
+	if m.began && len(results) > 1 {
+		results = results[1:]
+	}
+	t.stmts = make([]stmtResult, len(results))
+	labels, failed := make([]string, len(results)), make([]bool, len(results))
+	pick := 0
+	for i, r := range results {
+		t.stmts[i] = stmtResult{res: r, shown: resultFilter{base: r.SQL}, limit: m.limit, asMsg: !hasRows(r)}
+		labels[i], failed[i] = resultLabel(i, r.SQL, r.Err != nil), r.Err != nil
+		if hasRows(r) || r.Err != nil {
+			pick = i + 1
+		}
+	}
+	if pick == 0 && len(results) == 1 {
+		pick = 1
+	}
+	t.tabs.set(labels, failed)
+	t.loaded = -1
+	t.res.failedWhere = ""
+	return t.selectResult(pick)
+}
+
+// rerunDone takes the rows of a filter or load more run into the
+// statement tab it re-read; a failed run keeps the rows on screen.
+func (t *consoleTab) rerunDone(m runDoneMsg, last runner.Result) tea.Cmd {
+	s := t.curStmt()
+	if s == nil {
+		return nil
+	}
+	if !hasRows(last) {
+		if m.filter != nil && last.Err != nil {
+			t.res.failedWhere = m.filter.where
+		}
+		return nil
+	}
+	s.res, s.limit, s.asMsg = last, m.limit, false
+	s.shown = resultFilter{base: last.SQL}
+	if m.filter != nil {
+		s.shown = *m.filter
+	}
+	t.res.failedWhere = ""
+	return t.loadRows(m.more)
+}
+
+// curStmt is the statement tab on screen; nil on Summary.
+func (t *consoleTab) curStmt() *stmtResult {
+	if t.tabs.cur == 0 || t.tabs.cur > len(t.stmts) {
+		return nil
+	}
+	return &t.stmts[t.tabs.cur-1]
+}
+
+// dataShown reports the grid on screen: a statement tab showing its rows.
+func (t *consoleTab) dataShown() bool {
+	s := t.curStmt()
+	return s != nil && !s.asMsg && hasRows(s.res)
+}
+
+// selectResult shows result tab i; staged changes keep the rows they belong
+// to on screen.
+func (t *consoleTab) selectResult(i int) tea.Cmd {
+	if i != t.tabs.cur && t.res.changes() > 0 {
+		t.setStatus(t.res.unsavedNote(), true)
+		return nil
+	}
+	t.tabs.cur = i
+	t.msgView.Top()
+	if !t.dataShown() || t.loaded == i-1 {
+		return nil
+	}
+	return t.loadRows(false)
+}
+
+// loadRows puts the rows of the statement tab on screen in the grid, to
+// edit and filter; more keeps the cursor for load more.
+func (t *consoleTab) loadRows(more bool) tea.Cmd {
+	s := t.curStmt()
+	t.shown, t.last, t.lastLimit = s.shown, &s.res, s.limit
+	t.loaded = t.tabs.cur - 1
+	meta := t.resetResult(s.res.Rows)
+	if more {
+		t.grid.ReplaceResult(t.res.table.Result())
+	} else {
+		t.grid.SetResult(t.res.table.Result())
+	}
+	return meta
+}
+
+// toggleView switches a statement tab between its rows and its message.
+func (t *consoleTab) toggleView() tea.Cmd {
+	s := t.curStmt()
+	switch {
+	case s == nil:
+		return nil
+	case !hasRows(s.res):
+		t.setStatus("the statement returned no rows", false)
+		return nil
+	case !s.asMsg && t.res.changes() > 0:
+		t.setStatus(t.res.unsavedNote(), true)
+		return nil
+	}
+	s.asMsg = !s.asMsg
+	t.msgView.Top()
+	if !s.asMsg && t.loaded != t.tabs.cur-1 {
+		return t.loadRows(false)
+	}
+	return nil
+}
+
+// autoMore loads more rows once the cursor reaches the last row of a
+// truncated read.
+func (t *consoleTab) autoMore(a keymap.Action) tea.Cmd {
+	switch a {
+	case keymap.Down, keymap.Bottom, keymap.HalfPageDown:
+	default:
+		return nil
+	}
+	row, _ := t.grid.Position()
+	if t.running || t.res.changes() > 0 || t.last == nil || !t.last.Truncated ||
+		row < t.grid.RowCount()-1 || sqlx.Analyze(t.last.SQL, t.dialect).Kind != sqlx.Read {
+		return nil
+	}
+	return t.loadMore()
 }
 
 // sessionNotes logs that the session was reconnected or reopened.
@@ -938,20 +1080,27 @@ func (t *consoleTab) record(results []runner.Result) tea.Cmd {
 }
 
 func describe(r *runner.Result) string {
+	mark, text := outcome(r)
+	return mark + " " + oneLine(r.SQL) + " — " + text
+}
+
+// outcome is how r went: ✓ or ✗, and the rows, the rows affected or the
+// error.
+func outcome(r *runner.Result) (mark, text string) {
 	took := r.Duration.Round(time.Millisecond)
 	switch {
 	case r.Err != nil:
-		return fmt.Sprintf("✗ %s — %s", oneLine(r.SQL), errorText(r.Err))
+		return "✗", errorText(r.Err)
 	case r.Rows != nil && len(r.Rows.Columns) > 0:
-		s := fmt.Sprintf("✓ %s — %d rows in %s", oneLine(r.SQL), len(r.Rows.Rows), took)
+		s := fmt.Sprintf("%d rows in %s", len(r.Rows.Rows), took)
 		if r.Truncated {
 			s += " (truncated)"
 		}
-		return s
+		return "✓", s
 	case r.Rows != nil:
-		return fmt.Sprintf("✓ %s — ok in %s", oneLine(r.SQL), took)
+		return "✓", "ok in " + took.String()
 	}
-	return fmt.Sprintf("✓ %s — %d rows affected in %s", oneLine(r.SQL), r.Affected, took)
+	return "✓", fmt.Sprintf("%d rows affected in %s", r.Affected, took)
 }
 
 func errorText(err error) string {
@@ -1194,12 +1343,7 @@ func (t *consoleTab) Framed(title string, focused, danger bool) string {
 		return ""
 	}
 	onEditor, onResults := focused && !t.onResults, focused && t.onResults
-	results := ""
-	if t.showMessages {
-		results = t.messagesView(t.resultsH)
-	} else {
-		results = textutil.PadLines(t.grid.View(onResults), t.resultsH)
-	}
+	results := t.tabs.view(t.width) + "\n" + t.resultsBody(onResults, max(t.resultsH-1, 0))
 	t.editor.SetFocused(onEditor)
 	switch {
 	case t.full && t.onResults:
@@ -1213,9 +1357,45 @@ func (t *consoleTab) Framed(title string, focused, danger bool) string {
 	return t.drawPopup(top + "\n" + bottom)
 }
 
+// resultsBody is the result tab on screen in h rows: the session's
+// messages, a statement's rows, or its message.
+func (t *consoleTab) resultsBody(focused bool, h int) string {
+	s := t.curStmt()
+	switch {
+	case s == nil:
+		return t.messagesView(h)
+	case t.dataShown():
+		return textutil.PadLines(t.grid.View(focused), h)
+	}
+	t.msgView.SetLines(messageLines(t.message(s), s.res.SQL, t.width))
+	return textutil.PadLines(t.msgView.View(focused), h)
+}
+
+// message is the first line of a statement tab's message.
+func (t *consoleTab) message(s *stmtResult) string {
+	mark, text := outcome(&s.res)
+	return fmt.Sprintf("%s statement %d/%d · %s", mark, t.tabs.cur, len(t.stmts), text)
+}
+
+// yankText copies a statement's message or Summary; the grid copies its
+// own cells.
+func (t *consoleTab) yankText(keymap.Action) (text, what string, ok bool) {
+	s := t.curStmt()
+	switch {
+	case !t.onResults || t.dataShown():
+		return "", "", false
+	case s == nil:
+		return strings.Join(t.messages, "\n"), "messages", true
+	}
+	return t.message(s) + "\n\n" + s.res.SQL, "message", true
+}
+
 func (t *consoleTab) resultsTitle() string {
-	if t.showMessages {
-		return "Messages"
+	switch {
+	case t.curStmt() == nil:
+		return "Summary"
+	case !t.dataShown():
+		return "Message"
 	}
 	label := "Results"
 	if rs := t.grid.Result(); rs != nil {
@@ -1224,7 +1404,10 @@ func (t *consoleTab) resultsTitle() string {
 			label += " · where " + oneLine(t.shown.where)
 		}
 		if t.last != nil && t.last.Truncated {
-			label += " · truncated · ] more"
+			label += " · truncated"
+			if k := t.keys.KeysFor(keymap.Results, keymap.LoadMore); k != "" {
+				label += " · " + k + " more"
+			}
 		}
 	}
 	return label
@@ -1268,7 +1451,7 @@ func (t *consoleTab) statusLine() string {
 		hint = joinHints(
 			keyHint(t.keys, keymap.Results, keymap.EditCell, "edit"),
 			keyHint(t.keys, keymap.Results, keymap.FilterPrompt, "filter"),
-			keyHint(t.keys, keymap.Results, keymap.ToggleMessages, "messages"),
+			resultTabHints(t.keys, keymap.Results),
 			keyHint(t.keys, keymap.Results, keymap.FocusEditor, "editor"),
 			"hjkl move · yy copy row · K show cell · / search") // grid basics last: cut first when narrow
 	} else if t.editor.Visual() {

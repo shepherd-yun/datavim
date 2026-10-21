@@ -6,6 +6,22 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Consoles open in NORMAL mode, so the leader and global keys work at once; `i` starts typing.
+- Console results get a tab per statement (Redis: per command) of the last run, after a Summary
+  tab with the message log: `H` / `L` in the results switch tabs, `[` / `]` (or `M`) switch a
+  statement between its rows and its message (outcome, time, error and the statement). A run shows
+  the failed statement, else the last one with rows; several statements without rows show Summary.
+- Load more console rows is now `}` (it was `]`), and moving onto the last row of a truncated
+  result loads more on its own.
+- Long text values in the Redis console and on a key tab wrap instead of being cut at the edge.
+- Values fastjson wrote with class names (`28L`, `Set[…]`) read as indented JSON in the Redis
+  console and on a key tab; copies keep the value as it was stored.
+- `yy` / `yl` in a console's results copy a text reply (a string reply as read, not escaped), a
+  statement's message or the Summary log; they used to say "nothing to copy".
+- `?` lists only the focused area's keys and the common global ones; `Tab` in help shows every
+  global key, and `1`–`9` read as one line.
+
 ## [3.0.0] - 2026-10-21
 
 ### Changed

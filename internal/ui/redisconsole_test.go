@@ -211,7 +211,11 @@ func TestRedisConsoleTable(t *testing.T) {
 		t.Fatalf("export source = %+v %v", src, ok)
 	}
 	drainAll(t, m, c.Handle(keymap.ToggleMessages))
-	if c.resultsTitle() != "Messages" {
+	if c.resultsTitle() != "Message" {
+		t.Fatalf("title %q", c.resultsTitle())
+	}
+	drainAll(t, m, c.Handle(keymap.PrevResult))
+	if c.resultsTitle() != "Summary" {
 		t.Fatalf("title %q", c.resultsTitle())
 	}
 }
@@ -377,8 +381,8 @@ func TestRedisConsoleScalarText(t *testing.T) {
 	c := openRConsole(t, m, 0)
 	c.editor.SetValue("INCR n")
 	drainAll(t, m, c.Handle(keymap.RunStatement))
-	if !slices.Equal(c.text, []string{"(integer) 1"}) || c.showMessages {
-		t.Fatalf("text %q, messages %v", c.text, c.showMessages)
+	if !slices.Equal(c.text, []string{"(integer) 1"}) || !c.dataShown() {
+		t.Fatalf("text %q, reply shown %v", c.text, c.dataShown())
 	}
 	s := b.lastSession()
 	s.setAnswer(func(args []string) (rdb.Reply, bool) {

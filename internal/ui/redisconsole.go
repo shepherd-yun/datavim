@@ -109,21 +109,23 @@ type redisConsoleTab struct {
 	maxRows   int
 	timings   timings
 
-	editor       *editor.Model
-	popup        *complete.Model                      // completion popup; nil when closed
-	popStart     int                                  // byte offset the popup's word starts at
-	hint         string                               // the argument hint of the command at the cursor
-	keysFn       func(db int, prefix string) []string // the tree's scanned keys
-	extraKeys    map[string]bool                      // keys the console's completion scans found
-	scanned      map[string]bool                      // prefixes scanned for completion: true when the scan was complete
-	keyGen       int                                  // bumped when the db changes; older scans are dropped
-	grid         *grid.Model
-	view         *textview.Model
-	text         []string   // the text result on screen; nil when the grid shows a table
-	table        *replyView // the table on screen
-	onResults    bool
-	showMessages bool
-	messages     []string
+	editor    *editor.Model
+	popup     *complete.Model                      // completion popup; nil when closed
+	popStart  int                                  // byte offset the popup's word starts at
+	hint      string                               // the argument hint of the command at the cursor
+	keysFn    func(db int, prefix string) []string // the tree's scanned keys
+	extraKeys map[string]bool                      // keys the console's completion scans found
+	scanned   map[string]bool                      // prefixes scanned for completion: true when the scan was complete
+	keyGen    int                                  // bumped when the db changes; older scans are dropped
+	grid      *grid.Model
+	view      *textview.Model
+	msgView   *textview.Model // a command tab's message
+	text      []string        // the text result on screen; nil when the grid shows a table
+	table     *replyView      // the table on screen
+	onResults bool
+	messages  []string
+	cmds      []cmdResult // the commands of the latest run, a result tab each
+	tabs      resultTabs
 
 	session    rdb.Session
 	tx         rcmd.TxState
@@ -148,10 +150,11 @@ func newRedisConsoleTab(id int, b Backend, st Store, conn string, n int, s confi
 	t := &redisConsoleTab{
 		id: id, backend: b, store: st, conn: conn, openDB: n, db: n,
 		maxRows: s.MaxRows, timings: tm, editorCmd: s.EditorCommand(os.Getenv),
-		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), view: textview.New(), keys: keymap.Default(),
+		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), view: textview.New(), msgView: textview.New(),
+		keys: keymap.Default(),
 	}
 	t.editor.SetHighlighter(highlight.Redis)
-	t.editor.EnterInsert() // a console opens ready to type
+	t.view.SetWrap(true) // a long value reads in full
 	t.forgetKeys()
 	return t
 }
@@ -187,9 +190,12 @@ func (t *redisConsoleTab) Mode() string {
 
 func (t *redisConsoleTab) Find(q string, forward bool) bool {
 	found := false
-	if t.text != nil {
+	switch {
+	case !t.dataShown():
+		found = t.curCmd() != nil && t.msgView.Find(q, forward)
+	case t.text != nil:
 		found = t.view.Find(q, forward)
-	} else {
+	default:
 		found = t.grid.Find(q, forward)
 	}
 	if found {
@@ -201,7 +207,7 @@ func (t *redisConsoleTab) Find(q string, forward bool) bool {
 func (t *redisConsoleTab) activeGrid() *grid.Model { return t.grid }
 
 func (t *redisConsoleTab) exportSource() exportSrc {
-	if t.text != nil {
+	if t.text != nil || !t.dataShown() {
 		return exportSrc{}
 	}
 	return exportSrc{rs: t.grid.Result(), name: "redis", conn: t.conn}
@@ -226,8 +232,10 @@ func (t *redisConsoleTab) fit() {
 	t.editorH, t.resultsH = splitHeights(t.height, t.full, t.onResults)
 	t.fitOnResults = t.onResults
 	t.editor.SetSize(t.width, t.editorH)
-	t.grid.SetSize(t.width, t.resultsH)
-	t.view.SetSize(t.width, t.resultsH)
+	h := max(t.resultsH-1, 0) // the result tabs take a row
+	t.grid.SetSize(t.width, h)
+	t.view.SetSize(t.width, h)
+	t.msgView.SetSize(t.width, h)
 }
 
 func (t *redisConsoleTab) setStatus(s string, isErr bool) { t.status, t.statusErr = s, isErr }
@@ -315,8 +323,15 @@ func (t *redisConsoleTab) Handle(a keymap.Action) tea.Cmd {
 	case keymap.FocusEditor:
 		t.onResults = false
 		return nil
-	case keymap.ToggleMessages:
-		t.showMessages = !t.showMessages
+	case keymap.ToggleMessages, keymap.ResultView:
+		t.toggleView()
+		return nil
+	case keymap.PrevResult, keymap.NextResult:
+		d := 1
+		if a == keymap.PrevResult {
+			d = -1
+		}
+		t.selectResult(t.tabs.step(d))
 		return nil
 	}
 	if t.onResults {
@@ -338,6 +353,10 @@ func (t *redisConsoleTab) Handle(a keymap.Action) tea.Cmd {
 func (t *redisConsoleTab) resultsAction(a keymap.Action) tea.Cmd {
 	if a == keymap.OpenCellKey {
 		return t.openCellKey()
+	}
+	if !t.dataShown() {
+		msgViewAction(t.msgView, a)
+		return nil
 	}
 	if t.text == nil {
 		cmd, _ := gridAction(t.grid, a)
@@ -363,7 +382,7 @@ func (t *redisConsoleTab) resultsAction(a keymap.Action) tea.Cmd {
 // openCellKey opens the key in the cell under the cursor: its raw bytes,
 // not the escaped text, on the session's current db.
 func (t *redisConsoleTab) openCellKey() tea.Cmd {
-	if t.table == nil || t.showMessages {
+	if t.table == nil || !t.dataShown() {
 		t.setStatus("no key here: the result is not a table", true)
 		return nil
 	}
@@ -635,7 +654,7 @@ func (t *redisConsoleTab) done(m redisRunMsg) tea.Cmd {
 		}
 		t.log("✗ " + text)
 		t.setStatus(text, true)
-		t.showMessages = true
+		t.tabs.cur = 0
 		return nil
 	}
 	t.hadSession = true
@@ -643,34 +662,15 @@ func (t *redisConsoleTab) done(m redisRunMsg) tea.Cmd {
 		t.log(fmt.Sprintf("reconnected (db %d)", t.db))
 	}
 	var total time.Duration
-	var shown *replyView
-	var text []string
 	for _, r := range m.results {
 		if r.Err == nil {
 			t.tx.Apply(r.Args, r.Reply.Kind == rdb.KindError)
 		}
 		total += r.Duration
 		t.log(describeRedis(r, t.maxRows))
-		if r.Err != nil {
-			continue
-		}
-		v := viewReply(r.Args, r.Reply, t.maxRows)
-		if v.Columns != nil {
-			shown, text = &v, nil
-		} else if shown == nil {
-			text = v.Lines
-		}
 	}
-	switch {
-	case shown != nil:
-		t.table, t.text = shown, nil
-		t.grid.SetResult(shown.resultSet())
-		t.showMessages = false
-	case text != nil:
-		t.table, t.text = nil, text
-		t.view.SetLines(text)
-		t.view.Top()
-		t.showMessages = false
+	if len(m.results) > 0 {
+		t.newResults(m.results)
 	}
 	if m.session == nil && t.tx.Active() {
 		t.loseTx() // the connection dropped: the server forgot the MULTI / WATCH
@@ -688,13 +688,124 @@ func (t *redisConsoleTab) done(m redisRunMsg) tea.Cmd {
 		}
 		t.setStatus(status, true)
 		t.gotoLine(last.Line)
-		if last.Err != nil {
-			t.showMessages = true
-		}
 	default:
 		t.setStatus(fmt.Sprintf("%d command(s) ok in %s", len(m.results), total.Round(time.Millisecond)), false)
 	}
 	return t.record(m.results)
+}
+
+// cmdResult is a command of the latest run, shown in a result tab.
+type cmdResult struct {
+	res   redisResult
+	reply replyView
+	asMsg bool // the tab shows the message rather than the reply
+}
+
+// newResults makes a result tab for each command of the run and shows the
+// failed command, else the last one with a table, else the last one.
+func (t *redisConsoleTab) newResults(results []redisResult) {
+	t.cmds = make([]cmdResult, len(results))
+	labels, failed := make([]string, len(results)), make([]bool, len(results))
+	pick, table := len(results), 0
+	for i, r := range results {
+		c := cmdResult{res: r, asMsg: r.Err != nil}
+		if r.Err == nil {
+			c.reply = viewReply(r.Args, r.Reply, t.maxRows)
+			if c.reply.Columns != nil {
+				table = i + 1
+			}
+		}
+		t.cmds[i] = c
+		labels[i], failed[i] = resultLabel(i, rcmd.Redact(r.Args), r.failed()), r.failed()
+	}
+	if !failed[len(failed)-1] && table > 0 {
+		pick = table
+	}
+	t.tabs.set(labels, failed)
+	t.selectResult(pick)
+}
+
+// curCmd is the command tab on screen; nil on Summary.
+func (t *redisConsoleTab) curCmd() *cmdResult {
+	if t.tabs.cur == 0 || t.tabs.cur > len(t.cmds) {
+		return nil
+	}
+	return &t.cmds[t.tabs.cur-1]
+}
+
+// dataShown reports a command tab showing its reply.
+func (t *redisConsoleTab) dataShown() bool {
+	c := t.curCmd()
+	return c != nil && !c.asMsg
+}
+
+// selectResult shows result tab i.
+func (t *redisConsoleTab) selectResult(i int) {
+	t.tabs.cur = i
+	t.msgView.Top()
+	t.loadReply()
+}
+
+// loadReply puts the reply of the command tab on screen in the grid or the
+// text view.
+func (t *redisConsoleTab) loadReply() {
+	c := t.curCmd()
+	if c == nil || c.asMsg {
+		return
+	}
+	if c.reply.Columns != nil {
+		t.table, t.text = &c.reply, nil
+		t.grid.SetResult(c.reply.resultSet())
+		return
+	}
+	t.table, t.text = nil, c.reply.Lines
+	if t.text == nil {
+		t.text = []string{}
+	}
+	t.view.SetLines(t.text)
+	t.view.Top()
+}
+
+// message is a command tab's message: the outcome and the command.
+func (t *redisConsoleTab) message(c *cmdResult) (head, cmd string) {
+	mark, text := redisOutcome(c.res, t.maxRows)
+	return fmt.Sprintf("%s command %d/%d · %s", mark, t.tabs.cur, len(t.cmds), text), rcmd.Redact(c.res.Args)
+}
+
+// yankText copies the result tab on screen when it is text: a string
+// reply as it was read (not escaped), other text replies, a message or
+// Summary. The grid copies its own cells.
+func (t *redisConsoleTab) yankText(keymap.Action) (text, what string, ok bool) {
+	c := t.curCmd()
+	switch {
+	case !t.onResults:
+		return "", "", false
+	case c == nil:
+		return strings.Join(t.messages, "\n"), "messages", true
+	case c.asMsg:
+		head, cmd := t.message(c)
+		return head + "\n\n" + cmd, "message", true
+	case t.text == nil:
+		return "", "", false
+	case c.res.Reply.Kind == rdb.KindString:
+		return c.res.Reply.Str, "value", true
+	}
+	return strings.Join(t.text, "\n"), "reply", true
+}
+
+// toggleView switches a command tab between its reply and its message.
+func (t *redisConsoleTab) toggleView() {
+	c := t.curCmd()
+	switch {
+	case c == nil:
+		return
+	case c.res.Err != nil:
+		t.setStatus("the command has no reply", false)
+		return
+	}
+	c.asMsg = !c.asMsg
+	t.msgView.Top()
+	t.loadReply()
 }
 
 // errRedisTxLost is the note for a MULTI or WATCH whose connection dropped.
@@ -729,20 +840,25 @@ func redisErrorText(err error) string {
 
 // describeRedis is a result's line in the message log.
 func describeRedis(r redisResult, maxRows int) string {
-	cmd := oneLine(rcmd.Redact(r.Args))
+	mark, text := redisOutcome(r, maxRows)
+	return mark + " " + oneLine(rcmd.Redact(r.Args)) + " — " + text
+}
+
+// redisOutcome is how r went: ✓ or ✗, and the reply's summary or the error.
+func redisOutcome(r redisResult, maxRows int) (mark, text string) {
 	if r.Err != nil {
-		return "✗ " + cmd + " — " + redisErrorText(r.Err)
+		return "✗", redisErrorText(r.Err)
 	}
 	v := viewReply(r.Args, r.Reply, maxRows)
-	mark := "✓ "
+	mark = "✓"
 	if r.Reply.Kind == rdb.KindError {
-		mark = "✗ "
+		mark = "✗"
 	}
-	s := fmt.Sprintf("%s%s — %s in %s", mark, cmd, v.Summary, r.Duration.Round(time.Millisecond))
+	text = fmt.Sprintf("%s in %s", v.Summary, r.Duration.Round(time.Millisecond))
 	if v.Truncated {
-		s += " (truncated)"
+		text += " (truncated)"
 	}
-	return s
+	return mark, text
 }
 
 func (t *redisConsoleTab) record(results []redisResult) tea.Cmd {
@@ -838,15 +954,21 @@ func (t *redisConsoleTab) Framed(title string, focused, danger bool) string {
 	}
 	onEditor, onResults := focused && !t.onResults, focused && t.onResults
 	resultsH := t.resultsH
-	var results string
-	switch {
-	case t.showMessages:
-		results = t.messagesView(resultsH)
+	bodyH := max(resultsH-1, 0)
+	var body string
+	switch c := t.curCmd(); {
+	case c == nil:
+		body = t.messagesView(bodyH)
+	case c.asMsg:
+		head, cmd := t.message(c)
+		t.msgView.SetLines(messageLines(head, cmd, t.width))
+		body = textutil.PadLines(t.msgView.View(onResults), bodyH)
 	case t.text != nil:
-		results = textutil.PadLines(t.view.View(onResults), resultsH)
+		body = textutil.PadLines(t.view.View(onResults), bodyH)
 	default:
-		results = textutil.PadLines(t.grid.View(onResults), resultsH)
+		body = textutil.PadLines(t.grid.View(onResults), bodyH)
 	}
+	results := t.tabs.view(t.width) + "\n" + body
 	t.editor.SetFocused(onEditor)
 	var view string
 	switch {
@@ -868,8 +990,10 @@ func (t *redisConsoleTab) Framed(title string, focused, danger bool) string {
 
 func (t *redisConsoleTab) resultsTitle() string {
 	switch {
-	case t.showMessages:
-		return "Messages"
+	case t.curCmd() == nil:
+		return "Summary"
+	case !t.dataShown():
+		return "Message"
 	case t.table != nil:
 		label := fmt.Sprintf("Result · %d rows", len(t.table.Rows))
 		if t.table.Truncated {
@@ -916,7 +1040,7 @@ func (t *redisConsoleTab) statusLine() string {
 	case t.onResults:
 		hint = joinHints(
 			keyHint(t.keys, keymap.RedisResults, keymap.OpenCellKey, "open key"),
-			keyHint(t.keys, keymap.RedisResults, keymap.ToggleMessages, "messages"),
+			resultTabHints(t.keys, keymap.RedisResults),
 			keyHint(t.keys, keymap.RedisResults, keymap.FocusEditor, "editor"),
 			"hjkl move · yy copy row · K show cell · / search")
 	case t.editor.Visual():

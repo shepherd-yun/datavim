@@ -123,6 +123,9 @@ const (
 	FocusEditor        Action = "console.editor"
 	ToggleMessages     Action = "console.messages"
 	LoadMore           Action = "results.more"
+	PrevResult         Action = "results.prev"
+	NextResult         Action = "results.next"
+	ResultView         Action = "results.view"
 	Search             Action = "search.start"
 	SearchNext         Action = "search.next"
 	SearchPrev         Action = "search.prev"
@@ -259,8 +262,23 @@ type Hint struct {
 // HelpEntry is one help line; aliases for the same action are merged.
 type HelpEntry struct {
 	Context Context
+	Action  Action
 	Keys    string
 	Desc    string
+}
+
+// Essential reports a global action help lists next to the focused
+// area's own keys; the other global keys get a page of their own.
+func (e HelpEntry) Essential() bool {
+	if _, ok := TabNumber(e.Action); ok {
+		return true
+	}
+	switch e.Action {
+	case Help, CommandLine, Cancel, FocusNext, FocusPrev, FocusLeft, FocusRight,
+		FullScreen, ExitFullScreen, NextTab, PrevTab:
+		return true
+	}
+	return false
 }
 
 // Keymap resolves key sequences.
@@ -392,8 +410,17 @@ func (k *Keymap) Help(ctx Context, kind Kind) []HelpEntry {
 			out[i].Keys += ", " + k.Display(b.Keys)
 			continue
 		}
+		if n, ok := TabNumber(b.Action); ok {
+			// 1 … 9 read as one line.
+			id = string(b.Context) + "\x00" + tabPrefix
+			if i, ok := index[id]; ok {
+				out[i].Keys = strings.SplitN(out[i].Keys, "…", 2)[0] + "…" + k.Display(b.Keys)
+				out[i].Desc = "Go to tab 1–" + strconv.Itoa(n)
+				continue
+			}
+		}
 		index[id] = len(out)
-		out = append(out, HelpEntry{Context: b.Context, Keys: k.Display(b.Keys), Desc: b.descFor(kind)})
+		out = append(out, HelpEntry{Context: b.Context, Action: b.Action, Keys: k.Display(b.Keys), Desc: b.descFor(kind)})
 	}
 	return out
 }

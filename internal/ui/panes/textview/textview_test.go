@@ -48,3 +48,21 @@ func TestTextview(t *testing.T) {
 		t.Fatalf("short text: offset %d", m.Offset())
 	}
 }
+
+func TestTextviewWraps(t *testing.T) {
+	m := New()
+	m.SetSize(4, 3)
+	m.SetLines([]string{"abcdefghij", "xy"})
+	if v := ansi.Strip(m.View(true)); !strings.Contains(v, "abc…") {
+		t.Fatalf("without wrap long lines are cut:\n%s", v)
+	}
+	m.SetWrap(true)
+	v := strings.Split(ansi.Strip(m.View(true)), "\n")
+	if strings.TrimSpace(v[0]) != "abcd" || strings.TrimSpace(v[2]) != "ij" {
+		t.Fatalf("wrapped:\n%s", strings.Join(v, "\n"))
+	}
+	m.Bottom()
+	if v := ansi.Strip(m.View(true)); !strings.Contains(v, "xy") {
+		t.Fatalf("scrolls over wrapped lines:\n%s", v)
+	}
+}

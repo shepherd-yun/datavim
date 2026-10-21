@@ -136,7 +136,14 @@ func TestV02Bindings(t *testing.T) {
 		{Console, []string{"ctrl+j"}, FocusResults},
 		{Console, []string{"space", "v"}, ExternalEdit},
 		{Results, []string{"ctrl+k"}, FocusEditor},
-		{Results, []string{"]"}, LoadMore},
+		{Results, []string{"}"}, LoadMore},
+		{Results, []string{"]"}, ResultView},
+		{Results, []string{"["}, ResultView},
+		{Results, []string{"H"}, PrevResult},
+		{Results, []string{"L"}, NextResult},
+		{RedisResults, []string{"L"}, NextResult},
+		{RedisResults, []string{"["}, ResultView},
+		{Console, []string{"L"}, NextTab},
 		{Results, []string{"y", "y"}, YankRow},
 		{Grid, []string{"y", "l"}, YankCell},
 		{Grid, []string{"z", "L"}, ScrollRight},
@@ -392,8 +399,8 @@ func TestResultsShareFilterAndEditKeys(t *testing.T) {
 	if a, r := k.Resolve(Results, []string{"s"}); r == Matched && a == SortColumn {
 		t.Error("results do not sort")
 	}
-	if a, _ := k.Resolve(Results, []string{"]"}); a != LoadMore {
-		t.Errorf("] in results = %v", a)
+	if a, _ := k.Resolve(Results, []string{"}"}); a != LoadMore {
+		t.Errorf("} in results = %v", a)
 	}
 }
 

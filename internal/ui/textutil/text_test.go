@@ -87,3 +87,22 @@ func TestSanitizeText(t *testing.T) {
 		t.Fatalf("SanitizeText = %q", got)
 	}
 }
+
+func TestFastJSON(t *testing.T) {
+	for _, tt := range []struct {
+		in, want string
+		ok       bool
+	}{
+		{`[{"@type":"a.B","dictCode":28L,"sort":1L,"f":1.5F,"s":"28L"}]`, `[{"@type":"a.B","dictCode":28,"sort":1,"f":1.5,"s":"28L"}]`, true},
+		{`{"ids":Set[1L,2L],"t":HashSet["a"]}`, `{"ids":[1,2],"t":["a"]}`, true},
+		{`{"a":"say \"Set[\" 1L"}`, `{"a":"say \"Set[\" 1L"}`, true},
+		{`{"a":1}`, `{"a":1}`, true},
+		{`hello 1L`, `hello 1`, false},
+		{`{"a":ABCL}`, `{"a":ABCL}`, false},
+	} {
+		got, ok := FastJSON(tt.in)
+		if got != tt.want || ok != tt.ok {
+			t.Errorf("FastJSON(%s) = %s %v, want %s %v", tt.in, got, ok, tt.want, tt.ok)
+		}
+	}
+}

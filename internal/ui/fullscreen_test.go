@@ -62,17 +62,17 @@ func TestFullScreenConsoleShowsTheFocusedHalf(t *testing.T) {
 		t.Fatal("+ in the editor's NORMAL mode enters full screen")
 	}
 	lines(t, m)
-	if c.editorH != c.height-1 || strings.Contains(screen(m), "Results") {
+	if c.editorH != c.height-1 || strings.Contains(screen(m), "Summary") {
 		t.Fatalf("the editor fills the tab: %d of %d\n%s", c.editorH, c.height, screen(m))
 	}
 	press(t, m, "ctrl+j")
 	lines(t, m)
 	s := screen(m)
-	if !strings.Contains(s, "Results") || !strings.Contains(s, "[1]") || c.resultsH != c.height-1 {
+	if !strings.Contains(s, "Summary") || !strings.Contains(s, "[1]") || c.resultsH != c.height-1 {
 		t.Fatalf("the results fill the tab under the tab bar: %d of %d\n%s", c.resultsH, c.height, s)
 	}
 	press(t, m, "_")
-	if c.editorH != normal || !strings.Contains(screen(m), "Results") {
+	if c.editorH != normal || !strings.Contains(screen(m), "Summary") {
 		t.Fatal("_ splits the console again")
 	}
 	press(t, m, "ctrl+k", "i", "+", "-")

@@ -56,7 +56,7 @@ func renderValue(v string, f valueFormat) (lines []string, used valueFormat) {
 		switch {
 		case !utf8.ValidString(v) || hasControl(v):
 			f = fmtHex
-		case isJSON(v):
+		case isJSON(v) || isFastJSON(v):
 			f = fmtJSON
 		default:
 			f = fmtText
@@ -64,6 +64,9 @@ func renderValue(v string, f valueFormat) (lines []string, used valueFormat) {
 	}
 	switch f {
 	case fmtJSON:
+		if js, ok := textutil.FastJSON(v); ok && !isJSON(v) {
+			v = js // shown as JSON; copies keep the value as it is
+		}
 		if !isJSON(v) {
 			return strings.Split(v, "\n"), fmtText
 		}
@@ -88,6 +91,13 @@ func hasControl(v string) bool {
 func isJSON(v string) bool {
 	t := strings.TrimSpace(v)
 	return (strings.HasPrefix(t, "{") || strings.HasPrefix(t, "[")) && json.Valid([]byte(t))
+}
+
+// isFastJSON reports a value fastjson wrote with class names (28L,
+// Set[…]), which reads as JSON once those are dropped.
+func isFastJSON(v string) bool {
+	_, ok := textutil.FastJSON(v)
+	return ok
 }
 
 // hexDump is 16 bytes a line: offset, hex bytes, printable ASCII.
@@ -193,6 +203,7 @@ func newKeyTab(id int, b Backend, keys *keymap.Keymap, conn string, n int, key s
 		view: textview.New(), grid: grid.New(nil, s.MaxColumnWidth),
 	}
 	t.grid.SetMarks(t.mark)
+	t.view.SetWrap(true) // a long value reads in full
 	t.editorCmd = s.EditorCommand(os.Getenv)
 	return t
 }

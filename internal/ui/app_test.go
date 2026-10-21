@@ -367,9 +367,10 @@ func TestOpenConsoleTypeAndRun(t *testing.T) {
 	if s := screen(m); !strings.Contains(s, "[1]console:app") {
 		t.Fatalf("console tab:\n%s", s)
 	}
-	if !strings.Contains(screen(m), " INSERT ") {
-		t.Fatalf("a new console opens in INSERT mode:\n%s", screen(m))
+	if !strings.Contains(screen(m), " NORMAL ") {
+		t.Fatalf("a new console opens in NORMAL mode:\n%s", screen(m))
 	}
+	press(t, m, "i")
 	typeKeys(t, m, "select 1")
 	press(t, m, "1") // digits are text in INSERT, not "go to tab"
 	press(t, m, "esc", "enter")

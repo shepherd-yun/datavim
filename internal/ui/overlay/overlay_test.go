@@ -67,6 +67,23 @@ func TestHelpScrollAndClose(t *testing.T) {
 	}
 }
 
+func TestHelpListsTheAreaAndEssentialGlobalKeys(t *testing.T) {
+	h := NewHelp([]keymap.HelpEntry{
+		{Context: keymap.Results, Action: keymap.YankRow, Keys: "yy", Desc: "Copy row"},
+		{Context: keymap.Global, Action: keymap.Help, Keys: "?", Desc: "Help"},
+		{Context: keymap.Global, Action: keymap.ExportAs("csv"), Keys: "<space>xc", Desc: "Export as CSV"},
+	})
+	view := ansi.Strip(h.View(80, 20))
+	if !strings.Contains(view, "Copy row") || !strings.Contains(view, "Help") || strings.Contains(view, "Export as CSV") {
+		t.Fatalf("first page:\n%s", view)
+	}
+	send(t, h, "tab")
+	view = ansi.Strip(h.View(80, 20))
+	if strings.Contains(view, "Copy row") || !strings.Contains(view, "Export as CSV") {
+		t.Fatalf("global page:\n%s", view)
+	}
+}
+
 func TestDetailPrettyPrintsJSONAndWraps(t *testing.T) {
 	d := NewDetail("payload", `{"a":1,"b":[1,2]}`)
 	view := ansi.Strip(d.View(80, 20))

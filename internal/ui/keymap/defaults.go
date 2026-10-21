@@ -106,8 +106,12 @@ func DefaultBindings() []Binding {
 	b = append(b, gridBindings(Results)...)
 	b = append(b, filterEditBindings(Results)...)
 	b = append(b,
-		Binding{Results, keys("]"), LoadMore, "Load more rows"},
-		Binding{Results, keys("M"), ToggleMessages, "Toggle messages"},
+		Binding{Results, keys("}"), LoadMore, "Load more rows (also when the cursor reaches the last row)"},
+		Binding{Results, keys("H"), PrevResult, "Previous result tab: Summary, then one per statement (wraps)"},
+		Binding{Results, keys("L"), NextResult, "Next result tab (wraps)"},
+		Binding{Results, keys("]"), ResultView, "Switch the statement's data / message"},
+		Binding{Results, keys("["), ResultView, "Switch the statement's data / message"},
+		Binding{Results, keys("M"), ToggleMessages, "Switch the statement's data / message"},
 		Binding{Results, keys("ctrl+k"), FocusEditor, "Focus editor"},
 		Binding{Results, keys("ctrl+j"), FocusEditor, "Focus editor (wraps)"},
 	)
@@ -120,7 +124,7 @@ func DefaultBindings() []Binding {
 		Binding{Console, keys(LeaderToken, "R"), RunFromCursor, "Run from the statement under the cursor to the end"},
 		Binding{Console, keys("ctrl+j"), FocusResults, "Focus results"},
 		Binding{Console, keys("ctrl+k"), FocusResults, "Focus results (wraps)"},
-		Binding{Console, keys("M"), ToggleMessages, "Toggle messages"},
+		Binding{Console, keys("M"), ToggleMessages, "Switch the result's data / message"},
 		Binding{Console, keys(LeaderToken, "v"), ExternalEdit, "Edit in $EDITOR"},
 	)
 
@@ -182,7 +186,11 @@ func DefaultBindings() []Binding {
 
 	b = append(b, gridBindings(RedisResults)...)
 	b = append(b,
-		Binding{RedisResults, keys("M"), ToggleMessages, "Toggle messages"},
+		Binding{RedisResults, keys("H"), PrevResult, "Previous result tab: Summary, then one per command (wraps)"},
+		Binding{RedisResults, keys("L"), NextResult, "Next result tab (wraps)"},
+		Binding{RedisResults, keys("]"), ResultView, "Switch the command's reply / message"},
+		Binding{RedisResults, keys("["), ResultView, "Switch the command's reply / message"},
+		Binding{RedisResults, keys("M"), ToggleMessages, "Switch the command's reply / message"},
 		Binding{RedisResults, keys("g", "d"), OpenCellKey, "Open the Redis key in this cell"},
 		Binding{RedisResults, keys("ctrl+k"), FocusEditor, "Focus editor"},
 		Binding{RedisResults, keys("ctrl+j"), FocusEditor, "Focus editor (wraps)"},

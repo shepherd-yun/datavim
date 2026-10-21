@@ -136,3 +136,49 @@ func PrettyJSON(s string) string {
 	}
 	return b.String()
 }
+
+// FastJSON turns what fastjson writes with WriteClassName into JSON: it
+// drops the type suffixes of numbers (28L, 1.5F) and the names before
+// sets (Set[…], HashSet[…]) outside strings. ok is false when the result
+// is still not a JSON object or array.
+func FastJSON(s string) (out string, ok bool) {
+	var b strings.Builder
+	inStr, esc := false, false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case inStr:
+			switch {
+			case esc:
+				esc = false
+			case c == '\\':
+				esc = true
+			case c == '"':
+				inStr = false
+			}
+		case c == '"':
+			inStr = true
+		case strings.IndexByte("LSBFD", c) >= 0 && i > 0 && isNumberEnd(s[i-1]) && (i+1 == len(s) || isDelim(s[i+1])):
+			continue // 28L
+		case isLetter(c) && (i == 0 || !isLetter(s[i-1])):
+			j := i
+			for j < len(s) && isLetter(s[j]) {
+				j++
+			}
+			if j < len(s) && s[j] == '[' && strings.HasSuffix(s[i:j], "Set") {
+				i = j - 1 // Set[
+				continue
+			}
+		}
+		b.WriteByte(c)
+	}
+	out = strings.TrimSpace(b.String())
+	ok = (strings.HasPrefix(out, "{") || strings.HasPrefix(out, "[")) && json.Valid([]byte(out))
+	return out, ok
+}
+
+func isNumberEnd(c byte) bool { return c >= '0' && c <= '9' || c == '.' }
+
+func isDelim(c byte) bool { return strings.IndexByte(",]} \t\r\n", c) >= 0 }
+
+func isLetter(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }

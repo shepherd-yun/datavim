@@ -9,7 +9,9 @@ import (
 
 // Model holds the lines and the first visible one.
 type Model struct {
-	lines         []string
+	raw           []string // the text as set
+	lines         []string // the text as shown: raw, or raw wrapped to width
+	wrap          bool
 	offset        int
 	width, height int
 }
@@ -19,14 +21,31 @@ func New() *Model { return &Model{} }
 
 // SetLines replaces the text; the scroll position is kept when it still fits.
 func (m *Model) SetLines(lines []string) {
-	m.lines = lines
+	m.raw = lines
+	m.layout()
+}
+
+// SetWrap wraps long lines at the view's width instead of cutting them.
+func (m *Model) SetWrap(on bool) {
+	m.wrap = on
+	m.layout()
+}
+
+func (m *Model) layout() {
+	m.lines = m.raw
+	if m.wrap && m.width > 0 {
+		m.lines = make([]string, 0, len(m.raw))
+		for _, l := range m.raw {
+			m.lines = append(m.lines, textutil.Wrap(textutil.Sanitize(l), m.width)...)
+		}
+	}
 	m.clamp()
 }
 
 // SetSize sets the visible area.
 func (m *Model) SetSize(w, h int) {
 	m.width, m.height = max(w, 0), max(h, 0)
-	m.clamp()
+	m.layout()
 }
 
 // Offset is the index of the first visible line.

@@ -93,8 +93,16 @@ func TestConsoleRunsStatementUnderCursor(t *testing.T) {
 		t.Error("max_rows caps the result")
 	}
 	c.Handle(keymap.ToggleMessages)
-	if v := consoleView(c); !strings.Contains(v, "✓ select 1") {
-		t.Fatalf("messages:\n%s", v)
+	if v := consoleView(c); !strings.Contains(v, "✓ statement 1/1 · 2 rows") || !strings.Contains(v, "select 1") {
+		t.Fatalf("the statement's message:\n%s", v)
+	}
+	c.Handle(keymap.ToggleMessages)
+	if v := consoleView(c); !strings.Contains(v, "user1") {
+		t.Fatalf("back to the rows:\n%s", v)
+	}
+	c.Handle(keymap.PrevResult)
+	if v := consoleView(c); !strings.Contains(v, "✓ select 1") || !strings.Contains(v, "Summary") {
+		t.Fatalf("summary:\n%s", v)
 	}
 }
 
@@ -109,9 +117,16 @@ func TestConsoleRunAllShowsLastResultSet(t *testing.T) {
 	if !strings.Contains(consoleView(c), "user1") {
 		t.Fatalf("the select result stays visible:\n%s", consoleView(c))
 	}
-	c.Handle(keymap.ToggleMessages)
-	if v := consoleView(c); !strings.Contains(v, "1 rows affected") {
-		t.Fatalf("messages:\n%s", v)
+	if v := consoleView(c); !strings.Contains(v, "[1 SELECT]") || !strings.Contains(v, "2 UPDATE") {
+		t.Fatalf("a result tab per statement:\n%s", v)
+	}
+	c.Handle(keymap.NextResult)
+	if v := consoleView(c); !strings.Contains(v, "[2 UPDATE]") || !strings.Contains(v, "1 rows affected") {
+		t.Fatalf("the update's message:\n%s", v)
+	}
+	c.Handle(keymap.NextResult) // wraps to Summary
+	if v := consoleView(c); !strings.Contains(v, "[Summary]") || !strings.Contains(v, "✓ select 1") {
+		t.Fatalf("summary:\n%s", v)
 	}
 }
 
@@ -120,7 +135,7 @@ func TestConsoleOnlyExecShowsMessages(t *testing.T) {
 	c := newConsole(t, b, "local")
 	c.editor.SetValue("set @a = 1")
 	runTab(t, c, c.Handle(keymap.RunStatement))
-	if v := consoleView(c); !strings.Contains(v, "Messages") || !strings.Contains(v, "set @a = 1") {
+	if v := consoleView(c); !strings.Contains(v, "Message") || !strings.Contains(v, "set @a = 1") {
 		t.Fatalf("view:\n%s", v)
 	}
 }
@@ -169,7 +184,7 @@ func TestConsoleShowsErrors(t *testing.T) {
 	c := newConsole(t, b, "local")
 	c.editor.SetValue("select bad")
 	runTab(t, c, c.Handle(keymap.RunStatement))
-	if v := consoleView(c); !strings.Contains(v, "syntax error near bad") || !strings.Contains(v, "Messages") {
+	if v := consoleView(c); !strings.Contains(v, "syntax error near bad") || !strings.Contains(v, "1 SELECT ✗") {
 		t.Fatalf("view:\n%s", v)
 	}
 }
@@ -218,7 +233,7 @@ func TestConsoleReusesAndReopensSession(t *testing.T) {
 	if n := b.conn.sessionCount(); n != 2 {
 		t.Fatalf("sessions = %d, want a new one after a failed ping", n)
 	}
-	c.Handle(keymap.ToggleMessages)
+	c.Handle(keymap.PrevResult) // Summary
 	if !strings.Contains(consoleView(c), "reconnected") {
 		t.Fatalf("view:\n%s", consoleView(c))
 	}
@@ -447,7 +462,7 @@ func TestConsoleReopensSessionWhenReadOnlyChanges(t *testing.T) {
 	if n := b.conn.sessionCount(); n != 2 || !closed {
 		t.Fatalf("sessions = %d, first closed = %v", n, closed)
 	}
-	c.Handle(keymap.ToggleMessages)
+	c.Handle(keymap.PrevResult) // Summary
 	if v := consoleView(c); !strings.Contains(v, "reopened read-only") {
 		t.Fatalf("view:\n%s", v)
 	}
@@ -557,7 +572,7 @@ func TestConsoleMySQLDDLCommitsImplicitly(t *testing.T) {
 	if got := c.TxStatus(); got != "TX" {
 		t.Fatalf("status = %q", got)
 	}
-	// A statement without a result set already shows the messages pane.
+	c.Handle(keymap.PrevResult) // Summary
 	if !strings.Contains(consoleView(c), "implicitly") {
 		t.Fatalf("view:\n%s", consoleView(c))
 	}

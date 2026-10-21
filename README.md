@@ -91,10 +91,11 @@ Binary key names show as `\xNN`; `yy` in the tree copies a key name as redis-cli
 The Redis console (`<Space>c` on a Redis connection, db or key) runs one command a line, quoted
 as in redis-cli (`SET "a b" "line\n"`, `'it\'s'`); `#` and `//` lines are comments. `Enter` runs
 the line under the cursor or the selected lines, `R` everything and `<Space>R` from the cursor
-on; a failed command stops the rest. A reply shows as a value (JSON indented, binary as hex), a
+on; a failed command stops the rest. A reply shows as a value (JSON indented, fastjson's `28L` / `Set[…]` too; binary as hex; long
+lines wrap; `yy` copies it as stored), a
 table (arrays, field / value pairs of `HGETALL` or `CONFIG GET`, member / score pairs of
-`ZRANGE … WITHSCORES`, the keys of a `SCAN`) or redis-cli's indented text; `M` shows the message
-log and `g d` on a table cell opens that key. The console keeps its own connection, so `SELECT`
+`ZRANGE … WITHSCORES`, the keys of a `SCAN`) or redis-cli's indented text; each command of a run gets a result
+tab like in the SQL console and `g d` on a table cell opens that key. The console keeps its own connection, so `SELECT`
 (the tab title shows the db) and `MULTI` / `WATCH` last; the status bar shows `TX n` or `WATCH`,
 and closing the tab or quitting asks first. `Ctrl-c` cancels a blocking command such as
 `BLPOP q 0`; that drops the connection, and the next command reconnects on the same db. Inside
@@ -341,7 +342,7 @@ picks the workspace by directory.
 | `1`–`9` | Go to tab (in the console editor digits are counts: use `gt` / `gT` / `{n}gt`) |
 | `H` `L`, `gT` `gt` | Previous / next tab, wrapping around (from any pane or tab) |
 | `/` `n` `N` | Search in the tree or a result grid |
-| `[` `]` | Previous / next page (data), section (structure); `]` loads more console rows |
+| `[` `]` | Previous / next page (data), section (structure); in console results, the statement's data / message |
 | `0` / `$` | Grid: first / last column |
 | `zh` `zl` / `zH` `zL` | Scroll a grid sideways by half a screen / one column |
 | `K` | Show full cell value |
@@ -365,7 +366,9 @@ picks the workspace by directory.
 | `Enter` / `R` | Console: run statement under cursor, or the visual selection / run all (`Ctrl-Enter` or `Ctrl-j` in insert mode) |
 | `<Space>R` | Console: run from the statement under the cursor to the end |
 | `Ctrl-c` | Cancel the running query (never quits) |
-| `Ctrl-j` / `Ctrl-k` | Console: results / editor; `M` toggles the message log |
+| `Ctrl-j` / `Ctrl-k` | Console: results / editor |
+| `H` / `L` | Console results: previous / next result tab — Summary (the message log), then one per statement of the last run |
+| `}` | Console results: load more rows (also when the cursor reaches the last row of a truncated result) |
 | `<Space>v` | Edit the console in `$EDITOR` |
 | `<Space>h` | SQL history |
 | `<Space>a` | Audit log of the writes datavim sent (`:audit <connection>` for one connection); `F` searches, `gd` opens the object |
@@ -392,7 +395,7 @@ picks the workspace by directory.
 | `-` / `_` | Leave full screen |
 | `<Space>l` | Locate the current tab in the tree: the table, or the database / schema of a console (also `:locate`) |
 | `<Space>r` | Refresh the tree node or tab and reload the connection's metadata |
-| `?` | Help for the focused pane |
+| `?` | Help for the focused pane: its own keys and the common global ones (`Tab` lists every global key) |
 | `:q` / `:qa` | Close tab / quit |
 | `:e <file>` | Open a `.sql` file in a console on the connection / database in context |
 | `:w` / `:w <file>` / `:wq` | File console: save / save as (a plain console becomes a file console) / save and close; `:w!` overwrites a file changed on disk |
@@ -492,8 +495,8 @@ changed; masked messages can't be copied to a producer console (`p` / `P` leave 
 
 ## Console editor
 
-The console is a vim editor that opens in INSERT mode, ready to type (`Esc` for NORMAL
-mode, the leader and tab switching): NORMAL, INSERT, VISUAL (`v`) and V-LINE (`V`) modes;
+The console is a vim editor that opens in NORMAL mode, so the leader and tab switching
+work at once (`i` to type): NORMAL, INSERT, VISUAL (`v`) and V-LINE (`V`) modes;
 motions `h j k l w b e W B E 0 ^ $ gg G f F t T % { }` and `Ctrl-d` `Ctrl-u`; operators
 `d c y > <` with a motion, a text object (`iw aw i" a" i' a' i( a( i[ a[ i{ a{`) or doubled
 (`dd` `cc` `yy` `>>` `<<`); `x D C p P o O i a I A`; `u` / `Ctrl-r` undo and redo; `.`
