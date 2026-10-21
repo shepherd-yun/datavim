@@ -109,8 +109,8 @@ type ReindexSpec struct {
 	Conflicts    string          // "abort" or "proceed"
 }
 
-// Reindex starts a reindex as a task and returns its id.
-func Reindex(ctx context.Context, d Doer, r ReindexSpec) (string, error) {
+// ReindexBody is the POST _reindex body of r.
+func ReindexBody(r ReindexSpec) []byte {
 	type source struct {
 		Index string          `json:"index"`
 		Query json.RawMessage `json:"query,omitempty"`
@@ -124,7 +124,12 @@ func Reindex(ctx context.Context, d Doer, r ReindexSpec) (string, error) {
 		Dest      dest   `json:"dest"`
 		Conflicts string `json:"conflicts,omitempty"`
 	}{source{r.Source, r.Query}, dest{r.Dest, r.OpType}, r.Conflicts})
-	resp, err := do(ctx, d, Request{Method: "POST", Path: "_reindex?wait_for_completion=false", Body: b})
+	return b
+}
+
+// Reindex starts a reindex as a task and returns its id.
+func Reindex(ctx context.Context, d Doer, r ReindexSpec) (string, error) {
+	resp, err := do(ctx, d, Request{Method: "POST", Path: "_reindex?wait_for_completion=false", Body: ReindexBody(r)})
 	if err != nil {
 		return "", err
 	}

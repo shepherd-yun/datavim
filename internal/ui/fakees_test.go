@@ -346,6 +346,13 @@ func (f *fakeES) answer(r es.Request) es.Response {
 			"allocate_explanation": "cannot allocate because allocation is not permitted to any of the nodes",
 			"node_allocation_decisions": []map[string]any{{"node_name": "es-1", "deciders": []map[string]string{
 				{"decider": "same_shard", "decision": "NO", "explanation": "a copy of this shard is already allocated to this node"}}}}})
+	case r.Method == "HEAD" && len(segs) == 1:
+		if len(f.resolve(p)) == 0 {
+			return es.Response{Status: 404}
+		}
+		return es.Response{Status: 200}
+	case r.Method == "POST" && p == "_reindex":
+		return jsonResp(map[string]string{"task": "n:3"})
 	case r.Method == "GET" && p == "_cluster/stats":
 		var docs int64
 		for _, ix := range f.indices {

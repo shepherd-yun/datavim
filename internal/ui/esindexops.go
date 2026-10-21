@@ -68,7 +68,8 @@ func esIndexMenu(conn, index string, closed bool) []menuEntry {
 	if closed {
 		out = []menuEntry{op(opOpen, "Open (unclose) index…")}
 	}
-	return append(out, op(opRefresh, "Refresh index"), op(opFlush, "Flush index"), op(opCache, "Clear caches"), op(opForceMerge, "Force merge…"))
+	return append(out, op(opRefresh, "Refresh index"), op(opFlush, "Flush index"), op(opCache, "Clear caches"), op(opForceMerge, "Force merge…"),
+		menuEntry{desc: "Reindex…", msg: esReindexMsg{conn: conn, source: index}})
 }
 
 // indexOpRequest is an operation's method and path, for its class.
