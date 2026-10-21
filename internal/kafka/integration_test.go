@@ -23,6 +23,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcredpanda "github.com/testcontainers/testcontainers-go/modules/redpanda"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"github.com/twmb/franz-go/pkg/kadm"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -106,15 +107,21 @@ func startRedpanda(t *testing.T, opts ...testcontainers.ContainerCustomizer) str
 }
 
 func TestIntegrationKafka3(t *testing.T) {
-	coreSuite(t, Config{Brokers: []string{startApache(t, kafka3)}}, false)
+	cfg := Config{Brokers: []string{startApache(t, kafka3)}}
+	coreSuite(t, cfg, false)
+	k2Suite(t, cfg)
 }
 
 func TestIntegrationKafka4(t *testing.T) {
-	coreSuite(t, Config{Brokers: []string{startApache(t, kafka4)}}, true)
+	cfg := Config{Brokers: []string{startApache(t, kafka4)}}
+	coreSuite(t, cfg, true)
+	k2Suite(t, cfg)
 }
 
 func TestIntegrationRedpanda(t *testing.T) {
-	coreSuite(t, Config{Brokers: []string{startRedpanda(t)}}, false)
+	cfg := Config{Brokers: []string{startRedpanda(t)}}
+	coreSuite(t, cfg, false)
+	k2Suite(t, cfg)
 }
 
 // unsupported skips a step the cluster does not support, so the run says
@@ -258,6 +265,183 @@ func coreSuite(t *testing.T, cfg Config, kip848 bool) {
 
 	if err := cl.DeleteTopic(ctx, "orders"); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// alterConfig sets name (or, delete, removes its override) from what it is now.
+func alterConfig(t *testing.T, cl Client, topic, name, value string, del bool) {
+	t.Helper()
+	e := configOf(t, cl, topic, name)
+	ch := ConfigChange{Name: name, Value: value, Delete: del, Old: e.Value, OldDefault: e.Default}
+	if err := cl.AlterTopicConfigs(ictx(t), topic, []ConfigChange{ch}); err != nil {
+		t.Fatalf("alter %s: %v", name, err)
+	}
+}
+
+// k2Suite runs the K2 admin requests: configs, partitions, deleting
+// messages, groups and group offsets, and read_committed browsing.
+func k2Suite(t *testing.T, cfg Config) {
+	cl, err := Open(ictx(t), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cl.Close()
+	ctx := ictx(t)
+	if err := cl.CreateTopic(ctx, NewTopic{Name: "k2", Partitions: 3, Replication: -1}); err != nil {
+		t.Fatal(err)
+	}
+
+	// configs: changing one leaves the other override alone; delete goes back to the default
+	alterConfig(t, cl, "k2", "retention.ms", "3600000", false)
+	alterConfig(t, cl, "k2", "max.message.bytes", "2000000", false)
+	alterConfig(t, cl, "k2", "retention.ms", "7200000", false)
+	if e := configOf(t, cl, "k2", "max.message.bytes"); e.Value != "2000000" || e.Default {
+		t.Fatalf("max.message.bytes after another change = %+v", e)
+	}
+	if e := configOf(t, cl, "k2", "retention.ms"); e.Value != "7200000" {
+		t.Fatalf("retention.ms = %+v", e)
+	}
+	alterConfig(t, cl, "k2", "retention.ms", "", true)
+	if e := configOf(t, cl, "k2", "retention.ms"); !e.Default {
+		t.Fatalf("retention.ms after delete = %+v", e)
+	}
+	if e := configOf(t, cl, "k2", "max.message.bytes"); e.Value != "2000000" {
+		t.Fatalf("max.message.bytes after a delete = %+v", e)
+	}
+	stale := ConfigChange{Name: "max.message.bytes", Value: "3000000", Old: "1", OldDefault: false}
+	if err := cl.AlterTopicConfigs(ctx, "k2", []ConfigChange{stale}); !errors.Is(err, ErrConfigChanged) {
+		t.Fatalf("stale config change: %v", err)
+	}
+
+	if err := cl.AddPartitions(ctx, "k2", 5); err != nil {
+		t.Fatal(err)
+	}
+	// new partitions elect their leaders for a moment (LEADER_NOT_AVAILABLE on Redpanda)
+	var d TopicDetail
+	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(200 * time.Millisecond) {
+		if d, err = cl.TopicDetail(ctx, "k2"); err == nil || time.Now().After(deadline) {
+			break
+		}
+	}
+	if err != nil || len(d.Parts) != 5 {
+		t.Fatalf("detail after adding partitions = %+v, %v", d, err)
+	}
+	if err := cl.AddPartitions(ctx, "k2", 4); err == nil {
+		t.Fatal("partitions shrank")
+	}
+
+	var recs []ProduceRecord
+	for i := range 10 {
+		recs = append(recs, ProduceRecord{Value: []byte{'v', byte('0' + i)}, Partition: 0})
+	}
+	if _, err := cl.Produce(ctx, "k2", recs); err != nil {
+		t.Fatal(err)
+	}
+	dr, err := cl.DeleteRecords(ctx, "k2", map[int32]int64{0: 4})
+	if !cl.Supports("delete_records") {
+		if !errors.Is(err, ErrUnsupported) {
+			t.Fatalf("delete records without support: %v", err)
+		}
+		t.Logf("DeleteRecords: %v", err)
+	} else {
+		if err != nil || len(dr) != 1 || dr[0].Err != nil || dr[0].Start != 4 {
+			t.Fatalf("delete records = %+v, %v", dr, err)
+		}
+		if d, err := cl.TopicDetail(ctx, "k2"); err != nil || d.Parts[0].Start != 4 {
+			t.Fatalf("detail after delete = %+v, %v", d, err)
+		}
+		var oor ErrOutOfRange
+		if _, err := cl.DeleteRecords(ctx, "k2", map[int32]int64{0: 11}); !errors.As(err, &oor) {
+			t.Fatalf("delete past the end: %v", err)
+		}
+	}
+
+	// a live consumer: neither the group nor its offsets on k2 may go
+	kcl, err := kgo.NewClient(kgo.SeedBrokers(cfg.Brokers...), kgo.ConsumerGroup("k2-svc"), kgo.ConsumeTopics("k2"),
+		kgo.DisableAutoCommit(), kgo.ConsumeResetOffset(kgo.NewOffset().AtStart()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for n := 0; n == 0; {
+		fs := kcl.PollFetches(ctx)
+		if err := fs.Err0(); err != nil {
+			t.Fatal(err)
+		}
+		n = fs.NumRecords()
+	}
+	if err := kcl.CommitUncommittedOffsets(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err := cl.DeleteGroup(ctx, "k2-svc"); !errors.Is(err, ErrGroupNotEmpty) {
+		t.Fatalf("delete of a live group: %v", err)
+	}
+	if _, err := cl.DeleteGroupOffsets(ctx, "k2-svc", "k2"); !errors.Is(err, ErrGroupSubscribed) {
+		t.Fatalf("delete of offsets the group consumes: %v", err)
+	}
+	kcl.Close()
+	// offsets on a second topic keep the group alive once those on k2 are
+	// gone (Kafka 3 and Redpanda drop an Empty group without offsets)
+	if err := cl.CreateTopic(ctx, NewTopic{Name: "k2-tx", Partitions: 1, Replication: -1}); err != nil {
+		t.Fatal(err)
+	}
+	akcl, err := kgo.NewClient(kgo.SeedBrokers(cfg.Brokers...))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var offs kadm.Offsets
+	offs.Add(kadm.Offset{Topic: "k2-tx", Partition: 0, At: 0, LeaderEpoch: -1})
+	if err := kadm.NewClient(akcl).CommitAllOffsets(ctx, "k2-svc", offs); err != nil {
+		t.Fatal(err)
+	}
+	akcl.Close()
+	if res, err := cl.DeleteGroupOffsets(ctx, "k2-svc", "k2"); err != nil || len(res) == 0 || res[0].Err != nil {
+		t.Fatalf("delete offsets of an empty group = %+v, %v", res, err)
+	}
+	if err := cl.DeleteGroup(ctx, "k2-svc"); err != nil {
+		t.Fatal(err)
+	}
+	if gs, err := cl.Groups(ctx); err != nil || slices.ContainsFunc(gs, func(g Group) bool { return g.Name == "k2-svc" }) {
+		t.Fatalf("groups after delete = %+v, %v", gs, err)
+	}
+
+	// an aborted and a committed transaction: read_committed shows the second only
+	tx, err := kgo.NewClient(kgo.SeedBrokers(cfg.Brokers...), kgo.TransactionalID("sqlvim-it"), kgo.DefaultProduceTopic("k2-tx"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []string{"aborted", "committed"} {
+		if err := tx.BeginTransaction(); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.ProduceSync(ctx, &kgo.Record{Value: []byte(v)}).FirstErr(); err != nil {
+			t.Fatal(err)
+		}
+		if err := tx.EndTransaction(ctx, kgo.TransactionEndTry(v == "committed")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	tx.Close()
+	values := func(rc ReaderConfig) []string {
+		r, err := OpenReader(ctx, cfg, rc)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = r.Close() }()
+		got, err := r.Range(ctx, "k2-tx", map[int32]Range{0: {0, 100}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		var vs []string
+		for _, rec := range got {
+			vs = append(vs, string(rec.Value))
+		}
+		return vs
+	}
+	if vs := values(ReaderConfig{}); !slices.Equal(vs, []string{"committed"}) {
+		t.Fatalf("read_committed = %q", vs)
+	}
+	if vs := values(ReaderConfig{ReadUncommitted: true}); !slices.Equal(vs, []string{"aborted", "committed"}) {
+		t.Fatalf("read_uncommitted = %q", vs)
 	}
 }
 
