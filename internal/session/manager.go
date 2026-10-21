@@ -72,6 +72,9 @@ type Manager struct {
 	RegistryOpen RegistryOpener
 	// ConnectOpen makes Kafka Connect clients; nil is kafka.OpenConnect.
 	ConnectOpen ConnectOpener
+	// ESOpen, if set, opens elasticsearch clients; nil makes elasticsearch
+	// connections unavailable.
+	ESOpen ESOpener
 
 	mu        sync.Mutex
 	conns     []config.Connection
@@ -80,6 +83,8 @@ type Manager struct {
 	redis     map[connKey]rdb.Client
 	kafka     map[string]*guardedKafka
 	kafkaGen  map[string]int // counts the resets of each connection
+	es        map[string]*esConn
+	esGen     map[string]int // counts the resets of each connection
 	// registries are the kafka connections' Schema Registry clients.
 	registries map[string]*guardedRegistry
 	// connects are the kafka connections' Kafka Connect clients.
@@ -100,6 +105,8 @@ func NewManager(conns []config.Connection, secrets secret.Store, drivers ...db.D
 		redis:      map[connKey]rdb.Client{},
 		kafka:      map[string]*guardedKafka{},
 		kafkaGen:   map[string]int{},
+		es:         map[string]*esConn{},
+		esGen:      map[string]int{},
 		registries: map[string]*guardedRegistry{},
 		connects:   map[connectKey]*guardedConnect{},
 		savedRO:    map[string]*bool{},
@@ -314,6 +321,11 @@ func (m *Manager) resetLocked(name string) {
 	if c, ok := m.kafka[name]; ok {
 		delete(m.kafka, name)
 		go c.Close()
+	}
+	m.esGen[name]++
+	if c, ok := m.es[name]; ok {
+		delete(m.es, name)
+		c.raw.Close()
 	}
 }
 
@@ -535,6 +547,10 @@ func (m *Manager) CloseAll() {
 		c.Close()
 		delete(m.kafka, k)
 	}
+	for k, c := range m.es {
+		c.raw.Close()
+		delete(m.es, k)
+	}
 	clear(m.registries)
 	clear(m.connects)
 }
@@ -545,6 +561,8 @@ func (m *Manager) driverAvailable(name string) bool {
 		return m.RedisOpen != nil
 	case "kafka":
 		return m.KafkaOpen != nil
+	case "elasticsearch":
+		return m.ESOpen != nil
 	}
 	_, ok := m.drivers[name]
 	return ok
@@ -555,7 +573,7 @@ func (m *Manager) lookup(name string) (config.Connection, db.Driver, error) {
 	if !ok {
 		return config.Connection{}, nil, fmt.Errorf("unknown connection %q", name)
 	}
-	if c.Driver == "redis" || c.Driver == "kafka" {
+	if c.Driver == "redis" || c.Driver == "kafka" || c.Driver == "elasticsearch" {
 		return c, nil, fmt.Errorf("connection %q is a %s connection", name, c.Driver)
 	}
 	drv, ok := m.drivers[c.Driver]

@@ -7,6 +7,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/config"
 	"github.com/shepherd-yun/datavim/internal/db"
 	"github.com/shepherd-yun/datavim/internal/db/tunnel"
+	"github.com/shepherd-yun/datavim/internal/es"
 	"github.com/shepherd-yun/datavim/internal/kafka"
 	"github.com/shepherd-yun/datavim/internal/rdb"
 )
@@ -35,6 +36,12 @@ type Backend interface {
 	// kafka connection (session.ErrNoConnect for an unknown one); its
 	// writes refuse on a read-only connection.
 	KafkaConnect(ctx context.Context, conn, cluster string) (kafka.Connect, error)
+	// ES returns an elasticsearch connection's Doer, the only way to its
+	// cluster: it refuses anything but reads on a read-only connection
+	// and audits the writes.
+	ES(ctx context.Context, name string) (es.Doer, error)
+	// ESInfo is what the cluster said about itself when ES opened it.
+	ESInfo(name string) (es.Info, bool)
 	SetPassword(name, password string, save bool) error
 	// SetSecret remembers and saves a secret other than the password
 	// (session.SecretOAuth, session.SecretSchemaRegistry, session.SecretConnect).

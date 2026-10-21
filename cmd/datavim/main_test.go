@@ -225,6 +225,13 @@ func TestNewManagerOpensKafka(t *testing.T) {
 	}
 }
 
+func TestNewManagerOpensES(t *testing.T) {
+	mgr := newManager(&config.Config{}, config.Workspace{Name: config.DefaultWorkspace, ConfigDir: t.TempDir()}, nil)
+	if mgr.ESOpen == nil {
+		t.Fatal("elasticsearch connections need an opener")
+	}
+}
+
 func TestAuditWired(t *testing.T) {
 	st, err := history.Open(":memory:")
 	if err != nil {

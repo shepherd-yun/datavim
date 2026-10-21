@@ -39,6 +39,8 @@ func (m *Model) secretPrompt(err error) overlay.Overlay {
 		title, label = "OAuth", "Client secret for "+cfg.Params["oauth_client_id"]+":"
 	case session.SecretConnect:
 		title, label = "Kafka Connect", "Password for "+cfg.Params["connect_user"]+":"
+	case session.SecretAPIKey:
+		title, label = "Elasticsearch", "API key for "+se.Conn+":"
 	}
 	if se.Wrong {
 		label = "Wrong. " + label

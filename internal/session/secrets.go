@@ -11,9 +11,10 @@ const (
 	SecretSchemaRegistry = "schema-registry"
 	SecretOAuth          = "oauth"
 	SecretConnect        = "connect" // connect_user's password, for every Connect cluster
+	SecretAPIKey         = "apikey"  // an elasticsearch connection's API key
 )
 
-var secretKinds = []string{SecretSchemaRegistry, SecretOAuth, SecretConnect}
+var secretKinds = []string{SecretSchemaRegistry, SecretOAuth, SecretConnect, SecretAPIKey}
 
 // SecretRequiredError is a secret other than the connection's password
 // that datavim does not know yet, or one the server refused (Wrong).
@@ -28,6 +29,8 @@ func (e *SecretRequiredError) Error() string {
 		return "oauth client secret required"
 	case SecretConnect:
 		return "kafka connect password required"
+	case SecretAPIKey:
+		return "elasticsearch api key required"
 	}
 	return "schema registry password required"
 }

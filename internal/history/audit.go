@@ -14,6 +14,7 @@ const (
 	AuditSQL   = "sql"
 	AuditRedis = "redis"
 	AuditKafka = "kafka"
+	AuditES    = "es"
 )
 
 // AuditEntry is one write that reached a server.
@@ -21,7 +22,7 @@ type AuditEntry struct {
 	ID       int64 // set by Audit; ignored by AddAudit
 	Time     time.Time
 	Conn     string
-	Kind     string // AuditSQL, AuditRedis or AuditKafka
+	Kind     string // AuditSQL, AuditRedis, AuditKafka or AuditES
 	Database string // SQL database, Redis db number; "" for Kafka
 	Op       string // "UPDATE", "DEL", "delete_topic", …
 	Object   string // table, key, topic, group, subject, connector, principal

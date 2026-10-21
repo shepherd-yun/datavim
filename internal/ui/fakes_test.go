@@ -418,6 +418,8 @@ type fakeBackend struct {
 	redisOpens    []string
 	kafka         *fakeKafka // backs the kafka connections addKafka added
 	kafkaOpens    []string
+	es            *fakeES // backs the elasticsearch connections addES added
+	esOpens       []string
 	registry      *fakeRegistry // made by the first SchemaRegistry call when nil
 	registryErr   error
 	connects      map[string]*fakeConnect // Kafka Connect clusters by name
