@@ -30,6 +30,8 @@ const (
 	// group: Name is its name.
 	RecentKafkaTopic = "kafka_topic"
 	RecentKafkaGroup = "kafka_group"
+	// RecentESIndex is an Elasticsearch Index tab; Name is its target.
+	RecentESIndex = "es_index"
 	// RecentKafkaSubject is a Schema Registry subject's tab.
 	RecentKafkaSubject = "kafka_subject"
 )
