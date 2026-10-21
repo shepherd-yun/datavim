@@ -44,6 +44,8 @@ const (
 	KafkaConfig Context = "kafka_config"
 	// KafkaSchema is a Schema Registry subject's tab.
 	KafkaSchema Context = "kafka_schema"
+	// Audit is the audit log of writes.
+	Audit Context = "audit"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
 	// only one-key bindings count there.
 	Popup Context = "popup"
@@ -141,6 +143,7 @@ const (
 	ToggleIdle         Action = "server.toggleidle"
 	ToggleFavorite     Action = "redis.favorite"
 	Favorites          Action = "redis.favorites"
+	AuditLog           Action = "audit"
 	BigKeys            Action = "redis.bigkeys"
 	FilterEqual        Action = "filter.eq"
 	FilterNotEqual     Action = "filter.ne"

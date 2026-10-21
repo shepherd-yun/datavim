@@ -565,8 +565,45 @@ type fakeStore struct {
 	mu        sync.Mutex
 	entries   []history.Entry
 	drafts    map[string]string
-	recents   []history.Recent   // oldest first
-	favorites []history.Favorite // oldest first
+	recents   []history.Recent     // oldest first
+	favorites []history.Favorite   // oldest first
+	audits    []history.AuditEntry // oldest first; ID is index+1
+	auditQs   []history.AuditQuery
+}
+
+func (s *fakeStore) AddAudit(e history.AuditEntry) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e.ID = int64(len(s.audits) + 1)
+	s.audits = append(s.audits, e)
+	return nil
+}
+
+func (s *fakeStore) Audit(q history.AuditQuery) ([]history.AuditEntry, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.auditQs = append(s.auditQs, q)
+	var out []history.AuditEntry
+	for i := len(s.audits) - 1; i >= 0 && len(out) < q.Limit; i-- {
+		e := s.audits[i]
+		e.ID = int64(i + 1)
+		switch {
+		case q.Conn != "" && e.Conn != q.Conn, q.Kind != "" && e.Kind != q.Kind, q.BeforeID > 0 && e.ID >= q.BeforeID,
+			q.Text != "" && !strings.Contains(e.Op+"\x00"+e.Object+"\x00"+e.Detail, q.Text):
+			continue
+		}
+		out = append(out, e)
+	}
+	return out, nil
+}
+
+func (s *fakeStore) lastAuditQuery() history.AuditQuery {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(s.auditQs) == 0 {
+		return history.AuditQuery{}
+	}
+	return s.auditQs[len(s.auditQs)-1]
 }
 
 func newFakeStore() *fakeStore { return &fakeStore{drafts: map[string]string{}} }

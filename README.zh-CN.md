@@ -283,6 +283,7 @@ sqlvim --list-workspaces
 | `Ctrl-j` / `Ctrl-k` | 控制台：切到结果 / 编辑器；`M` 切换消息日志 |
 | `<Space>v` | 在 `$EDITOR` 中编辑控制台内容 |
 | `<Space>h` | SQL 历史 |
+| `<Space>a` | sqlvim 发出的写操作的审计日志（`:audit <连接名>` 只看一个连接）；`F` 搜索，`gd` 打开对象 |
 | `<Space>y t/c/j/m/i` | 复制结果为 TSV / CSV / JSON / Markdown / INSERT；在结果表格里也可直接按 `y t/c/j/m/i` |
 | `<Space>yd` | 复制光标所在表的 DDL（树、数据 tab 或结构 tab，这些地方也可直接按 `yd`）；在函数定义弹窗里按 `y` 复制其定义 |
 | `<Space>x c/j/s/x` | 导出结果为 CSV / JSON / SQL / xlsx |
@@ -432,6 +433,9 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，
   sqlvim 会提示事务已丢失，而不是悄悄重连。请用 `<Space>t` 而不是 `SET autocommit = 0`。
 - 导入在一个事务里完成，只要有一行失败就什么都不写；MySQL 上导入新建的表会被删掉。
+- 每个到达服务器的写操作都记进审计日志（`<Space>a`，存在 `state.db`，保留最近 50,000 条）：可能写入的 SQL 语句、
+  Redis 的写命令和认不出的命令、Kafka 和 Schema Registry 的写操作，以及它们的结果。SQL 会隐藏密码，Redis 命令按输入
+  记录（密码隐藏），不记语句参数，也不记 Kafka 消息内容。被只读拦截或在确认框取消的操作不记。
 
 ## 开发
 

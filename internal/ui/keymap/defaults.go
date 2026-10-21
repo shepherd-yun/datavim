@@ -33,6 +33,7 @@ func DefaultBindings() []Binding {
 		{Global, keys(LeaderToken, "k"), OpenKey, "Open a Redis key by name"},
 		{Global, keys(LeaderToken, "i"), ServerInfo, "Server status: load, sessions, locks, …"},
 		{Global, keys(LeaderToken, "F"), Favorites, "Starred Redis keys"},
+		{Global, keys(LeaderToken, "a"), AuditLog, "Audit log of writes"},
 	}
 	for _, c := range copyFormats {
 		b = append(b, Binding{Global, keys(LeaderToken, "y", c.key), CopyAs(c.format), c.desc})
@@ -257,6 +258,12 @@ func DefaultBindings() []Binding {
 		Binding{KafkaSchema, keys(LeaderToken, "v"), ExternalEdit, "Register a new version (edit in $EDITOR)"},
 		Binding{KafkaSchema, keys("c"), SetCompatibility, "Set the compatibility level…"},
 		Binding{KafkaSchema, keys("d", "d"), DeleteNode, "Soft-delete the version"},
+	)
+	b = append(b, gridBindings(Audit)...)
+	b = append(b,
+		Binding{Audit, keys("F"), FilterPrompt, "Search the audit log (op, object, detail)"},
+		Binding{Audit, keys("f", "x"), FilterClear, "Clear the search"},
+		Binding{Audit, keys("g", "d"), OpenCellKey, "Open the object of this write"},
 	)
 	b = append(b, gridBindings(KafkaProduceResults)...)
 	b = append(b,

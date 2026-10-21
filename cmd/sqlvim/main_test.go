@@ -11,6 +11,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
+	"github.com/shepherd-yun/sqlvim/internal/history"
 	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
 )
 
@@ -222,4 +223,20 @@ func TestNewManagerOpensKafka(t *testing.T) {
 	if mgr.KafkaOpen == nil || mgr.KafkaReaderOpen == nil {
 		t.Fatal("kafka connections need an opener")
 	}
+}
+
+func TestAuditWired(t *testing.T) {
+	st, err := history.Open(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	audit := auditTo(st)
+	audit(history.AuditEntry{Conn: "k", Kind: history.AuditKafka, Op: "delete_topic", Object: "orders"})
+	es, err := st.Audit(history.AuditQuery{Limit: 10})
+	if err != nil || len(es) != 1 || es[0].Object != "orders" {
+		t.Fatalf("audit = %+v, %v", es, err)
+	}
+	_ = st.Close()
+	// a store that fails only loses the entry: the write it records goes on
+	audit(history.AuditEntry{Conn: "k", Kind: history.AuditKafka, Op: "produce"})
 }

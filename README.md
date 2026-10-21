@@ -349,6 +349,7 @@ picks the workspace by directory.
 | `Ctrl-j` / `Ctrl-k` | Console: results / editor; `M` toggles the message log |
 | `<Space>v` | Edit the console in `$EDITOR` |
 | `<Space>h` | SQL history |
+| `<Space>a` | Audit log of the writes sqlvim sent (`:audit <connection>` for one connection); `F` searches, `gd` opens the object |
 | `<Space>y t/c/j/m/i` | Copy result as TSV / CSV / JSON / Markdown / INSERT; in a grid `y t/c/j/m/i` too |
 | `<Space>yd` | Copy the DDL of the table under the cursor (tree, data or structure tab; there `yd` too); `y` in a routine's definition copies it |
 | `<Space>x c/j/s/x` | Export result as CSV / JSON / SQL / xlsx |
@@ -520,6 +521,11 @@ with a syntax error, the cursor jumps to where the server says the error is.
   asks first. If the connection drops during a transaction, sqlvim says the transaction is
   lost instead of reconnecting silently. Use `<Space>t` rather than `SET autocommit = 0`.
 - Imports run in one transaction and write nothing unless every row goes in; on MySQL a table the import created is dropped again.
+- Every write that reaches a server is kept in an audit log (`<Space>a`, in `state.db`, the latest
+  50,000): SQL statements that may write, Redis write and unknown commands, Kafka and Schema
+  Registry writes, with their result. It keeps SQL with passwords hidden and Redis commands as
+  typed (passwords hidden), never statement parameters or Kafka message contents. Writes that
+  read-only refused or that you cancelled are not in it.
 
 ## Development
 

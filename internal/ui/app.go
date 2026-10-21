@@ -274,6 +274,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.topicDeleted(msg)
 	case openTopicSectionMsg:
 		return m, m.openTopicSection(msg)
+	case auditGotoMsg:
+		return m, m.auditGoto(msg.e)
 	case redisKeyChangedMsg:
 		m.keyChanged(msg)
 	case keyOpAskMsg:
@@ -645,6 +647,8 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		return m.openKeyPrompt()
 	case keymap.Favorites:
 		return m.showFavorites()
+	case keymap.AuditLog:
+		return m.openAudit("")
 	case keymap.ToggleFavorite:
 		return m.toggleFavoriteHere()
 	case keymap.ServerInfo:
@@ -965,6 +969,9 @@ func (m *Model) runCommand(text string) tea.Cmd {
 	}
 	if verb == "e" || verb == "edit" {
 		return m.editFile(arg)
+	}
+	if verb == "audit" {
+		return m.openAudit(arg)
 	}
 	if verb == "send" {
 		p, ok := m.activeTab().(*producerTab)

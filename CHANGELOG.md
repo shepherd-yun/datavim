@@ -7,6 +7,13 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- An audit log of the writes sqlvim sent: SQL statements that may write (DML, DDL, unknown
+  statements, and `BEGIN` / `COMMIT` / `ROLLBACK` in a console), Redis write, dangerous and
+  unknown commands and key-tab edits, and every Kafka and Schema Registry write. Each entry
+  keeps the time, connection, database, operation, object, a detail (SQL with passwords
+  hidden, never statement parameters or message contents) and the result, failed writes
+  included. `<Space>a` or `:audit [connection]` opens it; `F` searches it, `gd` opens the
+  table, key, topic, group or subject. It lives in `state.db` and keeps the latest 50,000 writes.
 - Kafka K2. The topic tab's Config section edits configs as staged changes (`i` edits, `dd`
   goes back to the default, `u` / `U` undo, `<Space>w` applies only what changed, and gives up
   if someone changed those configs since the preview); `o` in Partitions adds partitions; `X`

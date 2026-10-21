@@ -122,6 +122,7 @@ func run(args []string, stdout io.Writer) error {
 	defer tunnels.Close()
 
 	mgr := newManager(cfg, ws, tunnels)
+	mgr.Audit = auditTo(st)
 	defer mgr.CloseAll()
 
 	slog.Info("starting", "version", version, "workspace", ws.Name, "connections", len(cfg.Connections))
@@ -165,6 +166,16 @@ func openStore(stateDir string) (*history.Store, error) {
 	}
 	slog.Warn("state database unavailable; history and drafts will not be kept", "err", err)
 	return history.Open(":memory:")
+}
+
+// auditTo writes audit entries to st; a failed write is logged and the
+// operation it records goes on.
+func auditTo(st *history.Store) func(history.AuditEntry) {
+	return func(e history.AuditEntry) {
+		if err := st.AddAudit(e); err != nil {
+			slog.Warn("audit entry not saved", "op", e.Op, "conn", e.Conn, "err", err)
+		}
+	}
 }
 
 // newManager builds the session manager for workspace ws; connections added,
