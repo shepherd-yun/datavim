@@ -52,6 +52,9 @@ type msgView struct {
 	headers bool        // the HEADERS column is shown
 	format  valueFormat // how K and yl show keys and values
 	from    string      // the group this view was opened from
+	// uncommitted reads read_uncommitted: aborted and open transactions'
+	// messages too. Off (read_committed) in every new view.
+	uncommitted bool
 
 	filter    kmsgx.Filter
 	shown     []int      // the indexes of the recs that pass the filter, one per grid row
@@ -60,6 +63,11 @@ type msgView struct {
 
 	tail  *liveTail // live tail; nil when off
 	limit int       // messages kept, msgLimit but in tests
+}
+
+// readerConfig is what the view's Reader is opened with.
+func (v *msgView) readerConfig() kafka.ReaderConfig {
+	return kafka.ReaderConfig{MaxValueBytes: maxValueBytes, ReadUncommitted: v.uncommitted}
 }
 
 // current is the message under the cursor.
@@ -210,7 +218,7 @@ func singlePartition(pos kmsgx.Position) bool { return len(pos.Partitions) == 1 
 func (t *topicTab) loadMsgs(dir int, pos kmsgx.Position, edges map[int32]int64) tea.Cmd {
 	v := t.msgs
 	v.loading = true
-	tabCtx, id, gen, b, conn, topic, reader := t.ctx, t.id, v.gen, t.backend, t.conn, t.topic, v.reader
+	tabCtx, id, gen, b, conn, topic, reader, rc := t.ctx, t.id, v.gen, t.backend, t.conn, t.topic, v.reader, v.readerConfig()
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(tabCtx, loadTimeout)
 		defer cancel()
@@ -249,7 +257,7 @@ func (t *topicTab) loadMsgs(dir int, pos kmsgx.Position, edges map[int32]int64) 
 				return nil
 			}
 			if reader == nil {
-				if reader, err = b.KafkaReader(ctx, conn, kafka.ReaderConfig{MaxValueBytes: maxValueBytes}); err != nil {
+				if reader, err = b.KafkaReader(ctx, conn, rc); err != nil {
 					return err
 				}
 				msg.reader = reader
@@ -455,7 +463,11 @@ func msgSize(n int) string {
 // msgsHeader is "latest · all partitions · 200 messages · format auto".
 func (t *topicTab) msgsHeader() string {
 	v := t.msgs
-	parts := []string{v.pos.Describe(v.bounds), plural(len(v.recs), "message")}
+	parts := []string{v.pos.Describe(v.bounds)}
+	if v.uncommitted {
+		parts = append(parts, "read_uncommitted")
+	}
+	parts = append(parts, plural(len(v.recs), "message"))
 	switch {
 	case v.tail == nil:
 	case v.tail.paused:
@@ -494,6 +506,8 @@ func (t *topicTab) handleMsgs(a keymap.Action) (tea.Cmd, bool) {
 		return t.seekPrompt(), true
 	case keymap.DeleteRecords:
 		return t.deleteFromMessage(), true
+	case keymap.ToggleIsolation:
+		return t.toggleIsolation(), true
 	case keymap.LiveTail:
 		return t.toggleTail(), true
 	case keymap.OpenCellKey:
@@ -1154,6 +1168,26 @@ type tailEstimateMsg struct {
 func (m tailEstimateMsg) TabID() int { return m.tabID }
 
 // toggleTail is T: live tail on, paused, on again.
+// toggleIsolation switches between read_committed and read_uncommitted:
+// the reader (and live tail) stops, and a new one reads the same place.
+func (t *topicTab) toggleIsolation() tea.Cmd {
+	v := t.msgs
+	v.uncommitted = !v.uncommitted
+	level := "read_committed"
+	if v.uncommitted {
+		level = "read_uncommitted"
+	}
+	t.setStatus("isolation "+level, false)
+	r := v.reader
+	v.reader, v.tail = nil, nil
+	v.gen++
+	load := t.loadMsgs(0, v.pos, nil)
+	if r == nil {
+		return load
+	}
+	return tea.Batch(func() tea.Msg { _ = r.Close(); return nil }, load)
+}
+
 func (t *topicTab) toggleTail() tea.Cmd {
 	v := t.msgs
 	switch {
@@ -1177,7 +1211,7 @@ func (t *topicTab) toggleTail() tea.Cmd {
 // highest offset kept), or from their end when kept is nil.
 func (t *topicTab) startTail(kept map[int32]int64) tea.Cmd {
 	v := t.msgs
-	tabCtx, id, gen, b, conn, topic, reader, parts := t.ctx, t.id, v.gen, t.backend, t.conn, t.topic, v.reader, v.pos.Partitions
+	tabCtx, id, gen, b, conn, topic, reader, parts, rc := t.ctx, t.id, v.gen, t.backend, t.conn, t.topic, v.reader, v.pos.Partitions, v.readerConfig()
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(tabCtx, loadTimeout)
 		defer cancel()
@@ -1199,7 +1233,7 @@ func (t *topicTab) startTail(kept map[int32]int64) tea.Cmd {
 				}
 			}
 			if reader == nil {
-				if reader, err = b.KafkaReader(ctx, conn, kafka.ReaderConfig{MaxValueBytes: maxValueBytes}); err != nil {
+				if reader, err = b.KafkaReader(ctx, conn, rc); err != nil {
 					return err
 				}
 				msg.reader = reader

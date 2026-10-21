@@ -803,3 +803,30 @@ func TestMessagesDetailFollowsKeymap(t *testing.T) {
 		t.Fatal("v is no longer bound")
 	}
 }
+
+func TestToggleIsolation(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 10)
+	tt := openTopicTab(t, m, "orders")
+	first := k.lastReader()
+	if first == nil || first.rc.ReadUncommitted {
+		t.Fatalf("first reader = %+v", first)
+	}
+	pressAll(t, m, "I")
+	drainAll(t, m, nil)
+	second := k.lastReader()
+	if second == first || !second.rc.ReadUncommitted {
+		t.Fatalf("after I the reader is %+v", second)
+	}
+	if !first.closed {
+		t.Fatal("the read_committed reader stays open")
+	}
+	if !strings.Contains(tt.msgsHeader(), "read_uncommitted") || tt.status != "isolation read_uncommitted" {
+		t.Fatalf("header %q status %q", tt.msgsHeader(), tt.status)
+	}
+	pressAll(t, m, "I")
+	drainAll(t, m, nil)
+	if k.lastReader().rc.ReadUncommitted || strings.Contains(tt.msgsHeader(), "read_uncommitted") {
+		t.Fatal("I again is read_committed")
+	}
+}

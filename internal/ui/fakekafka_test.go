@@ -500,6 +500,7 @@ func (c *fakeKafkaClient) Close() {}
 // fakeReader reads the fake cluster and records its calls.
 type fakeReader struct {
 	k       *fakeKafka
+	rc      kafka.ReaderConfig
 	mu      sync.Mutex
 	ranges  []map[int32]kafka.Range
 	tails   []map[int32]int64
@@ -635,13 +636,13 @@ func (f *fakeBackend) Kafka(_ context.Context, name string) (kafka.Client, error
 	return &fakeKafkaClient{k: f.kafka, ro: cfg.IsReadOnly()}, nil
 }
 
-func (f *fakeBackend) KafkaReader(_ context.Context, name string, _ kafka.ReaderConfig) (kafka.Reader, error) {
+func (f *fakeBackend) KafkaReader(_ context.Context, name string, rc kafka.ReaderConfig) (kafka.Reader, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if _, err := f.kafkaConn(name); err != nil {
 		return nil, err
 	}
-	r := &fakeReader{k: f.kafka}
+	r := &fakeReader{k: f.kafka, rc: rc}
 	f.kafka.mu.Lock()
 	f.kafka.readers = append(f.kafka.readers, r)
 	f.kafka.mu.Unlock()
