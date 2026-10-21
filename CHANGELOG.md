@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.1.0] - 2026-10-21
+
 ### Changed
 - Consoles open in NORMAL mode, so the leader and global keys work at once; `i` starts typing.
 - Console results get a tab per statement (Redis: per command) of the last run, after a Summary
@@ -567,7 +569,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.0.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.1.0...HEAD
+[3.1.0]: https://github.com/shepherd-yun/datavim/compare/v3.0.0...v3.1.0
 [3.0.0]: https://github.com/shepherd-yun/datavim/compare/v2.4.0...v3.0.0
 [2.4.0]: https://github.com/shepherd-yun/datavim/compare/v2.3.0...v2.4.0
 [2.3.0]: https://github.com/shepherd-yun/datavim/compare/v2.2.0...v2.3.0
