@@ -142,7 +142,14 @@ func TestIntegrationConnect(t *testing.T) {
 	if err := c.SetConfig(ictx(t), "orders-sink", old, cfg); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := c.Connector(ictx(t), "orders-sink"); err != nil || got.Config["tasks.max"] != "2" {
+	// the worker rebalances after a config change: reads fail for a moment
+	var got Connector
+	for deadline := time.Now().Add(30 * time.Second); time.Now().Before(deadline); time.Sleep(300 * time.Millisecond) {
+		if got, err = c.Connector(ictx(t), "orders-sink"); err == nil && got.Config["tasks.max"] == "2" {
+			break
+		}
+	}
+	if err != nil || got.Config["tasks.max"] != "2" {
 		t.Fatalf("after SetConfig: %+v, %v", got.Config, err)
 	}
 	cfg["tasks.max"] = "3"
