@@ -180,9 +180,9 @@ func settingValue(v *string) json.RawMessage {
 	return b
 }
 
-// PutClusterSettings changes cluster settings; a nil value puts one back
-// to its default. Nothing is sent when both maps are empty.
-func PutClusterSettings(ctx context.Context, d Doer, persistent, transient map[string]*string) error {
+// ClusterSettingsBody is the PUT _cluster/settings body of the changes;
+// nil when both maps are empty.
+func ClusterSettingsBody(persistent, transient map[string]*string) []byte {
 	if len(persistent) == 0 && len(transient) == 0 {
 		return nil
 	}
@@ -196,11 +196,18 @@ func PutClusterSettings(ctx context.Context, d Doer, persistent, transient map[s
 			body[scope][k] = settingValue(v)
 		}
 	}
-	b, err := json.Marshal(body)
-	if err != nil {
-		return err
+	b, _ := json.Marshal(body)
+	return b
+}
+
+// PutClusterSettings changes cluster settings; a nil value puts one back
+// to its default. Nothing is sent when both maps are empty.
+func PutClusterSettings(ctx context.Context, d Doer, persistent, transient map[string]*string) error {
+	b := ClusterSettingsBody(persistent, transient)
+	if b == nil {
+		return nil
 	}
-	_, err = do(ctx, d, Request{Method: "PUT", Path: "_cluster/settings", Body: b})
+	_, err := do(ctx, d, Request{Method: "PUT", Path: "_cluster/settings", Body: b})
 	return err
 }
 

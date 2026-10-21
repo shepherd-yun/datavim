@@ -101,6 +101,11 @@ type esServerTab struct {
 	pending  []es.PendingTask
 	shards   []es.Shard
 	tasks    []es.Task
+	// csettings are the cluster settings read, csView the Settings rows.
+	csettings    []es.ClusterSetting
+	csView       []es.ClusterSetting
+	clusterEdits []clusterEdit
+	showDefaults bool
 	// shardView are the Shards rows shown: not STARTED unless shardsAll,
 	// matching shardFilter.
 	shardView   []es.Shard
@@ -127,6 +132,7 @@ func newESServerTab(id int, b Backend, keys *keymap.Keymap, maxCol int, conn str
 		t.grids[i] = grid.New(nil, maxCol)
 	}
 	t.grids[secESNodes].SetMarks(t.nodeMark)
+	t.grids[secESSettings].SetMarks(t.clusterMark)
 	return t
 }
 
@@ -246,6 +252,9 @@ func clusterSettingValue(set []es.ClusterSetting, key string) string {
 }
 
 func (t *esServerTab) Update(msg tea.Msg) tea.Cmd {
+	if cmd, ok := t.clusterUpdate(msg); ok {
+		return cmd
+	}
 	switch m := msg.(type) {
 	case esServerLoadedMsg:
 		if m.gen != t.gen {
@@ -300,6 +309,9 @@ func (t *esServerTab) apply(m esServerLoadedMsg) {
 	case secESShards:
 		t.shards = m.shards
 		t.renderShards()
+	case secESSettings:
+		t.csettings = m.settings
+		t.renderClusterSettings()
 	case secESTasks:
 		t.tasks = m.tasks
 		t.grids[secESTasks].ReplaceResult(t.tasksResult())
@@ -316,6 +328,11 @@ func (t *esServerTab) Handle(a keymap.Action) tea.Cmd {
 	t.status = ""
 	if t.section == secESShards {
 		if cmd, ok := t.handleShards(a); ok {
+			return cmd
+		}
+	}
+	if t.section == secESSettings {
+		if cmd, ok := t.handleClusterSettings(a); ok {
 			return cmd
 		}
 	}
@@ -513,7 +530,10 @@ func (t *esServerTab) empty() string {
 
 // sectionNote is shown under the section titles.
 func (t *esServerTab) sectionNote() string {
-	if t.section != secESShards {
+	switch {
+	case t.section == secESSettings && t.showDefaults:
+		return "defaults shown"
+	case t.section != secESShards:
 		return ""
 	}
 	var n []string
