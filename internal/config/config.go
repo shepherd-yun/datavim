@@ -10,8 +10,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -261,7 +261,9 @@ func normalizeKafka(c Connection) (Connection, error) {
 	return c, nil
 }
 
-func httpURL(u string) bool { return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") }
+func httpURL(u string) bool {
+	return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://")
+}
 
 // ConnectCluster is one Kafka Connect cluster of a kafka connection.
 type ConnectCluster struct{ Name, URL string }

@@ -769,7 +769,9 @@ host = "h2"
 }
 
 func TestKafkaConnectClusters(t *testing.T) {
-	conn := func(v string) Connection { return Connection{Name: "k", Driver: "kafka", Params: map[string]string{"connect_url": v}} }
+	conn := func(v string) Connection {
+		return Connection{Name: "k", Driver: "kafka", Params: map[string]string{"connect_url": v}}
+	}
 	for _, tc := range []struct {
 		in   string
 		want []ConnectCluster
