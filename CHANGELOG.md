@@ -35,6 +35,23 @@ All notable changes to this project are documented here. The format follows
   dangerous requests want the index typed, and a wildcard, `_all` or multi-index delete, close or
   delete by query is expanded, shown and sent with the expanded names — refused on prod. Writes are
   in the audit log (method and path, never the body).
+- The Elasticsearch cluster tab has sections (`[` / `]`): Overview, Nodes (heap, RAM, CPU, load,
+  disk and shards; nodes short of heap or past the high disk watermark are marked; `Enter` shows a
+  node's details), Shards (the ones not started, `.` shows all, `F` filters by index; `Enter` on an
+  unassigned shard explains why), Allocation, Tasks (reindex, by-query, force merge, snapshot and
+  resize tasks with their progress; `dd` cancels one), Pending and Settings (persistent and
+  transient cluster settings, `.` shows the defaults; staged with `i` / `dd` and sent with
+  `<Space>w` once the connection name is typed). `Enter` on the Overview of a cluster that is not
+  green opens Shards.
+- Reindex from an index's actions menu: destination, query, op type and conflicts; a destination
+  that does not exist can be created with the source's mapping and settings first. The task shows
+  in Tasks.
+- Update by query (`<Space>u` in Documents): a painless script written in `$EDITOR` runs on what the
+  filter matches, after a count and with the index typed, as a task with progress.
+- Index Templates in the Elasticsearch tree (composable, legacy and component): `Enter` shows one
+  as JSON, `<Space>v` edits it in `$EDITOR`, `dd` deletes it.
+- Mapping: `o` adds fields in `$EDITOR`; a field whose type would change is refused before anything
+  is sent. `gd` on Stats opens the index's shards on the cluster tab.
 
 ## [3.1.0] - 2026-10-21
 

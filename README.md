@@ -18,7 +18,8 @@ A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys
   Schema Registry (Avro, Protobuf and JSON Schema), ACLs, Kafka Connect and masking of message fields.
 - Elasticsearch and OpenSearch: indices, aliases and data streams, documents found by `_id` or a
   query string with hits highlighted, edited with concurrency checks, delete by query, index
-  management, a REST console with completion and table views, and a cluster overview.
+  management, update by query and reindex, index templates, a REST console with completion and
+  table views, and a cluster tab with nodes, shards (why one is unassigned), tasks and settings.
 - An audit log of every write datavim sent to SQL, Redis, Kafka and Elasticsearch servers (`<Space>a`).
 - SSH tunnels (agent, keys, ProxyJump), production safeguards, manual transactions.
 - Your own keys (`keymap.toml`) and colors (`[theme]`).
@@ -301,8 +302,26 @@ force-merges. Settings edit like a topic's configs; Aliases add (`o`) and remove
 `"""` strings, `#` comments, NDJSON for `_bulk`), with completion of methods, indices, APIs,
 query DSL keys and field names. `Enter` runs the request at the cursor, `R` all of them; each gets
 a result tab with its status and time, as JSON or (`[` / `]`) as a table of the hits, a `_cat`
-list or aggregation buckets (`gd` on an `_id` opens the document). `<Space>i` on the connection
-shows the cluster overview.
+list or aggregation buckets (`gd` on an `_id` opens the document).
+
+`<Space>i` on the connection opens the cluster tab, refreshed every 10 seconds while on screen;
+`[` / `]` switch its sections. **Overview** has the version, health and totals (`Enter` on a
+cluster that is not green opens Shards). **Nodes** lists heap, RAM, CPU, load, disk and shards,
+marking a node at 85% heap or past the cluster's high disk watermark; `Enter` shows the node's
+details. **Shards** lists the shards that are not started (`.` all of them, `F` filters by index
+name or `*` pattern, `fx` clears); `Enter` on an unassigned one shows why (allocation explain).
+**Allocation** is the disk of each node, **Tasks** the reindex, by-query, force merge, snapshot
+and resize tasks with their progress (`dd` cancels one), **Pending** the queued cluster state
+updates, and **Settings** the persistent and transient cluster settings (`.` shows the defaults;
+`i` edits, `dd` removes, `<Space>w` sends them once you type the connection name).
+
+The actions menu (`a`) of an index has `Reindex…`: destination, query, op type and conflicts;
+a destination that does not exist can first be created with the source's mapping and settings.
+`<Space>u` in Documents runs a painless script, written in `$EDITOR`, on every document the filter
+matches (update by query, after a count); both run as tasks shown in Tasks. On Mapping, `o` adds
+fields in `$EDITOR` (changing a field's type is refused: reindex instead), and `gd` on Stats opens
+the index's shards. Index Templates in the tree lists the composable, legacy and component
+templates: `Enter` shows one as JSON, `<Space>v` edits it in `$EDITOR`, `dd` deletes it.
 
 ## Editing table data
 
@@ -486,6 +505,11 @@ picks the workspace by directory.
 | `yk` / `ys` / `yr` / `yu` | Elasticsearch documents: copy the `_id` / the `_source` / as console requests / as curl |
 | `X` | Elasticsearch documents: delete every document the filter matches |
 | `<Space>x n` | Elasticsearch documents: export as NDJSON |
+| `<Space>u` | Elasticsearch documents: update every document the filter matches (painless in `$EDITOR`) |
+| `o` / `g d` | Elasticsearch index tab: add mapping fields in `$EDITOR` / on Stats, open the index's shards |
+| `Enter` / `.` / `F` / `d d` | Elasticsearch cluster tab: node details, why a shard is unassigned / all shards / filter shards / cancel the task |
+| `i` / `d d` / `<Space>w` / `.` | Elasticsearch cluster settings: edit / back to the default / apply / show the defaults |
+| `<Space>v` / `y y` | Elasticsearch template tab: edit in `$EDITOR` / copy the JSON |
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
 | `v` | Redis key tab: show a string as auto / text / JSON / hex |

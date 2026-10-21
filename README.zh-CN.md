@@ -14,7 +14,8 @@
 - Kafka：topic、按 lag 排序的 consumer group，可跳转、过滤和 live tail 的消息浏览，重置 offset，producer console；
   修改 topic 配置和 partition，删除消息和 group，Schema Registry（Avro、Protobuf、JSON Schema），ACL、Kafka Connect 和消息字段打码。
 - Elasticsearch 和 OpenSearch：索引、别名、data stream，按 `_id` 或 query string 查文档并高亮命中，带并发检查的编辑，
-  按条件删除，索引管理，带补全和表格视图的 REST 控制台，集群概览。
+  按条件删除和按条件更新，reindex，索引模板，索引管理，带补全和表格视图的 REST 控制台，以及有节点、分片（未分配的原因）、
+  任务和集群 settings 的集群状态页。
 - 审计日志：记录 datavim 发给 SQL、Redis、Kafka、Elasticsearch 服务器的每个写操作（`<Space>a`）。
 - SSH 隧道（agent、密钥、ProxyJump），生产环境保护，手动事务。
 - 自定义按键（`keymap.toml`）与颜色（`[theme]`）。
@@ -232,8 +233,20 @@ topic 配置一样编辑；Aliases 用 `o` 添加、`dd` 删除。
 
 `<Space>c` 打开 REST 控制台：格式和 Kibana Dev Tools 一样（`GET orders/_search` 加 JSON body，支持 `"""` 字符串、`#` 注释、`_bulk`
 的 NDJSON），补全方法、索引、接口、Query DSL 关键字和字段名。回车执行光标所在的请求，`R` 执行全部；每个请求一个结果标签，显示
-状态码和耗时，可以看 JSON，也可以（`[` / `]`）看成 hits、`_cat` 列表或聚合 buckets 的表格（在 `_id` 上 `gd` 打开文档）。在连接上
-`<Space>i` 显示集群概览。
+状态码和耗时，可以看 JSON，也可以（`[` / `]`）看成 hits、`_cat` 列表或聚合 buckets 的表格（在 `_id` 上 `gd` 打开文档）。
+
+在连接上按 `<Space>i` 打开集群状态页，显示在屏幕上时每 10 秒刷新，`[` / `]` 切换部分。**Overview** 是版本、健康状态和总数
+（集群不是 green 时回车跳到 Shards）。**Nodes** 列出 heap、内存、CPU、load、磁盘和分片数，heap 到 85% 或磁盘超过集群 high
+watermark 的节点会标出来；回车看节点详情。**Shards** 列出没有 STARTED 的分片（`.` 显示全部，`F` 按索引名或 `*` 通配过滤，
+`fx` 清除）；在未分配的分片上回车显示原因（allocation explain）。**Allocation** 是各节点的磁盘，**Tasks** 是 reindex、by-query、
+force merge、快照和 resize 任务及其进度（`dd` 取消），**Pending** 是排队的集群状态更新，**Settings** 是 persistent 和 transient
+集群 settings（`.` 显示默认值；`i` 修改，`dd` 删除，`<Space>w` 输入连接名后提交）。
+
+索引的操作菜单（`a`）里有 `Reindex…`：目标索引、查询条件、op type 和 conflicts；目标不存在时可以先按源索引的 mapping 和
+settings 建好。Documents 里 `<Space>u` 对条件命中的全部文档执行在 `$EDITOR` 里写的 painless 脚本（update by query，先计数）；
+两者都作为任务提交，在 Tasks 里能看到。Mapping 里 `o` 在 `$EDITOR` 里加字段（改已有字段的类型会被拒绝：请 reindex），
+Stats 里 `gd` 打开这个索引的分片。树上的 Index Templates 列出 composable、legacy 和 component 模板：回车看 JSON，
+`<Space>v` 在 `$EDITOR` 里修改，`dd` 删除。
 
 ## 编辑表数据
 
@@ -417,6 +430,11 @@ datavim --list-workspaces
 | `yk` / `ys` / `yr` / `yu` | Elasticsearch 文档：复制 `_id` / `_source` / 控制台请求 / curl |
 | `X` | Elasticsearch 文档：删除条件命中的全部文档 |
 | `<Space>x n` | Elasticsearch 文档：导出为 NDJSON |
+| `<Space>u` | Elasticsearch 文档：更新条件命中的全部文档（在 `$EDITOR` 里写 painless） |
+| `o` / `g d` | Elasticsearch 索引标签页：在 `$EDITOR` 里加 mapping 字段 / 在 Stats 里打开这个索引的分片 |
+| `Enter` / `.` / `F` / `d d` | Elasticsearch 集群状态页：节点详情、分片未分配的原因 / 全部分片 / 过滤分片 / 取消任务 |
+| `i` / `d d` / `<Space>w` / `.` | Elasticsearch 集群 settings：修改 / 恢复默认 / 提交 / 显示默认值 |
+| `<Space>v` / `y y` | Elasticsearch 模板标签页：在 `$EDITOR` 里修改 / 复制 JSON |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |
 
