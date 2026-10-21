@@ -430,6 +430,8 @@ func (d *esDocs) handle(a keymap.Action) (tea.Cmd, bool) {
 		return d.deleteByQuery(), true
 	case keymap.UpdateByQuery:
 		return d.updateByQuery(), true
+	case keymap.SimulatePipeline:
+		return d.simulate(), true
 	case keymap.EditCell:
 		return d.editCell(), true
 	case keymap.InsertRow:

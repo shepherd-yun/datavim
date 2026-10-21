@@ -76,6 +76,7 @@ type esSectionMsg struct {
 	settings []es.Setting
 	aliases  []es.Alias
 	stats    []es.IndexStats
+	ilm      map[string]es.ILMState // with stats; nil when ILM can't be read
 	err      error
 }
 
@@ -114,6 +115,7 @@ type esIndexTab struct {
 	setEdits    []settingEdit // staged in the Settings section, in order
 	aliases     []es.Alias
 	stats       []es.IndexStats
+	ilm         map[string]es.ILMState // by index; nil: no ilm column
 	parts       [idxSections]esPart
 
 	docs    *esDocs
@@ -138,6 +140,7 @@ func newESIndexTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, co
 	}
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 	t.setGrid.SetMarks(t.settingsMark)
+	t.statsGrid.SetMarks(t.statsMark)
 	t.docs = newESDocs(t)
 	return t
 }
@@ -316,7 +319,7 @@ func (t *esIndexTab) loadMapping() tea.Cmd {
 
 func (t *esIndexTab) loadSection(s indexSection) tea.Cmd {
 	t.parts[s].loading = true
-	id, conn, target := t.id, t.conn, t.target
+	id, conn, target, b := t.id, t.conn, t.target, t.backend
 	return t.load(func(ctx context.Context, d es.Doer) tea.Msg {
 		msg := esSectionMsg{tabID: id, conn: conn, section: s}
 		switch s {
@@ -326,6 +329,11 @@ func (t *esIndexTab) loadSection(s indexSection) tea.Cmd {
 			msg.aliases, msg.err = es.IndexAliases(ctx, d, target)
 		case idxStats:
 			msg.stats, msg.err = es.Stats(ctx, d, target)
+			// the ILM state is a column of its own; no ILM (OpenSearch, a
+			// basic license, no permission) leaves it out
+			if info, _ := b.ESInfo(conn); msg.err == nil && !info.OpenSearch() {
+				msg.ilm, _ = es.ILMExplain(ctx, d, target)
+			}
 		}
 		return msg
 	}, func(err error) tea.Msg { return esSectionMsg{tabID: id, conn: conn, section: s, err: err} })
@@ -338,6 +346,12 @@ func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case esFilterMsg:
 		return t.docs.filtered(m.text)
+	case esPipelinesMsg:
+		return t.pickPipeline(m)
+	case esSimulatePickMsg:
+		return t.runSimulate(m)
+	case esSimulatedMsg:
+		return t.simulated(m)
 	case esCellMsg:
 		t.docs.cellEdited(m)
 	case esDBQPlanMsg:
@@ -414,7 +428,7 @@ func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 			t.aliases = m.aliases
 			t.aliasGrid.ReplaceResult(t.aliasesResult())
 		case idxStats:
-			t.stats = m.stats
+			t.stats, t.ilm = m.stats, m.ilm
 			t.statsGrid.ReplaceResult(t.statsResult())
 		}
 	}
@@ -579,15 +593,36 @@ func (t *esIndexTab) statsResult() *db.ResultSet {
 	n := groupDigits
 	rows := make([][]string, len(t.stats))
 	for i, s := range t.stats {
-		rows[i] = []string{
-			s.Index, n(s.Docs), n(s.Deleted), humanBytes(s.PriStoreBytes), humanBytes(s.StoreBytes), shards[s.Index],
-			n(s.Segments), n(s.Refreshes), n(s.Flushes), n(s.Merges), n(s.Queries), n(s.Indexed),
+		rows[i] = []string{s.Index, n(s.Docs), n(s.Deleted), humanBytes(s.PriStoreBytes), humanBytes(s.StoreBytes), shards[s.Index]}
+		if t.ilm != nil {
+			rows[i] = append(rows[i], ilmText(t.ilm[s.Index]))
 		}
+		rows[i] = append(rows[i], n(s.Segments), n(s.Refreshes), n(s.Flushes), n(s.Merges), n(s.Queries), n(s.Indexed))
 	}
-	return textResult([]string{
-		"index", "docs", "deleted", "pri size", "size", "shards", "segments",
-		"refreshes", "flushes", "merges", "queries", "indexed",
-	}, rows)
+	cols := []string{"index", "docs", "deleted", "pri size", "size", "shards"}
+	if t.ilm != nil {
+		cols = append(cols, "ilm")
+	}
+	return textResult(append(cols, "segments", "refreshes", "flushes", "merges", "queries", "indexed"), rows)
+}
+
+// ilmText is an index's ILM state in a cell: "—" when ILM does not manage it.
+func ilmText(s es.ILMState) string {
+	switch {
+	case s.Policy == "":
+		return "—"
+	case s.Failed != "":
+		return s.Policy + " · ERROR: " + s.Failed
+	}
+	return s.Policy + " · " + s.Phase + "/" + s.Action
+}
+
+// statsMark shows the indices whose ILM step failed.
+func (t *esIndexTab) statsMark(row, _ int) grid.Mark {
+	if row < len(t.stats) && t.ilm[t.stats[row].Index].Failed != "" {
+		return grid.MarkError
+	}
+	return grid.MarkNone
 }
 
 func (t *esIndexTab) sectionLine() string {
