@@ -91,6 +91,22 @@ func TestOAuthRefused(t *testing.T) {
 	}
 }
 
+// TestOAuthErrorRedactsURL: a token URL's userinfo stays out of a network error.
+func TestOAuthErrorRedactsURL(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dead := ln.Addr().String()
+	_ = ln.Close()
+	var dials atomic.Int32
+	cfg := Config{OAuth: &OAuthConfig{TokenURL: "http://u:url-pw-123@" + dead + "/token", ClientID: "cid", ClientSecret: "s"}}
+	_, err = oauthAuth(cfg, countingDial(&dials))(ctx(t))
+	if err == nil || strings.Contains(err.Error(), "url-pw-123") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
 func TestAWSAuthFromChain(t *testing.T) {
 	t.Setenv("AWS_ACCESS_KEY_ID", "AK")
 	t.Setenv("AWS_SECRET_ACCESS_KEY", "SK")
