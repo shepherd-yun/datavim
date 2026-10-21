@@ -277,8 +277,10 @@ func (f *fakeES) answer(r es.Request) es.Response {
 		}
 		var rows []map[string]any
 		for _, n := range f.nodes {
-			rows = append(rows, map[string]any{"node": n.Name, "ip": n.IP, "shards": str(int64(count[n.Name])), "disk.indices": "1000",
-				"disk.used": str(n.DiskUsed), "disk.avail": str(n.DiskTotal - n.DiskUsed), "disk.total": str(n.DiskTotal), "disk.percent": str(int64(n.DiskUsedPct))})
+			rows = append(rows, map[string]any{
+				"node": n.Name, "ip": n.IP, "shards": str(int64(count[n.Name])), "disk.indices": "1000",
+				"disk.used": str(n.DiskUsed), "disk.avail": str(n.DiskTotal - n.DiskUsed), "disk.total": str(n.DiskTotal), "disk.percent": str(int64(n.DiskUsedPct)),
+			})
 		}
 		return jsonResp(rows)
 	case r.Method == "GET" && (p == "_cat/shards" || strings.HasPrefix(p, "_cat/shards/")):
@@ -318,8 +320,10 @@ func (f *fakeES) answer(r es.Request) es.Response {
 		for _, t := range f.tasks {
 			node, id, _ := strings.Cut(t.ID, ":")
 			n, _ := strconv.Atoi(id)
-			v := map[string]any{"node": node, "id": n, "action": t.Action, "description": t.Description,
-				"running_time_in_nanos": int64(t.Running), "cancellable": t.Cancellable}
+			v := map[string]any{
+				"node": node, "id": n, "action": t.Action, "description": t.Description,
+				"running_time_in_nanos": int64(t.Running), "cancellable": t.Cancellable,
+			}
 			if t.Total >= 0 {
 				v["status"] = map[string]int64{"total": t.Total, "created": t.Done}
 			}
@@ -343,10 +347,13 @@ func (f *fakeES) answer(r es.Request) es.Response {
 			Primary bool   `json:"primary"`
 		}
 		_ = json.Unmarshal(r.Body, &b)
-		return jsonResp(map[string]any{"index": b.Index, "shard": b.Shard, "primary": b.Primary, "current_state": "unassigned",
+		return jsonResp(map[string]any{
+			"index": b.Index, "shard": b.Shard, "primary": b.Primary, "current_state": "unassigned",
 			"allocate_explanation": "cannot allocate because allocation is not permitted to any of the nodes",
 			"node_allocation_decisions": []map[string]any{{"node_name": "es-1", "deciders": []map[string]string{
-				{"decider": "same_shard", "decision": "NO", "explanation": "a copy of this shard is already allocated to this node"}}}}})
+				{"decider": "same_shard", "decision": "NO", "explanation": "a copy of this shard is already allocated to this node"},
+			}}},
+		})
 	case r.Method == "GET" && (p == "_index_template" || p == "_template" || p == "_component_template"):
 		kind := map[string]es.TemplateKind{"_index_template": es.TemplateComposable, "_template": es.TemplateLegacy, "_component_template": es.TemplateComponent}[p]
 		var list []map[string]any
