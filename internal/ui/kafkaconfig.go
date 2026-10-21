@@ -198,9 +198,11 @@ func (t *topicTab) applyConfigs(changes []kafka.ConfigChange) tea.Cmd {
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(tabCtx, queryTimeout)
 		defer cancel()
-		err := withKafka(ctx, b, conn, func(c kafka.Client) error {
-			return c.AlterTopicConfigs(ctx, topic, changes)
-		})
+		// a write is never retried after a lost connection: it may have been applied
+		c, err := b.Kafka(ctx, conn)
+		if err == nil {
+			err = c.AlterTopicConfigs(ctx, topic, changes)
+		}
 		return cfgAppliedMsg{tabID: id, conn: conn, n: len(changes), err: err}
 	}
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/sqlvim/internal/db"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
@@ -72,6 +73,23 @@ func TestConfigEditSubmit(t *testing.T) {
 	drainAll(t, m, nil)
 	if len(k.alters) != 2 || len(k.alters[1]) != 1 || k.alters[1][0].Name != "retention.ms" {
 		t.Fatalf("after u: %+v", k.alters)
+	}
+}
+
+// TestConfigApplyNoRetry: a config write that lost its connection is not
+// sent again (it may have been applied); the error is shown.
+func TestConfigApplyNoRetry(t *testing.T) {
+	m, k, tt := openConfig(t, config.Connection{})
+	k.setErr("AlterTopicConfigs", db.ErrConnLost)
+	pressAll(t, m, "j")
+	editConfigTo(t, m, "1")
+	pressAll(t, m, "space", "w", "y")
+	drainAll(t, m, nil)
+	if len(k.alters) != 1 {
+		t.Fatalf("alters = %+v, want one attempt", k.alters)
+	}
+	if !strings.Contains(tt.status, "connection lost") {
+		t.Fatalf("status = %q", tt.status)
 	}
 }
 
