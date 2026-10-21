@@ -375,3 +375,53 @@ func TestAuditRedisDo(t *testing.T) {
 		}
 	}
 }
+
+// serverConn is a sqlConn with a server status reader.
+type serverConn struct {
+	sqlConn
+	srv *fakeServerReader
+}
+
+func (c *serverConn) Server() db.ServerReader { return c.srv }
+
+type fakeServerReader struct {
+	db.ServerReader
+	calls []string
+}
+
+func (r *fakeServerReader) CancelQuery(context.Context, db.SessionID) (bool, error) {
+	r.calls = append(r.calls, "CancelQuery")
+	return true, nil
+}
+
+func (r *fakeServerReader) KillSession(context.Context, db.SessionID) (bool, error) {
+	r.calls = append(r.calls, "KillSession")
+	return false, errors.New("permission denied")
+}
+
+func TestAuditSQLKillAndCancel(t *testing.T) {
+	m, drv, sec := setup(true)
+	sec.m["local"] = "pw"
+	srv := &fakeServerReader{}
+	drv.conn = &serverConn{sqlConn: sqlConn{fakeConn: fakeConn{done: make(chan struct{})}}, srv: srv}
+	audit := recordAudit(m)
+	c, err := m.Conn(context.Background(), "local", "app")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := db.SessionID{ID: "4242"}
+	if ok, err := c.Server().CancelQuery(context.Background(), id); !ok || err != nil {
+		t.Fatalf("CancelQuery = %v, %v", ok, err)
+	}
+	if _, err := c.Server().KillSession(context.Background(), id); err == nil {
+		t.Fatal("KillSession's error is lost")
+	}
+	es := audit.entries()
+	if len(es) != 2 || es[0].Op != "CANCEL" || es[0].Object != "4242" || es[1].Op != "KILL" || es[1].Err != "permission denied" ||
+		es[0].Kind != history.AuditSQL || es[0].Database != "app" {
+		t.Fatalf("audit = %+v", es)
+	}
+	if len(srv.calls) != 2 {
+		t.Fatalf("calls = %v", srv.calls)
+	}
+}

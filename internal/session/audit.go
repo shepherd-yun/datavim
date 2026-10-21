@@ -184,8 +184,9 @@ func (a sqlAudit) stream(ctx context.Context, q db.Querier, sql string, onColumn
 }
 
 // auditedConn records the statements of Query, Exec and Stream that may
-// write; Session wraps the session it opens the same way. Meta and Server
-// pass through: they only read.
+// write; Session wraps the session it opens the same way, and Server the
+// reader whose CancelQuery and KillSession end others' work. Meta passes
+// through: it only reads.
 type auditedConn struct {
 	db.Conn
 	a sqlAudit
@@ -201,6 +202,40 @@ func (c *auditedConn) Exec(ctx context.Context, sql string, args ...any) (db.Exe
 
 func (c *auditedConn) Stream(ctx context.Context, sql string, onColumns func([]db.ColumnInfo), onRow func([]db.Value) error) error {
 	return c.a.stream(ctx, c.Conn, sql, onColumns, onRow)
+}
+
+func (c *auditedConn) Server() db.ServerReader {
+	srv := c.Conn.Server()
+	if srv == nil {
+		return nil
+	}
+	return &auditedServer{ServerReader: srv, a: c.a}
+}
+
+// auditedServer records the cancels and kills of a server status tab.
+type auditedServer struct {
+	db.ServerReader
+	a sqlAudit
+}
+
+func (s *auditedServer) record(op string, id db.SessionID, start time.Time, err error) {
+	s.a.m.record(history.AuditEntry{
+		Conn: s.a.name, Kind: history.AuditSQL, Database: s.a.database, Op: op, Object: id.ID, Detail: "session " + id.ID,
+	}, start, err)
+}
+
+func (s *auditedServer) CancelQuery(ctx context.Context, id db.SessionID) (bool, error) {
+	start := time.Now()
+	ok, err := s.ServerReader.CancelQuery(ctx, id)
+	s.record("CANCEL", id, start, err)
+	return ok, err
+}
+
+func (s *auditedServer) KillSession(ctx context.Context, id db.SessionID) (bool, error) {
+	start := time.Now()
+	ok, err := s.ServerReader.KillSession(ctx, id)
+	s.record("KILL", id, start, err)
+	return ok, err
 }
 
 func (c *auditedConn) Session(ctx context.Context) (db.Session, error) {

@@ -277,6 +277,9 @@ func (m *Model) auditGoto(e history.AuditEntry) tea.Cmd {
 	}
 	switch e.Kind {
 	case history.AuditSQL:
+		if e.Op == "KILL" || e.Op == "CANCEL" {
+			return nothing() // Object is a session id
+		}
 		ref := db.TableRef{Namespace: db.Namespace{Database: e.Database}, Name: e.Object}
 		if schema, name, ok := strings.Cut(e.Object, "."); ok {
 			ref.Schema, ref.Name = schema, name
