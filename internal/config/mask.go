@@ -7,15 +7,27 @@ import (
 	"strings"
 )
 
-// MaskRule hides message fields on matching connections and topics
-// (config.toml [[mask]]).
+// MaskRule hides message fields on matching connections and topics, or
+// document fields on matching connections and indices (config.toml
+// [[mask]]).
 type MaskRule struct {
 	Connections []string `toml:"connections"` // connection names
 	Env         string   `toml:"env"`         // or every connection of this env ("prod")
 	Topics      []string `toml:"topics"`      // path.Match globs; empty: every topic
-	Fields      []string `toml:"fields"`      // "key", "value", "key.<path>", "value.<path>"
-	Headers     []string `toml:"headers"`     // header names, path.Match globs, case-insensitive
+	Indices     []string `toml:"indices"`     // Elasticsearch: path.Match globs; empty: every index
+	// "key", "value", "key.<path>", "value.<path>" (Kafka) or
+	// "_source.<path>" (Elasticsearch)
+	Fields  []string `toml:"fields"`
+	Headers []string `toml:"headers"` // header names, path.Match globs, case-insensitive
 }
+
+// ForES reports a rule for Elasticsearch connections: it names indices or
+// _source paths.
+func (r MaskRule) ForES() bool {
+	return len(r.Indices) > 0 || slices.ContainsFunc(r.Fields, isSourceField)
+}
+
+func isSourceField(f string) bool { return strings.HasPrefix(f, "_source.") }
 
 // checkMasks validates the rules; a connection that does not exist is
 // not an error (workspaces have different connections).
@@ -30,7 +42,21 @@ func checkMasks(rules []MaskRule) error {
 		}
 		for _, f := range r.Fields {
 			if !validMaskField(f) {
-				return fmt.Errorf("%s: field %q: want key, value, key.<path> or value.<path>", at, f)
+				return fmt.Errorf("%s: field %q: want key, value, key.<path>, value.<path> or _source.<path>", at, f)
+			}
+		}
+		es := slices.ContainsFunc(r.Fields, isSourceField)
+		switch {
+		case es && slices.ContainsFunc(r.Fields, func(f string) bool { return !isSourceField(f) }):
+			return fmt.Errorf("%s: fields mix Kafka (key / value) and Elasticsearch (_source.<path>) paths", at)
+		case len(r.Indices) > 0 && !es:
+			return fmt.Errorf("%s: indices go with _source.<path> fields", at)
+		case es && (len(r.Topics) > 0 || len(r.Headers) > 0):
+			return fmt.Errorf("%s: topics and headers are for Kafka rules, not _source.<path> fields", at)
+		}
+		for _, g := range r.Indices {
+			if _, err := path.Match(g, ""); err != nil {
+				return fmt.Errorf("%s: index %q: %w", at, g, err)
 			}
 		}
 		for _, g := range r.Topics {
@@ -49,7 +75,10 @@ func checkMasks(rules []MaskRule) error {
 
 func validMaskField(f string) bool {
 	part, rest, dotted := strings.Cut(f, ".")
-	if part != "key" && part != "value" {
+	if part == "_source" && !dotted {
+		return false // the whole document: nothing would be left to show
+	}
+	if part != "key" && part != "value" && part != "_source" {
 		return false
 	}
 	if !dotted {

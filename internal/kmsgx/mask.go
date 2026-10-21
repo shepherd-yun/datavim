@@ -8,11 +8,12 @@ import (
 	"strings"
 
 	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/jsonmask"
 	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 // Masked is the text a masked field shows; in JSON it is the string "******".
-const Masked = "******"
+const Masked = jsonmask.Masked
 
 var maskedJSON = []byte(`"` + Masked + `"`)
 
@@ -39,6 +40,9 @@ func NewMasker(rules []config.MaskRule, conn, env, topic string) *Masker {
 	var m Masker
 	found := false
 	for _, r := range rules {
+		if r.ForES() {
+			continue
+		}
 		if !slices.Contains(r.Connections, conn) && (r.Env == "" || r.Env != env) {
 			continue
 		}
@@ -133,7 +137,7 @@ func (p maskPart) mask(raw, decoded []byte, null bool) ([]byte, bool) {
 	if !json.Valid(src) {
 		return maskedJSON, true // fail closed: the fields can't be found
 	}
-	out, changed := maskJSON(src, p.paths)
+	out, changed := jsonmask.Paths(src, p.paths)
 	if !changed {
 		return raw, false
 	}
@@ -142,119 +146,6 @@ func (p maskPart) mask(raw, decoded []byte, null bool) ([]byte, bool) {
 		return maskedJSON, true
 	}
 	return b.Bytes(), true
-}
-
-// maskJSON replaces the values at paths in the valid JSON raw, keeping
-// the order of keys and every other value as written.
-func maskJSON(raw []byte, paths [][]string) ([]byte, bool) {
-	for _, p := range paths {
-		if len(p) == 0 {
-			return maskedJSON, true
-		}
-	}
-	raw = bytes.TrimSpace(raw)
-	if len(raw) == 0 {
-		return raw, false
-	}
-	switch raw[0] {
-	case '{':
-		return maskObject(raw, paths)
-	case '[':
-		var rest [][]string
-		for _, p := range paths {
-			if p[0] == "[]" {
-				rest = append(rest, p[1:])
-			}
-		}
-		return maskArray(raw, rest)
-	}
-	return raw, false
-}
-
-func maskObject(raw []byte, paths [][]string) ([]byte, bool) {
-	dec := json.NewDecoder(bytes.NewReader(raw))
-	if _, err := dec.Token(); err != nil { // {
-		return raw, false
-	}
-	var out bytes.Buffer
-	out.WriteByte('{')
-	changed := false
-	for first := true; dec.More(); first = false {
-		tok, err := dec.Token()
-		k, ok := tok.(string)
-		if err != nil || !ok {
-			return raw, false
-		}
-		var v json.RawMessage
-		if dec.Decode(&v) != nil {
-			return raw, false
-		}
-		var sub [][]string
-		for _, p := range paths {
-			name, arr := strings.CutSuffix(p[0], "[]")
-			if name != k && name != "*" {
-				continue
-			}
-			if arr {
-				sub = append(sub, append([]string{"[]"}, p[1:]...))
-			} else {
-				sub = append(sub, p[1:])
-			}
-		}
-		val := []byte(v)
-		if len(sub) > 0 {
-			var ch bool
-			if val, ch = maskJSON(val, sub); ch {
-				changed = true
-			}
-		}
-		if !first {
-			out.WriteByte(',')
-		}
-		out.Write(jsonString(k))
-		out.WriteByte(':')
-		out.Write(val)
-	}
-	out.WriteByte('}')
-	if !changed {
-		return raw, false
-	}
-	return out.Bytes(), true
-}
-
-func maskArray(raw []byte, paths [][]string) ([]byte, bool) {
-	if len(paths) == 0 {
-		return raw, false
-	}
-	var elems []json.RawMessage
-	if json.Unmarshal(raw, &elems) != nil {
-		return raw, false
-	}
-	var out bytes.Buffer
-	out.WriteByte('[')
-	changed := false
-	for i, e := range elems {
-		val, ch := maskJSON(e, paths)
-		changed = changed || ch
-		if i > 0 {
-			out.WriteByte(',')
-		}
-		out.Write(val)
-	}
-	out.WriteByte(']')
-	if !changed {
-		return raw, false
-	}
-	return out.Bytes(), true
-}
-
-// jsonString is s as a JSON string, without HTML escapes.
-func jsonString(s string) []byte {
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	_ = enc.Encode(s)
-	return bytes.TrimSuffix(b.Bytes(), []byte("\n"))
 }
 
 // MaskJSON masks the decoded JSON of a key or a value (Schema Registry

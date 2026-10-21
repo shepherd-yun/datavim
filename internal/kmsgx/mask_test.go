@@ -188,3 +188,10 @@ func TestMaskJSON(t *testing.T) {
 		t.Fatal("nil masker")
 	}
 }
+
+func TestNewMaskerSkipsES(t *testing.T) {
+	rules := []config.MaskRule{{Env: "prod", Fields: []string{"_source.password"}}, {Env: "prod", Indices: []string{"u*"}, Fields: []string{"_source.x"}}}
+	if m := NewMasker(rules, "events", "prod", "orders"); m != nil {
+		t.Errorf("an ES rule masks Kafka: %+v", m)
+	}
+}
