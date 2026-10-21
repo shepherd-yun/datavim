@@ -64,8 +64,10 @@ func TestFormatDraftRoundTrip(t *testing.T) {
 
 func TestParseJSONL(t *testing.T) {
 	recs := []kafka.Record{
-		{Topic: "orders", Partition: 2, Offset: 7, Time: time.Unix(0, 0), Key: []byte("k1"), Value: []byte(`{"a":1}`),
-			Headers: []kafka.Header{{Key: "h", Value: []byte{0xff}}}},
+		{
+			Topic: "orders", Partition: 2, Offset: 7, Time: time.Unix(0, 0), Key: []byte("k1"), Value: []byte(`{"a":1}`),
+			Headers: []kafka.Header{{Key: "h", Value: []byte{0xff}}},
+		},
 		{Topic: "orders", KeyNull: true, Value: []byte{0, 0xff, 1}},
 		{Topic: "orders", Key: []byte("k3"), ValueNull: true},
 	}

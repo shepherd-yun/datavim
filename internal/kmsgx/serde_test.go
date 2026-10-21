@@ -90,11 +90,15 @@ func TestAvroTypes(t *testing.T) {
 }
 
 func TestAvroWithReference(t *testing.T) {
-	addr := kafka.Schema{ID: 1, Subject: "address-value", Version: 1, Type: "AVRO",
-		Text: `{"type":"record","name":"Address","namespace":"shop","fields":[{"name":"city","type":"string"}]}`}
-	s := kafka.Schema{ID: 2, Type: "AVRO",
+	addr := kafka.Schema{
+		ID: 1, Subject: "address-value", Version: 1, Type: "AVRO",
+		Text: `{"type":"record","name":"Address","namespace":"shop","fields":[{"name":"city","type":"string"}]}`,
+	}
+	s := kafka.Schema{
+		ID: 2, Type: "AVRO",
 		Text:       `{"type":"record","name":"Order","namespace":"shop","fields":[{"name":"id","type":"long"},{"name":"ship","type":"Address"}]}`,
-		References: []kafka.SchemaRef{{Name: "shop.Address", Subject: "address-value", Version: 1}}}
+		References: []kafka.SchemaRef{{Name: "shop.Address", Subject: "address-value", Version: 1}},
+	}
 	roundTrip(t, s, map[string]kafka.Schema{"shop.Address": addr}, "", `{"id":5,"ship":{"city":"Oslo"}}`)
 }
 
@@ -122,9 +126,11 @@ func TestProtoRoundTrip(t *testing.T) {
 
 func TestProtoImport(t *testing.T) {
 	common := kafka.Schema{ID: 1, Type: "PROTOBUF", Text: `syntax = "proto3"; package common; message Money { int64 cents = 1; string currency = 2; }`}
-	s := kafka.Schema{ID: 2, Type: "PROTOBUF",
+	s := kafka.Schema{
+		ID: 2, Type: "PROTOBUF",
 		Text:       `syntax = "proto3"; package shop; import "common.proto"; message Order { int64 id = 1; common.Money total = 2; }`,
-		References: []kafka.SchemaRef{{Name: "common.proto", Subject: "common", Version: 1}}}
+		References: []kafka.SchemaRef{{Name: "common.proto", Subject: "common", Version: 1}},
+	}
 	roundTrip(t, s, map[string]kafka.Schema{"common.proto": common}, "", `{"id":"3","total":{"cents":"250","currency":"EUR"}}`)
 }
 

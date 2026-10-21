@@ -75,10 +75,14 @@ func TestRegistryResolve(t *testing.T) {
 	reg := srfake.New()
 	defer reg.Close()
 	reg.SeedSchema("c", 1, 3, sr.Schema{Schema: `{"type":"record","name":"C","fields":[]}`})
-	reg.SeedSchema("b", 1, 2, sr.Schema{Schema: `{"type":"record","name":"B","fields":[{"name":"c","type":"C"}]}`,
-		References: []sr.SchemaReference{{Name: "C", Subject: "c", Version: 1}}})
-	reg.SeedSchema("a", 1, 1, sr.Schema{Schema: `{"type":"record","name":"A","fields":[{"name":"b","type":"B"}]}`,
-		References: []sr.SchemaReference{{Name: "B", Subject: "b", Version: 1}}})
+	reg.SeedSchema("b", 1, 2, sr.Schema{
+		Schema:     `{"type":"record","name":"B","fields":[{"name":"c","type":"C"}]}`,
+		References: []sr.SchemaReference{{Name: "C", Subject: "c", Version: 1}},
+	})
+	reg.SeedSchema("a", 1, 1, sr.Schema{
+		Schema:     `{"type":"record","name":"A","fields":[{"name":"b","type":"B"}]}`,
+		References: []sr.SchemaReference{{Name: "B", Subject: "b", Version: 1}},
+	})
 	r := openRegistry(t, reg, RegistryConfig{})
 	a, err := r.Schema(ctx(t), "a", 1)
 	if err != nil {

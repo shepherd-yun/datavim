@@ -1,10 +1,11 @@
 package ui
 
 import (
-	"github.com/charmbracelet/x/ansi"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
@@ -68,8 +69,10 @@ func TestDeleteGroupFromTree(t *testing.T) {
 
 func TestDeleteGroupNotEmpty(t *testing.T) {
 	m, _, k := newKafkaModel(t, config.Connection{})
-	k.addGroup(kafka.GroupDetail{Group: kafka.Group{Name: "billing", State: "Stable", Type: kafka.GroupClassic},
-		Members: []kafka.Member{{ID: "1"}, {ID: "2"}, {ID: "3"}}, Lag: lagOn("orders")})
+	k.addGroup(kafka.GroupDetail{
+		Group:   kafka.Group{Name: "billing", State: "Stable", Type: kafka.GroupClassic},
+		Members: []kafka.Member{{ID: "1"}, {ID: "2"}, {ID: "3"}}, Lag: lagOn("orders"),
+	})
 	onGroup(t, m, "billing")
 	pressAll(t, m, "d", "d")
 	if m.overlay != nil || m.status != "group has 3 active members — stop the consumers first" {

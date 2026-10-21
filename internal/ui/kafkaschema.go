@@ -73,7 +73,7 @@ type schemaTab struct {
 	mark     int // the version m marked, 0 none
 	diff     []string
 	diffName string
-	editPath string // the temp file of the last $EDITOR run
+	editPath string              // the temp file of the last $EDITOR run
 	scroll   [schemaSections]int // the first line shown of Schema and Diff
 
 	status  string
@@ -86,8 +86,10 @@ type schemaTab struct {
 }
 
 func newSchemaTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, conn, subject string, version int) *schemaTab {
-	t := &schemaTab{id: id, backend: b, keys: keys, settings: s, conn: conn, subject: subject, version: version,
-		verGrid: grid.New(nil, s.MaxColumnWidth)}
+	t := &schemaTab{
+		id: id, backend: b, keys: keys, settings: s, conn: conn, subject: subject, version: version,
+		verGrid: grid.New(nil, s.MaxColumnWidth),
+	}
 	t.ctx, t.cancel = context.WithCancel(context.Background())
 	return t
 }

@@ -121,14 +121,20 @@ func TestIntegrationSchemaRegistry(t *testing.T) {
 		subject, topic, message, body, want string
 		schema                              kafka.Schema
 	}{
-		{"avro-orders-value", "avro-orders", "", `{"id":88124,"note":{"string":"x"}}`, `{"id":88124,"note":"x"}`,
-			kafka.Schema{Type: "AVRO", Text: orderAvro}},
-		{"proto-orders-value", "proto-orders", "shop.Order", `{"id":"7","ship":{"city":"Oslo"}}`, `{"id":"7","ship":{"city":"Oslo"}}`,
+		{
+			"avro-orders-value", "avro-orders", "", `{"id":88124,"note":{"string":"x"}}`, `{"id":88124,"note":"x"}`,
+			kafka.Schema{Type: "AVRO", Text: orderAvro},
+		},
+		{
+			"proto-orders-value", "proto-orders", "shop.Order", `{"id":"7","ship":{"city":"Oslo"}}`, `{"id":"7","ship":{"city":"Oslo"}}`,
 			kafka.Schema{Type: "PROTOBUF", Text: orderProto, References: []kafka.SchemaRef{
 				{Name: "shop/address.proto", Subject: "shop-address", Version: addr.Version},
-			}}},
-		{"json-events-value", "json-events", "", `{"n": 3}`, `{"n":3}`,
-			kafka.Schema{Type: "JSON", Text: eventJSON}},
+			}},
+		},
+		{
+			"json-events-value", "json-events", "", `{"n": 3}`, `{"n":3}`,
+			kafka.Schema{Type: "JSON", Text: eventJSON},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.subject, func(t *testing.T) {

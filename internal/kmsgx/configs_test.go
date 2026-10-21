@@ -19,16 +19,32 @@ func TestPlanConfigs(t *testing.T) {
 		want  []kafka.ConfigChange
 		err   string
 	}{
-		{"set", []ConfigEdit{{Name: "retention.ms", Value: "86400000"}},
-			[]kafka.ConfigChange{{Name: "retention.ms", Value: "86400000", Old: "604800000"}}, ""},
-		{"set a default one", []ConfigEdit{{Name: "cleanup.policy", Value: "compact"}},
-			[]kafka.ConfigChange{{Name: "cleanup.policy", Value: "compact", Old: "delete", OldDefault: true}}, ""},
+		{
+			"set",
+			[]ConfigEdit{{Name: "retention.ms", Value: "86400000"}},
+			[]kafka.ConfigChange{{Name: "retention.ms", Value: "86400000", Old: "604800000"}},
+			"",
+		},
+		{
+			"set a default one",
+			[]ConfigEdit{{Name: "cleanup.policy", Value: "compact"}},
+			[]kafka.ConfigChange{{Name: "cleanup.policy", Value: "compact", Old: "delete", OldDefault: true}},
+			"",
+		},
 		{"back to the same value", []ConfigEdit{{Name: "retention.ms", Value: "604800000"}}, nil, ""},
 		{"delete a default", []ConfigEdit{{Name: "cleanup.policy", Delete: true}}, nil, ""},
-		{"delete an override", []ConfigEdit{{Name: "retention.ms", Delete: true}},
-			[]kafka.ConfigChange{{Name: "retention.ms", Delete: true, Old: "604800000"}}, ""},
-		{"last edit wins", []ConfigEdit{{Name: "retention.ms", Value: "1"}, {Name: "retention.ms", Delete: true}, {Name: "retention.ms", Value: "2"}},
-			[]kafka.ConfigChange{{Name: "retention.ms", Value: "2", Old: "604800000"}}, ""},
+		{
+			"delete an override",
+			[]ConfigEdit{{Name: "retention.ms", Delete: true}},
+			[]kafka.ConfigChange{{Name: "retention.ms", Delete: true, Old: "604800000"}},
+			"",
+		},
+		{
+			"last edit wins",
+			[]ConfigEdit{{Name: "retention.ms", Value: "1"}, {Name: "retention.ms", Delete: true}, {Name: "retention.ms", Value: "2"}},
+			[]kafka.ConfigChange{{Name: "retention.ms", Value: "2", Old: "604800000"}},
+			"",
+		},
 		{"unknown", []ConfigEdit{{Name: "nope", Value: "1"}}, nil, "unknown config nope"},
 		{"sensitive", []ConfigEdit{{Name: "sasl.jaas.config", Value: "x"}}, nil, "sensitive configs can't be edited here"},
 	} {
