@@ -71,8 +71,8 @@ var kindDescs = map[Context]map[Action][3]string{ // [SQL, Redis, Kafka]
 		DeleteNode:   {"Delete connection / drop table or view", "Delete connection / delete Redis keys", "Delete connection / delete topic / delete group / soft-delete schema version"},
 		RenameTable:  {"Rename table or view", "Rename Redis key", ""},
 		NewKey:       {"", "New Redis key", "New topic"},
-		FilterPrompt: {"", "Filter Redis keys (pattern)", "Filter topics / groups by name"},
-		FilterClear:  {"", "Clear the Redis key filter", "Clear the topic / group filter"},
+		FilterPrompt: {"", "Filter Redis keys (pattern)", "Filter topics / groups / subjects by name"},
+		FilterClear:  {"", "Clear the Redis key filter", "Clear the topic / group / subject filter"},
 	},
 }
 

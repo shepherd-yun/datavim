@@ -34,6 +34,8 @@ const (
 	KindTopic
 	KindKafkaGroup
 	KindBroker
+	KindSchemaSubject // a Schema Registry subject; Key is its name
+	KindSchemaVersion // Key is "subject\x00version", Name "v3"
 )
 
 // Group tells the groups under a table apart.
@@ -74,7 +76,7 @@ type Node struct {
 func (n *Node) Parent() *Node { return n.parent }
 func (n *Node) Expandable() bool {
 	switch n.Kind {
-	case KindGroup, KindRedisDB, KindKeyFolder, KindKafkaSection, KindTopicFolder:
+	case KindGroup, KindRedisDB, KindKeyFolder, KindKafkaSection, KindTopicFolder, KindSchemaSubject:
 		return true
 	}
 	return n.Kind <= KindView
@@ -500,7 +502,7 @@ func icon(n *Node, style IconStyle) string {
 		return arrow + " •"
 	case KindView:
 		return arrow + " ◦"
-	case KindColumn, KindKey, KindForeignKey, KindIndex, KindTopic, KindKafkaGroup, KindBroker:
+	case KindColumn, KindKey, KindForeignKey, KindIndex, KindTopic, KindKafkaGroup, KindBroker, KindSchemaVersion:
 		return "·"
 	}
 	return arrow
@@ -535,6 +537,8 @@ func nerdGlyph(n *Node) string {
 			return "\U000f048b" // md-server
 		case "groups":
 			return "\U000f0849" // md-account_group
+		case "schemas":
+			return "\U000f0169" // md-code_json
 		}
 		return "\U000f0369" // md-message_text
 	case KindTopic:
@@ -543,6 +547,8 @@ func nerdGlyph(n *Node) string {
 		return "\U000f0849" // md-account_group
 	case KindBroker:
 		return "\U000f048b" // md-server
+	case KindSchemaSubject, KindSchemaVersion:
+		return "\U000f0169" // md-code_json
 	case KindGroup, KindKeyFolder, KindTopicFolder:
 		if n.Expanded {
 			return "\U000f0770" // md-folder_open

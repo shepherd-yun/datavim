@@ -110,7 +110,8 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 		default:
 			entries = append(entries[:1], append([]entry{{keymap.ServerInfo, "Server status"}}, entries[1:]...)...)
 		}
-	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker:
+	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker,
+		tree.KindSchemaSubject, tree.KindSchemaVersion:
 		entries = kafkaMenu(n)
 	case tree.KindDatabase, tree.KindSchema:
 		entries = []entry{
@@ -220,6 +221,10 @@ func kafkaMenu(n *tree.Node) []menuEntry {
 		entries = append(entries, menuEntry{keymap.Open, "Open group"})
 	case tree.KindTopicFolder:
 		entries = append(entries, menuEntry{keymap.Open, "Expand / collapse"})
+	case tree.KindSchemaSubject:
+		entries = append(entries, menuEntry{keymap.Open, "Open subject"})
+	case tree.KindSchemaVersion:
+		entries = append(entries, menuEntry{keymap.Open, "Open this version"})
 	}
 	switch n.Section {
 	case secTopics:
@@ -228,10 +233,17 @@ func kafkaMenu(n *tree.Node) []menuEntry {
 	case secGroups:
 		entries = append(entries, menuEntry{keymap.FilterPrompt, "Filter groups…"}, menuEntry{keymap.FilterClear, "Clear the group filter"},
 			menuEntry{keymap.SortGroups, "Sort: by lag / by name"})
+	case secSchemas:
+		entries = append(entries, menuEntry{keymap.FilterPrompt, "Filter subjects…"}, menuEntry{keymap.FilterClear, "Clear the subject filter"})
 	}
 	entries = append(entries, menuEntry{keymap.ServerInfo, "Cluster status"}, menuEntry{keymap.Refresh, "Refresh"})
-	if n.Kind == tree.KindTopic {
+	switch n.Kind {
+	case tree.KindTopic:
 		entries = append(entries, menuEntry{keymap.DeleteNode, "Delete topic…"})
+	case tree.KindKafkaGroup:
+		entries = append(entries, menuEntry{keymap.DeleteNode, "Delete group…"})
+	case tree.KindSchemaVersion:
+		entries = append(entries, menuEntry{keymap.DeleteNode, "Soft-delete version…"})
 	}
 	return entries
 }
@@ -239,7 +251,8 @@ func kafkaMenu(n *tree.Node) []menuEntry {
 // isKafkaNode reports whether n is a node under a kafka connection.
 func isKafkaNode(n *tree.Node) bool {
 	switch n.Kind {
-	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker:
+	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker,
+		tree.KindSchemaSubject, tree.KindSchemaVersion:
 		return true
 	}
 	return false

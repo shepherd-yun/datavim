@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -287,3 +288,89 @@ func TestSecretPromptRetries(t *testing.T) {
 }
 
 func keymapKindKafka() keymap.Kind { return keymap.KindKafka }
+
+// registryTree is a kafka model with a registry: orders-value v1..v2,
+// payments-value v1.
+func registryTree(t *testing.T) (*Model, *fakeBackend, *fakeRegistry) {
+	t.Helper()
+	m, b, k := newKafkaModel(t, withRegistry(config.Connection{}))
+	k.addTopic("orders", 1, 0, 1)
+	b.registry = newFakeRegistry()
+	b.registry.add("orders-value", 1, 10, "AVRO", orderV1)
+	b.registry.add("orders-value", 2, 11, "AVRO", orderV2)
+	b.registry.add("payments-value", 1, 20, "JSON", `{"type":"object"}`)
+	m.setFocus(focusTree)
+	pressAll(t, m, "l")
+	return m, b, b.registry
+}
+
+func TestTreeSchemaSection(t *testing.T) {
+	m, _, _ := registryTree(t)
+	root := m.tree.Roots()[0]
+	if got := names(root.Children); len(got) != 4 || got[3] != "Schema Registry (2)" {
+		t.Fatalf("sections = %v", got)
+	}
+	subs := section(t, m, "events", secSchemas).Children
+	if len(subs) != 2 || subs[0].Name != "orders-value" || subs[0].Detail != "v2 AVRO" {
+		t.Fatalf("subjects = %+v", subs[0])
+	}
+
+	m2, _, _ := newKafkaModel(t, config.Connection{})
+	m2.setFocus(focusTree)
+	pressAll(t, m2, "l")
+	if got := names(m2.tree.Roots()[0].Children); len(got) != 3 {
+		t.Fatalf("without a registry: %v", got)
+	}
+}
+
+func TestTreeSchemaVersions(t *testing.T) {
+	m, _, _ := registryTree(t)
+	selectKafkaNode(t, m, func(n *tree.Node) bool { return n.Section == secSchemas && n.Kind == tree.KindKafkaSection })
+	pressAll(t, m, "l")
+	selectKafkaNode(t, m, func(n *tree.Node) bool { return n.Kind == tree.KindSchemaSubject && n.Key == "orders-value" })
+	pressAll(t, m, "l")
+	n := m.tree.Selected()
+	if got := names(n.Children); !slices.Equal(got, []string{"v1", "v2"}) {
+		t.Fatalf("versions = %v", got)
+	}
+}
+
+func TestTreeSchemaError(t *testing.T) {
+	m, b, k := newKafkaModel(t, withRegistry(config.Connection{}))
+	k.addTopic("orders", 1, 0, 1)
+	b.registry = newFakeRegistry()
+	b.registry.errs["Subjects"] = errors.New("schema registry: 503 unavailable")
+	m.setFocus(focusTree)
+	pressAll(t, m, "l")
+	if s := section(t, m, "events", secSchemas); !strings.Contains(s.Err, "503 unavailable") {
+		t.Fatalf("schema section = %+v", s)
+	}
+	if s := section(t, m, "events", secTopics); s.Err != "" || len(s.Children) != 1 {
+		t.Fatalf("topics = %+v", s)
+	}
+}
+
+func TestTreeSchemaOpen(t *testing.T) {
+	m, _, _ := registryTree(t)
+	selectKafkaNode(t, m, func(n *tree.Node) bool { return n.Section == secSchemas && n.Kind == tree.KindKafkaSection })
+	pressAll(t, m, "l")
+	selectKafkaNode(t, m, func(n *tree.Node) bool { return n.Kind == tree.KindSchemaSubject && n.Key == "orders-value" })
+	pressAll(t, m, "l")
+	selectKafkaNode(t, m, func(n *tree.Node) bool { return n.Kind == tree.KindSchemaVersion && n.Name == "v1" })
+	pressAll(t, m, "enter")
+	st, ok := m.activeTab().(*schemaTab)
+	if !ok || st.subject != "orders-value" || !strings.Contains(st.header(), "v1 of 2") {
+		t.Fatalf("tab = %T %+v", m.activeTab(), st)
+	}
+}
+
+func TestTreeSchemaFilter(t *testing.T) {
+	m, _, _ := registryTree(t)
+	selectKafkaNode(t, m, func(n *tree.Node) bool { return n.Section == secSchemas && n.Kind == tree.KindKafkaSection })
+	pressAll(t, m, "F")
+	typeText(t, m, "order")
+	pressAll(t, m, "enter")
+	if got := names(section(t, m, "events", secSchemas).Children); !slices.Equal(got, []string{"orders-value"}) {
+		t.Fatalf("subjects = %v", got)
+	}
+}

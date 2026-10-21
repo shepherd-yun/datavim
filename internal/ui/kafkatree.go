@@ -28,6 +28,7 @@ const (
 	secBrokers = "brokers"
 	secTopics  = "topics"
 	secGroups  = "groups"
+	secSchemas = "schemas" // only with a schema_registry_url
 )
 
 var errKafkaUnsupported = errors.New("not supported for kafka")
@@ -38,6 +39,8 @@ type kafkaTree struct {
 	cluster              kafka.ClusterInfo
 	topics               []kafka.Topic
 	groups               []kafka.Group
+	subjects             []kafka.Subject
+	registry             bool              // the connection has a Schema Registry
 	errs                 map[string]string // section -> why it could not load
 	lag                  map[string]int64
 	showInternal, byName bool
@@ -73,12 +76,14 @@ func withKafka(ctx context.Context, b Backend, conn string, fn func(kafka.Client
 // kafkaTreeMsg is the load of a kafka connection's tree. err fails the
 // whole load; errs are sections the user may not read.
 type kafkaTreeMsg struct {
-	node    *tree.Node
-	cluster kafka.ClusterInfo
-	topics  []kafka.Topic
-	groups  []kafka.Group
-	errs    map[string]string
-	err     error
+	node     *tree.Node
+	cluster  kafka.ClusterInfo
+	topics   []kafka.Topic
+	groups   []kafka.Group
+	subjects []kafka.Subject
+	registry bool
+	errs     map[string]string
+	err      error
 }
 
 func (m kafkaTreeMsg) failure() (string, error) { return m.node.Conn, m.err }
@@ -113,11 +118,36 @@ func loadKafkaTree(b Backend, n *tree.Node) tea.Cmd {
 			}
 			return nil
 		})
+		if msg.err == nil {
+			msg.subjects, msg.registry, msg.err = loadSubjects(ctx, b, conn, msg.errs)
+		}
 		if msg.err != nil {
 			slog.Warn("load kafka tree", "conn", conn, "err", msg.err)
 		}
 		return msg
 	}
+}
+
+// loadSubjects reads the Schema Registry's subjects. A registry that
+// fails is its section's error, the rest of the tree loads; one that wants
+// a password fails the load, so it is asked for.
+func loadSubjects(ctx context.Context, b Backend, conn string, errs map[string]string) ([]kafka.Subject, bool, error) {
+	reg, err := b.SchemaRegistry(ctx, conn)
+	if errors.Is(err, session.ErrNoRegistry) {
+		return nil, false, nil
+	}
+	var subs []kafka.Subject
+	if err == nil {
+		subs, err = reg.Subjects(ctx)
+	}
+	var se *session.SecretRequiredError
+	if errors.As(err, &se) {
+		return nil, true, err
+	}
+	if err != nil {
+		errs[secSchemas] = err.Error()
+	}
+	return subs, true, nil
 }
 
 // kafkaTreeLoaded builds the sections and starts computing lag.
@@ -147,6 +177,7 @@ func (m *Model) kafkaTreeLoaded(msg kafkaTreeMsg) tea.Cmd {
 	}
 	st.gen++
 	st.cluster, st.topics, st.groups, st.errs = msg.cluster, msg.topics, msg.groups, msg.errs
+	st.subjects, st.registry = msg.subjects, msg.registry
 	m.buildKafkaTree(n.Conn)
 	if st.selectTopic != "" {
 		m.selectNewTopic(n.Conn, st.selectTopic)
@@ -279,10 +310,15 @@ func (m *Model) buildKafkaTree(conn string) {
 		m.kafkaSection(conn, secTopics, "Topics", countTopics(topics), topics),
 		m.kafkaSection(conn, secGroups, "Consumer Groups", len(groups), groups),
 	}
+	if st.registry {
+		subjects := buildSubjectNodes(conn, filterSubjects(st.subjects, st.filter[secSchemas]))
+		sections = append(sections, m.kafkaSection(conn, secSchemas, "Schema Registry", len(subjects), subjects))
+	}
 	var reopen func([]*tree.Node)
 	reopen = func(nodes []*tree.Node) {
 		for _, c := range nodes {
-			if open[refOf(c)] {
+			// a subject's versions load when it opens: rebuilt, it starts closed
+			if open[refOf(c)] && c.Kind != tree.KindSchemaSubject {
 				c.Expanded = true
 			}
 			reopen(c.Children)
@@ -336,6 +372,58 @@ func filterTopics(topics []kafka.Topic, f string) []kafka.Topic {
 	}
 	f = strings.ToLower(f)
 	return slices.DeleteFunc(slices.Clone(topics), func(t kafka.Topic) bool { return !strings.Contains(strings.ToLower(t.Name), f) })
+}
+
+func filterSubjects(subs []kafka.Subject, f string) []kafka.Subject {
+	if f == "" {
+		return subs
+	}
+	f = strings.ToLower(f)
+	return slices.DeleteFunc(slices.Clone(subs), func(s kafka.Subject) bool { return !strings.Contains(strings.ToLower(s.Name), f) })
+}
+
+// buildSubjectNodes are the Schema Registry section's subjects.
+func buildSubjectNodes(conn string, subs []kafka.Subject) []*tree.Node {
+	out := make([]*tree.Node, len(subs))
+	for i, s := range subs {
+		out[i] = &tree.Node{
+			Kind: tree.KindSchemaSubject, Conn: conn, Section: secSchemas, Key: s.Name, Name: s.Name,
+			Detail: fmt.Sprintf("v%d %s", s.Latest, s.Type),
+		}
+	}
+	return out
+}
+
+// versionKey is a version node's Key.
+func versionKey(subject string, v int) string { return subject + "\x00" + strconv.Itoa(v) }
+
+// subjectVersion splits a version node's Key.
+func subjectVersion(n *tree.Node) (string, int) {
+	subject, v, _ := strings.Cut(n.Key, "\x00")
+	ver, _ := strconv.Atoi(v)
+	return subject, ver
+}
+
+// loadSubjectVersions is the versions under a subject node.
+func loadSubjectVersions(b Backend, n *tree.Node) tea.Cmd {
+	conn, subject := n.Conn, n.Key
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		defer cancel()
+		msg := childrenLoadedMsg{node: n}
+		reg, err := b.SchemaRegistry(ctx, conn)
+		var vs []int
+		if err == nil {
+			vs, err = reg.Versions(ctx, subject)
+		}
+		for _, v := range vs {
+			msg.children = append(msg.children, &tree.Node{
+				Kind: tree.KindSchemaVersion, Conn: conn, Section: secSchemas, Key: versionKey(subject, v), Name: "v" + strconv.Itoa(v),
+			})
+		}
+		msg.err = err
+		return msg
+	}
 }
 
 func filterGroups(groups []kafka.Group, f string) []kafka.Group {
@@ -471,13 +559,16 @@ func (m *Model) kafkaTreeAction(a keymap.Action, n *tree.Node) (tea.Cmd, bool) {
 			}
 		}
 	case keymap.FilterPrompt:
-		if st == nil || (n.Section != secTopics && n.Section != secGroups) {
-			m.setStatus("select Topics or Consumer Groups to filter them", true)
+		if st == nil || (n.Section != secTopics && n.Section != secGroups && n.Section != secSchemas) {
+			m.setStatus("select Topics, Consumer Groups or Schema Registry to filter them", true)
 			return nil, true
 		}
 		sec, title := n.Section, "Filter topics"
-		if sec == secGroups {
+		switch sec {
+		case secGroups:
 			title = "Filter consumer groups"
+		case secSchemas:
+			title = "Filter subjects"
 		}
 		conn := n.Conn
 		m.overlay = overlay.NewPrompt(title, "Name contains", st.filter[sec], func(text string) tea.Msg {
@@ -513,6 +604,11 @@ func (m *Model) kafkaTreeAction(a keymap.Action, n *tree.Node) (tea.Cmd, bool) {
 			return m.openTopic(n.Conn, n.Key), true
 		case tree.KindKafkaGroup:
 			return m.openGroup(n.Conn, n.Key), true
+		case tree.KindSchemaSubject:
+			return m.openSchema(n.Conn, n.Key, -1), true
+		case tree.KindSchemaVersion:
+			subject, v := subjectVersion(n)
+			return m.openSchema(n.Conn, subject, v), true
 		}
 		return nil, false
 	default:
