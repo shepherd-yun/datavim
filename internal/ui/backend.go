@@ -27,6 +27,10 @@ type Backend interface {
 	Kafka(ctx context.Context, name string) (kafka.Client, error)
 	// KafkaReader opens a message reader for one view; the caller closes it.
 	KafkaReader(ctx context.Context, name string, rc kafka.ReaderConfig) (kafka.Reader, error)
+	// SchemaRegistry returns a kafka connection's Schema Registry client
+	// (session.ErrNoRegistry without schema_registry_url); its writes
+	// refuse on a read-only connection.
+	SchemaRegistry(ctx context.Context, name string) (kafka.Registry, error)
 	SetPassword(name, password string, save bool) error
 	// SetSecret remembers and saves a secret other than the password
 	// (session.SecretOAuth, session.SecretSchemaRegistry).

@@ -350,3 +350,173 @@ func TestKafkaResetDuringOpen(t *testing.T) {
 		t.Fatal("the client cached is the one opened after the reset")
 	}
 }
+
+// registryReadMethods are the kafka.Registry methods that change nothing.
+var registryReadMethods = []string{"Subjects", "Versions", "Schema", "SchemaByID", "Resolve", "Compatibility", "Check"}
+
+type fakeRegistry struct {
+	kafka.Registry
+	mu      sync.Mutex
+	calls   []string
+	authErr bool
+}
+
+func (r *fakeRegistry) record(name string) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, name)
+	if r.authErr {
+		return kafka.ErrRegistryAuth
+	}
+	return nil
+}
+
+func (r *fakeRegistry) Subjects(context.Context) ([]kafka.Subject, error) {
+	return nil, r.record("Subjects")
+}
+
+func (r *fakeRegistry) Register(context.Context, string, kafka.Schema) (kafka.Schema, error) {
+	return kafka.Schema{}, r.record("Register")
+}
+
+func (r *fakeRegistry) SetCompatibility(context.Context, string, string) error {
+	return r.record("SetCompatibility")
+}
+
+func (r *fakeRegistry) DeleteVersion(context.Context, string, int) error {
+	return r.record("DeleteVersion")
+}
+
+func callRegistryWrite(r kafka.Registry, name string) error {
+	ctx := context.Background()
+	switch name {
+	case "Register":
+		_, err := r.Register(ctx, "s", kafka.Schema{})
+		return err
+	case "SetCompatibility":
+		return r.SetCompatibility(ctx, "s", "FULL")
+	case "DeleteVersion":
+		return r.DeleteVersion(ctx, "s", 1)
+	}
+	panic("no call for " + name)
+}
+
+func setupRegistry(c config.Connection) (*Manager, *fakeRegistry, *[]kafka.RegistryConfig, *fakeSecrets) {
+	if c.Params == nil {
+		c.Params = map[string]string{}
+	}
+	if _, ok := c.Params["schema_registry_url"]; !ok {
+		c.Params["schema_registry_url"] = "http://sr:8081"
+	}
+	m, _, sec := setupKafka(c)
+	reg := &fakeRegistry{}
+	var cfgs []kafka.RegistryConfig
+	m.RegistryOpen = func(cfg kafka.RegistryConfig) (kafka.Registry, error) {
+		cfgs = append(cfgs, cfg)
+		return reg, nil
+	}
+	return m, reg, &cfgs, sec
+}
+
+func TestRegistryMethodsClassified(t *testing.T) {
+	typ := reflect.TypeFor[kafka.Registry]()
+	for i := range typ.NumMethod() {
+		name := typ.Method(i).Name
+		if !slices.Contains(registryReadMethods, name) && !slices.Contains(registryWriteMethods, name) {
+			t.Errorf("kafka.Registry.%s is neither a read nor a write method: add it to registryWriteMethods (and guard it) or to registryReadMethods", name)
+		}
+	}
+}
+
+func TestRegistryGuardRefusesWrites(t *testing.T) {
+	on := true
+	m, reg, _, _ := setupRegistry(config.Connection{ReadOnly: &on})
+	r, err := m.SchemaRegistry(context.Background(), "k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range registryWriteMethods {
+		if err := callRegistryWrite(r, name); !errors.Is(err, ErrReadOnly) {
+			t.Errorf("%s on a read-only connection: err = %v", name, err)
+		}
+	}
+	if len(reg.calls) != 0 {
+		t.Fatalf("writes reached the registry: %v", reg.calls)
+	}
+	if err := m.SetReadOnly("k", false); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range registryWriteMethods {
+		if err := callRegistryWrite(r, name); err != nil {
+			t.Errorf("%s after :set noreadonly: %v", name, err)
+		}
+	}
+	if !slices.Equal(reg.calls, registryWriteMethods) {
+		t.Fatalf("calls = %v", reg.calls)
+	}
+}
+
+func TestRegistryPasswordAsked(t *testing.T) {
+	m, reg, cfgs, sec := setupRegistry(config.Connection{Params: map[string]string{"schema_registry_user": "sr-user"}})
+	_, err := m.SchemaRegistry(context.Background(), "k")
+	var se *SecretRequiredError
+	if !errors.As(err, &se) || se.Kind != SecretSchemaRegistry || se.Wrong {
+		t.Fatalf("err = %v", err)
+	}
+	if err := m.SetSecret("k", SecretSchemaRegistry, "pw"); err != nil {
+		t.Fatal(err)
+	}
+	r, err := m.SchemaRegistry(context.Background(), "k")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c := (*cfgs)[0]; c.URL != "http://sr:8081" || c.User != "sr-user" || c.Password != "pw" {
+		t.Fatalf("cfg = %+v", c)
+	}
+	reg.authErr = true
+	_, err = r.Subjects(context.Background())
+	if !errors.As(err, &se) || se.Kind != SecretSchemaRegistry || !se.Wrong {
+		t.Fatalf("refused password: err = %v", err)
+	}
+	delete(sec.m, "k#schema-registry")
+	if _, err := m.SchemaRegistry(context.Background(), "k"); !errors.As(err, &se) {
+		t.Fatalf("the refused password is still remembered: %v", err)
+	}
+}
+
+func TestRegistryCached(t *testing.T) {
+	m, _, cfgs, _ := setupRegistry(config.Connection{})
+	for range 2 {
+		if _, err := m.SchemaRegistry(context.Background(), "k"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(*cfgs) != 1 {
+		t.Fatalf("opened %d times", len(*cfgs))
+	}
+	m.Reset("k")
+	if _, err := m.SchemaRegistry(context.Background(), "k"); err != nil {
+		t.Fatal(err)
+	}
+	if len(*cfgs) != 2 {
+		t.Fatal("Reset keeps the registry")
+	}
+}
+
+func TestNoRegistry(t *testing.T) {
+	m, _, _, _ := setupRegistry(config.Connection{Params: map[string]string{"schema_registry_url": ""}})
+	if _, err := m.SchemaRegistry(context.Background(), "k"); !errors.Is(err, ErrNoRegistry) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRegistryTunnel(t *testing.T) {
+	m, _, cfgs, _ := setupRegistry(config.Connection{SSH: "bastion"})
+	m.Tunnels = &fakeTunnels{}
+	if _, err := m.SchemaRegistry(context.Background(), "k"); err != nil {
+		t.Fatal(err)
+	}
+	if (*cfgs)[0].Dial == nil {
+		t.Fatal("the registry does not dial through the tunnel")
+	}
+}

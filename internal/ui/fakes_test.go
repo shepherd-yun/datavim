@@ -400,25 +400,28 @@ func fakeChangeName(c db.SchemaChange) string {
 }
 
 type fakeBackend struct {
-	mu           sync.Mutex
-	conns        []config.Connection
-	conn         *fakeConn
-	needPassword bool
-	connErr      error
-	passwords    []string
-	resets       []string
-	added        []config.Connection
-	addErr       error
-	lostConns    int
-	passphrases  []string
-	secrets      []string // SetSecret calls, "conn:kind:value"
-	trusted      []string
-	others       map[string]*fakeConn // connections with their own fakeConn; the rest share conn
-	redis        *fakeRedis           // backs the redis connections addRedis added
-	redisOpens   []string
-	kafka        *fakeKafka // backs the kafka connections addKafka added
-	kafkaOpens   []string
-	connCalls    int
+	mu            sync.Mutex
+	conns         []config.Connection
+	conn          *fakeConn
+	needPassword  bool
+	connErr       error
+	passwords     []string
+	resets        []string
+	added         []config.Connection
+	addErr        error
+	lostConns     int
+	passphrases   []string
+	secrets       []string // SetSecret calls, "conn:kind:value"
+	trusted       []string
+	others        map[string]*fakeConn // connections with their own fakeConn; the rest share conn
+	redis         *fakeRedis           // backs the redis connections addRedis added
+	redisOpens    []string
+	kafka         *fakeKafka // backs the kafka connections addKafka added
+	kafkaOpens    []string
+	registry      *fakeRegistry // made by the first SchemaRegistry call when nil
+	registryErr   error
+	registryOpens int
+	connCalls     int
 	// sessionDBs is the n of every RedisSession call; sessions are the
 	// sessions handed out, in order.
 	sessionDBs []int

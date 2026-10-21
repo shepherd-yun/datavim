@@ -1,0 +1,170 @@
+package kafka
+
+import (
+	"context"
+	"errors"
+	"net"
+	"net/http"
+	"slices"
+	"strings"
+	"sync/atomic"
+	"testing"
+
+	"github.com/twmb/franz-go/pkg/sr"
+	"github.com/twmb/franz-go/pkg/sr/srfake"
+)
+
+const orderAvro = `{"type":"record","name":"Order","fields":[{"name":"id","type":"long"}]}`
+
+func openRegistry(t *testing.T, reg *srfake.Registry, cfg RegistryConfig) Registry {
+	t.Helper()
+	if cfg.URL == "" {
+		cfg.URL = reg.URL()
+	}
+	r, err := OpenRegistry(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return r
+}
+
+func TestRegistryReadWrite(t *testing.T) {
+	reg := srfake.New(srfake.WithGlobalCompat(sr.CompatBackward))
+	defer reg.Close()
+	reg.SeedSchema("orders-value", 1, 1, sr.Schema{Schema: orderAvro, Type: sr.TypeAvro})
+	r := openRegistry(t, reg, RegistryConfig{})
+	subs, err := r.Subjects(ctx(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(subs, []Subject{{Name: "orders-value", Latest: 1, Type: "AVRO"}}) {
+		t.Fatalf("subjects = %+v", subs)
+	}
+	v2 := Schema{Type: "AVRO", Text: `{"type":"record","name":"Order","fields":[{"name":"id","type":"long"},{"name":"note","type":["null","string"],"default":null}]}`}
+	got, err := r.Register(ctx(t), "orders-value", v2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Version != 2 || got.ID == 0 || got.Subject != "orders-value" {
+		t.Fatalf("registered = %+v", got)
+	}
+	if vs, _ := r.Versions(ctx(t), "orders-value"); !slices.Equal(vs, []int{1, 2}) {
+		t.Fatalf("versions = %v", vs)
+	}
+	if s, err := r.Schema(ctx(t), "orders-value", -1); err != nil || s.Version != 2 || s.Type != "AVRO" {
+		t.Fatalf("latest = %+v, %v", s, err)
+	}
+	if err := r.DeleteVersion(ctx(t), "orders-value", 1); err != nil {
+		t.Fatal(err)
+	}
+	if vs, _ := r.Versions(ctx(t), "orders-value"); !slices.Equal(vs, []int{2}) {
+		t.Fatalf("versions after the delete = %v", vs)
+	}
+	if lvl, global, err := r.Compatibility(ctx(t), "orders-value"); err != nil || lvl != "BACKWARD" || !global {
+		t.Fatalf("compat = %s %v %v", lvl, global, err)
+	}
+	if err := r.SetCompatibility(ctx(t), "orders-value", "FULL"); err != nil {
+		t.Fatal(err)
+	}
+	if lvl, global, err := r.Compatibility(ctx(t), "orders-value"); err != nil || lvl != "FULL" || global {
+		t.Fatalf("compat = %s %v %v", lvl, global, err)
+	}
+}
+
+func TestRegistryResolve(t *testing.T) {
+	reg := srfake.New()
+	defer reg.Close()
+	reg.SeedSchema("c", 1, 3, sr.Schema{Schema: `{"type":"record","name":"C","fields":[]}`})
+	reg.SeedSchema("b", 1, 2, sr.Schema{Schema: `{"type":"record","name":"B","fields":[{"name":"c","type":"C"}]}`,
+		References: []sr.SchemaReference{{Name: "C", Subject: "c", Version: 1}}})
+	reg.SeedSchema("a", 1, 1, sr.Schema{Schema: `{"type":"record","name":"A","fields":[{"name":"b","type":"B"}]}`,
+		References: []sr.SchemaReference{{Name: "B", Subject: "b", Version: 1}}})
+	r := openRegistry(t, reg, RegistryConfig{})
+	a, err := r.Schema(ctx(t), "a", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(a.References) != 1 || a.References[0] != (SchemaRef{Name: "B", Subject: "b", Version: 1}) {
+		t.Fatalf("refs = %+v", a.References)
+	}
+	refs, err := r.Resolve(ctx(t), a)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(refs) != 2 || refs["B"].Subject != "b" || refs["C"].Subject != "c" {
+		t.Fatalf("resolved = %+v", refs)
+	}
+}
+
+func TestRegistryDialsThroughTunnel(t *testing.T) {
+	reg := srfake.New()
+	defer reg.Close()
+	var dials atomic.Int32
+	r := openRegistry(t, reg, RegistryConfig{Dial: func(ctx context.Context, network, addr string) (net.Conn, error) {
+		dials.Add(1)
+		var d net.Dialer
+		return d.DialContext(ctx, network, addr)
+	}})
+	if _, err := r.Subjects(ctx(t)); err != nil {
+		t.Fatal(err)
+	}
+	if dials.Load() < 1 {
+		t.Fatal("the registry's HTTP requests did not go through Dial")
+	}
+}
+
+func TestRegistryRedactsCredentials(t *testing.T) {
+	reg := srfake.New(srfake.WithAuth("Basic other"))
+	defer reg.Close()
+	host := strings.TrimPrefix(reg.URL(), "http://")
+	r := openRegistry(t, reg, RegistryConfig{URL: "http://u:secret-pw@" + host})
+	_, err := r.Subjects(ctx(t))
+	if !errors.Is(err, ErrRegistryAuth) {
+		t.Fatalf("err = %v, want ErrRegistryAuth", err)
+	}
+	if strings.Contains(err.Error(), "secret-pw") {
+		t.Fatalf("the password is in the error: %v", err)
+	}
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dead := ln.Addr().String()
+	_ = ln.Close()
+	r = openRegistry(t, reg, RegistryConfig{URL: "http://u:secret-pw@" + dead})
+	_, err = r.Subjects(ctx(t))
+	if err == nil || strings.Contains(err.Error(), "secret-pw") {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestRegistryCachesByID(t *testing.T) {
+	reg := srfake.New()
+	defer reg.Close()
+	reg.SeedSchema("orders-value", 3, 12, sr.Schema{Schema: orderAvro})
+	var byID atomic.Int32
+	reg.Intercept(func(_ http.ResponseWriter, req *http.Request) bool {
+		if strings.HasPrefix(req.URL.Path, "/schemas/ids/") {
+			byID.Add(1)
+		}
+		return false
+	})
+	r := openRegistry(t, reg, RegistryConfig{})
+	s, err := r.SchemaByID(ctx(t), 12)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.ID != 12 || s.Subject != "orders-value" || s.Version != 3 || s.Type != "AVRO" {
+		t.Fatalf("schema = %+v", s)
+	}
+	first := byID.Load()
+	if _, err := r.SchemaByID(ctx(t), 12); err != nil {
+		t.Fatal(err)
+	}
+	if byID.Load() != first {
+		t.Fatalf("SchemaByID asked again: %d requests, then %d", first, byID.Load())
+	}
+	if _, err := r.SchemaByID(ctx(t), 7); err == nil || err.Error() != "schema 7: not found" {
+		t.Fatalf("missing id err = %v", err)
+	}
+}

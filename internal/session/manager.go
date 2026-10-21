@@ -63,6 +63,8 @@ type Manager struct {
 	// message readers; nil makes kafka connections unavailable.
 	KafkaOpen       KafkaOpener
 	KafkaReaderOpen KafkaReaderOpener
+	// RegistryOpen makes Schema Registry clients; nil is kafka.OpenRegistry.
+	RegistryOpen RegistryOpener
 
 	mu        sync.Mutex
 	conns     []config.Connection
@@ -71,6 +73,8 @@ type Manager struct {
 	redis     map[connKey]rdb.Client
 	kafka     map[string]*guardedKafka
 	kafkaGen  map[string]int // counts the resets of each connection
+	// registries are the kafka connections' Schema Registry clients.
+	registries map[string]*guardedRegistry
 	// savedRO is the readonly in connections.toml of the connections
 	// SetReadOnly switched for this run.
 	savedRO map[string]*bool
@@ -79,15 +83,16 @@ type Manager struct {
 // NewManager builds a Manager for the configured connections.
 func NewManager(conns []config.Connection, secrets secret.Store, drivers ...db.Driver) *Manager {
 	m := &Manager{
-		conns:     conns,
-		drivers:   make(map[string]db.Driver, len(drivers)),
-		secrets:   secrets,
-		passwords: map[string]string{},
-		open:      map[connKey]db.Conn{},
-		redis:     map[connKey]rdb.Client{},
-		kafka:     map[string]*guardedKafka{},
-		kafkaGen:  map[string]int{},
-		savedRO:   map[string]*bool{},
+		conns:      conns,
+		drivers:    make(map[string]db.Driver, len(drivers)),
+		secrets:    secrets,
+		passwords:  map[string]string{},
+		open:       map[connKey]db.Conn{},
+		redis:      map[connKey]rdb.Client{},
+		kafka:      map[string]*guardedKafka{},
+		kafkaGen:   map[string]int{},
+		registries: map[string]*guardedRegistry{},
+		savedRO:    map[string]*bool{},
 	}
 	for _, d := range drivers {
 		m.drivers[d.Name()] = d
@@ -290,6 +295,7 @@ func (m *Manager) Reset(name string) {
 func (m *Manager) resetLocked(name string) {
 	m.resetServersLocked(name)
 	m.kafkaGen[name]++
+	delete(m.registries, name)
 	if c, ok := m.kafka[name]; ok {
 		delete(m.kafka, name)
 		go c.Close()
@@ -512,6 +518,7 @@ func (m *Manager) CloseAll() {
 		c.Close()
 		delete(m.kafka, k)
 	}
+	clear(m.registries)
 }
 
 func (m *Manager) driverAvailable(name string) bool {
