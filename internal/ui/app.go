@@ -246,6 +246,12 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.createTopic(msg)
 	case topicCreatedMsg:
 		return m, m.topicCreated(msg)
+	case resendPickMsg:
+		return m, m.resendPick(msg)
+	case resendTopicsMsg:
+		m.resendTopics(msg)
+	case resendMsg:
+		return m, m.resendTo(msg)
 	case softDeleteAskMsg:
 		return m, m.softDeleteAsked(msg)
 	case softDeleteMsg:

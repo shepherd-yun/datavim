@@ -120,6 +120,9 @@ type producerTab struct {
 	showMessages bool
 	messages     []string
 
+	draftLoaded bool     // the saved draft was read
+	appendQ     []string // drafts appendDraft got before that
+
 	pending []kmsgx.DraftRecord // checked, waiting for a confirmation
 	gen     int
 	running bool
@@ -554,14 +557,21 @@ func (t *producerTab) Update(msg tea.Msg) tea.Cmd {
 		}
 	case draftLoadedMsg:
 		switch cur := t.editor.Value(); {
-		case m.text == "" && cur == "":
-			t.editor.SetValue(producerTemplate(t.topic))
+		case m.text == "" && cur == "" && len(t.appendQ) == 0:
+			t.editor.SetValue(producerTemplate(t.topic)) // copied messages take its place
 		case m.text == "" || m.text == cur:
 		case cur == "":
 			t.editor.SetValue(m.text)
 		default:
 			t.editor.SetValue(m.text + "\n" + cur)
 		}
+		t.draftLoaded = true
+		var cmds []tea.Cmd
+		for _, text := range t.appendQ {
+			cmds = append(cmds, t.appendDraft(text))
+		}
+		t.appendQ = nil
+		return tea.Batch(cmds...)
 	case draftTickMsg:
 		if m.gen == t.draftGen {
 			save := t.saveDraft()

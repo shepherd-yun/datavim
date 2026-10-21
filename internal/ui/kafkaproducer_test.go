@@ -242,3 +242,75 @@ func TestProduceSchemaNoRegistry(t *testing.T) {
 		t.Fatalf("produced %+v status %q", k.produced, p.status)
 	}
 }
+
+func TestResendOne(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 3)
+	k.addTopic("orders-dlq-replay", 1, 0, 0)
+	r := fakeRecord("orders", 0, 1)
+	r.Headers = []kafka.Header{{Key: "trace", Value: []byte("abc")}}
+	k.setRecord(r)
+	openProducer(t, m, "key: a\nv", 0)
+	tt := openTopicTab(t, m, "orders")
+	cursorOn(t, tt, 0, 1)
+	pressAll(t, m, "p")
+	if _, ok := m.overlay.(*overlay.Picker); !ok {
+		t.Fatalf("overlay = %T, status %q", m.overlay, tt.status)
+	}
+	pressAll(t, m, "enter") // the current topic is first
+	p, ok := m.activeTab().(*producerTab)
+	if !ok || p.Title() != "produce:orders" {
+		t.Fatalf("active tab = %T", m.activeTab())
+	}
+	want := "key: a\nv\n===\n" + kmsgx.FormatDraft([]kafka.Record{r})
+	if got := p.editor.Value(); got != strings.TrimRight(want, "\n") && got != want {
+		t.Fatalf("draft:\n%q\nwant\n%q", got, want)
+	}
+	if len(k.produced) != 0 {
+		t.Fatal("copying sent the message")
+	}
+	if !strings.Contains(m.status+p.status, "copied 1 message to produce:orders · nothing is sent until you run them") {
+		t.Fatalf("status %q / %q", m.status, p.status)
+	}
+}
+
+func TestResendShownOtherTopic(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 12)
+	k.addTopic("orders-dlq-replay", 1, 0, 0)
+	tt := openTopicTab(t, m, "orders")
+	pressAll(t, m, "F")
+	typeText(t, m, "key ~ k-1")
+	pressAll(t, m, "enter")
+	if len(tt.msgs.shown) != 3 { // k-1, k-10, k-11
+		t.Fatalf("shown = %d", len(tt.msgs.shown))
+	}
+	pressAll(t, m, "P")
+	typeText(t, m, "dlq")
+	pressAll(t, m, "enter")
+	p, ok := m.activeTab().(*producerTab)
+	if !ok || p.Title() != "produce:orders-dlq-replay" {
+		t.Fatalf("active tab = %T", m.activeTab())
+	}
+	recs, err := kmsgx.ParseDraft(p.editor.Value())
+	if err != nil || len(recs) != 3 {
+		t.Fatalf("draft has %d messages (%v):\n%s", len(recs), err, p.editor.Value())
+	}
+}
+
+func TestResendTruncated(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 3)
+	r := fakeRecord("orders", 0, 1)
+	r.Truncated = true
+	k.setRecord(r)
+	tt := openTopicTab(t, m, "orders")
+	cursorOn(t, tt, 0, 1)
+	pressAll(t, m, "p")
+	if m.overlay != nil || tt.status != "p0:1 has only its first 1 MB here; it can't be sent again as it was" {
+		t.Fatalf("overlay %T status %q", m.overlay, tt.status)
+	}
+	if len(m.tabs) != 1 {
+		t.Fatal("a console opened")
+	}
+}

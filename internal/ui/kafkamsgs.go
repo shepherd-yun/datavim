@@ -514,6 +514,8 @@ func (t *topicTab) handleMsgs(a keymap.Action) (tea.Cmd, bool) {
 		return t.deleteFromMessage(), true
 	case keymap.ToggleIsolation:
 		return t.toggleIsolation(), true
+	case keymap.ResendMessage, keymap.ResendShown:
+		return t.resend(a == keymap.ResendShown), true
 	case keymap.LiveTail:
 		return t.toggleTail(), true
 	case keymap.OpenCellKey:
