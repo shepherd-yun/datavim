@@ -163,3 +163,21 @@ func TestAuditHint(t *testing.T) {
 		t.Fatalf("description = %q", d)
 	}
 }
+
+func TestAuditTabGotoConnector(t *testing.T) {
+	m, _, _ := connectModel(t, "http://c1:8083")
+	addAudit(t, m,
+		history.AuditEntry{Conn: "events", Kind: history.AuditKafka, Op: "create_acl", Object: "User:alice"},
+		history.AuditEntry{Conn: "events", Kind: history.AuditKafka, Op: "pause_connector", Object: "connect/orders-sink"},
+	)
+	openAudit(t, m)
+	press(t, m, "g", "d")
+	if c, ok := m.activeTab().(*connectorTab); !ok || c.name != "orders-sink" || c.cluster != "connect" {
+		t.Fatalf("active tab = %T (%s)", m.activeTab(), m.status)
+	}
+	openAudit(t, m)
+	press(t, m, "j", "g", "d")
+	if _, ok := m.activeTab().(*aclTab); !ok {
+		t.Fatalf("active tab = %T (%s)", m.activeTab(), m.status)
+	}
+}

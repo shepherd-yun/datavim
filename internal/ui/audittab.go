@@ -302,6 +302,12 @@ func (m *Model) auditGotoKafka(e history.AuditEntry, nothing func() tea.Cmd) tea
 		return m.openGroup(e.Conn, e.Object)
 	case "register_schema", "set_compatibility", "delete_schema_version":
 		return m.openSchema(e.Conn, e.Object, -1)
+	case "create_acl", "delete_acl":
+		return m.openACLs(e.Conn)
+	case "pause_connector", "resume_connector", "restart_connector", "restart_task", "alter_connector_config":
+		if cluster, name, ok := strings.Cut(e.Object, "/"); ok {
+			return m.openConnector(e.Conn, cluster, name)
+		}
 	}
 	return nothing()
 }
