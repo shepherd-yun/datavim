@@ -492,6 +492,8 @@ func (t *topicTab) handleMsgs(a keymap.Action) (tea.Cmd, bool) {
 		}
 	case keymap.Seek:
 		return t.seekPrompt(), true
+	case keymap.DeleteRecords:
+		return t.deleteFromMessage(), true
 	case keymap.LiveTail:
 		return t.toggleTail(), true
 	case keymap.OpenCellKey:

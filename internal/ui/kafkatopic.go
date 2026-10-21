@@ -265,6 +265,9 @@ func (t *topicTab) Update(msg tea.Msg) tea.Cmd {
 	if cmd, ok := t.configsUpdate(msg); ok {
 		return cmd
 	}
+	if cmd, ok := t.partOpsUpdate(msg); ok {
+		return cmd
+	}
 	switch m := msg.(type) {
 	case topicLoadedMsg:
 		t.loading = false
@@ -321,6 +324,16 @@ func (t *topicTab) Handle(a keymap.Action) tea.Cmd {
 			if !t.loading {
 				return t.loadDetail()
 			}
+		}
+		return nil
+	case keymap.AddPartitions:
+		if t.section == secPartitions {
+			return t.addPartitionsPrompt()
+		}
+		return nil
+	case keymap.DeleteRecords:
+		if t.section == secPartitions {
+			return t.deleteFromPartitions()
 		}
 		return nil
 	case keymap.Open:
