@@ -51,6 +51,7 @@ var recentKinds = map[string]string{
 	history.RecentRedisKey:  "key",
 
 	history.RecentKafkaTopic:   "topic",
+	history.RecentESIndex:      "index",
 	history.RecentKafkaGroup:   "group",
 	history.RecentKafkaSubject: "schema",
 }
@@ -113,6 +114,9 @@ func (m *Model) openRecent(r history.Recent) tea.Cmd {
 		if isRedis(m.backend, r.Conn) {
 			return m.openRedisConsole(r.Conn, redisDBOf(ns))
 		}
+		if isES(m.backend, r.Conn) {
+			return m.openESConsole(r.Conn) // its draft, not run
+		}
 		return m.openConsole(r.Conn, ns)
 	case history.RecentFile:
 		return m.openFile(r.Conn, ns, r.Name)
@@ -123,6 +127,9 @@ func (m *Model) openRecent(r history.Recent) tea.Cmd {
 		return m.openTopic(r.Conn, r.Name)
 	case history.RecentKafkaGroup:
 		return m.openGroup(r.Conn, r.Name)
+	case history.RecentESIndex:
+		// read again from the top: not the filter or the staged edits it had
+		return m.openIndex(r.Conn, r.Name, targetKindNamed(r.Database))
 	case history.RecentKafkaSubject:
 		// the latest version: not the one it showed
 		return m.openSchema(r.Conn, r.Name, -1)
@@ -153,6 +160,10 @@ func (m *Model) touchActive() tea.Cmd {
 		r = history.Recent{Kind: history.RecentKafkaGroup, Conn: x.conn, Name: x.group}
 	case *schemaTab:
 		r = history.Recent{Kind: history.RecentKafkaSubject, Conn: x.conn, Name: x.subject}
+	case *esIndexTab:
+		r = recentIndex(x.conn, x.target, x.kind)
+	case *esConsoleTab:
+		r = history.Recent{Kind: history.RecentConsole, Conn: x.conn}
 	case *consoleTab:
 		r.Kind, r.Name = history.RecentConsole, ""
 		if x.file != nil {

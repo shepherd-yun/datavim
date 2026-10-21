@@ -526,3 +526,37 @@ func (m *Model) esTreeNames(conn string) []string {
 	}
 	return out
 }
+
+// searchES finds the indices (not the system ones), aliases and data
+// streams of the loaded trees (of conn, unless empty) whose name contains
+// q (lower case): searching reads nothing.
+func (m *Model) searchES(conn, q string) []kafkaHit {
+	var out []kafkaHit
+	for _, c := range m.backend.Connections() {
+		st := m.esTrees[c.Name]
+		if st == nil || conn != "" && c.Name != conn || c.Driver != "elasticsearch" {
+			continue
+		}
+		add := func(name string, kind targetKind) {
+			if i := strings.Index(strings.ToLower(name), q); i >= 0 {
+				out = append(out, kafkaHit{conn: c.Name, name: name, prefix: i == 0, es: true, esKind: kind})
+			}
+		}
+		for _, i := range st.indices {
+			if !i.System || st.showSystem {
+				add(i.Name, targetIndex)
+			}
+		}
+		seen := map[string]bool{}
+		for _, a := range st.aliases {
+			if !seen[a.Name] {
+				seen[a.Name] = true
+				add(a.Name, targetAlias)
+			}
+		}
+		for _, s := range st.streams {
+			add(s.Name, targetStream)
+		}
+	}
+	return out
+}

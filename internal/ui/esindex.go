@@ -141,9 +141,26 @@ func newESIndexTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, co
 	return t
 }
 
+var targetKindNames = map[targetKind]string{targetIndex: "index", targetAlias: "alias", targetPattern: "pattern", targetStream: "stream"}
+
+// recentIndex is an Index tab among the recent tabs; Database names what
+// its target is.
+func recentIndex(conn, target string, kind targetKind) history.Recent {
+	return history.Recent{Kind: history.RecentESIndex, Conn: conn, Name: target, Database: targetKindNames[kind]}
+}
+
+func targetKindNamed(s string) targetKind {
+	for k, n := range targetKindNames {
+		if n == s {
+			return k
+		}
+	}
+	return targetIndex
+}
+
 // openIndex opens (or shows) the Index tab of target on conn.
 func (m *Model) openIndex(conn, target string, kind targetKind) tea.Cmd {
-	rec := history.Recent{Kind: history.RecentESIndex, Conn: conn, Name: target}
+	rec := recentIndex(conn, target, kind)
 	return m.openTab(esIndexTabKey(conn, target), rec, func(id int) tab {
 		t := newESIndexTab(id, m.backend, m.keys, m.settings, conn, target, kind)
 		t.store = m.store

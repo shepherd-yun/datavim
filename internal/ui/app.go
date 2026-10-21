@@ -704,6 +704,8 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 			return m.openServer(conn)
 		case isKafka(m.backend, conn):
 			return m.openKafkaServer(conn)
+		case isES(m.backend, conn):
+			return m.openESServer(conn)
 		}
 		return m.openSQLServer(conn)
 	case keymap.Refresh:

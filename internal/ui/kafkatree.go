@@ -655,16 +655,22 @@ func (m *Model) kafkaFiltered(msg kafkaFilterMsg) {
 	m.buildKafkaTree(msg.conn)
 }
 
-// kafkaHit is a topic or group the global search found.
+// kafkaHit is a topic or group, or an elasticsearch index, alias or
+// data stream (es set), the global search found in a loaded tree.
 type kafkaHit struct {
 	conn, name string
 	group      bool
 	prefix     bool // the name starts with the query: listed before the catalog hits
+	es         bool
+	esKind     targetKind
 }
 
 func (h kafkaHit) item() overlay.SearchItem {
 	kind := "topic"
-	if h.group {
+	switch {
+	case h.es:
+		kind = map[targetKind]string{targetIndex: "index", targetAlias: "alias", targetStream: "stream"}[h.esKind]
+	case h.group:
 		kind = "group"
 	}
 	return overlay.SearchItem{Kind: kind, Label: h.name, Where: h.conn}
@@ -678,7 +684,7 @@ func (m *Model) searchKafka(conn, text string) []kafkaHit {
 	if q == "" {
 		return nil
 	}
-	var out []kafkaHit
+	out := m.searchES(conn, q)
 	for _, c := range m.backend.Connections() {
 		st := m.kafkaTrees[c.Name]
 		if st == nil || conn != "" && c.Name != conn || c.Driver != "kafka" {
@@ -705,8 +711,11 @@ func (m *Model) searchKafka(conn, text string) []kafkaHit {
 	return out[:min(len(out), searchLimit)]
 }
 
-// openKafkaHit opens a found topic or group.
+// openKafkaHit opens a found topic, group, index, alias or data stream.
 func (m *Model) openKafkaHit(h kafkaHit) tea.Cmd {
+	if h.es {
+		return m.openIndex(h.conn, h.name, h.esKind)
+	}
 	if h.group {
 		return m.openGroup(h.conn, h.name)
 	}
