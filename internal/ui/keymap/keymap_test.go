@@ -744,9 +744,9 @@ func TestESBindings(t *testing.T) {
 		a    Action
 		want string
 	}{
-		{Tree, KindES, NewKey, "New index"},
+		{Tree, KindES, NewKey, "New index · new snapshot (on a repository) · new repository (on Snapshots)"},
 		{Tree, KindKafka, NewKey, "New topic"},
-		{Tree, KindES, ToggleInternal, "Show / hide system indices"},
+		{Tree, KindES, ToggleInternal, "Show / hide system indices, templates, ILM policies and pipelines"},
 		{Tree, KindES, SortGroups, "Sort indices: name / docs / size"},
 		{Global, KindES, History, "Request history"},
 		{Global, KindES, OpenConsole, "REST console"},
@@ -764,7 +764,7 @@ func TestESBindings(t *testing.T) {
 	if has(k.Help(Global, KindES), "Starred Redis keys") {
 		t.Error("Redis favorites listed on ES")
 	}
-	for _, ctx := range []Context{ESDocs, ESIndex, ESSettings, ESServer, ESResults, ESClusterSettings, ESTemplate} {
+	for _, ctx := range []Context{ESDocs, ESIndex, ESSettings, ESServer, ESResults, ESClusterSettings, ESObject} {
 		if !slices.Contains(Contexts(), ctx) {
 			t.Errorf("Contexts() lacks %s", ctx)
 		}
@@ -793,10 +793,10 @@ func TestESE2Bindings(t *testing.T) {
 		{ESClusterSettings, "space w", SubmitEdits},
 		{ESClusterSettings, ".", ToggleInternal},
 		{ESClusterSettings, "j", Down},
-		{ESTemplate, "space v", ExternalEdit},
-		{ESTemplate, "y y", YankRow},
-		{ESTemplate, "space r", Refresh},
-		{ESTemplate, "/", Search},
+		{ESObject, "space v", ExternalEdit},
+		{ESObject, "y y", YankRow},
+		{ESObject, "space r", Refresh},
+		{ESObject, "/", Search},
 		{ESDocs, "space u", UpdateByQuery},
 		{ESIndex, "g d", OpenCellKey},
 		{ESIndex, "o", InsertRow},
@@ -814,7 +814,77 @@ func TestESE2Bindings(t *testing.T) {
 	if srv := k.Help(ESServer, KindES); !has(srv, "cancel the task") || !has(srv, "why it is unassigned") {
 		t.Errorf("ES server help = %+v", srv)
 	}
-	if tpl := k.Help(ESTemplate, KindES); !has(tpl, "Copy the template (JSON)") || has(tpl, "Copy row") || has(tpl, "Copy DDL") {
+	if tpl := k.Help(ESObject, KindES); !has(tpl, "Copy the JSON") || has(tpl, "Copy row") || has(tpl, "Copy DDL") {
 		t.Errorf("ES template help = %+v", tpl)
+	}
+}
+
+func TestESE3Bindings(t *testing.T) {
+	k := Default()
+	if ESObject != "es_template" {
+		t.Errorf("ESObject = %q: user keymaps name es_template", ESObject)
+	}
+	for _, tc := range []struct {
+		ctx  Context
+		keys string
+		want Action
+	}{
+		{ESObject, "y y", YankRow},
+		{ESObject, "space v", ExternalEdit},
+		{ESObject, "space r", Refresh},
+		{ESSnapshot, "space r", Refresh},
+		{ESSnapshot, "R", RestoreSnapshot},
+		{ESSnapshot, "d d", DeleteRow},
+		{ESSnapshot, "j", Down},
+		{ESSnapshot, "y l", YankCell},
+		{ESDocs, "space p", SimulatePipeline},
+		{ESServer, "o", InsertRow},
+		{ESServer, "i", EditCell},
+		{ESServer, "x", ToggleEnabled},
+		{ESServer, "P", ChangePassword},
+		{ESServer, "enter", Open},
+		{ESServer, "d d", KillClient},
+		{Tree, "o", NewKey},
+	} {
+		if a, r := k.Resolve(tc.ctx, strings.Fields(tc.keys)); a != tc.want || r != Matched {
+			t.Errorf("%s %q = %q (%v), want %q", tc.ctx, tc.keys, a, r, tc.want)
+		}
+	}
+	has := func(entries []HelpEntry, s string) bool {
+		return slices.ContainsFunc(entries, func(e HelpEntry) bool { return strings.Contains(e.Desc, s) })
+	}
+	if obj := k.Help(ESObject, KindES); !has(obj, "Copy the JSON") || !has(obj, "Edit in $EDITOR") || !has(obj, "Reload") {
+		t.Errorf("ES object help = %+v", obj)
+	}
+	if srv := k.Help(ESServer, KindES); !has(srv, "Users: new user") || !has(srv, "Users: change the password") ||
+		!has(srv, "Users: enable / disable") || !has(srv, "Roles: open the role") || !has(srv, "Users / Roles: delete") {
+		t.Errorf("ES server help = %+v", srv)
+	}
+	if snap := k.Help(ESSnapshot, KindES); !has(snap, "Restore the snapshot") || !has(snap, "Delete the snapshot") {
+		t.Errorf("ES snapshot help = %+v", snap)
+	}
+	if docs := k.Help(ESDocs, KindES); !has(docs, "Run an ingest pipeline") {
+		t.Errorf("ES docs help lacks simulate")
+	}
+	if tree := k.Help(Tree, KindES); !has(tree, "new snapshot (on a repository)") {
+		t.Errorf("ES tree help = %+v", tree)
+	}
+	for _, a := range []Action{SimulatePipeline, RestoreSnapshot, ToggleEnabled, ChangePassword} {
+		for _, kind := range []Kind{KindKafka, KindSQL, KindRedis} {
+			for _, ctx := range []Context{ESDocs, ESServer, ESSnapshot, Global} {
+				for _, e := range k.Help(ctx, kind) {
+					if e.Action == a {
+						t.Errorf("%s shows on kind %v in %s", a, kind, ctx)
+					}
+				}
+			}
+		}
+	}
+	for _, a := range []Action{InsertRow, EditCell} {
+		for _, e := range k.Help(ESServer, KindKafka) {
+			if e.Action == a {
+				t.Errorf("%s on ESServer shows on Kafka", a)
+			}
+		}
 	}
 }

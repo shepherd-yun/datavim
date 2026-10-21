@@ -85,7 +85,7 @@ func TestESTemplateTab(t *testing.T) {
 	m, _, f := newESModel(t, config.Connection{})
 	fakeTemplates(f)
 	tab := openTemplateTab(t, m, "logs")
-	if tab.Title() != "logs · composable template" || tab.Context() != keymap.ESTemplate {
+	if tab.Title() != "logs · composable template" || tab.Context() != keymap.ESObject {
 		t.Errorf("title %q context %s", tab.Title(), tab.Context())
 	}
 	if s := screen(m); !strings.Contains(s, `"priority": 100`) {

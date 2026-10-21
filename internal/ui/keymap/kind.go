@@ -1,6 +1,9 @@
 package keymap
 
-import "slices"
+import (
+	"maps"
+	"slices"
+)
 
 // Kind is the kind of connection the UI is working on. Help and which-key
 // list only the bindings that make sense on it; keys still resolve either
@@ -60,13 +63,14 @@ var kinds = map[Context]map[Action][]Kind{
 		ToggleInternal: kafkaES,
 		SortGroups:     kafkaES,
 	},
-	ESDocs:            sqlOnlyGrid,
+	ESDocs:            withKinds(sqlOnlyGrid, map[Action][]Kind{SimulatePipeline: es}),
 	ESIndex:           sqlOnlyGrid,
 	ESSettings:        sqlOnlyGrid,
-	ESServer:          sqlOnlyGrid,
+	ESServer:          withKinds(sqlOnlyGrid, map[Action][]Kind{InsertRow: es, EditCell: es, ToggleEnabled: es, ChangePassword: es}),
+	ESSnapshot:        withKinds(sqlOnlyGrid, map[Action][]Kind{RestoreSnapshot: es}),
 	ESResults:         sqlOnlyGrid,
 	ESClusterSettings: sqlOnlyGrid,
-	ESTemplate:        sqlOnlyGrid,
+	ESObject:        sqlOnlyGrid,
 	Grid:              {CopyDDL: sql, CopyAs("sql"): sql},
 	Results:           {CopyDDL: sql, CopyAs("sql"): sql},
 	Structure:         {CopyDDL: sql},
@@ -83,12 +87,12 @@ var kindDescs = map[Context]map[Action][4]string{ // [SQL, Redis, Kafka, ES]
 	Tree: {
 		Open:           {"Open: table data, a column or index in the structure, a foreign key's table", "Open the key", "Open the topic / group", "Open the index / alias / data stream"},
 		EditNode:       {"Edit connection / modify table", "Edit connection", "Edit connection", "Edit connection"},
-		DeleteNode:     {"Delete connection / drop table or view", "Delete connection / delete Redis keys", "Delete connection / delete topic / delete group / soft-delete schema version", "Delete connection / delete index"},
+		DeleteNode:     {"Delete connection / drop table or view", "Delete connection / delete Redis keys", "Delete connection / delete topic / delete group / soft-delete schema version", "Delete connection / index / template / ILM policy / pipeline / snapshot / repository"},
 		RenameTable:    {"Rename table or view", "Rename Redis key", "", ""},
-		NewKey:         {"", "New Redis key", "New topic", "New index"},
+		NewKey:         {"", "New Redis key", "New topic", "New index · new snapshot (on a repository) · new repository (on Snapshots)"},
 		FilterPrompt:   {"", "Filter Redis keys (pattern)", "Filter topics / groups / subjects by name", "Filter indices by name (* wildcard)"},
 		FilterClear:    {"", "Clear the Redis key filter", "Clear the topic / group / subject filter", "Clear the index filter"},
-		ToggleInternal: {"", "", "", "Show / hide system indices"},
+		ToggleInternal: {"", "", "", "Show / hide system indices, templates, ILM policies and pipelines"},
 		SortGroups:     {"", "", "", "Sort indices: name / docs / size"},
 	},
 }
@@ -105,4 +109,11 @@ func (b Binding) descFor(kind Kind) string {
 		return d[kind-KindSQL]
 	}
 	return b.Desc
+}
+
+// withKinds is base with more actions marked.
+func withKinds(base, more map[Action][]Kind) map[Action][]Kind {
+	out := maps.Clone(base)
+	maps.Copy(out, more)
+	return out
 }

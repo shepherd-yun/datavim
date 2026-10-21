@@ -124,7 +124,7 @@ func (m *Model) openESTemplate(conn, key string) tea.Cmd {
 func (t *esTemplateTab) ID() int                        { return t.id }
 func (t *esTemplateTab) Title() string                  { return t.name + " · " + t.kind.String() + " template" }
 func (t *esTemplateTab) Key() string                    { return esTemplateTabKey(t.conn, t.key) }
-func (t *esTemplateTab) Context() keymap.Context        { return keymap.ESTemplate }
+func (t *esTemplateTab) Context() keymap.Context        { return keymap.ESObject }
 func (t *esTemplateTab) Target() (string, db.TableRef)  { return t.conn, db.TableRef{} }
 func (t *esTemplateTab) SetSize(w, h int)               { t.width, t.height = max(w, 0), max(h, 0) }
 func (t *esTemplateTab) Init() tea.Cmd                  { return t.load() }

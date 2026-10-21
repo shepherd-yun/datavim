@@ -366,11 +366,16 @@ func esBindings() []Binding {
 		Binding{ESSettings, keys("u"), UndoEdit, "Undo the last change"},
 		Binding{ESSettings, keys("U"), UndoAllEdits, "Discard every change"},
 		Binding{ESSettings, keys(LeaderToken, "w"), SubmitEdits, "Apply the settings changes (:w)"},
-		Binding{ESServer, keys("enter"), Open, "Nodes: node details · Shards: why it is unassigned · Overview: the unhealthy shards"},
+		Binding{ESServer, keys("enter"), Open, "Nodes: node details · Shards: why it is unassigned · Overview: the unhealthy shards · Roles: open the role"},
 		Binding{ESServer, keys("."), ToggleInternal, "Shards: all / only not STARTED"},
 		Binding{ESServer, keys("F"), FilterPrompt, "Shards: filter by index (* pattern)"},
 		Binding{ESServer, keys("f", "x"), FilterClear, "Shards: clear the filter"},
-		Binding{ESServer, keys("d", "d"), KillClient, "Tasks: cancel the task"},
+		Binding{ESServer, keys("d", "d"), KillClient, "Tasks: cancel the task · Users / Roles: delete…"},
+		Binding{ESServer, keys("o"), InsertRow, "Users: new user"},
+		Binding{ESServer, keys("i"), EditCell, "Users: change roles"},
+		Binding{ESServer, keys("x"), ToggleEnabled, "Users: enable / disable"},
+		Binding{ESServer, keys("P"), ChangePassword, "Users: change the password…"},
+		Binding{ESDocs, keys(LeaderToken, "p"), SimulatePipeline, "Run an ingest pipeline on the selected document (_simulate)…"},
 		Binding{ESClusterSettings, keys("i"), EditCell, "Edit the setting (persistent unless it is transient)"},
 		Binding{ESClusterSettings, keys("enter"), EditCell, "Edit the setting (persistent unless it is transient)"},
 		Binding{ESClusterSettings, keys("d", "d"), DeleteRow, "Remove the setting (back to the default)"},
@@ -379,15 +384,21 @@ func esBindings() []Binding {
 		Binding{ESClusterSettings, keys(LeaderToken, "w"), SubmitEdits, "Apply the cluster settings changes (:w)"},
 		Binding{ESClusterSettings, keys("."), ToggleInternal, "Show / hide the defaults"},
 	)
-	for _, g := range gridBindings(ESTemplate) {
+	for _, g := range gridBindings(ESObject) {
 		if g.Action == YankRow {
-			g.Desc = "Copy the template (JSON)"
+			g.Desc = "Copy the JSON"
 		}
 		b = append(b, g)
 	}
 	b = append(b,
-		Binding{ESTemplate, keys(LeaderToken, "v"), ExternalEdit, "Edit the template in $EDITOR"},
-		Binding{ESTemplate, keys(LeaderToken, "r"), Refresh, "Reload the template"},
+		Binding{ESObject, keys(LeaderToken, "v"), ExternalEdit, "Edit in $EDITOR"},
+		Binding{ESObject, keys(LeaderToken, "r"), Refresh, "Reload"},
+	)
+	b = append(b, gridBindings(ESSnapshot)...)
+	b = append(b,
+		Binding{ESSnapshot, keys(LeaderToken, "r"), Refresh, "Reload the snapshot"},
+		Binding{ESSnapshot, keys("R"), RestoreSnapshot, "Restore the snapshot…"},
+		Binding{ESSnapshot, keys("d", "d"), DeleteRow, "Delete the snapshot…"},
 	)
 	b = append(b, gridBindings(ESResults)...)
 	return append(b,

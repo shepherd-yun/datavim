@@ -60,8 +60,12 @@ const (
 	ESResults Context = "es_results"
 	// ESClusterSettings is the Settings section of an Elasticsearch cluster status tab.
 	ESClusterSettings Context = "es_cluster_settings"
-	// ESTemplate is an Elasticsearch index template tab.
-	ESTemplate Context = "es_template"
+	// ESObject is the tab of an Elasticsearch object kept as JSON: an index
+	// template, ILM policy, ingest pipeline or role. Its name predates the
+	// other kinds and stays for users' keymap.toml.
+	ESObject Context = "es_template"
+	// ESSnapshot is an Elasticsearch snapshot's tab.
+	ESSnapshot Context = "es_snapshot"
 	// Audit is the audit log of writes.
 	Audit Context = "audit"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
@@ -219,6 +223,10 @@ const (
 	YankSource         Action = "es.yank_source"
 	YankRequest        Action = "es.yank_request"
 	YankCurl           Action = "es.yank_curl"
+	SimulatePipeline   Action = "es.simulate_pipeline"
+	RestoreSnapshot    Action = "es.restore_snapshot"
+	ToggleEnabled      Action = "es.toggle_enabled"
+	ChangePassword     Action = "es.change_password"
 )
 
 const (
