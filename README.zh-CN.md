@@ -156,7 +156,8 @@ Partitions 部分按 `o` 增加 partition，`X` 删除某个 offset 之前的消
 或 `+N` / `-N`，执行前预览每个 partition。只能在 group 为 Empty 时重置（先停掉消费者），预览之后 group 有变化就放弃。
 在 topic 上按 `<Space>c` 打开 producer console：每条消息由可选的 `key:`、`partition:`、`header: name=value` 行和正文组成；
 `key: null` 表示 key 为 null，正文只有 `null` 表示 tombstone，消息之间用 `===` 分隔。`key-encoding:` / `value-encoding: base64`（或 `hex`）和
-`header-base64: name=<base64>` 用来写二进制数据，`key-schema:` / `value-schema: orders-value[@3][#shop.Order]` 用这个
+`header-base64: name=<base64>`、`header-binary: <base64 name>,<base64 value>`（header 名不是普通文本或含 `=` 时）
+用来写二进制数据，`key-schema:` / `value-schema: orders-value[@3][#shop.Order]` 用这个
 subject 的 schema 序列化 JSON 正文（默认最新版本；`#` 指定 Protobuf message）。`Enter` 发送光标所在的消息（或选中的
 消息），`R` 发送全部，结果区显示每条的 partition 和 offset。`:send orders.jsonl` 发送一个 JSON Lines 导出文件，确认一次
 （超过 1,000 条时先显示前 5 条）。

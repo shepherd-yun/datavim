@@ -20,7 +20,7 @@ All notable changes to this project are documented here. The format follows
   `$EDITOR` after a compatibility check, `c` to set the compatibility level and `dd` to
   soft-delete a version. The producer console takes `key-schema:` / `value-schema:`
   `subject[@version][#message]` lines to serialize a JSON body, `key-encoding:` /
-  `value-encoding: base64|hex` and `header-base64:` for binary data. `p` / `P` in Messages copy
+  `value-encoding: base64|hex`, `header-base64:` and `header-binary:` for binary data. `p` / `P` in Messages copy
   the message under the cursor / every shown message to a producer console (of this or another
   topic) to send them again byte for byte, and `:send <file.jsonl>` in a producer console sends
   a JSON Lines export after one confirmation. `I` switches a message view between

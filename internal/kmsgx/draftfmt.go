@@ -34,6 +34,11 @@ func FormatDraft(recs []kafka.Record) string {
 			}
 		}
 		for _, h := range r.Headers {
+			b64 := base64.StdEncoding.EncodeToString
+			if !plainLine([]byte(h.Key)) || h.Key == "" || strings.Contains(h.Key, "=") {
+				b.WriteString("header-binary: " + b64([]byte(h.Key)) + "," + b64(h.Value) + "\n")
+				continue
+			}
 			if plainLine(h.Value) {
 				b.WriteString("header: " + h.Key + "=" + string(h.Value) + "\n")
 			} else {

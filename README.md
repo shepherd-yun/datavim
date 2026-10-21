@@ -203,7 +203,8 @@ works only on an empty group (stop the consumers first) and gives up if the grou
 the preview. `<Space>c` on a topic opens a producer console: each message is optional `key:`,
 `partition:` and `header: name=value` lines, then the body; `key: null` is a null key, a body of
 `null` a tombstone, and `===` separates messages. `key-encoding:` / `value-encoding: base64` (or
-`hex`) and `header-base64: name=<base64>` carry binary data, and `key-schema:` /
+`hex`), `header-base64: name=<base64>` and `header-binary: <base64 name>,<base64 value>` (a
+header name that isn't plain text or contains `=`) carry binary data, and `key-schema:` /
 `value-schema: orders-value[@3][#shop.Order]` serialize the JSON body with that subject's
 schema (the latest version by default; `#` picks a Protobuf message). `Enter` sends the message
 under the cursor (or the selection), `R` all of them, and the result shows each partition and

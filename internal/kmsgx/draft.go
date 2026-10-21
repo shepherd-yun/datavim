@@ -69,7 +69,8 @@ func splitDraft(lines []string) []draftPart {
 // ParseDraft reads every message of a producer draft. Messages are
 // separated by a line of ===. Each one starts with optional # comment
 // lines, then optional header lines (key:, partition:, header: name=value,
-// header-base64: name=<base64>, key-encoding: / value-encoding: base64|hex,
+// header-base64: name=<base64>, header-binary: <base64 name>,<base64 value>,
+// key-encoding: / value-encoding: base64|hex,
 // key-schema: / value-schema: subject[@version][#message]) and then the
 // body, up to the separator. The headers end at the first line
 // that is not one; a blank line there is dropped. No key: line, or
@@ -137,7 +138,7 @@ func parsePart(lines []string, p draftPart) (DraftRecord, bool, error) {
 			}
 			break
 		}
-		if name != "header" && name != "header-base64" && seen[name] > 0 {
+		if name != "header" && name != "header-base64" && name != "header-binary" && seen[name] > 0 {
 			return r, false, DraftError{i + 1, name + " is given twice"}
 		}
 		seen[name] = i + 1
@@ -166,6 +167,14 @@ func parsePart(lines []string, p draftPart) (DraftRecord, bool, error) {
 				return r, false, DraftError{i + 1, "header-base64 needs name=<base64>"}
 			}
 			r.Headers = append(r.Headers, kafka.Header{Key: strings.TrimSpace(k), Value: b})
+		case "header-binary":
+			k, v, ok := strings.Cut(val, ",")
+			kb, kerr := base64.StdEncoding.DecodeString(strings.TrimSpace(k))
+			vb, verr := base64.StdEncoding.DecodeString(strings.TrimSpace(v))
+			if !ok || kerr != nil || verr != nil {
+				return r, false, DraftError{i + 1, "header-binary needs <base64 name>,<base64 value>"}
+			}
+			r.Headers = append(r.Headers, kafka.Header{Key: string(kb), Value: vb})
 		case "key-encoding", "value-encoding":
 			if val != "base64" && val != "hex" {
 				return r, false, DraftError{i + 1, name + " must be base64 or hex"}
@@ -253,7 +262,7 @@ func parseSchemaSpec(v string) (SchemaSpec, error) {
 
 // headerNames are the lines a message may start with, before its body.
 var headerNames = []string{
-	"key", "partition", "header", "header-base64",
+	"key", "partition", "header", "header-base64", "header-binary",
 	"key-encoding", "value-encoding", "key-schema", "value-schema",
 }
 
