@@ -72,28 +72,28 @@ func releaseCursor(c es.Cursor) {
 
 // esDocs is the Documents section of an Index tab.
 type esDocs struct {
-	tab      *esIndexTab
-	grid     *grid.Model
-	cursor   es.Cursor
-	hits     []esx.Hit
-	cols     []string
-	query    string // the filter as typed: a query string or a {…} DSL object
+	tab    *esIndexTab
+	grid   *grid.Model
+	cursor es.Cursor
+	hits   []esx.Hit
+	cols   []string
+	query  string // the filter as typed: a query string or a {…} DSL object
 	// prevQuery is the filter before the prompt's, put back when the
 	// server refuses the new one (fromPrompt).
 	prevQuery  string
 	fromPrompt bool
-	sortCol  string // the column sorted on, "" for the default order
-	sortDesc bool
-	total    int64
-	exact    bool
-	done     bool
-	started  bool
-	loading  bool
-	loaded   bool
-	err      string
-	gen      int // bumped by every reload: pages of an older one are dropped
-	limit    int
-	dropped  int // rows dropped off the top so far
+	sortCol    string // the column sorted on, "" for the default order
+	sortDesc   bool
+	total      int64
+	exact      bool
+	done       bool
+	started    bool
+	loading    bool
+	loaded     bool
+	err        string
+	gen        int // bumped by every reload: pages of an older one are dropped
+	limit      int
+	dropped    int // rows dropped off the top so far
 
 	changes  map[string]*esChange // staged, by docKey ("new\x00n" for new documents)
 	order    []string             // the keys of changes in staging order

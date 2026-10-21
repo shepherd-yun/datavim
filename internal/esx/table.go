@@ -16,8 +16,8 @@ type Hit struct {
 	// (set by the es package).
 	Truncated  bool
 	SourceSize int // the full _source's size in bytes
-	Highlight map[string][]string
-	Sort      []json.RawMessage // for search_after
+	Highlight  map[string][]string
+	Sort       []json.RawMessage // for search_after
 }
 
 // Table is a response shown as rows of text.
@@ -238,4 +238,3 @@ func decodeArray(raw json.RawMessage) ([]json.RawMessage, error) {
 	err := json.Unmarshal(raw, &arr)
 	return arr, err
 }
-

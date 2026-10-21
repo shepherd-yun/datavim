@@ -295,7 +295,7 @@ func (f *fakeES) answer(r es.Request) es.Response {
 		return jsonResp(map[string]bool{"succeeded": true})
 	case p == "_search" && r.Method == "POST":
 		var b struct {
-			Size int `json:"size"`
+			Size int                 `json:"size"`
 			Pit  struct{ ID string } `json:"pit"`
 		}
 		json.Unmarshal(r.Body, &b)
@@ -308,19 +308,25 @@ func (f *fakeES) answer(r es.Request) es.Response {
 		}
 		return f.page(c, b.Size, b.Pit.ID, "pit_id")
 	case len(segs) == 2 && segs[1] == "_search" && r.Method == "POST" && strings.Contains(query, "scroll="):
-		var b struct{ Size int `json:"size"` }
+		var b struct {
+			Size int `json:"size"`
+		}
 		json.Unmarshal(r.Body, &b)
 		id := fmt.Sprintf("scroll-%d", len(f.cursors)+1)
 		c := &fakeCursor{hits: f.matching(segs[0], r.Body)}
 		f.cursors[id] = c
 		return f.page(c, b.Size, id, "_scroll_id")
 	case len(segs) == 2 && segs[1] == "_search" && r.Method == "POST":
-		var b struct{ Size int `json:"size"` }
+		var b struct {
+			Size int `json:"size"`
+		}
 		json.Unmarshal(r.Body, &b)
 		c := &fakeCursor{hits: f.matching(segs[0], r.Body)}
 		return f.page(c, b.Size, "", "_none")
 	case p == "_search/scroll" && r.Method == "POST":
-		var b struct{ ScrollID string `json:"scroll_id"` }
+		var b struct {
+			ScrollID string `json:"scroll_id"`
+		}
 		json.Unmarshal(r.Body, &b)
 		c := f.cursors[b.ScrollID]
 		if c == nil {
