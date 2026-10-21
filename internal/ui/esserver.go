@@ -100,6 +100,7 @@ type esServerTab struct {
 	alloc    []es.NodeAllocation
 	pending  []es.PendingTask
 	shards   []es.Shard
+	tasks    []es.Task
 	// shardView are the Shards rows shown: not STARTED unless shardsAll,
 	// matching shardFilter.
 	shardView   []es.Shard
@@ -272,6 +273,10 @@ func (t *esServerTab) Update(msg tea.Msg) tea.Cmd {
 			return nil
 		}
 		return openOverlay(overlay.NewDetail(m.title, m.text))
+	case esCancelTaskMsg:
+		return t.runCancel(m.id)
+	case esTaskCancelledMsg:
+		return t.taskCancelled(m)
 	case esShardFilterMsg:
 		t.shardFilter = m.text
 		return t.setSection(secESShards)
@@ -295,6 +300,9 @@ func (t *esServerTab) apply(m esServerLoadedMsg) {
 	case secESShards:
 		t.shards = m.shards
 		t.renderShards()
+	case secESTasks:
+		t.tasks = m.tasks
+		t.grids[secESTasks].ReplaceResult(t.tasksResult())
 	case secESAllocation:
 		t.alloc = m.alloc
 		t.grids[secESAllocation].ReplaceResult(t.allocationResult())
@@ -331,6 +339,11 @@ func (t *esServerTab) Handle(a keymap.Action) tea.Cmd {
 			if r, _ := t.grids[secESNodes].Position(); r < len(t.nodes) {
 				return t.nodeDetail(t.nodes[r])
 			}
+		}
+		return nil
+	case keymap.KillClient:
+		if t.section == secESTasks {
+			return t.cancelTask()
 		}
 		return nil
 	}
@@ -490,6 +503,8 @@ func (t *esServerTab) empty() string {
 	switch {
 	case t.section == secESPending && len(t.pending) == 0:
 		return "no pending cluster tasks"
+	case t.section == secESTasks && len(t.tasks) == 0:
+		return "no long-running tasks"
 	case t.section == secESShards && len(t.shardView) == 0 && !t.shardsAll && t.shardFilter == "":
 		return "every shard is started"
 	}

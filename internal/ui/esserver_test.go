@@ -4,6 +4,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
@@ -335,5 +336,88 @@ func TestOpenESShards(t *testing.T) {
 	}
 	if !slices.Contains(f.sent(), "GET _cat/shards/orders?format=json&bytes=b&h=index,shard,prirep,state,docs,store,node,unassigned.reason") {
 		t.Errorf("sent %v", f.sent())
+	}
+}
+
+func twoTasks(f *fakeES) {
+	f.tasks = []es.Task{
+		{ID: "n1:7", Node: "n1", Action: "indices:data/write/reindex", Description: "reindex from [orders] to [orders-v2]", Running: 90 * time.Second, Cancellable: true, Total: 88000, Done: 12000},
+		{ID: "n1:9", Node: "n1", Action: "indices:admin/forcemerge", Description: "Force-merge indices [logs]", Running: time.Second, Total: -1, Done: -1},
+	}
+}
+
+func TestESServerTasks(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	tab := openESServerTab(t, m)
+	drain(t, m, tab.setSection(secESTasks))
+	if s := screen(m); !strings.Contains(s, "no long-running tasks") {
+		t.Errorf("screen:\n%s", s)
+	}
+	twoTasks(f)
+	drain(t, m, tab.Handle(keymap.Refresh))
+	rows := tab.grids[secESTasks].Result().Rows
+	if len(rows) != 2 || rows[0][2].Text != "12,000 / 88,000 (13%)" || rows[1][2].Text != "" || rows[0][5].Text != "n1:7" {
+		t.Errorf("rows = %v", rows)
+	}
+}
+
+func TestESServerCancelTask(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	twoTasks(f)
+	tab := openESServerTab(t, m)
+	drain(t, m, tab.setSection(secESTasks))
+	press(t, m, "d", "d")
+	if _, ok := m.overlay.(*overlay.Confirm); !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	press(t, m, "y")
+	if !slices.Contains(f.sent(), "POST _tasks/n1:7/_cancel") {
+		t.Fatalf("sent %v", f.sent())
+	}
+	if tab.status != "cancelled n1:7" || tab.statusE {
+		t.Errorf("status = %q", tab.status)
+	}
+	press(t, m, "j", "d", "d")
+	if m.overlay != nil || tab.status != "this task cannot be cancelled" {
+		t.Errorf("overlay %T status %q", m.overlay, tab.status)
+	}
+}
+
+func TestESServerCancelGone(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	twoTasks(f)
+	f.routes["POST _tasks/n1:7/_cancel"] = func(es.Request) es.Response {
+		return errResp(404, "resource_not_found_exception", "task [n1:7] is not found")
+	}
+	tab := openESServerTab(t, m)
+	drain(t, m, tab.setSection(secESTasks))
+	press(t, m, "d", "d", "y")
+	if tab.status != "task already finished" || tab.statusE {
+		t.Errorf("status = %q (err %v)", tab.status, tab.statusE)
+	}
+	sent := f.sent()
+	if last := sent[len(sent)-1]; !strings.HasPrefix(last, "GET _tasks?") {
+		t.Errorf("not refreshed: %v", sent)
+	}
+}
+
+func TestESServerCancelReadOnly(t *testing.T) {
+	ro := true
+	m, _, f := newESModel(t, config.Connection{ReadOnly: &ro})
+	twoTasks(f)
+	tab := openESServerTab(t, m)
+	drain(t, m, tab.setSection(secESTasks))
+	n := len(f.sent())
+	press(t, m, "d", "d")
+	if m.overlay != nil || tab.status != readOnlyHint || len(f.sent()) != n {
+		t.Errorf("overlay %T status %q sent %v", m.overlay, tab.status, f.sent()[n:])
+	}
+}
+
+func TestOpenESTasks(t *testing.T) {
+	m, _, _ := newESModel(t, config.Connection{})
+	drain(t, m, m.openESTasks("search"))
+	if tab, ok := m.activeTab().(*esServerTab); !ok || tab.section != secESTasks {
+		t.Fatalf("tab = %#v", m.activeTab())
 	}
 }

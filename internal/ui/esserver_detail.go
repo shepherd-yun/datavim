@@ -2,11 +2,13 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
 
+	"github.com/shepherd-yun/datavim/internal/db"
 	"github.com/shepherd-yun/datavim/internal/es"
 	"github.com/shepherd-yun/datavim/internal/esx"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
@@ -120,4 +122,96 @@ func (m *Model) openESShards(conn, index string) tea.Cmd {
 	}
 	t.shardFilter, t.shardsAll = index, true
 	return tea.Batch(cmd, t.setSection(secESShards))
+}
+
+// esCancelTaskMsg is a confirmed task cancel.
+type esCancelTaskMsg struct {
+	tabID int
+	id    string
+}
+
+func (m esCancelTaskMsg) TabID() int { return m.tabID }
+
+// esTaskCancelledMsg is a task cancel's outcome.
+type esTaskCancelledMsg struct {
+	tabID    int
+	conn, id string
+	err      error
+}
+
+func (m esTaskCancelledMsg) TabID() int { return m.tabID }
+func (m esTaskCancelledMsg) esMsg()     {}
+func (m esTaskCancelledMsg) failure() (string, error) {
+	if errors.Is(m.err, es.ErrTaskGone) {
+		return m.conn, nil
+	}
+	return m.conn, m.err
+}
+
+// openESTasks shows conn's cluster tab on its long-running tasks.
+func (m *Model) openESTasks(conn string) tea.Cmd {
+	cmd := m.openESServer(conn)
+	t, ok := m.activeTab().(*esServerTab)
+	if !ok || t.conn != conn {
+		return cmd
+	}
+	return tea.Batch(cmd, t.setSection(secESTasks))
+}
+
+func (t *esServerTab) tasksResult() *db.ResultSet {
+	rows := make([][]string, len(t.tasks))
+	for i, k := range t.tasks {
+		progress := ""
+		if k.Total > 0 {
+			progress = fmt.Sprintf("%s / %s (%d%%)", groupDigits(k.Done), groupDigits(k.Total), k.Done*100/k.Total)
+		}
+		rows[i] = []string{k.Action, k.Description, progress, durationText(k.Running), k.Node, k.ID}
+	}
+	return textResult([]string{"ACTION", "DESCRIPTION", "PROGRESS", "RUNNING", "NODE", "ID"}, rows)
+}
+
+// cancelTask asks to cancel the task under the cursor.
+func (t *esServerTab) cancelTask() tea.Cmd {
+	r, _ := t.grids[secESTasks].Position()
+	if r >= len(t.tasks) {
+		return nil
+	}
+	k := t.tasks[r]
+	if !k.Cancellable {
+		t.setStatus("this task cannot be cancelled", false)
+		return nil
+	}
+	cfg, _ := t.backend.Connection(t.conn)
+	path := "_tasks/" + k.ID + "/_cancel"
+	p := esPlan{
+		Class: esx.Classify("POST", path, nil), Count: -1, Method: "POST", Path: path,
+		Lines: []string{"cancel " + k.Action + " " + k.Description},
+	}
+	return confirmESCmd(cfg, p, esCancelTaskMsg{tabID: t.id, id: k.ID}, t.setStatus)
+}
+
+func (t *esServerTab) runCancel(id string) tea.Cmd {
+	tabID, b, conn := t.id, t.backend, t.conn
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), loadTimeout)
+		defer cancel()
+		err := withES(ctx, b, conn, func(d es.Doer) error { return es.CancelTask(ctx, d, id) })
+		return esTaskCancelledMsg{tabID: tabID, conn: conn, id: id, err: err}
+	}
+}
+
+func (t *esServerTab) taskCancelled(m esTaskCancelledMsg) tea.Cmd {
+	switch {
+	case errors.Is(m.err, es.ErrTaskGone):
+		t.setStatus("task already finished", false)
+	case m.err != nil:
+		t.setStatus(esReason(m.err), true)
+		return nil
+	default:
+		t.setStatus("cancelled "+m.id, false)
+	}
+	status, isErr := t.status, t.statusE
+	cmd := t.setSection(secESTasks)
+	t.status, t.statusE = status, isErr
+	return cmd
 }
