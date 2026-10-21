@@ -13,12 +13,17 @@ import (
 )
 
 // Wire splits the Confluent wire format: a 0 byte, then the schema id as
-// 4 big-endian bytes. ok is false when b is not in it.
+// 4 big-endian bytes. ok is false when b is not in it; id 0 is not one
+// (registry ids start at 1), so small big-endian numbers aren't taken for it.
 func Wire(b []byte) (id int, payload []byte, ok bool) {
 	if len(b) < 5 || b[0] != 0 {
 		return 0, nil, false
 	}
-	return int(binary.BigEndian.Uint32(b[1:5])), b[5:], true
+	id = int(binary.BigEndian.Uint32(b[1:5]))
+	if id == 0 {
+		return 0, nil, false
+	}
+	return id, b[5:], true
 }
 
 func wireHeader(id int) []byte {

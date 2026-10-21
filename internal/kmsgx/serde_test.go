@@ -21,6 +21,7 @@ func TestWire(t *testing.T) {
 		{[]byte{0, 0, 0, 1, 0}, 256, []byte{}, true},
 		{[]byte{1, 0, 0, 0, 7, 0xAA}, 0, nil, false},
 		{[]byte{0, 0, 0, 7}, 0, nil, false},
+		{[]byte{0, 0, 0, 0, 0, 0, 1, 0x23}, 0, nil, false}, // a LongSerializer key: registry ids start at 1
 		{nil, 0, nil, false},
 	} {
 		id, payload, ok := Wire(tc.in)
