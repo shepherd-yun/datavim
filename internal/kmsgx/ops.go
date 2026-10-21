@@ -10,6 +10,18 @@ const (
 	OpResetOffsets
 )
 
+// K2 operations, after K1's so their values stay put.
+const (
+	OpAlterConfigs Op = iota + OpResetOffsets + 1
+	OpAddPartitions
+	OpDeleteRecords
+	OpDeleteGroup
+	OpDeleteOffsets
+	OpRegisterSchema
+	OpSetCompatibility
+	OpDeleteSchemaVersion
+)
+
 // Level grades an Op (design §8.1).
 type Level int
 
@@ -29,7 +41,8 @@ const (
 
 // LevelOf grades op.
 func LevelOf(op Op) Level {
-	if op == OpDeleteTopic {
+	switch op {
+	case OpDeleteTopic, OpDeleteRecords, OpDeleteGroup, OpDeleteOffsets, OpDeleteSchemaVersion:
 		return LevelDanger
 	}
 	return LevelWrite
