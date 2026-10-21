@@ -85,6 +85,7 @@ type fakeKafkaOpener struct {
 	clients    []*fakeKafkaClient
 	readers    int
 	authFailed bool
+	err        error // returned by the next opens when set
 	during     func() // runs inside the next open, once
 }
 
@@ -101,6 +102,9 @@ func (f *fakeKafkaOpener) open(_ context.Context, cfg kafka.Config) (kafka.Clien
 	f.cfgs = append(f.cfgs, cfg)
 	if f.authFailed {
 		return nil, kafka.ErrAuthFailed
+	}
+	if f.err != nil {
+		return nil, f.err
 	}
 	c := &fakeKafkaClient{}
 	f.clients = append(f.clients, c)

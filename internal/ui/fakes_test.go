@@ -411,6 +411,7 @@ type fakeBackend struct {
 	addErr       error
 	lostConns    int
 	passphrases  []string
+	secrets      []string // SetSecret calls, "conn:kind:value"
 	trusted      []string
 	others       map[string]*fakeConn // connections with their own fakeConn; the rest share conn
 	redis        *fakeRedis           // backs the redis connections addRedis added
@@ -627,6 +628,14 @@ func (f *fakeBackend) SetReadOnly(name string, ro bool) error {
 		}
 	}
 	return fmt.Errorf("unknown connection %q", name)
+}
+
+func (f *fakeBackend) SetSecret(conn, kind, value string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.secrets = append(f.secrets, conn+":"+kind+":"+value)
+	f.connErr = nil
+	return nil
 }
 
 func (f *fakeBackend) SetPassphrase(path, passphrase string) {

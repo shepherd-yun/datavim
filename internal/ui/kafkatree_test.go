@@ -8,6 +8,7 @@ import (
 
 	"github.com/shepherd-yun/sqlvim/internal/config"
 	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
@@ -259,6 +260,29 @@ func TestKafkaPasswordPrompt(t *testing.T) {
 	pressAll(t, m, "enter")
 	if root := m.tree.Roots()[0]; len(root.Children) != 3 {
 		t.Fatalf("after the password: %+v", root.Children)
+	}
+}
+
+func TestSecretPromptRetries(t *testing.T) {
+	m, b, _ := newKafkaModel(t, config.Connection{Params: map[string]string{
+		"sasl": "oauth", "oauth_token_url": "https://idp/token", "oauth_client_id": "cid",
+	}})
+	b.setConnErr(&session.SecretRequiredError{Conn: "events", Kind: session.SecretOAuth, Wrong: true})
+	pressAll(t, m, "l")
+	sec, ok := m.overlay.(*overlay.Secret)
+	if !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	if v := sec.View(80, 20); !strings.Contains(v, "OAuth") || !strings.Contains(v, "Wrong. Client secret for cid:") {
+		t.Fatalf("prompt:\n%s", v)
+	}
+	typeText(t, m, "s")
+	pressAll(t, m, "enter")
+	if !slices.Equal(b.secrets, []string{"events:oauth:s"}) {
+		t.Fatalf("SetSecret calls = %v", b.secrets)
+	}
+	if root := m.tree.Roots()[0]; len(root.Children) != 3 {
+		t.Fatalf("after the secret: %+v", root.Children)
 	}
 }
 

@@ -129,7 +129,7 @@ func (m *Model) kafkaTreeLoaded(msg kafkaTreeMsg) tea.Cmd {
 		m.overlay = overlay.NewPassword(n.Conn)
 		return nil
 	}
-	if sshPrompt(msg.err) != nil {
+	if m.userPrompt(msg.err) != nil {
 		m.tree.CancelLoad(n)
 		m.retryNode = n
 		return nil

@@ -90,7 +90,7 @@ func (m *Manager) Kafka(ctx context.Context, name string) (kafka.Client, error) 
 		return nil, err
 	}
 	raw, err := m.KafkaOpen(ctx, kc)
-	if err := kafkaOpenErr(name, err); err != nil {
+	if err := m.kafkaOpenErr(name, err); err != nil {
 		return nil, err
 	}
 	m.mu.Lock()
@@ -123,7 +123,7 @@ func (m *Manager) KafkaReader(ctx context.Context, name string, rc kafka.ReaderC
 		return nil, err
 	}
 	r, err := m.KafkaReaderOpen(ctx, kc, rc)
-	if err := kafkaOpenErr(name, err); err != nil {
+	if err := m.kafkaOpenErr(name, err); err != nil {
 		return nil, err
 	}
 	return r, nil
@@ -144,8 +144,8 @@ func (m *Manager) kafkaConn(name string, available bool) (config.Connection, err
 }
 
 // kafkaConfig maps the connection to a kafka.Config: brokers, SASL with
-// the known password (none known: ErrPasswordRequired), TLS params and the
-// SSH tunnel.
+// the known password (none known: ErrPasswordRequired) or OAuth client
+// secret (*SecretRequiredError), TLS params, broker_map and the SSH tunnel.
 func (m *Manager) kafkaConfig(ctx context.Context, cfg config.Connection) (kafka.Config, error) {
 	kc := kafka.Config{
 		Brokers: config.KafkaBrokers(cfg), SASL: cfg.Params["sasl"],
@@ -156,13 +156,31 @@ func (m *Manager) kafkaConfig(ctx context.Context, cfg config.Connection) (kafka
 	if kc.ClientID == "" {
 		kc.ClientID = "sqlvim"
 	}
-	if kc.SASL != "" {
+	switch kc.SASL {
+	case "":
+	case "oauth":
+		cs, err := m.secretFor(cfg.Name, SecretOAuth)
+		if err != nil {
+			return kafka.Config{}, err
+		}
+		kc.OAuth = &kafka.OAuthConfig{
+			TokenURL: cfg.Params["oauth_token_url"], ClientID: cfg.Params["oauth_client_id"],
+			ClientSecret: cs, Scope: cfg.Params["oauth_scope"],
+		}
+	case "aws-msk-iam":
+		kc.AWS = &kafka.AWSConfig{Region: cfg.Params["aws_region"], Profile: cfg.Params["aws_profile"]}
+	default:
 		pw, err := m.password(cfg.Name)
 		if err != nil {
 			return kafka.Config{}, err
 		}
 		kc.User, kc.Password = cfg.User, pw
 	}
+	bm, err := config.KafkaBrokerMap(cfg)
+	if err != nil {
+		return kafka.Config{}, err
+	}
+	kc.BrokerMap = bm
 	dial, err := m.dial(ctx, cfg)
 	if err != nil {
 		return kafka.Config{}, err
@@ -171,9 +189,12 @@ func (m *Manager) kafkaConfig(ctx context.Context, cfg config.Connection) (kafka
 	return kc, nil
 }
 
-func kafkaOpenErr(name string, err error) error {
+func (m *Manager) kafkaOpenErr(name string, err error) error {
 	if errors.Is(err, kafka.ErrAuthFailed) {
 		return ErrPasswordRequired
+	}
+	if errors.Is(err, kafka.ErrOAuthRefused) {
+		return m.refusedSecret(name, SecretOAuth)
 	}
 	if err != nil {
 		return fmt.Errorf("connect %s: %w", name, err)

@@ -6,13 +6,54 @@ import (
 	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
+	"github.com/shepherd-yun/sqlvim/internal/session"
 	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
 )
 
 type (
-	passphraseMsg  struct{ path, passphrase string }
-	hostTrustedMsg struct{ host *tunnel.UnknownHostError }
+	passphraseMsg    struct{ path, passphrase string }
+	hostTrustedMsg   struct{ host *tunnel.UnknownHostError }
+	secretEnteredMsg struct{ conn, kind, value string }
 )
+
+// userPrompt is the popup that resolves err when err needs the user: SSH's
+// questions, or a secret other than the connection's password.
+func (m *Model) userPrompt(err error) overlay.Overlay {
+	if o := sshPrompt(err); o != nil {
+		return o
+	}
+	return m.secretPrompt(err)
+}
+
+// secretPrompt asks for a *session.SecretRequiredError's secret; nil for
+// other errors.
+func (m *Model) secretPrompt(err error) overlay.Overlay {
+	var se *session.SecretRequiredError
+	if !errors.As(err, &se) {
+		return nil
+	}
+	cfg, _ := m.backend.Connection(se.Conn)
+	title, label := "Schema Registry", "Password for "+cfg.Params["schema_registry_user"]+":"
+	if se.Kind == session.SecretOAuth {
+		title, label = "OAuth", "Client secret for "+cfg.Params["oauth_client_id"]+":"
+	}
+	if se.Wrong {
+		label = "Wrong. " + label
+	}
+	conn, kind := se.Conn, se.Kind
+	return overlay.NewSecret(title, label, func(s string) tea.Msg {
+		return secretEnteredMsg{conn: conn, kind: kind, value: s}
+	})
+}
+
+func (m *Model) secretEntered(msg secretEnteredMsg) tea.Cmd {
+	if err := m.backend.SetSecret(msg.conn, msg.kind, msg.value); err != nil {
+		m.setStatus(err.Error(), true)
+	} else if m.retryNode == nil {
+		m.setStatus("secret saved · run it again", false)
+	}
+	return m.retryLoad()
+}
 
 // sshPrompt returns the popup that resolves err when err needs the user: a
 // key passphrase, or accepting an unknown host key. Otherwise nil.

@@ -186,16 +186,21 @@ func (m *Manager) UpdateConnection(old string, c config.Connection, password str
 		}
 	}
 	m.resetLocked(old)
-	pw, known := m.passwords[old]
-	delete(m.passwords, old)
-	if known {
-		m.passwords[c.Name] = pw
+	renamed := accounts(c.Name)
+	for i, acct := range accounts(old) {
+		pw, known := m.passwords[acct]
+		delete(m.passwords, acct)
+		if known {
+			m.passwords[renamed[i]] = pw
+		}
 	}
 	m.mu.Unlock()
 	var errs []error
 	if c.Name != old {
-		if saved, err := m.secrets.Get(old); err == nil {
-			errs = append(errs, m.secrets.Set(c.Name, saved), m.secrets.Delete(old))
+		for i, acct := range accounts(old) {
+			if saved, err := m.secrets.Get(acct); err == nil {
+				errs = append(errs, m.secrets.Set(renamed[i], saved), m.secrets.Delete(acct))
+			}
 		}
 	}
 	if password != "" {
@@ -208,7 +213,7 @@ func (m *Manager) UpdateConnection(old string, c config.Connection, password str
 }
 
 // RemoveConnection forgets the connection, closes it and deletes its saved
-// password.
+// password and secrets.
 func (m *Manager) RemoveConnection(name string) error {
 	if _, ok := m.Connection(name); !ok {
 		return fmt.Errorf("unknown connection %q", name)
@@ -222,9 +227,15 @@ func (m *Manager) RemoveConnection(name string) error {
 	m.conns = slices.DeleteFunc(m.conns, func(c config.Connection) bool { return c.Name == name })
 	delete(m.savedRO, name)
 	m.resetLocked(name)
-	delete(m.passwords, name)
+	var errs []error
+	for _, acct := range accounts(name) {
+		delete(m.passwords, acct)
+	}
 	m.mu.Unlock()
-	if err := m.secrets.Delete(name); err != nil {
+	for _, acct := range accounts(name) {
+		errs = append(errs, m.secrets.Delete(acct))
+	}
+	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("connection removed, but its keychain password was not: %w", errors.Join(ErrKeychain, err))
 	}
 	return nil

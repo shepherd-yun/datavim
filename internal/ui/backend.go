@@ -28,6 +28,9 @@ type Backend interface {
 	// KafkaReader opens a message reader for one view; the caller closes it.
 	KafkaReader(ctx context.Context, name string, rc kafka.ReaderConfig) (kafka.Reader, error)
 	SetPassword(name, password string, save bool) error
+	// SetSecret remembers and saves a secret other than the password
+	// (session.SecretOAuth, session.SecretSchemaRegistry).
+	SetSecret(conn, kind, value string) error
 	// Reset drops the open connections of name so the next Conn reconnects.
 	Reset(name string)
 	// AddConnection saves a new connection to connections.toml (and its
