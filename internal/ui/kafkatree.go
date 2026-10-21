@@ -74,7 +74,8 @@ func withKafka(ctx context.Context, b Backend, conn string, fn func(kafka.Client
 }
 
 // kafkaTreeMsg is the load of a kafka connection's tree. err fails the
-// whole load; errs are sections the user may not read.
+// whole load; errs are sections the user may not read; prompt is a secret
+// the registry wants (the rest of the tree loads anyway).
 type kafkaTreeMsg struct {
 	node     *tree.Node
 	cluster  kafka.ClusterInfo
@@ -83,6 +84,7 @@ type kafkaTreeMsg struct {
 	subjects []kafka.Subject
 	registry bool
 	errs     map[string]string
+	prompt   error
 	err      error
 }
 
@@ -119,7 +121,7 @@ func loadKafkaTree(b Backend, n *tree.Node) tea.Cmd {
 			return nil
 		})
 		if msg.err == nil {
-			msg.subjects, msg.registry, msg.err = loadSubjects(ctx, b, conn, msg.errs)
+			msg.subjects, msg.registry, msg.prompt = loadSubjects(ctx, b, conn, msg.errs)
 		}
 		if msg.err != nil {
 			slog.Warn("load kafka tree", "conn", conn, "err", msg.err)
@@ -130,7 +132,7 @@ func loadKafkaTree(b Backend, n *tree.Node) tea.Cmd {
 
 // loadSubjects reads the Schema Registry's subjects. A registry that
 // fails is its section's error, the rest of the tree loads; one that wants
-// a password fails the load, so it is asked for.
+// a password is also returned, so it is asked for.
 func loadSubjects(ctx context.Context, b Backend, conn string, errs map[string]string) ([]kafka.Subject, bool, error) {
 	reg, err := b.SchemaRegistry(ctx, conn)
 	if errors.Is(err, session.ErrNoRegistry) {
@@ -142,6 +144,7 @@ func loadSubjects(ctx context.Context, b Backend, conn string, errs map[string]s
 	}
 	var se *session.SecretRequiredError
 	if errors.As(err, &se) {
+		errs[secSchemas] = "the schema registry wants a password"
 		return nil, true, err
 	}
 	if err != nil {
@@ -179,6 +182,10 @@ func (m *Model) kafkaTreeLoaded(msg kafkaTreeMsg) tea.Cmd {
 	st.cluster, st.topics, st.groups, st.errs = msg.cluster, msg.topics, msg.groups, msg.errs
 	st.subjects, st.registry = msg.subjects, msg.registry
 	m.buildKafkaTree(n.Conn)
+	if o := m.userPrompt(msg.prompt); o != nil && m.overlay == nil {
+		m.overlay = o
+		m.retryNode = n // the secret reloads the tree
+	}
 	if st.selectTopic != "" {
 		m.selectNewTopic(n.Conn, st.selectTopic)
 		st.selectTopic = ""

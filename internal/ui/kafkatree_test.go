@@ -335,6 +335,30 @@ func TestTreeSchemaVersions(t *testing.T) {
 	}
 }
 
+// TestTreeRegistryPassword: a registry that wants a password asks for it
+// without holding back the topics; Esc leaves the section's error.
+func TestTreeRegistryPassword(t *testing.T) {
+	m, b, k := newKafkaModel(t, withRegistry(config.Connection{}))
+	k.addTopic("orders", 1, 0, 1)
+	b.registry = newFakeRegistry()
+	b.registry.errs["Subjects"] = &session.SecretRequiredError{Conn: "events", Kind: session.SecretSchemaRegistry}
+	m.setFocus(focusTree)
+	pressAll(t, m, "l")
+	if _, ok := m.overlay.(*overlay.Secret); !ok {
+		t.Fatalf("overlay = %T", m.overlay)
+	}
+	if s := section(t, m, "events", secTopics); len(s.Children) != 1 {
+		t.Fatalf("topics while the prompt is open = %+v", s)
+	}
+	pressAll(t, m, "esc")
+	if s := section(t, m, "events", secTopics); len(s.Children) != 1 {
+		t.Fatalf("topics after esc = %+v", s)
+	}
+	if s := section(t, m, "events", secSchemas); !strings.Contains(s.Err, "password") {
+		t.Fatalf("schema section = %+v", s)
+	}
+}
+
 func TestTreeSchemaError(t *testing.T) {
 	m, b, k := newKafkaModel(t, withRegistry(config.Connection{}))
 	k.addTopic("orders", 1, 0, 1)
