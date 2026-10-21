@@ -128,6 +128,17 @@ func (k *fakeKafka) call(s string) {
 	k.calls = append(k.calls, s)
 }
 
+// callsOf is the calls that start with prefix.
+func (k *fakeKafka) callsOf(prefix string) []string {
+	var out []string
+	for _, c := range k.callList() {
+		if strings.HasPrefix(c, prefix) {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 func (k *fakeKafka) callList() []string {
 	k.mu.Lock()
 	defer k.mu.Unlock()

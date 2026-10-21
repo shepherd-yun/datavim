@@ -40,6 +40,10 @@ const (
 	KafkaProduceResults Context = "kafka_produce_results"
 	// KafkaServer is a Kafka connection's cluster status tab.
 	KafkaServer Context = "kafka_server"
+	// KafkaConfig is a Kafka topic tab's Config section, where configs are edited.
+	KafkaConfig Context = "kafka_config"
+	// KafkaSchema is a Schema Registry subject's tab.
+	KafkaSchema Context = "kafka_schema"
 	// Popup holds the keys popups read themselves (they bypass the keymap):
 	// only one-key bindings count there.
 	Popup Context = "popup"
@@ -176,6 +180,13 @@ const (
 	ToggleInternal     Action = "kafka.internal"
 	SortGroups         Action = "kafka.sort_groups"
 	ToggleHeaders      Action = "kafka.headers"
+	AddPartitions      Action = "kafka.add_partitions"
+	DeleteRecords      Action = "kafka.delete_records"
+	DeleteOffsets      Action = "kafka.delete_offsets"
+	ResendMessage      Action = "kafka.resend"
+	ResendShown        Action = "kafka.resend_shown"
+	ToggleIsolation    Action = "kafka.isolation"
+	SetCompatibility   Action = "kafka.compat"
 )
 
 const (

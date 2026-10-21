@@ -68,7 +68,7 @@ var kindDescs = map[Context]map[Action][3]string{ // [SQL, Redis, Kafka]
 	Tree: {
 		Open:         {"Open: table data, a column or index in the structure, a foreign key's table", "Open the key", "Open the topic / group"},
 		EditNode:     {"Edit connection / modify table", "Edit connection", "Edit connection"},
-		DeleteNode:   {"Delete connection / drop table or view", "Delete connection / delete Redis keys", "Delete connection / delete topic"},
+		DeleteNode:   {"Delete connection / drop table or view", "Delete connection / delete Redis keys", "Delete connection / delete topic / delete group / soft-delete schema version"},
 		RenameTable:  {"Rename table or view", "Rename Redis key", ""},
 		NewKey:       {"", "New Redis key", "New topic"},
 		FilterPrompt: {"", "Filter Redis keys (pattern)", "Filter topics / groups by name"},

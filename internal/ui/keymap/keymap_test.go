@@ -585,7 +585,7 @@ func TestKafkaBindings(t *testing.T) {
 		}
 		return ""
 	}
-	if d := descOf(Tree, KindKafka, DeleteNode); d != "Delete connection / delete topic" {
+	if d := descOf(Tree, KindKafka, DeleteNode); d != "Delete connection / delete topic / delete group / soft-delete schema version" {
 		t.Errorf("DeleteNode on kafka = %q", d)
 	}
 	if d := descOf(Tree, KindKafka, NewKey); d != "New topic" {
@@ -611,5 +611,58 @@ func TestKafkaBindings(t *testing.T) {
 		if !slices.Contains(Contexts(), ctx) {
 			t.Errorf("Contexts() lacks %s", ctx)
 		}
+	}
+}
+
+func TestKafkaKeymapK2(t *testing.T) {
+	k := Default()
+	for _, tc := range []struct {
+		ctx  Context
+		keys string
+		want Action
+	}{
+		{KafkaConfig, "i", EditCell},
+		{KafkaConfig, "enter", EditCell},
+		{KafkaConfig, "d d", DeleteRow},
+		{KafkaConfig, "u", UndoEdit},
+		{KafkaConfig, "U", UndoAllEdits},
+		{KafkaConfig, "space w", SubmitEdits},
+		{KafkaConfig, "]", NextSection},
+		{KafkaConfig, "[", PrevSection},
+		{KafkaConfig, "j", Down},
+		{KafkaTopic, "o", AddPartitions},
+		{KafkaTopic, "X", DeleteRecords},
+		{KafkaMessages, "X", DeleteRecords},
+		{KafkaMessages, "p", ResendMessage},
+		{KafkaMessages, "P", ResendShown},
+		{KafkaMessages, "I", ToggleIsolation},
+		{KafkaGroup, "X", DeleteOffsets},
+		{KafkaSchema, "enter", Open},
+		{KafkaSchema, "m", MarkCompare},
+		{KafkaSchema, "C", Compare},
+		{KafkaSchema, "space v", ExternalEdit},
+		{KafkaSchema, "c", SetCompatibility},
+		{KafkaSchema, "d d", DeleteNode},
+		{KafkaSchema, "]", NextSection},
+		{KafkaSchema, "/", Search},
+		{KafkaSchema, "space r", Refresh},
+	} {
+		if a, r := k.Resolve(tc.ctx, strings.Fields(tc.keys)); a != tc.want || r != Matched {
+			t.Errorf("%s %q = %q (%v), want %q", tc.ctx, tc.keys, a, r, tc.want)
+		}
+	}
+	for _, ctx := range []Context{KafkaConfig, KafkaSchema} {
+		if !slices.Contains(Contexts(), ctx) {
+			t.Errorf("Contexts() lacks %s", ctx)
+		}
+	}
+	has := func(entries []HelpEntry, a string) bool {
+		return slices.ContainsFunc(entries, func(e HelpEntry) bool { return strings.Contains(e.Desc, a) })
+	}
+	if !has(k.Help(Tree, KindKafka), "delete group") {
+		t.Errorf("tree help on kafka lacks deleting groups: %+v", k.Help(Tree, KindKafka))
+	}
+	if has(k.Help(Tree, KindKafka), "Compare with the marked node") {
+		t.Error("the tree's compare is listed on kafka")
 	}
 }

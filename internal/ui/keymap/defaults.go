@@ -208,7 +208,7 @@ func DefaultBindings() []Binding {
 	b = append(b, gridBindings(RedisBigKeys)...)
 	b = append(b, Binding{RedisBigKeys, keys("enter"), Open, "Open the key"})
 
-	for _, ctx := range []Context{KafkaTopic, KafkaMessages, KafkaGroup, KafkaServer} {
+	for _, ctx := range []Context{KafkaTopic, KafkaMessages, KafkaGroup, KafkaServer, KafkaConfig} {
 		b = append(b, gridBindings(ctx)...)
 		b = append(b,
 			Binding{ctx, keys("["), PrevSection, "Previous section"},
@@ -232,6 +232,31 @@ func DefaultBindings() []Binding {
 		Binding{KafkaGroup, keys("g", "d"), OpenCellKey, "Jump to the message this group is stuck on"},
 		Binding{KafkaGroup, keys("R"), ResetOffsets, "Reset offsets…"},
 		Binding{KafkaServer, keys("enter"), Open, "Open the topic's partitions"},
+		Binding{KafkaConfig, keys("i"), EditCell, "Edit the config value"},
+		Binding{KafkaConfig, keys("enter"), EditCell, "Edit the config value"},
+		Binding{KafkaConfig, keys("d", "d"), DeleteRow, "Back to the default (removes the override)"},
+		Binding{KafkaConfig, keys("u"), UndoEdit, "Undo the last change"},
+		Binding{KafkaConfig, keys("U"), UndoAllEdits, "Discard every change"},
+		Binding{KafkaConfig, keys(LeaderToken, "w"), SubmitEdits, "Apply the config changes (:w)"},
+		Binding{KafkaTopic, keys("o"), AddPartitions, "Add partitions…"},
+		Binding{KafkaTopic, keys("X"), DeleteRecords, "Delete messages before an offset…"},
+		Binding{KafkaMessages, keys("X"), DeleteRecords, "Delete messages up to this one…"},
+		Binding{KafkaMessages, keys("p"), ResendMessage, "Copy the message to a producer console"},
+		Binding{KafkaMessages, keys("P"), ResendShown, "Copy every shown message to a producer console"},
+		Binding{KafkaMessages, keys("I"), ToggleIsolation, "Isolation: read_committed / read_uncommitted"},
+		Binding{KafkaGroup, keys("X"), DeleteOffsets, "Delete the group's offsets on this topic…"},
+	)
+	b = append(b, vertical(KafkaSchema)...)
+	b = append(b, search(KafkaSchema)...)
+	b = append(b,
+		Binding{KafkaSchema, keys("["), PrevSection, "Previous section"},
+		Binding{KafkaSchema, keys("]"), NextSection, "Next section"},
+		Binding{KafkaSchema, keys("enter"), Open, "Show this version"},
+		Binding{KafkaSchema, keys("m"), MarkCompare, "Mark the version to compare"},
+		Binding{KafkaSchema, keys("C"), Compare, "Diff with the marked version (or the latest)"},
+		Binding{KafkaSchema, keys(LeaderToken, "v"), ExternalEdit, "Register a new version (edit in $EDITOR)"},
+		Binding{KafkaSchema, keys("c"), SetCompatibility, "Set the compatibility level…"},
+		Binding{KafkaSchema, keys("d", "d"), DeleteNode, "Soft-delete the version"},
 	)
 	b = append(b, gridBindings(KafkaProduceResults)...)
 	b = append(b,

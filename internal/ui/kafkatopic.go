@@ -88,6 +88,7 @@ type topicTab struct {
 
 	detail    *kafka.TopicDetail
 	configs   []kafka.ConfigEntry
+	cfgEdits  []kmsgx.ConfigEdit // staged in the Config section, in order
 	detailErr string
 	cfgErr    string
 	loading   bool
@@ -133,8 +134,11 @@ func (t *topicTab) ID() int       { return t.id }
 func (t *topicTab) Title() string { return t.topic }
 func (t *topicTab) Key() string   { return topicTabKey(t.conn, t.topic) }
 func (t *topicTab) Context() keymap.Context {
-	if t.section == secMessages {
+	switch t.section {
+	case secMessages:
 		return keymap.KafkaMessages
+	case secConfig:
+		return keymap.KafkaConfig
 	}
 	return keymap.KafkaTopic
 }
@@ -258,6 +262,9 @@ func (t *topicTab) Update(msg tea.Msg) tea.Cmd {
 	if cmd, ok := t.msgsUpdate(msg); ok {
 		return cmd
 	}
+	if cmd, ok := t.configsUpdate(msg); ok {
+		return cmd
+	}
 	switch m := msg.(type) {
 	case topicLoadedMsg:
 		t.loading = false
@@ -291,6 +298,11 @@ func (t *topicTab) Handle(a keymap.Action) tea.Cmd {
 	t.status = ""
 	if t.section == secMessages {
 		if cmd, ok := t.handleMsgs(a); ok {
+			return cmd
+		}
+	}
+	if t.section == secConfig {
+		if cmd, ok := t.handleConfig(a); ok {
 			return cmd
 		}
 	}
@@ -454,29 +466,6 @@ func (t *topicTab) partMark(row, _ int) grid.Mark {
 	return grid.MarkNone
 }
 
-func (t *topicTab) configResult() *db.ResultSet {
-	if t.configs == nil {
-		return nil
-	}
-	rows := make([][]string, len(t.configs))
-	for i, c := range t.configs {
-		v := c.Value
-		if c.Sensitive {
-			v = "******"
-		}
-		rows[i] = []string{c.Name, v, c.Source}
-	}
-	return textResult([]string{"NAME", "VALUE", "SOURCE"}, rows)
-}
-
-// cfgMark highlights the configs set away from their default.
-func (t *topicTab) cfgMark(row, _ int) grid.Mark {
-	if row < len(t.configs) && !t.configs[row].Default {
-		return grid.MarkChanged
-	}
-	return grid.MarkNone
-}
-
 func (t *topicTab) consumersResult() *db.ResultSet {
 	nparts := 0
 	if t.detail != nil {
@@ -525,6 +514,9 @@ func (t *topicTab) View(focused bool) string {
 		lines = append(lines, theme.Error.Render(textutil.Sanitize(t.detailErr)))
 	case t.detail != nil:
 		lines = append(lines, theme.Muted.Render(t.header()))
+		if note := t.cfgNote(); note != "" {
+			lines = append(lines, note)
+		}
 	default:
 		lines = append(lines, theme.Muted.Render("loading…"))
 	}

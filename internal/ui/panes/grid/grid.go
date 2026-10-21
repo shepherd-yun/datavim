@@ -29,6 +29,7 @@ const (
 	MarkDefault       // a cell of a new row left to the column default
 	MarkDeleted       // a cell of a row marked for deletion
 	MarkError         // a cell of a row in trouble (an offline partition)
+	MarkSet           // a value set away from its default
 )
 
 // Model is a table with a cell cursor.
@@ -124,6 +125,8 @@ func (m *Model) look(r, c int, v db.Value) (lipgloss.Style, string) {
 		style = theme.Deleted
 	case MarkError:
 		style = theme.Error
+	case MarkSet:
+		style = theme.Accent
 	}
 	return style, text
 }

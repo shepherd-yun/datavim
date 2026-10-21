@@ -53,7 +53,11 @@ func TestTopicTabSections(t *testing.T) {
 	want := []topicSection{secPartitions, secConfig, secConsumers, secConsumers}
 	for _, w := range want {
 		pressAll(t, m, "]")
-		if tt.section != w || tt.Context() != keymap.KafkaTopic {
+		ctx := keymap.KafkaTopic
+		if w == secConfig {
+			ctx = keymap.KafkaConfig
+		}
+		if tt.section != w || tt.Context() != ctx {
 			t.Fatalf("section = %d (want %d), context %s", tt.section, w, tt.Context())
 		}
 	}
@@ -96,7 +100,7 @@ func TestTopicTabConfigSensitive(t *testing.T) {
 		t.Fatalf("screen:\n%s", s)
 	}
 	// row 0 cleanup.policy is a default, row 1 retention.ms is set on the topic
-	if tt.cfgMark(0, 0) != grid.MarkNone || tt.cfgMark(1, 0) != grid.MarkChanged {
+	if tt.cfgMark(0, 0) != grid.MarkNone || tt.cfgMark(1, 0) != grid.MarkSet {
 		t.Fatal("non-default configs are highlighted")
 	}
 }
