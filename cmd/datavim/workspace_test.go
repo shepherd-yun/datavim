@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/config"
 )
 
 func TestSelectWorkspaceDefault(t *testing.T) {
@@ -29,11 +29,11 @@ func TestSelectWorkspaceFlagBeatsEnv(t *testing.T) {
 	}
 	ws, err := selectWorkspace(cfg, state, workspaceOptions{name: "personal", env: "work"})
 	if err != nil || ws.Name != "personal" {
-		t.Fatalf("ws = %+v, %v; -w wins over SQLVIM_WORKSPACE", ws, err)
+		t.Fatalf("ws = %+v, %v; -w wins over DATAVIM_WORKSPACE", ws, err)
 	}
 	ws, err = selectWorkspace(cfg, state, workspaceOptions{env: "work"})
 	if err != nil || ws.Name != "work" {
-		t.Fatalf("ws = %+v, %v; SQLVIM_WORKSPACE is used without -w", ws, err)
+		t.Fatalf("ws = %+v, %v; DATAVIM_WORKSPACE is used without -w", ws, err)
 	}
 }
 
@@ -43,7 +43,7 @@ func TestSelectWorkspaceMissing(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := selectWorkspace(cfg, t.TempDir(), workspaceOptions{name: "personal"})
-	want := "workspace \"personal\" does not exist (have: default, work)\ncreate it with: sqlvim -w personal --create"
+	want := "workspace \"personal\" does not exist (have: default, work)\ncreate it with: datavim -w personal --create"
 	if err == nil || err.Error() != want {
 		t.Fatalf("err = %v, want %q", err, want)
 	}
@@ -74,7 +74,7 @@ func TestSelectWorkspaceErrors(t *testing.T) {
 		o    workspaceOptions
 		want string
 	}{
-		{workspaceOptions{create: true}, "--create needs a workspace name (-w or SQLVIM_WORKSPACE)"},
+		{workspaceOptions{create: true}, "--create needs a workspace name (-w or DATAVIM_WORKSPACE)"},
 		{workspaceOptions{name: "default", create: true}, "--create cannot be used with the default workspace"},
 		{workspaceOptions{env: "default", create: true}, "--create cannot be used with the default workspace"},
 		{workspaceOptions{name: "Work"}, `invalid workspace name "Work"`},

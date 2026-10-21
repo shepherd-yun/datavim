@@ -9,10 +9,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
-	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
-	"github.com/shepherd-yun/sqlvim/internal/ui/vimedit"
+	"github.com/shepherd-yun/datavim/internal/ui/highlight"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/ui/uitest"
+	"github.com/shepherd-yun/datavim/internal/ui/vimedit"
 )
 
 func typeText(m *Model, s string) {

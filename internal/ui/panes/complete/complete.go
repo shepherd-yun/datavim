@@ -8,8 +8,8 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"github.com/sahilm/fuzzy"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // Kind tags a candidate.

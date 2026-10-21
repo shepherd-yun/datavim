@@ -7,8 +7,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 )
 
 func TestConnFormSubmit(t *testing.T) {

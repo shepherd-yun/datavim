@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 // ConfigEdit is one staged change: a new value, or back to the default.

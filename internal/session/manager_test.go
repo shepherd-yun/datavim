@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
-	"github.com/shepherd-yun/sqlvim/internal/secret"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db/tunnel"
+	"github.com/shepherd-yun/datavim/internal/secret"
 )
 
 type fakeSecrets struct{ m map[string]string }

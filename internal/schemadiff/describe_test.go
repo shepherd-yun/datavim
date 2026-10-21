@@ -3,7 +3,7 @@ package schemadiff
 import (
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func TestDescribe(t *testing.T) {

@@ -11,15 +11,15 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/sparkline"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/sparkline"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // sqlSection is one part of a SQL connection's server tab.
@@ -233,7 +233,7 @@ func (t *sqlServerTab) load() tea.Cmd {
 	}
 }
 
-// marked is the sessions with "*" before the first cell of sqlvim's own.
+// marked is the sessions with "*" before the first cell of datavim's own.
 func marked(l db.SessionList) *db.ResultSet {
 	if l.Rows == nil {
 		return nil
@@ -605,7 +605,7 @@ func (t *sqlServerTab) summary() string {
 		}
 		s := plural(l.Total, "session") + " · " + strconv.Itoa(l.Active) + " running · " + idle
 		if slices.Contains(l.Self, true) {
-			s += " · * sqlvim"
+			s += " · * datavim"
 		}
 		return s
 	case sqlSettings:

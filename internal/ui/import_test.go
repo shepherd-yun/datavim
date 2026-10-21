@@ -12,8 +12,8 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/importer"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/importer"
 )
 
 // importFixture writes name into a temp directory that becomes the export
@@ -273,9 +273,9 @@ func TestImportIntoATable(t *testing.T) {
 	press(t, m, "y")
 	want := []string{
 		"START TRANSACTION",
-		"SAVEPOINT sqlvim_import",
+		"SAVEPOINT datavim_import",
 		"INSERT INTO `app`.`users` (`id`, `name`) VALUES (?, ?), (?, ?)",
-		"RELEASE SAVEPOINT sqlvim_import",
+		"RELEASE SAVEPOINT datavim_import",
 		"COMMIT",
 	}
 	if got := b.conn.execList(); !slices.Equal(got[len(got)-len(want):], want) {

@@ -10,16 +10,16 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/datadiff"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/datadiff"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/schemadiff"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/complete"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // dataCellWidth caps a column of the data view; l / h scroll the columns
@@ -529,7 +529,7 @@ func (t *diffTab) writeDataScript() tea.Cmd {
 func (t *diffTab) dataScriptText(stmts []string) string {
 	v := t.data
 	var b strings.Builder
-	b.WriteString("-- sqlvim data sync\n")
+	b.WriteString("-- datavim data sync\n")
 	fmt.Fprintf(&b, "-- source: %s\n-- target: %s\n-- key: %s\n", v.src.label(), v.tgt.label(), strings.Join(v.spec.Key, ", "))
 	if v.where != "" {
 		fmt.Fprintf(&b, "-- where: %s\n", strings.ReplaceAll(v.where, "\n", " "))

@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func TestFileName(t *testing.T) {

@@ -13,18 +13,18 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/export"
-	"github.com/shepherd-yun/sqlvim/internal/history"
-	"github.com/shepherd-yun/sqlvim/internal/meta"
-	"github.com/shepherd-yun/sqlvim/internal/session"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
-	"github.com/shepherd-yun/sqlvim/internal/ui/vimedit"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/export"
+	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/meta"
+	"github.com/shepherd-yun/datavim/internal/session"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/ui/vimedit"
 )
 
 const defaultWhichKeyDelay = 300 * time.Millisecond
@@ -172,7 +172,7 @@ func New(b Backend, st Store, settings config.Settings) *Model {
 // program starts: open tabs keep the keymap they were created with.
 func (m *Model) SetKeymap(k *keymap.Keymap) { m.keys = k }
 
-// SetWorkspace names the workspace sqlvim runs in; the default workspace
+// SetWorkspace names the workspace datavim runs in; the default workspace
 // ("" or "default") is not shown.
 func (m *Model) SetWorkspace(name string) {
 	if name == config.DefaultWorkspace {
@@ -181,12 +181,12 @@ func (m *Model) SetWorkspace(name string) {
 	m.workspace = name
 }
 
-// title is "sqlvim", followed by the workspace when it is not the default.
+// title is "datavim", followed by the workspace when it is not the default.
 func (m *Model) title() string {
 	if m.workspace == "" {
-		return "sqlvim"
+		return "datavim"
 	}
-	return "sqlvim — " + m.workspace
+	return "datavim — " + m.workspace
 }
 
 func (m *Model) Init() tea.Cmd { return loadFavorites(m.store) }

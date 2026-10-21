@@ -13,10 +13,10 @@ func TestWorkspaceIsShown(t *testing.T) {
 	if status := lines[len(lines)-1]; !strings.Contains(status, "[personal]") {
 		t.Fatalf("status bar must name the workspace:\n%s", status)
 	}
-	if !strings.Contains(s, "sqlvim — personal") {
+	if !strings.Contains(s, "datavim — personal") {
 		t.Fatalf("welcome box title must name the workspace:\n%s", s)
 	}
-	if got := m.View().WindowTitle; got != "sqlvim — personal" {
+	if got := m.View().WindowTitle; got != "datavim — personal" {
 		t.Fatalf("WindowTitle = %q", got)
 	}
 }
@@ -26,7 +26,7 @@ func TestDefaultWorkspaceIsNotShown(t *testing.T) {
 		m, _ := newTestModel(t)
 		m.SetWorkspace(name)
 		s := screen(m)
-		if strings.Contains(s, "[default]") || strings.Contains(s, "sqlvim — ") {
+		if strings.Contains(s, "[default]") || strings.Contains(s, "datavim — ") {
 			t.Fatalf("workspace %q must not be shown:\n%s", name, s)
 		}
 		if got := m.View().WindowTitle; got != "" {

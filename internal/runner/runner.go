@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // Verdict says whether a batch may run.

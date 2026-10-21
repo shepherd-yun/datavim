@@ -4,11 +4,11 @@ package ui
 import (
 	"context"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db/tunnel"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/rdb"
 )
 
 // Backend is what the UI needs from the session layer.

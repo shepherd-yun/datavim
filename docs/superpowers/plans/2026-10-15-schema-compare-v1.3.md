@@ -432,7 +432,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // TableSchema reads t for schema comparison: what Columns, Indexes and
@@ -557,7 +557,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // serialDefault is the default a serial column gets from its sequence.
@@ -986,7 +986,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 var app = db.Namespace{Database: "app"}
@@ -1416,7 +1416,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // DiffTable lists the changes that make target look like source, in the
@@ -1964,7 +1964,7 @@ Expected: FAIL，`w.CreateTable undefined`、`undefined: castable`
 import (
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 ```
 
@@ -2130,7 +2130,7 @@ func (w ddlWriter) alterClause(c db.SchemaChange) (string, bool) {
 import (
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 ```
 
@@ -2416,7 +2416,7 @@ git commit -m "feat(db): DDLWriter 写出建表与 ALTER 语句，写不出的�
 
 - [ ] **Step 1: 写 contract 子测试**
 
-在 `internal/db/dbtest/contract.go` 的 import 里加上 `"github.com/shepherd-yun/sqlvim/internal/schemadiff"`。
+在 `internal/db/dbtest/contract.go` 的 import 里加上 `"github.com/shepherd-yun/datavim/internal/schemadiff"`。
 
 在 `Fixture` 末尾加：
 
@@ -2581,7 +2581,7 @@ package schemadiff
 import (
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func TestDescribe(t *testing.T) {
@@ -2663,7 +2663,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func TestDiffNamespace(t *testing.T) {
@@ -2702,7 +2702,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // fakeWriter writes one short line per statement and, like the real ones,
@@ -2799,7 +2799,7 @@ package schemadiff
 import (
 	"sort"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // ObjectKind says how a table differs between the two sides.
@@ -2865,7 +2865,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Describe is c on one line, as the diff tab lists it: a sign (+ added,
@@ -3017,7 +3017,7 @@ package schemadiff
 import (
 	"slices"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Writable reports whether w can write c as SQL on table t. What it cannot
@@ -3341,9 +3341,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 )
 
 var appNS = db.Namespace{Database: "app"}
@@ -3632,12 +3632,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/schemadiff"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // compareTimeout bounds reading both sides of a comparison; a namespace
@@ -4260,8 +4260,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 )
 
 // withBakTable makes the fake app database list users, users_bak and the view active.
@@ -4466,10 +4466,10 @@ package ui
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
 
 // compareSourceMsg is the source picked for a comparison.
@@ -4717,7 +4717,7 @@ git commit -m "feat(ui): 树上 m 标记对比源、C 与当前节点对比"
 脚本格式：
 
 ```
--- sqlvim schema sync
+-- datavim schema sync
 -- source: local · app.users
 -- target: local · app.users_bak
 -- generated: 2026-10-15 14:03:00
@@ -4742,7 +4742,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func scriptConsole(t *testing.T, m *Model) *consoleTab {
@@ -4959,7 +4959,7 @@ func (t *diffTab) writeScript() tea.Cmd {
 
 func (t *diffTab) scriptText(stmts, manual []string) string {
 	var b strings.Builder
-	b.WriteString("-- sqlvim schema sync\n")
+	b.WriteString("-- datavim schema sync\n")
 	fmt.Fprintf(&b, "-- source: %s\n-- target: %s\n-- generated: %s\n",
 		t.src.label(), t.tgt.label(), t.now().Format("2006-01-02 15:04:05"))
 	b.WriteString("-- These statements change the target to match the source. Review them before running.\n")
@@ -5027,7 +5027,7 @@ git commit -m "feat(ui): <Space>w 把勾选的变更写成脚本，放进目标�
   another one of the same engine. The diff tab lists the differing columns, indexes, comments
   and options (foreign keys are shown, not synced); `x` picks what to sync (deletions start
   unpicked), `~` swaps the sides and `<Space>w` writes the script into a new console on the
-  target, where the usual read-only and prod checks apply. Changes sqlvim cannot script stay in
+  target, where the usual read-only and prod checks apply. Changes datavim cannot script stay in
   it as comments.
 ```
 
@@ -5058,7 +5058,7 @@ Expected: 全部通过
 
 - [ ] **Step 5: 手动跑一遍**
 
-Run: `make build && ./bin/sqlvim --config <测试配置目录> --debug`
+Run: `make build && ./bin/datavim --config <测试配置目录> --debug`
 
 在一个本地 MySQL 和一个本地 PG 上各建两个命名空间（或同一命名空间的两张表），制造列、索引、注释的差异：
 1. 树上 `m` 标记源，`◆` 出现；在目标上 `C`，Diff 标签页列出差异，删除项默认未勾选。

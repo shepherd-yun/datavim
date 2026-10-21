@@ -9,7 +9,7 @@ import (
 )
 
 // go-redis logs pool and dial failures to stderr by default, which draws
-// over the TUI. Send them to the sqlvim log instead; the error itself still
+// over the TUI. Send them to the datavim log instead; the error itself still
 // reaches the caller.
 func init() { redis.SetLogger(slogLogger{}) }
 

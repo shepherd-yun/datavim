@@ -6,11 +6,11 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 )
 
 // openUsersTab opens local/app/users and returns its tab.

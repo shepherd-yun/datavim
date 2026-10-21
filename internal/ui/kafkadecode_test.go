@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kmsgx"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 )
 
 const orderAvroSchema = `{"type":"record","name":"Order","fields":[{"name":"id","type":"long"}]}`

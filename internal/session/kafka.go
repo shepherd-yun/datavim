@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kmsgx"
 )
 
 // KafkaOpener opens a Kafka client; kafka.Open implements it.
@@ -242,7 +242,7 @@ func (m *Manager) kafkaConfig(ctx context.Context, cfg config.Connection) (kafka
 		ClientID: cfg.Params["client_id"],
 	}
 	if kc.ClientID == "" {
-		kc.ClientID = "sqlvim"
+		kc.ClientID = "datavim"
 	}
 	switch kc.SASL {
 	case "":

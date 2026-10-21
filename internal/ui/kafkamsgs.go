@@ -16,14 +16,14 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kmsgx"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // Message view limits (design §5.2).
@@ -695,7 +695,7 @@ func (t *topicTab) openValueInEditor() tea.Cmd {
 	if isJSON(string(r.Value)) {
 		ext = ".json"
 	}
-	f, err := os.CreateTemp("", fmt.Sprintf("sqlvim-%s-p%d-%d-*%s", safeFileName(t.topic), r.Partition, r.Offset, ext))
+	f, err := os.CreateTemp("", fmt.Sprintf("datavim-%s-p%d-%d-*%s", safeFileName(t.topic), r.Partition, r.Offset, ext))
 	if err != nil {
 		t.setStatus("cannot create temp file: "+err.Error(), true)
 		return nil

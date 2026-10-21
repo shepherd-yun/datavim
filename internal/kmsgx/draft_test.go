@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 const specDraft = `# topic: orders
 key: ord-1
 partition: 2
 header: trace-id=abc123
-header: source=sqlvim
+header: source=datavim
 
 {"id": 1, "amount": 99}
 ===
@@ -30,7 +30,7 @@ func TestParseDraft(t *testing.T) {
 		{"spec example", specDraft, []DraftRecord{
 			{
 				Line: 2, EndLine: 7, Key: []byte("ord-1"), Partition: 2, Value: []byte(`{"id": 1, "amount": 99}`),
-				Headers: []kafka.Header{{Key: "trace-id", Value: []byte("abc123")}, {Key: "source", Value: []byte("sqlvim")}},
+				Headers: []kafka.Header{{Key: "trace-id", Value: []byte("abc123")}, {Key: "source", Value: []byte("datavim")}},
 			},
 			{Line: 9, EndLine: 10, Key: []byte("ord-2"), Partition: -1, Value: []byte(`{"id": 2, "amount": 12}`)},
 		}},

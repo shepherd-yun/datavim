@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func scriptConsole(t *testing.T, m *Model) *consoleTab {

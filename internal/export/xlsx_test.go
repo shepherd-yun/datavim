@@ -7,7 +7,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/xuri/excelize/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func TestXLSX(t *testing.T) {

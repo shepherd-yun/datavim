@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 // DraftRecord is one message of a producer draft.

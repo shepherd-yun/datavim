@@ -7,7 +7,7 @@ import (
 
 	mssql "github.com/microsoft/go-mssqldb"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // nearRE finds the token a syntax error names.

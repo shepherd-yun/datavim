@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping with sqlvim! Bug reports, ideas and pull requests are welcome.
+Thanks for helping with datavim! Bug reports, ideas and pull requests are welcome.
 
 ## Development
 
@@ -22,5 +22,5 @@ Go (the version in `go.mod`) and, for integration tests, Docker.
 
 ## Design
 
-The overall design is in `docs/superpowers/specs/2026-10-13-sqlvim-design.md`;
+The overall design is in `docs/superpowers/specs/2026-10-13-datavim-design.md`;
 each release has an implementation plan in `docs/superpowers/plans/`.

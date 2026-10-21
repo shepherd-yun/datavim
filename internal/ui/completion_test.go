@@ -6,13 +6,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/meta"
-	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
-	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/meta"
+	"github.com/shepherd-yun/datavim/internal/ui/highlight"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/complete"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/ui/uitest"
 )
 
 // readyCatalogs is a cache with fakeCatalog loaded for local.

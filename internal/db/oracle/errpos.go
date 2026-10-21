@@ -5,7 +5,7 @@ import (
 
 	"github.com/sijms/go-ora/v2/network"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // locate marks a server error that carries a position (a character offset

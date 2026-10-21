@@ -8,8 +8,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 type fakeQuerier struct {
@@ -140,7 +140,7 @@ func TestApplyInTxReleasesItsSavepoint(t *testing.T) {
 	if err := ApplyInTx(context.Background(), f, sqlx.MySQL, []string{"a", "b"}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"SAVEPOINT sqlvim_edit", "a", "b", "RELEASE SAVEPOINT sqlvim_edit"}
+	want := []string{"SAVEPOINT datavim_edit", "a", "b", "RELEASE SAVEPOINT datavim_edit"}
 	if diff := cmp.Diff(want, f.execs); diff != "" {
 		t.Fatalf("execs (-want +got):\n%s", diff)
 	}
@@ -149,7 +149,7 @@ func TestApplyInTxReleasesItsSavepoint(t *testing.T) {
 func TestApplyInTxRollsBackToItsSavepoint(t *testing.T) {
 	f := &fakeQuerier{affected: map[string]int64{"b": 2}}
 	err := ApplyInTx(context.Background(), f, sqlx.Postgres, []string{"a", "b", "c"})
-	want := []string{"SAVEPOINT sqlvim_edit", "a", "b", "ROLLBACK TO SAVEPOINT sqlvim_edit"}
+	want := []string{"SAVEPOINT datavim_edit", "a", "b", "ROLLBACK TO SAVEPOINT datavim_edit"}
 	if diff := cmp.Diff(want, f.execs); diff != "" {
 		t.Fatalf("execs (-want +got):\n%s", diff)
 	}
@@ -167,8 +167,8 @@ func TestApplyInTxSavepointSyntax(t *testing.T) {
 		d          sqlx.Dialect
 		ok, failed []string
 	}{
-		{sqlx.SQLServer, []string{"SAVE TRANSACTION sqlvim_edit", "a"}, []string{"SAVE TRANSACTION sqlvim_edit", "b", "ROLLBACK TRANSACTION sqlvim_edit"}},
-		{sqlx.Oracle, []string{"SAVEPOINT sqlvim_edit", "a"}, []string{"SAVEPOINT sqlvim_edit", "b", "ROLLBACK TO SAVEPOINT sqlvim_edit"}},
+		{sqlx.SQLServer, []string{"SAVE TRANSACTION datavim_edit", "a"}, []string{"SAVE TRANSACTION datavim_edit", "b", "ROLLBACK TRANSACTION datavim_edit"}},
+		{sqlx.Oracle, []string{"SAVEPOINT datavim_edit", "a"}, []string{"SAVEPOINT datavim_edit", "b", "ROLLBACK TO SAVEPOINT datavim_edit"}},
 	} {
 		f := &fakeQuerier{}
 		if err := ApplyInTx(context.Background(), f, tc.d, []string{"a"}); err != nil {

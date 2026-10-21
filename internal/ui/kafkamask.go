@@ -1,9 +1,9 @@
 package ui
 
 import (
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kmsgx"
 )
 
 // SetMasks sets the [[mask]] rules of config.toml; topic tabs opened

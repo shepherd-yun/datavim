@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 func TestPlanConfigs(t *testing.T) {

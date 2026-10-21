@@ -8,14 +8,14 @@
 
 DataGrip 可以切换工作空间，例如工作相关的数据库放在一个空间，个人的放在另一个空间，彼此看不到。
 
-sqlvim 现在只有一个 `connections.toml`。虽然可以用 `--config <dir>` 换一个配置目录，但这样有两个问题：
+datavim 现在只有一个 `connections.toml`。虽然可以用 `--config <dir>` 换一个配置目录，但这样有两个问题：
 
 - `config.toml` 和 `keymap.toml` 跟着一起被换掉，个人偏好要维护好几份。
-- keychain（`service="sqlvim", account=<conn>`）和 `state.db`（`history.conn`、`recent.conn`、`drafts.key`）仍然只按连接名区分。两套配置里出现同名连接时，密码、历史、草稿和最近打开会混在一起。
+- keychain（`service="datavim", account=<conn>`）和 `state.db`（`history.conn`、`recent.conn`、`drafts.key`）仍然只按连接名区分。两套配置里出现同名连接时，密码、历史、草稿和最近打开会混在一起。
 
 ## 2. 目标
 
-- 用 `sqlvim -w <name>` 或环境变量 `SQLVIM_WORKSPACE` 在启动时选择工作空间。
+- 用 `datavim -w <name>` 或环境变量 `DATAVIM_WORKSPACE` 在启动时选择工作空间。
 - 每个空间有自己的连接、密码、SQL 历史、控制台草稿和最近打开记录。不同空间里的同名连接互不影响。
 - `config.toml`、`keymap.toml`（设置、主题、按键）在所有空间之间共享。
 - 不指定空间时进入默认空间，行为和文件位置都和现在完全一样，现有用户不需要迁移。
@@ -32,11 +32,11 @@ sqlvim 现在只有一个 `connections.toml`。虽然可以用 `--config <dir>` 
 
 | 参数 | 说明 |
 |---|---|
-| `-w, --workspace <name>` | 选择工作空间。优先级高于 `SQLVIM_WORKSPACE`。 |
-| `--create` | 空间不存在时先创建，然后正常启动。空间已存在时不报错。必须配合 `-w` 或 `SQLVIM_WORKSPACE` 使用，不能用于 `default`。 |
+| `-w, --workspace <name>` | 选择工作空间。优先级高于 `DATAVIM_WORKSPACE`。 |
+| `--create` | 空间不存在时先创建，然后正常启动。空间已存在时不报错。必须配合 `-w` 或 `DATAVIM_WORKSPACE` 使用，不能用于 `default`。 |
 | `--list-workspaces` | 每行输出一个空间名后退出。`default` 永远在第一行，其余按字母排序。 |
 
-空间名的解析顺序：`-w` 参数 > `SQLVIM_WORKSPACE` > `default`。
+空间名的解析顺序：`-w` 参数 > `DATAVIM_WORKSPACE` > `default`。
 
 ### 3.1 名字规则
 
@@ -47,23 +47,23 @@ sqlvim 现在只有一个 `connections.toml`。虽然可以用 `--config <dir>` 
 ### 3.2 错误
 
 ```
-sqlvim: workspace "personal" does not exist (have: default, work)
-create it with: sqlvim -w personal --create
+datavim: workspace "personal" does not exist (have: default, work)
+create it with: datavim -w personal --create
 ```
 
 ```
-sqlvim: invalid workspace name "Work": use 1-32 characters from a-z, 0-9, '_' and '-'
+datavim: invalid workspace name "Work": use 1-32 characters from a-z, 0-9, '_' and '-'
 ```
 
 ```
-sqlvim: --create needs a workspace name (-w or SQLVIM_WORKSPACE)
+datavim: --create needs a workspace name (-w or DATAVIM_WORKSPACE)
 ```
 
 `--create` 配合 `default` 使用时，也按上面这种格式报错。
 
 ## 4. 目录与数据归属
 
-`<cfg>` 是配置根目录：默认为 `$XDG_CONFIG_HOME/sqlvim` 或 `~/.config/sqlvim`，传了 `--config` 时用它的值。`<state>` 是状态根目录：`$XDG_STATE_HOME/sqlvim` 或 `~/.local/state/sqlvim`。
+`<cfg>` 是配置根目录：默认为 `$XDG_CONFIG_HOME/datavim` 或 `~/.config/datavim`，传了 `--config` 时用它的值。`<state>` 是状态根目录：`$XDG_STATE_HOME/datavim` 或 `~/.local/state/datavim`。
 
 ```
 <cfg>/
@@ -73,7 +73,7 @@ sqlvim: --create needs a workspace name (-w or SQLVIM_WORKSPACE)
     work/connections.toml
     personal/connections.toml
 <state>/
-  sqlvim.log                          # 共享
+  datavim.log                          # 共享
   state.db                            # 默认空间
   workspaces/
     personal/state.db
@@ -85,8 +85,8 @@ sqlvim: --create needs a workspace name (-w or SQLVIM_WORKSPACE)
 | 设置、主题、按键 | `<cfg>/config.toml`、`<cfg>/keymap.toml` | 同左（共享） |
 | 历史、草稿、最近打开 | `<state>/state.db` | `<state>/workspaces/personal/state.db` |
 | keychain account | `<conn>` | `personal/<conn>` |
-| 密码环境变量 | `SQLVIM_PASSWORD_<CONN>` | 同左，不加前缀 |
-| 日志 | `<state>/sqlvim.log` | 同左，启动日志带 `workspace=personal` |
+| 密码环境变量 | `DATAVIM_PASSWORD_<CONN>` | 同左，不加前缀 |
+| 日志 | `<state>/datavim.log` | 同左，启动日志带 `workspace=personal` |
 
 判断一个空间是否存在，只看 `<cfg>/workspaces/<name>/` 是否为目录。状态目录在启动时按需创建。
 
@@ -137,7 +137,7 @@ func (w Workspace) IsDefault() bool
 
 测试用 `keyring.MockInit()` 检查前缀。
 
-### 5.3 `cmd/sqlvim/main.go`
+### 5.3 `cmd/datavim/main.go`
 
 1. 解析 `-w/--workspace`、`--create` 和 `--list-workspaces`。
 2. `--list-workspaces`：输出后返回。
@@ -146,14 +146,14 @@ func (w Workspace) IsDefault() bool
 5. `slog.Info("starting", ..., "workspace", ws.Name)`。
 6. `ui.New(...)` 传入空间名（非默认空间才非空）。
 
-日志仍然写到 `<state>/sqlvim.log`，和空间无关。
+日志仍然写到 `<state>/datavim.log`，和空间无关。
 
 ### 5.4 `internal/ui`
 
 - `Model` 增加 `workspace string`（为空表示默认空间）。
 - `renderStatus`：非默认空间时，在模式块后面加上 `theme.Accent.Render("[personal]")`。位置在 `[PROD]` 前面，这样空间和生产标记能同时看到。
-- 欢迎页：非默认空间时，欢迎页框的标题为 `sqlvim — personal`。
-- 窗口标题：非默认空间时为 `sqlvim — personal`，默认空间保持现状。
+- 欢迎页：非默认空间时，欢迎页框的标题为 `datavim — personal`。
+- 窗口标题：非默认空间时为 `datavim — personal`，默认空间保持现状。
 
 ## 6. 安全
 
@@ -165,12 +165,12 @@ func (w Workspace) IsDefault() bool
 
 把默认空间里的个人连接挪到 `personal` 空间：
 
-1. `sqlvim -w personal --create`，然后退出。
+1. `datavim -w personal --create`，然后退出。
 2. 把相应的 `[[connection]]` 段落从 `<cfg>/connections.toml` 剪切到 `<cfg>/workspaces/personal/connections.toml`。
-3. 用 `sqlvim -w personal` 启动，首次连接时重新输入密码（会存为 `personal/<conn>`）。旧 keychain 条目可以在"钥匙串访问"里手动删除。
+3. 用 `datavim -w personal` 启动，首次连接时重新输入密码（会存为 `personal/<conn>`）。旧 keychain 条目可以在"钥匙串访问"里手动删除。
 4. 旧连接的历史和草稿留在默认空间的 `state.db` 里，不会跟过去。
 
-README 还要给一个 direnv 示例：在工作项目目录的 `.envrc` 里写 `export SQLVIM_WORKSPACE=work`。
+README 还要给一个 direnv 示例：在工作项目目录的 `.envrc` 里写 `export DATAVIM_WORKSPACE=work`。
 
 ## 8. 测试
 
@@ -183,17 +183,17 @@ README 还要给一个 direnv 示例：在工作项目目录的 `.envrc` 里写 
   - `LoadIn(root, connDir)`：连接从 connDir 读，设置和 keymap 从 root 读。
   - `Create`：目录权限为 0700；重复调用不报错。
 - `secret`：用 `keyring.MockInit()` 检查 Prefix 拼接；环境变量覆盖时忽略前缀。
-- `cmd/sqlvim/main_test.go`：
+- `cmd/datavim/main_test.go`：
   - 空间不存在时报错，错误信息包含现有空间列表和 `--create` 提示。
   - 带 `--create` 时创建两个目录。
   - 不给名字时用 `--create` 报错；`--create` 用于 `default` 时报错。
   - `--list-workspaces` 的输出。
-  - `-w` 优先于 `SQLVIM_WORKSPACE`。
+  - `-w` 优先于 `DATAVIM_WORKSPACE`。
   - 不合法名字报错。
 - `ui`：非默认空间时状态栏和欢迎页显示空间名；默认空间时不显示。
 
 ## 9. 文档
 
-- `CHANGELOG.md` 的 `[Unreleased]` 下增加 Added 条目：工作空间（`-w`、`SQLVIM_WORKSPACE`、`--create`、`--list-workspaces`）。
+- `CHANGELOG.md` 的 `[Unreleased]` 下增加 Added 条目：工作空间（`-w`、`DATAVIM_WORKSPACE`、`--create`、`--list-workspaces`）。
 - `README.md` 和 `README.zh-CN.md` 增加"工作空间"一节，内容是 §3、§4 的摘要、§7 的迁移步骤和 direnv 示例。
 - 主设计文档 §5.1 和 §7 补一句话指向本文。

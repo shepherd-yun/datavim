@@ -33,7 +33,7 @@ func (l Level) String() string {
 	}
 }
 
-// unsupported commands would put the connection out of step with sqlvim
+// unsupported commands would put the connection out of step with datavim
 // (pub/sub, MONITOR, protocol or reply changes, QUIT).
 var unsupported = set("SUBSCRIBE", "PSUBSCRIBE", "SSUBSCRIBE", "MONITOR", "SYNC", "PSYNC",
 	"CLIENT TRACKING", "CLIENT REPLY", "RESET", "HELLO", "QUIT")
@@ -163,7 +163,7 @@ func Guard(lines []Line, p Policy) Check {
 		reject := func(reason string) Check { return Check{Verdict: Reject, Line: i, Reason: reason} }
 		switch {
 		case level == Unsupported:
-			return reject(name + " is not supported in sqlvim")
+			return reject(name + " is not supported in datavim")
 		case p.ReadOnly && level != Read:
 			return reject(fmt.Sprintf("%s is a %s command and the connection is read-only · :set noreadonly to allow it", name, level))
 		case name == "SELECT" && inMulti:
@@ -223,7 +223,7 @@ func NeedsDBSize(lines []Line) bool {
 	return false
 }
 
-// GuardArgs is Guard over commands sqlvim made itself (each joined with
+// GuardArgs is Guard over commands datavim made itself (each joined with
 // Quote).
 func GuardArgs(cmds [][]string, p Policy) Check {
 	lines := make([]Line, len(cmds))

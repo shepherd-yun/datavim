@@ -1,6 +1,6 @@
 package schemadiff
 
-import "github.com/shepherd-yun/sqlvim/internal/db"
+import "github.com/shepherd-yun/datavim/internal/db"
 
 // DiffIndexEdits lists the index changes of a table edited in place
 // (Modify Table). Unlike DiffTable, which pairs indexes by name and then

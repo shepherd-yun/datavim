@@ -8,7 +8,7 @@ import (
 )
 
 func TestEnvVar(t *testing.T) {
-	if got := EnvVar("prod-pg.main"); got != "SQLVIM_PASSWORD_PROD_PG_MAIN" {
+	if got := EnvVar("prod-pg.main"); got != "DATAVIM_PASSWORD_PROD_PG_MAIN" {
 		t.Fatalf("EnvVar = %q", got)
 	}
 }
@@ -32,7 +32,7 @@ func TestKeyringRoundTrip(t *testing.T) {
 func TestEnvOverridesKeyring(t *testing.T) {
 	keyring.MockInit()
 	k := Keyring{Getenv: func(name string) string {
-		if name == "SQLVIM_PASSWORD_LOCAL" {
+		if name == "DATAVIM_PASSWORD_LOCAL" {
 			return "from-env"
 		}
 		return ""
@@ -81,7 +81,7 @@ func TestKeyringPrefixKeepsWorkspacesApart(t *testing.T) {
 	if got, _ := personal.Get("local"); got != "home-pw" {
 		t.Fatalf("personal Get = %q, want home-pw", got)
 	}
-	if got, err := keyring.Get("sqlvim", "personal/local"); err != nil || got != "home-pw" {
+	if got, err := keyring.Get("datavim", "personal/local"); err != nil || got != "home-pw" {
 		t.Fatalf("keychain account personal/local = %q, %v", got, err)
 	}
 	if err := personal.Delete("local"); err != nil {
@@ -95,12 +95,42 @@ func TestKeyringPrefixKeepsWorkspacesApart(t *testing.T) {
 func TestEnvOverrideIgnoresPrefix(t *testing.T) {
 	keyring.MockInit()
 	k := Keyring{Prefix: "personal/", Getenv: func(name string) string {
-		if name == "SQLVIM_PASSWORD_LOCAL" {
+		if name == "DATAVIM_PASSWORD_LOCAL" {
 			return "from-env"
 		}
 		return ""
 	}}
 	if got, _ := k.Get("local"); got != "from-env" {
 		t.Fatalf("Get = %q, want from-env", got)
+	}
+}
+
+func TestGetMovesLegacyPassword(t *testing.T) {
+	keyring.MockInit()
+	k := Keyring{Getenv: func(string) string { return "" }, Prefix: "ws/"}
+	if err := keyring.Set(legacyService, "ws/local", "old-pw"); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := k.Get("local"); err != nil || got != "old-pw" {
+		t.Fatalf("Get = %q, %v", got, err)
+	}
+	if got, err := keyring.Get(service, "ws/local"); err != nil || got != "old-pw" {
+		t.Fatalf("moved = %q, %v", got, err)
+	}
+	if _, err := keyring.Get(legacyService, "ws/local"); !errors.Is(err, keyring.ErrNotFound) {
+		t.Fatalf("legacy still there: %v", err)
+	}
+}
+
+func TestLegacyEnvVarStillWorks(t *testing.T) {
+	keyring.MockInit()
+	k := Keyring{Getenv: func(name string) string {
+		if name == "SQLVIM_PASSWORD_LOCAL" {
+			return "from-old-env"
+		}
+		return ""
+	}}
+	if got, err := k.Get("local"); err != nil || got != "from-old-env" {
+		t.Fatalf("Get = %q, %v", got, err)
 	}
 }

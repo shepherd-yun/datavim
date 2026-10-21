@@ -3,7 +3,7 @@ package mysql
 import (
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func (dialect) DDL() db.DDLWriter { return ddlWriter{} }

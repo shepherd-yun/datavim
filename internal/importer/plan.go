@@ -6,8 +6,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // Column is a file column picked for import and the column it goes to.

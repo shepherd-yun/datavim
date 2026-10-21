@@ -15,19 +15,19 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
-	"github.com/shepherd-yun/sqlvim/internal/session"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/editor"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
-	"github.com/shepherd-yun/sqlvim/internal/ui/vimedit"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kmsgx"
+	"github.com/shepherd-yun/datavim/internal/session"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/editor"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/ui/vimedit"
 )
 
 func producerTabKey(conn, topic string) string   { return "kprod\x00" + conn + "\x00" + topic }
@@ -310,7 +310,7 @@ func (t *producerTab) Handle(a keymap.Action) tea.Cmd {
 	}
 	switch a {
 	case keymap.ExternalEdit:
-		return writeTempEdit(t.id, t.editor.Value(), "sqlvim-*.kafka")
+		return writeTempEdit(t.id, t.editor.Value(), "datavim-*.kafka")
 	case keymap.RunStatement:
 		return t.runAtCursor()
 	case keymap.RunAll:

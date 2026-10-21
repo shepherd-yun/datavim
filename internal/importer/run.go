@@ -12,8 +12,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 const (
@@ -23,7 +23,7 @@ const (
 	MaxErrors = 50
 	// Savepoint is taken before every batch, so that a rejected batch can
 	// be replayed row by row to find the row the server rejects.
-	Savepoint = "sqlvim_import"
+	Savepoint = "datavim_import"
 
 	cleanupTimeout = 5 * time.Second
 )

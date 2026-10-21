@@ -11,11 +11,11 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcmssql "github.com/testcontainers/testcontainers-go/modules/mssql"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/db/dbtest"
-	"github.com/shepherd-yun/sqlvim/internal/db/sqlserver"
-	"github.com/shepherd-yun/sqlvim/internal/runner"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db/dbtest"
+	"github.com/shepherd-yun/datavim/internal/db/sqlserver"
+	"github.com/shepherd-yun/datavim/internal/runner"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 var fixture = []string{
@@ -61,14 +61,14 @@ func TestContract(t *testing.T) {
 	}
 	// Readers do not wait for writers, as on MySQL and PostgreSQL: the
 	// contract reads a row another session has changed in a transaction.
-	for _, q := range []string{"CREATE DATABASE sqlvim_test", "ALTER DATABASE sqlvim_test SET READ_COMMITTED_SNAPSHOT ON"} {
+	for _, q := range []string{"CREATE DATABASE datavim_test", "ALTER DATABASE datavim_test SET READ_COMMITTED_SNAPSHOT ON"} {
 		if _, err := master.Exec(ctx, q); err != nil {
 			t.Fatalf("%s: %v", q, err)
 		}
 	}
 	_ = master.Close()
 
-	conn, err := open(ctx, "sqlvim_test")
+	conn, err := open(ctx, "datavim_test")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -80,13 +80,13 @@ func TestContract(t *testing.T) {
 	}
 	dbtest.RunContract(t, conn, dbtest.Fixture{
 		Dialect:  sqlx.SQLServer,
-		NS:       db.Namespace{Database: "sqlvim_test", Schema: "dbo"},
+		NS:       db.Namespace{Database: "datavim_test", Schema: "dbo"},
 		SleepSQL: "WAITFOR DELAY '00:00:30'",
 		ManyRowsSQL: "SELECT a.n FROM (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) a(n), (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) b(n), " +
 			"(VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) c(n), (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) d(n), " +
 			"(VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) e(n), (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) f(n), " +
 			"(VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) g(n), (VALUES (0),(1),(2),(3),(4),(5),(6),(7),(8),(9)) h(n)",
-		OpenReadOnly: func(ctx context.Context) (db.Conn, error) { return open(ctx, "sqlvim_test") },
+		OpenReadOnly: func(ctx context.Context) (db.Conn, error) { return open(ctx, "datavim_test") },
 		TempTable: func(name string) (string, string) {
 			return "CREATE TABLE #" + name + " (id int)", "#" + name
 		},
@@ -111,7 +111,7 @@ func TestContract(t *testing.T) {
 	})
 
 	dbtest.RunServerContract(t, conn, dbtest.ServerFixture{
-		SleepSQL:  "/* sqlvim_contract_sleep */ WAITFOR DELAY '00:00:30'",
+		SleepSQL:  "/* datavim_contract_sleep */ WAITFOR DELAY '00:00:30'",
 		LockSQL:   "UPDATE dbo.users SET name = name WHERE id = 1",
 		Begin:     "BEGIN TRANSACTION",
 		SelfIDSQL: "SELECT @@SPID",

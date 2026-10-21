@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 // kafkaReadMethods are the kafka.Client methods that never change the
@@ -311,7 +311,7 @@ func TestKafkaConfigFromParams(t *testing.T) {
 	}
 	cfg := op.cfgs[0]
 	if !slices.Equal(cfg.Brokers, []string{"b1:9092", "b2:9093"}) || !cfg.TLS || !cfg.TLSSkipVerify ||
-		cfg.TLSCA != "/ca.pem" || cfg.TLSCert != "/c.pem" || cfg.TLSKey != "/k.pem" || cfg.ClientID != "sqlvim" || cfg.SASL != "" {
+		cfg.TLSCA != "/ca.pem" || cfg.TLSCert != "/c.pem" || cfg.TLSKey != "/k.pem" || cfg.ClientID != "datavim" || cfg.SASL != "" {
 		t.Fatalf("cfg = %+v", cfg)
 	}
 	m, op, _ = setupKafka(config.Connection{Params: map[string]string{"client_id": "me"}})

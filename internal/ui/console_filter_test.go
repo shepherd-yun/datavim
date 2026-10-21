@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 )
 
 // filterFirstID runs sql and filters its result by the first row's id.

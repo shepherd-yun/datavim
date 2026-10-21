@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 )
 
 const updateUser1 = "UPDATE `app`.`users` SET `name` = 'user1x' WHERE `id` = '1'"

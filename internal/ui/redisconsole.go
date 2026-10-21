@@ -14,22 +14,22 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/history"
-	"github.com/shepherd-yun/sqlvim/internal/rcmd"
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
-	"github.com/shepherd-yun/sqlvim/internal/session"
-	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/editor"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/textview"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
-	"github.com/shepherd-yun/sqlvim/internal/ui/vimedit"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/rcmd"
+	"github.com/shepherd-yun/datavim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/session"
+	"github.com/shepherd-yun/datavim/internal/ui/highlight"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/complete"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/editor"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/textview"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/ui/vimedit"
 )
 
 // rconsoleTabKey is the tab (and draft) key of the redis console on db n.
@@ -825,7 +825,7 @@ func (t *redisConsoleTab) insertText(s string) tea.Cmd {
 }
 
 func (t *redisConsoleTab) externalEdit() tea.Cmd {
-	return writeTempEdit(t.id, t.editor.Value(), "sqlvim-*.redis")
+	return writeTempEdit(t.id, t.editor.Value(), "datavim-*.redis")
 }
 
 // ---- view ----

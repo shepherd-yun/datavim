@@ -5,7 +5,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // locate marks server errors that carry a position (1-based, in characters).

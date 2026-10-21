@@ -372,7 +372,7 @@ package schemadiff
 import (
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func TestDiffIndexEdits(t *testing.T) {
@@ -497,7 +497,7 @@ func addIndex(ix *db.Index, name string) db.SchemaChange {
 ```go
 package schemadiff
 
-import "github.com/shepherd-yun/sqlvim/internal/db"
+import "github.com/shepherd-yun/datavim/internal/db"
 
 // DiffIndexEdits lists the index changes of a table edited in place
 // (Modify Table). Unlike DiffTable, which pairs indexes by name and then
@@ -627,8 +627,8 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 func users() db.TableSchema {
@@ -955,8 +955,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // ErrDeleted is an edit of a column or index marked for deletion.
@@ -1505,8 +1505,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // norm stands in for DDLWriter.NormalizeType: PostgreSQL spells INTEGER int.
@@ -1702,8 +1702,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/schemadiff"
 )
 
 // check refuses edits no ALTER can apply as staged.
@@ -1852,7 +1852,7 @@ git commit -m "feat(schemaedit): Plan 检查暂存的编辑并算出 ALTER 所�
 
 - [ ] **Step 1: 写子测试**
 
-`internal/db/dbtest/contract.go` 的 import 加 `"github.com/shepherd-yun/sqlvim/internal/schemaedit"`，在 Task 1 的两个子测试之后追加：
+`internal/db/dbtest/contract.go` 的 import 加 `"github.com/shepherd-yun/datavim/internal/schemaedit"`，在 Task 1 的两个子测试之后追加：
 
 ```go
 	t.Run("Modify Table edits round-trip through schemaedit and AlterTable", func(t *testing.T) {
@@ -2166,7 +2166,7 @@ git commit -m "feat(keymap): 树上 e 改为 node.edit 并兼容 conn.edit，结
 
 - [ ] **Step 1: 写测试**
 
-`internal/ui/panes/structure/structure_test.go` 的 import 加 `"github.com/shepherd-yun/sqlvim/internal/schemaedit"`，末尾追加：
+`internal/ui/panes/structure/structure_test.go` 的 import 加 `"github.com/shepherd-yun/datavim/internal/schemaedit"`，末尾追加：
 
 ```go
 func editable() db.TableSchema {
@@ -2281,7 +2281,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 )
 
 // table lays rows out under headers like textutil.Table and styles each
@@ -2329,7 +2329,7 @@ func table(headers []string, rows [][]string, style func(row, col int) (lipgloss
 
 - [ ] **Step 4: 改 `structure.go`**
 
-import 加 `"charm.land/lipgloss/v2"` 与 `"github.com/shepherd-yun/sqlvim/internal/schemaedit"`。`Model` 加字段：
+import 加 `"charm.land/lipgloss/v2"` 与 `"github.com/shepherd-yun/datavim/internal/schemaedit"`。`Model` 加字段：
 
 ```go
 type Model struct {
@@ -2658,10 +2658,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/schemaedit"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/structure"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/schemaedit"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/structure"
 )
 
 func usersSchema() db.TableSchema {
@@ -2861,7 +2861,7 @@ package ui
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // stager is a tab that stages changes until they are submitted: table
@@ -2989,12 +2989,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/schemaedit"
-	"github.com/shepherd-yun/sqlvim/internal/session"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/structure"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/schemaedit"
+	"github.com/shepherd-yun/datavim/internal/session"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/structure"
 )
 
 const readOnlyHint = "read-only connection · :set noreadonly allows changes for this session"
@@ -3371,7 +3371,7 @@ func newStructureTab(id int, b Backend, st Store, conn string, ref db.TableRef) 
 }
 ```
 
-import 加 `"github.com/shepherd-yun/sqlvim/internal/schemaedit"`。把仓库里其它 `newStructureTab(` 调用（`grep -rn "newStructureTab(" internal/ui`，含测试）都补上 `store` 参数（测试里传 `newFakeStore()`）。
+import 加 `"github.com/shepherd-yun/datavim/internal/schemaedit"`。把仓库里其它 `newStructureTab(` 调用（`grep -rn "newStructureTab(" internal/ui`，含测试）都补上 `store` 参数（测试里传 `newFakeStore()`）。
 
 `SetSize`：
 
@@ -3581,8 +3581,8 @@ package overlay
 import (
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // BoxOption changes a Preview or a Confirm.
@@ -3697,8 +3697,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 const renameName = "ALTER TABLE `app`.`users` RenameColumn name_x"
@@ -3795,7 +3795,7 @@ func TestModifyRefusesManualChanges(t *testing.T) {
 	if m.overlay != nil {
 		t.Fatalf("nothing to confirm:\n%s", screen(m))
 	}
-	if !strings.Contains(screen(m), "sqlvim cannot write") || st.changes() != 1 {
+	if !strings.Contains(screen(m), "datavim cannot write") || st.changes() != 1 {
 		t.Fatalf("status:\n%s", screen(m))
 	}
 }
@@ -3971,7 +3971,7 @@ func (t *structureTab) submit() tea.Cmd {
 	}
 	stmts, manual := t.ddl.AlterTable(t.ref, changes)
 	if len(manual) > 0 {
-		t.setStatus("sqlvim cannot write "+schemadiff.Describe(manual[0])+" · undo it, or make that change in a console", true)
+		t.setStatus("datavim cannot write "+schemadiff.Describe(manual[0])+" · undo it, or make that change in a console", true)
 		return nil
 	}
 	var warnings []string

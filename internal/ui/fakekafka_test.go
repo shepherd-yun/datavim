@@ -12,9 +12,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/session"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/session"
 )
 
 // fakeKafkaBase is the time of offset 0 of every fake partition; offset o

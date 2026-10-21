@@ -6,8 +6,8 @@ package editor
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
-	"github.com/shepherd-yun/sqlvim/internal/ui/vimedit"
+	"github.com/shepherd-yun/datavim/internal/ui/highlight"
+	"github.com/shepherd-yun/datavim/internal/ui/vimedit"
 )
 
 // Model is the editor pane.

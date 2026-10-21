@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/config"
 )
 
 const (

@@ -13,7 +13,7 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 )
 
-// PassphraseError means a key needs a passphrase sqlvim does not know yet,
+// PassphraseError means a key needs a passphrase datavim does not know yet,
 // or the one given was wrong. The UI asks for it and calls SetPassphrase.
 type PassphraseError struct {
 	Path  string

@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 )
 
 // Detail shows one cell value (or a routine's DDL) in full; JSON is

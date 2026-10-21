@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // killGrace is how long a killed statement may take to stop before the

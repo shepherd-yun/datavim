@@ -13,13 +13,13 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func TestConnStringKeepsSpecialCharacters(t *testing.T) {
 	cs := connString(db.ConnConfig{
 		Host: "db.local", Port: 6543, User: "app", Password: "p@ss:w/rd?#%",
-		Params: map[string]string{"sslmode": "disable", "application_name": "sqlvim"},
+		Params: map[string]string{"sslmode": "disable", "application_name": "datavim"},
 	})
 	cfg, err := pgx.ParseConfig(cs)
 	if err != nil {
@@ -34,7 +34,7 @@ func TestConnStringKeepsSpecialCharacters(t *testing.T) {
 	if cfg.Database != "postgres" {
 		t.Errorf("database = %q, want default postgres", cfg.Database)
 	}
-	if cfg.RuntimeParams["application_name"] != "sqlvim" {
+	if cfg.RuntimeParams["application_name"] != "datavim" {
 		t.Errorf("runtime params = %v", cfg.RuntimeParams)
 	}
 	if cfg.ConnectTimeout != 10*time.Second {

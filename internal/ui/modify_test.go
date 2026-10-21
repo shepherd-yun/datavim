@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 const renameName = "ALTER TABLE `app`.`users` RenameColumn name_x"
@@ -108,7 +108,7 @@ func TestModifyRefusesManualChanges(t *testing.T) {
 	if m.overlay != nil {
 		t.Fatalf("nothing to confirm:\n%s", screen(m))
 	}
-	if !strings.Contains(screen(m), "sqlvim cannot write") || st.changes() != 1 {
+	if !strings.Contains(screen(m), "datavim cannot write") || st.changes() != 1 {
 		t.Fatalf("status:\n%s", screen(m))
 	}
 }

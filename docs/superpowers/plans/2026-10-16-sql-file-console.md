@@ -56,7 +56,7 @@
 | `internal/ui/app.go` | `runCommand` (`e`, `w…`, `wq`), `editFile`, `openFile`, `fileRead`, `writeFile`, `location`, close/quit confirmations, `closeTabsOf` |
 | `internal/ui/recent.go`, `internal/history/history.go` | `RecentFile` |
 | `internal/ui/console_test.go`, `internal/ui/recent_test.go` | tests |
-| `CHANGELOG.md`, `README.md`, `README.zh-CN.md`, `docs/superpowers/specs/2026-10-13-sqlvim-design.md`, `docs/superpowers/specs/2026-10-16-sql-file-console-design.md` | docs |
+| `CHANGELOG.md`, `README.md`, `README.zh-CN.md`, `docs/superpowers/specs/2026-10-13-datavim-design.md`, `docs/superpowers/specs/2026-10-16-sql-file-console-design.md` | docs |
 
 ---
 
@@ -272,7 +272,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 )
 
 // ex runs an ex command as if typed on the command line.
@@ -445,7 +445,7 @@ func TestFileConsoleMarksChangesAndKeepsNoDraft(t *testing.T) {
 }
 ```
 
-Add `"github.com/shepherd-yun/sqlvim/internal/config"` to the imports (used by `TestEditNeedsAConnectionAndAName`).
+Add `"github.com/shepherd-yun/datavim/internal/config"` to the imports (used by `TestEditNeedsAConnectionAndAName`).
 
 - [ ] **Step 2: Run** `go test ./internal/ui -run 'TestEdit|TestFileConsole'` → FAIL to compile (`c.file`, `c.dirty` undefined).
 
@@ -466,7 +466,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // maxFileSize bounds the files :e opens into a console.
@@ -1354,7 +1354,7 @@ git commit -m "feat(ui): 最近列表记录并重新打开 SQL 文件"
 ### Task 6: Docs
 
 **Files:**
-- Modify: `CHANGELOG.md`, `README.md`, `README.zh-CN.md`, `docs/superpowers/specs/2026-10-13-sqlvim-design.md`, `docs/superpowers/specs/2026-10-16-sql-file-console-design.md`, `internal/ui/keymap/defaults.go` (`Recent` description)
+- Modify: `CHANGELOG.md`, `README.md`, `README.zh-CN.md`, `docs/superpowers/specs/2026-10-13-datavim-design.md`, `docs/superpowers/specs/2026-10-16-sql-file-console-design.md`, `internal/ui/keymap/defaults.go` (`Recent` description)
 
 - [ ] **Step 1: CHANGELOG** — under `## [Unreleased]` → `### Added`, at the top:
 
@@ -1401,7 +1401,7 @@ and `<Space>f` → `最近打开的表、结构、控制台和文件`.
 
 - [ ] **Step 4: `keymap/defaults.go`** — `Recent` description: `"Recent tabs and files"`. Run `go test ./internal/ui/...` (help/which-key tests may assert the text; update them).
 
-- [ ] **Step 5: Main spec** `docs/superpowers/specs/2026-10-13-sqlvim-design.md` — after the `:q` / `:qa` line (~299) add:
+- [ ] **Step 5: Main spec** `docs/superpowers/specs/2026-10-13-datavim-design.md` — after the `:q` / `:qa` line (~299) add:
 
 ```markdown
 - `:e <file>` 用控制台打开 SQL 文件；文件控制台里 `:w` 保存文件而不是提交暂存修改（见 `2026-10-16-sql-file-console-design.md`）

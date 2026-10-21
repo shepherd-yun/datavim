@@ -8,7 +8,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 type delimited struct {

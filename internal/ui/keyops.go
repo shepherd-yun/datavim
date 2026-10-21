@@ -9,12 +9,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/rcmd"
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
-	"github.com/shepherd-yun/sqlvim/internal/redit"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/rcmd"
+	"github.com/shepherd-yun/datavim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/redit"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
 
 // keyOp is a one-step change to a whole key (design §6.1, last row).
@@ -197,7 +197,7 @@ func (m *Model) keyOpInput(msg keyOpInputMsg) tea.Cmd {
 	return m.guardKeyOp(req, cmds)
 }
 
-// guardKeyOp checks sqlvim's commands for req: refused on read-only,
+// guardKeyOp checks datavim's commands for req: refused on read-only,
 // confirmed with y on prod, run at once otherwise.
 func (m *Model) guardKeyOp(req keyOpReq, cmds [][]string) tea.Cmd {
 	cfg, _ := m.backend.Connection(req.conn)

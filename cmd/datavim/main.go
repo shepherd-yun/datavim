@@ -1,7 +1,8 @@
-// Command sqlvim is a terminal SQL client with vim keys.
+// Command datavim is a terminal SQL client with vim keys.
 package main
 
 import (
+	"cmp"
 	"flag"
 	"fmt"
 	"io"
@@ -13,20 +14,20 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db/mysql"
-	"github.com/shepherd-yun/sqlvim/internal/db/oracle"
-	"github.com/shepherd-yun/sqlvim/internal/db/postgres"
-	"github.com/shepherd-yun/sqlvim/internal/db/sqlserver"
-	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
-	"github.com/shepherd-yun/sqlvim/internal/history"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
-	"github.com/shepherd-yun/sqlvim/internal/secret"
-	"github.com/shepherd-yun/sqlvim/internal/session"
-	"github.com/shepherd-yun/sqlvim/internal/ui"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db/mysql"
+	"github.com/shepherd-yun/datavim/internal/db/oracle"
+	"github.com/shepherd-yun/datavim/internal/db/postgres"
+	"github.com/shepherd-yun/datavim/internal/db/sqlserver"
+	"github.com/shepherd-yun/datavim/internal/db/tunnel"
+	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/secret"
+	"github.com/shepherd-yun/datavim/internal/session"
+	"github.com/shepherd-yun/datavim/internal/ui"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // version is set at build time via -ldflags "-X main.version=...".
@@ -34,18 +35,18 @@ var version = "dev"
 
 func main() {
 	if err := run(os.Args[1:], os.Stdout); err != nil {
-		fmt.Fprintln(os.Stderr, "sqlvim:", err)
+		fmt.Fprintln(os.Stderr, "datavim:", err)
 		os.Exit(1)
 	}
 }
 
 func run(args []string, stdout io.Writer) error {
-	fs := flag.NewFlagSet("sqlvim", flag.ContinueOnError)
+	fs := flag.NewFlagSet("datavim", flag.ContinueOnError)
 	showVersion := fs.Bool("version", false, "print version and exit")
 	debug := fs.Bool("debug", false, "write debug-level logs")
-	configDir := fs.String("config", "", "config directory (default $XDG_CONFIG_HOME/sqlvim or ~/.config/sqlvim)")
+	configDir := fs.String("config", "", "config directory (default $XDG_CONFIG_HOME/datavim or ~/.config/datavim)")
 	var wsName string
-	fs.StringVar(&wsName, "workspace", "", "workspace to open (default $SQLVIM_WORKSPACE, else default)")
+	fs.StringVar(&wsName, "workspace", "", "workspace to open (default $DATAVIM_WORKSPACE, else default)")
 	fs.StringVar(&wsName, "w", "", "shorthand for --workspace")
 	create := fs.Bool("create", false, "create the workspace if it does not exist")
 	listWorkspaces := fs.Bool("list-workspaces", false, "print the workspaces and exit")
@@ -53,7 +54,7 @@ func run(args []string, stdout io.Writer) error {
 		return err
 	}
 	if *showVersion {
-		_, err := fmt.Fprintln(stdout, "sqlvim", version)
+		_, err := fmt.Fprintln(stdout, "datavim", version)
 		return err
 	}
 
@@ -78,7 +79,9 @@ func run(args []string, stdout io.Writer) error {
 		return err
 	}
 	ws, err := selectWorkspace(dir, stateRoot, workspaceOptions{
-		name: wsName, env: os.Getenv("SQLVIM_WORKSPACE"), create: *create,
+		name: wsName, create: *create,
+		// SQLVIM_WORKSPACE is the variable from before the rename.
+		env: cmp.Or(os.Getenv("DATAVIM_WORKSPACE"), os.Getenv("SQLVIM_WORKSPACE")),
 	})
 	if err != nil {
 		return err
@@ -145,7 +148,7 @@ func setupLogging(debug bool) (path string, closeFn func(), err error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", nil, err
 	}
-	path = filepath.Join(dir, "sqlvim.log")
+	path = filepath.Join(dir, "datavim.log")
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
 	if err != nil {
 		return "", nil, err
@@ -159,7 +162,7 @@ func setupLogging(debug bool) (path string, closeFn func(), err error) {
 }
 
 // openStore opens state.db, falling back to an in-memory store so a broken
-// state file never stops sqlvim from starting.
+// state file never stops datavim from starting.
 func openStore(stateDir string) (*history.Store, error) {
 	st, err := history.Open(filepath.Join(stateDir, "state.db"))
 	if err == nil {

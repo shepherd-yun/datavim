@@ -7,9 +7,9 @@ import (
 	"strconv"
 	"sync"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/session"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/session"
 )
 
 // fakeConnect is one Kafka Connect cluster of the fake backend.

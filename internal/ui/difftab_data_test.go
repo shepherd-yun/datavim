@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/uitest"
 )
 
 var userCols = []db.ColumnInfo{{Name: "id", DatabaseType: "BIGINT"}, {Name: "name", DatabaseType: "VARCHAR"}}
@@ -292,7 +292,7 @@ func TestDataScriptOpensConsoleOnTarget(t *testing.T) {
 	}
 	text := c.editor.Value()
 	for _, want := range []string{
-		"-- sqlvim data sync\n",
+		"-- datavim data sync\n",
 		"-- source: local · app.users\n",
 		"-- target: local · app.users_bak\n",
 		"-- key: id\n",

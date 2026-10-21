@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/schemadiff"
 )
 
 // check refuses edits no ALTER can apply as staged.

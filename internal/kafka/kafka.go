@@ -1,4 +1,4 @@
-// Package kafka is sqlvim's only link to Kafka clusters, what internal/db
+// Package kafka is datavim's only link to Kafka clusters, what internal/db
 // is for SQL servers and internal/rdb for Redis. The UI never imports
 // franz-go. Keys, values and header values are raw bytes: nothing here
 // converts them.
@@ -30,7 +30,7 @@ import (
 	"github.com/twmb/franz-go/pkg/sasl/plain"
 	"github.com/twmb/franz-go/pkg/sasl/scram"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Config is what Open and OpenReader need.
@@ -185,7 +185,7 @@ func firstVersionsErr(vs kadm.BrokersApiVersions) error {
 func clientOpts(cfg Config) ([]kgo.Opt, error) {
 	clientID := cfg.ClientID
 	if clientID == "" {
-		clientID = "sqlvim"
+		clientID = "datavim"
 	}
 	dial, err := dialer(cfg)
 	if err != nil {
@@ -344,7 +344,7 @@ func (c *client) Supports(feature string) bool {
 	return ok
 }
 
-// wrap turns franz-go errors into sqlvim's: cancellation is ctx.Err(), a
+// wrap turns franz-go errors into datavim's: cancellation is ctx.Err(), a
 // refused login ErrAuthFailed, missing ACLs ErrDenied (naming what, e.g.
 // "topic orders"), an unknown request ErrUnsupported and network failures
 // db.ErrConnLost. Other broker errors stay as they are.

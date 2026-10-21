@@ -3,7 +3,7 @@ package schemadiff
 import (
 	"slices"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Writable reports whether w can write c as SQL on table t. What it cannot

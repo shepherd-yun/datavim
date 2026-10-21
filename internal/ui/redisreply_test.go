@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/rcmd"
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/rcmd"
+	"github.com/shepherd-yun/datavim/internal/rdb"
 )
 
 func rs(s string) rdb.Reply { return rdb.Reply{Kind: rdb.KindString, Str: s} }

@@ -15,7 +15,7 @@
 - Formats: `.csv` → CSV, `.tsv` / `.tab` → TSV, `.xlsx` → XLSX, anything else → CSV. Encodings: `UTF-8` (leading BOM dropped) and `GBK`.
 - XLSX is opened with `excelize.Options{ShortDatePattern: "yyyy-mm-dd", LongTimePattern: "hh:mm:ss"}` and read as formatted text.
 - Batch size: `max(1, min(500, 65535/columns))` rows per INSERT. Values are parameters (`?` on MySQL, `$n` on PostgreSQL); NULL and DEFAULT are written as keywords.
-- Savepoint name `sqlvim_import`, taken before every batch.
+- Savepoint name `datavim_import`, taken before every batch.
 - Preview: first 20 rows. Dry run reports at most 50 problems plus the total.
 - One transaction: any failure, cancel or lost connection rolls back everything; on MySQL a table the import created is dropped again. Never reconnect and retry an import.
 - Safety: read-only connections refuse; a console with an open transaction on the connection refuses; staged changes of the target table refuse (`tableBlocked`); prod asks to type the table name.
@@ -691,7 +691,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func strp(s string) *string { return &s }
@@ -841,7 +841,7 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Kind groups column types by how a cell is converted for them.
@@ -1229,7 +1229,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func testPlan(driver string) Plan {
@@ -1343,8 +1343,8 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // Column is a file column picked for import and the column it goes to.
@@ -1533,7 +1533,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func TestInferTypes(t *testing.T) {
@@ -1614,7 +1614,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Inferrer guesses the column types of a new table from the file's rows.
@@ -1765,7 +1765,7 @@ git commit -m "feat(importer): 从文件推断新表的列类型"
 **Interfaces:**
 - Consumes: `Open`, `Plan`, `RowError`, `BatchSize` (Tasks 1–4); `db.Querier`, `db.IsConnLost`, `db.ErrConnLost`; `sqlx.BeginSQL`, `sqlx.DialectOf`, `sqlx.MySQL`, `sqlx.Postgres`.
 - Produces:
-  - `const PreviewRows = 20`, `const MaxErrors = 50`, `const Savepoint = "sqlvim_import"`
+  - `const PreviewRows = 20`, `const MaxErrors = 50`, `const Savepoint = "datavim_import"`
   - `type Sample struct { Header []string; Rows [][]string; Lines []int; BadUTF8 bool }`
   - `func Read(ctx context.Context, path string, o Options, n int, scan func([]string)) (Sample, error)`
   - `type CheckResult struct { Rows int; Errors []*RowError; Failed int }`
@@ -1792,7 +1792,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 type call struct {
@@ -1904,7 +1904,7 @@ func TestRunCommitsInBatches(t *testing.T) {
 	if err != nil || n != 1001 || done.Load() != 1001 {
 		t.Fatalf("n = %d, done = %d, err = %v", n, done.Load(), err)
 	}
-	batch := []string{"SAVEPOINT sqlvim_import", "", "RELEASE SAVEPOINT sqlvim_import"}
+	batch := []string{"SAVEPOINT datavim_import", "", "RELEASE SAVEPOINT datavim_import"}
 	want := []string{"BEGIN"}
 	for _, rows := range []int{500, 500, 1} {
 		batch[1] = "INSERT " + strconv.Itoa(rows) + " rows"
@@ -1940,7 +1940,7 @@ func TestRunFindsTheRejectedRow(t *testing.T) {
 	if !errors.As(err, &le) || le.Line != 3 || err.Error() != "line 3: duplicate key" {
 		t.Fatalf("err = %v", err)
 	}
-	want := []string{"START TRANSACTION", "SAVEPOINT sqlvim_import", "INSERT 3 rows", "ROLLBACK TO SAVEPOINT sqlvim_import", "INSERT 1 rows", "INSERT 1 rows", "ROLLBACK"}
+	want := []string{"START TRANSACTION", "SAVEPOINT datavim_import", "INSERT 3 rows", "ROLLBACK TO SAVEPOINT datavim_import", "INSERT 1 rows", "INSERT 1 rows", "ROLLBACK"}
 	if got := q.statements(); !slices.Equal(got, want) {
 		t.Fatalf("statements:\n%v\nwant\n%v", got, want)
 	}
@@ -1977,7 +1977,7 @@ func TestRunCreatesAndDropsOnMySQL(t *testing.T) {
 	}
 	q := &fakeQuerier{fail: failOn("1")}
 	_, err := Run(context.Background(), q, job(t, "mysql"), new(atomic.Int64))
-	want := []string{"CREATE TABLE t", "START TRANSACTION", "SAVEPOINT sqlvim_import", "INSERT 1 rows", "ROLLBACK TO SAVEPOINT sqlvim_import", "INSERT 1 rows", "ROLLBACK", "DROP TABLE t"}
+	want := []string{"CREATE TABLE t", "START TRANSACTION", "SAVEPOINT datavim_import", "INSERT 1 rows", "ROLLBACK TO SAVEPOINT datavim_import", "INSERT 1 rows", "ROLLBACK", "DROP TABLE t"}
 	if got := q.statements(); err == nil || !slices.Equal(got, want) {
 		t.Fatalf("mysql: err %v, statements\n%v\nwant\n%v", err, got, want)
 	}
@@ -1996,7 +1996,7 @@ func TestRunCreatesAndDropsOnMySQL(t *testing.T) {
 
 	q = &fakeQuerier{fail: failOn("1")}
 	_, err = Run(context.Background(), q, job(t, "postgres"), new(atomic.Int64))
-	want = []string{"BEGIN", "CREATE TABLE t", "SAVEPOINT sqlvim_import", "INSERT 1 rows", "ROLLBACK TO SAVEPOINT sqlvim_import", "INSERT 1 rows", "ROLLBACK"}
+	want = []string{"BEGIN", "CREATE TABLE t", "SAVEPOINT datavim_import", "INSERT 1 rows", "ROLLBACK TO SAVEPOINT datavim_import", "INSERT 1 rows", "ROLLBACK"}
 	if got := q.statements(); err == nil || !slices.Equal(got, want) {
 		t.Fatalf("postgres: err %v, statements\n%v\nwant\n%v", err, got, want)
 	}
@@ -2015,7 +2015,7 @@ func TestRunCancelAndConnLost(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel: %v", err)
 	}
-	if got := q.statements(); got[len(got)-1] != "ROLLBACK" || slices.Contains(got, "ROLLBACK TO SAVEPOINT sqlvim_import") {
+	if got := q.statements(); got[len(got)-1] != "ROLLBACK" || slices.Contains(got, "ROLLBACK TO SAVEPOINT datavim_import") {
 		t.Fatalf("cancel statements %v", got)
 	}
 
@@ -2026,7 +2026,7 @@ func TestRunCancelAndConnLost(t *testing.T) {
 		return nil
 	}}
 	_, err = Run(context.Background(), q, Job{Path: idsFile(t, 2), Options: DefaultOptions("ids.csv"), Plan: idsPlan("mysql")}, new(atomic.Int64))
-	if !db.IsConnLost(err) || slices.Contains(q.statements(), "ROLLBACK TO SAVEPOINT sqlvim_import") {
+	if !db.IsConnLost(err) || slices.Contains(q.statements(), "ROLLBACK TO SAVEPOINT datavim_import") {
 		t.Fatalf("conn lost: %v, %v", err, q.statements())
 	}
 }
@@ -2054,8 +2054,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 const (
@@ -2065,7 +2065,7 @@ const (
 	MaxErrors = 50
 	// Savepoint is taken before every batch, so that a rejected batch can
 	// be replayed row by row to find the row the server rejects.
-	Savepoint = "sqlvim_import"
+	Savepoint = "datavim_import"
 
 	cleanupTimeout = 5 * time.Second
 )
@@ -2393,8 +2393,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/importer"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/importer"
 )
 
 // runImportContract checks that importer.Run writes through the driver:
@@ -2887,12 +2887,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/importer"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/importer"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // importTimeout bounds reading, checking or importing one file.
@@ -3485,10 +3485,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/importer"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/importer"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
 
 // importFileMsg is the file typed at the prompt that starts an import.
@@ -3637,7 +3637,7 @@ git commit -m "feat(ui): 从树上打开 Import tab，读取文件并按列名�
 
 - [ ] **Step 1: Write the failing tests**
 
-Append to `internal/ui/import_test.go` (and add `"github.com/shepherd-yun/sqlvim/internal/db"` to its imports). The tab draws its own status as its last line, above the root status bar, so tab messages are checked with `screen(m)`; `statusLine(m)` is the root's.
+Append to `internal/ui/import_test.go` (and add `"github.com/shepherd-yun/datavim/internal/db"` to its imports). The tab draws its own status as its last line, above the root status bar, so tab messages are checked with `screen(m)`; `statusLine(m)` is the root's.
 
 ```go
 func TestImportMappingKeys(t *testing.T) {
@@ -3995,7 +3995,7 @@ func (t *importTab) editType() tea.Cmd {
 func (t *importTab) submit() tea.Cmd { return nil }
 ```
 
-The `"t changes types"` text names a key: replace it with `keyHint(t.keys, keymap.Import, keymap.ImportType, "changes types of a new table")` joined by `joinHints`, per the Global Constraints. Add imports `errors`, `strconv`, `github.com/shepherd-yun/sqlvim/internal/ui/overlay`.
+The `"t changes types"` text names a key: replace it with `keyHint(t.keys, keymap.Import, keymap.ImportType, "changes types of a new table")` joined by `joinHints`, per the Global Constraints. Add imports `errors`, `strconv`, `github.com/shepherd-yun/datavim/internal/ui/overlay`.
 
 - [ ] **Step 4: Run the tests to verify they pass**
 
@@ -4041,9 +4041,9 @@ func TestImportIntoATable(t *testing.T) {
 	press(t, m, "y")
 	want := []string{
 		"START TRANSACTION",
-		"SAVEPOINT sqlvim_import",
+		"SAVEPOINT datavim_import",
 		"INSERT INTO `app`.`users` (`id`, `name`) VALUES (?, ?), (?, ?)",
-		"RELEASE SAVEPOINT sqlvim_import",
+		"RELEASE SAVEPOINT datavim_import",
 		"COMMIT",
 	}
 	if got := b.conn.execList(); !slices.Equal(got[len(got)-len(want):], want) {
@@ -4203,7 +4203,7 @@ func TestImportErrorText(t *testing.T) {
 }
 ```
 
-Add imports `context`, `errors`, `fmt`, `slices`, `tea "charm.land/bubbletea/v2"`, `github.com/shepherd-yun/sqlvim/internal/importer`.
+Add imports `context`, `errors`, `fmt`, `slices`, `tea "charm.land/bubbletea/v2"`, `github.com/shepherd-yun/datavim/internal/importer`.
 
 - [ ] **Step 2: Run the tests to verify they fail**
 
@@ -4482,7 +4482,7 @@ Extend `Update`:
 		}
 ```
 
-Add imports `errors`, `log/slog`, `github.com/shepherd-yun/sqlvim/internal/ui/overlay` (if not there yet).
+Add imports `errors`, `log/slog`, `github.com/shepherd-yun/datavim/internal/ui/overlay` (if not there yet).
 
 In `internal/ui/importrun.go` add:
 

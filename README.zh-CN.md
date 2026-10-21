@@ -1,10 +1,10 @@
-# sqlvim
+# datavim
 
 一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle，也能浏览和查询 Redis 和 Kafka。
 
 [English](README.md)
 
-![sqlvim 演示](docs/demo.gif)
+![datavim 演示](docs/demo.gif)
 
 - 浏览数据库，过滤、排序表数据，并**直接编辑**：改动先暂存，以 SQL 预览后在一个事务里提交。在树中展开表，查看列、键、外键和索引。
 - 带语法高亮的 SQL 控制台，**内置 vim 编辑器**、自动补全，可交给 `$EDITOR` 编辑。
@@ -13,30 +13,30 @@
 - 把 CSV、TSV、xlsx 文件导入到表，或从文件推断结构新建表。
 - Kafka：topic、按 lag 排序的 consumer group，可跳转、过滤和 live tail 的消息浏览，重置 offset，producer console；
   修改 topic 配置和 partition，删除消息和 group，Schema Registry（Avro、Protobuf、JSON Schema），ACL、Kafka Connect 和消息字段打码。
-- 审计日志：记录 sqlvim 发给 SQL、Redis、Kafka 服务器的每个写操作（`<Space>a`）。
+- 审计日志：记录 datavim 发给 SQL、Redis、Kafka 服务器的每个写操作（`<Space>a`）。
 - SSH 隧道（agent、密钥、ProxyJump），生产环境保护，手动事务。
 - 自定义按键（`keymap.toml`）与颜色（`[theme]`）。
 
 ## 安装
 
 ```sh
-brew install shepherd-yun/tap/sqlvim
+brew install shepherd-yun/tap/datavim
 ```
 
 或用 Go（版本见 `go.mod`）：
 
 ```sh
-go install github.com/shepherd-yun/sqlvim/cmd/sqlvim@latest
+go install github.com/shepherd-yun/datavim/cmd/datavim@latest
 ```
 
-macOS 与 Linux 的二进制包在 [Releases 页面](https://github.com/shepherd-yun/sqlvim/releases)。
+macOS 与 Linux 的二进制包在 [Releases 页面](https://github.com/shepherd-yun/datavim/releases)。
 
 ## 配置
 
-创建 `~/.config/sqlvim/connections.toml`，参见 [docs/examples/connections.toml](docs/examples/connections.toml)。
-首次连接时 sqlvim 会询问密码，并可保存到 macOS 钥匙串。
+创建 `~/.config/datavim/connections.toml`，参见 [docs/examples/connections.toml](docs/examples/connections.toml)。
+首次连接时 datavim 会询问密码，并可保存到 macOS 钥匙串。
 
-可选的 `~/.config/sqlvim/config.toml`（参见 [docs/examples/config.toml](docs/examples/config.toml)）：
+可选的 `~/.config/datavim/config.toml`（参见 [docs/examples/config.toml](docs/examples/config.toml)）：
 
 ```toml
 page_size        = 200
@@ -51,7 +51,7 @@ icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "pl
 树使用 [Nerd Font](https://www.nerdfonts.com)（v3）图标：连接前显示 MySQL / PostgreSQL / Redis / Kafka 的标志，
 下面的库、schema、表、文件夹、键也各有图标。终端没有 Nerd Font 时会显示成方框，设置 `icons = "plain"` 即可。
 
-还没有配置？启动 sqlvim 后按 `<space>n` 添加连接。
+还没有配置？启动 datavim 后按 `<space>n` 添加连接。
 
 **SQL Server**（2014–2022，用户名密码登录）：`driver = "sqlserver"`，端口 1433。`params` 里的值原样传给驱动。
 较老的服务器通常要放宽 TLS：`params = { encrypt = "disable" }`；自签名证书用 `TrustServerCertificate = "true"`；
@@ -64,7 +64,7 @@ icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "pl
 语句默认自动提交；`<Space>t` 或 `SET TRANSACTION` 会保持事务直到 `COMMIT` 或 `ROLLBACK`。Oracle 上暂不支持修改表结构、对比和导入。
 
 **Redis**（5.0 及以上，单机）：`driver = "redis"`，端口 6379，`database` 是默认的 db 编号
-（留空为 0，表单里显示为 `DB`）。密码可选：sqlvim 先不带密码连接，服务器回 `NOAUTH` 时才询问。
+（留空为 0，表单里显示为 `DB`）。密码可选：datavim 先不带密码连接，服务器回 `NOAUTH` 时才询问。
 `params`：`separator` 是 key 分组用的分隔符（默认 `:`），`tls = "true"`、`tls_skip_verify = "true"`。
 展开 db 时用 `SCAN` 每批 1,000 个扫描 key（从不用 `KEYS`）：一次加载扫到 10,000 个就停，`↓ load more` 继续
 （每个 db 最多 100,000 个），`Ctrl-c` 停止扫描，prod 连接每批之间会停顿一下。在 db、文件夹或 key 上按 `F`
@@ -81,19 +81,19 @@ Redis 控制台（在 Redis 连接、db 或 key 上按 `<Space>c`）一行一条
 或 redis-cli 那样的缩进文本；`M` 切换到消息日志，在表格单元格上按 `g d` 打开那个 key。控制台有自己的专用连接，
 所以 `SELECT`（标签页标题显示当前 db）和 `MULTI` / `WATCH` 会一直有效；状态栏显示 `TX n` 或 `WATCH`，
 关闭标签页或退出时会先询问。`Ctrl-c` 可以取消 `BLPOP q 0` 这类阻塞命令；取消会断开连接，下一条命令自动重连并回到原来的 db。
-在 `MULTI` 或 `WATCH` 中不会自动重连，sqlvim 会提示事务已丢失。输入时补全命令、子命令和 key
+在 `MULTI` 或 `WATCH` 中不会自动重连，datavim 会提示事务已丢失。输入时补全命令、子命令和 key
 （树里已扫描到的 key，再加一次小范围的 `SCAN`），并显示命令的参数提示。已知限制：重连后不恢复 `CLIENT SETNAME`
 等其他连接状态；`MULTI` 里不能 `SELECT`；Redis 控制台不支持 `:e` / `:w`；不支持 `SUBSCRIBE`、`MONITOR`、`HELLO`、
 `RESET`、`CLIENT TRACKING` 等命令。Redis 不支持结构、对比和导入。
 
 Redis key 在详情页里像表数据一样编辑：`i` / `Enter` 改单元格（String 的值用单元格编辑框，值很长或含换行时用 `$EDITOR`；
 `<Space>v` 总是打开 `$EDITOR`），`o` 加一个 field、元素（index 列写 `head` 或 `tail` 决定加在哪头）、成员或 Stream 条目，
-`dd` 删除一行，`u` / `U` 撤销，`<Space>w` 先显示要做的检查和命令再提交。sqlvim 会 `WATCH` 这个 key，并检查修改所依赖的值
+`dd` 删除一行，`u` / `U` 撤销，`<Space>w` 先显示要做的检查和命令再提交。datavim 会 `WATCH` 这个 key，并检查修改所依赖的值
 （field 的值、某个下标上的元素、成员的 score）是否仍和加载时一样；不一样，或者 `EXEC` 之前 key 被别人改了，就一条都不写。
-Redis 不会回滚：`EXEC` 里某条命令失败时，它前后的命令仍然生效，sqlvim 会指出是哪一条。超过 1 MB（只加载了一部分）的 String
+Redis 不会回滚：`EXEC` 里某条命令失败时，它前后的命令仍然生效，datavim 会指出是哪一条。超过 1 MB（只加载了一部分）的 String
 和二进制值不能在这里改，请用控制台。详情页上 `t` 设置或去掉 TTL，`r` 重命名（`RENAMENX`，目标已存在时先确认再覆盖），
 `D` 删除（`UNLINK`）；树上对 key 按 `r` / `dd` 效果一样，`o` 新建 key，在文件夹或 db 上按 `dd` 删除匹配的 key（文件夹的前缀，
-或 db 的过滤条件）：sqlvim 先数出数量、列出前 20 个，再每批 500 个删除，`Ctrl-c` 可以停止。删除过程中新写入的 key 可能删不到。
+或 db 的过滤条件）：datavim 先数出数量、列出前 20 个，再每批 500 个删除，`Ctrl-c` 可以停止。删除过程中新写入的 key 可能删不到。
 
 服务器页（在 Redis 连接上按 `<Space>i`，或节点菜单里的 `Server status`）用 `INFO` 显示服务器状态——版本、角色、运行时间、
 客户端数、key 数、内存、命中率、淘汰和过期的 key 数——以及 ops/sec、内存、网络流量的 sparkline。每 2 秒采样一次，
@@ -118,22 +118,22 @@ params = { sasl = "scram-sha-512", tls = "true" }
 
 `params`：`sasl`（`plain`、`scram-sha-256` 或 `scram-sha-512`；密码和其他连接一样会询问并存进钥匙串）、
 `tls = "true"`、`tls_skip_verify`、`tls_ca`、`tls_cert` 和 `tls_key`（PEM 文件，用于 mTLS）、`client_id`（默认
-`sqlvim`）和 `show_internal = "true"`。连接表单里有 `SASL` 和 `TLS` 两项。走 SSH 隧道时，所有 broker 连接（包括
+`datavim`）和 `show_internal = "true"`。连接表单里有 `SASL` 和 `TLS` 两项。走 SSH 隧道时，所有 broker 连接（包括
 broker 返回的 advertised 地址）都经过跳板机，所以跳板机必须能访问这些地址。
 `broker_map = "b-1.internal:9092=localhost:19092, …"` 让某个 advertised broker 改连另一个地址（端口转发、NAT）。
 
 `sasl = "oauth"` 用 OAuth client credentials 取 token 登录：必须配 `oauth_token_url` 和 `oauth_client_id`，`oauth_scope`
 可选，client secret 在第一次用到时询问。`sasl = "aws-msk-iam"` 用 IAM 登录 MSK（`aws_region`、`aws_profile`，默认开 TLS）：
-凭据来自 AWS 自己的凭据链（环境变量、`~/.aws`、SSO、实例角色），sqlvim 不保存 AWS 密钥。
+凭据来自 AWS 自己的凭据链（环境变量、`~/.aws`、SSO、实例角色），datavim 不保存 AWS 密钥。
 
 `schema_registry_url = "https://sr.internal:8081"` 配置 Schema Registry（Confluent API，Redpanda 自带的也行），basic auth
 用 `schema_registry_user`；它的 HTTP 请求同样走 SSH 隧道，使用同样的 TLS 参数（`tls_ca`、`tls_cert` / `tls_key`、`tls_skip_verify`）。Registry 第一次要求密码时
 才询问。连接密码以外的秘密在钥匙串里的账户是 `<连接名>#schema-registry` 和 `<连接名>#oauth`，也可以用环境变量
-`SQLVIM_PASSWORD_<名字>_SCHEMA_REGISTRY` / `SQLVIM_PASSWORD_<名字>_OAUTH` 提供。
+`DATAVIM_PASSWORD_<名字>_SCHEMA_REGISTRY` / `DATAVIM_PASSWORD_<名字>_OAUTH` 提供。
 
 `connect_url = "main=http://connect-1:8083, cdc=https://connect-2:8083"` 配置 Kafka Connect 集群（只写一个 URL 时集群名是
 `connect`），basic auth 用 `connect_user`（所有集群共用）；集群第一次要求密码时才询问，存在钥匙串的 `<连接名>#connect`
-（环境变量 `SQLVIM_PASSWORD_<名字>_CONNECT`）。它们的 HTTP 请求同样走 SSH 隧道。树上的 Kafka Connect 部分列出 connector
+（环境变量 `DATAVIM_PASSWORD_<名字>_CONNECT`）。它们的 HTTP 请求同样走 SSH 隧道。树上的 Kafka Connect 部分列出 connector
 （有多个集群时按集群分组）、状态和运行中的 task 数，失败的标红；`Enter` 打开 connector：Status、Tasks（`K` 查看 task 的
 trace）和 Config，密码、secret、token、key 显示成 `******`。`p` 暂停或继续，`R` 重启 connector 和它失败的 task（在 Tasks
 部分是重启光标所在的 task），`<Space>v` 在 `$EDITOR` 里以 JSON 修改配置：先由集群校验，确认框列出改动，`******` 表示保留原值，
@@ -198,9 +198,9 @@ principal（只删这一条：所有字段都要一致），`gd` 打开 literal 
 
 - **Status** —— 版本、运行时间、角色、连接数和上限、缓存命中率等，以及负载的 sparkline（QPS / TPS、运行中的会话、
   每秒读写行数或网络流量）。每 2 秒采样一次，只在显示在屏幕上时采样。
-- **Sessions** —— 谁连着、在跑什么、跑了多久、是否在事务里（默认隐藏空闲会话，`a` 显示；`*` 标出 sqlvim 自己的）。
+- **Sessions** —— 谁连着、在跑什么、跑了多久、是否在事务里（默认隐藏空闲会话，`a` 显示；`*` 标出 datavim 自己的）。
   `c` 取消会话正在执行的查询，`dd` 断开会话：只读连接上拒绝，其他连接都要确认，prod 上要输入连接名；
-  执行前 sqlvim 会核对这个 id 还是原来那个会话。SQL Server 不能只取消查询（只能断开），Oracle 18c 以前也不能。
+  执行前 datavim 会核对这个 id 还是原来那个会话。SQL Server 不能只取消查询（只能断开），Oracle 18c 以前也不能。
 - **Locks** —— 谁在等锁、谁持有锁，以及双方的语句。
 - **Slow queries** —— 按总耗时排序的语句：MySQL 用 `performance_schema` 的摘要，PostgreSQL 用 `pg_stat_statements`（装了才有），
   SQL Server 用 `dm_exec_query_stats`，Oracle 用 `v$sql`。
@@ -225,7 +225,7 @@ env      = "prod"
 ssh      = "bastion"
 ```
 
-sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任意跳数）和 `UserKnownHostsFile`。
+datavim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任意跳数）和 `UserKnownHostsFile`。
 先尝试 ssh-agent，再尝试你的密钥文件，都不行时才询问密钥口令（口令只保存在内存里）。
 未知主机会显示指纹，输入 `yes` 后加入 `known_hosts`；主机密钥变化视为错误。不支持 `ProxyCommand`。
 
@@ -235,23 +235,23 @@ sqlvim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任�
 `connections.toml`、钥匙串密码、历史和控制台草稿；设置、主题和按键在所有空间共享。
 
 ```sh
-sqlvim -w personal --create   # 第一次先创建
-sqlvim -w personal            # 或：SQLVIM_WORKSPACE=personal sqlvim
-sqlvim --list-workspaces
+datavim -w personal --create   # 第一次先创建
+datavim -w personal            # 或：DATAVIM_WORKSPACE=personal datavim
+datavim --list-workspaces
 ```
 
 不加 `-w` 时进入 `default` 空间，也就是一直以来用的那些文件。当前空间名会显示在状态栏和窗口标题里。
 
 | | default | `personal` |
 |---|---|---|
-| 连接 | `~/.config/sqlvim/connections.toml` | `~/.config/sqlvim/workspaces/personal/connections.toml` |
-| 历史、草稿 | `~/.local/state/sqlvim/state.db` | `~/.local/state/sqlvim/workspaces/personal/state.db` |
+| 连接 | `~/.config/datavim/connections.toml` | `~/.config/datavim/workspaces/personal/connections.toml` |
+| 历史、草稿 | `~/.local/state/datavim/state.db` | `~/.local/state/datavim/workspaces/personal/state.db` |
 | 钥匙串账户 | `<连接名>` | `personal/<连接名>` |
 
 要把连接挪到某个空间：先创建空间，把对应的 `[[connection]]` 段落剪切到它的
 `connections.toml`，首次连接时重新输入一次密码。这些连接的历史留在默认空间。
 
-配合 [direnv](https://direnv.net)，在项目的 `.envrc` 里写 `export SQLVIM_WORKSPACE=work`，就能按目录自动选空间。
+配合 [direnv](https://direnv.net)，在项目的 `.envrc` 里写 `export DATAVIM_WORKSPACE=work`，就能按目录自动选空间。
 
 ## 按键
 
@@ -295,7 +295,7 @@ sqlvim --list-workspaces
 | `Ctrl-j` / `Ctrl-k` | 控制台：切到结果 / 编辑器；`M` 切换消息日志 |
 | `<Space>v` | 在 `$EDITOR` 中编辑控制台内容 |
 | `<Space>h` | SQL 历史 |
-| `<Space>a` | sqlvim 发出的写操作的审计日志（`:audit <连接名>` 只看一个连接）；`F` 搜索，`gd` 打开对象 |
+| `<Space>a` | datavim 发出的写操作的审计日志（`:audit <连接名>` 只看一个连接）；`F` 搜索，`gd` 打开对象 |
 | `<Space>y t/c/j/m/i` | 复制结果为 TSV / CSV / JSON / Markdown / INSERT；在结果表格里也可直接按 `y t/c/j/m/i` |
 | `<Space>yd` | 复制光标所在表的 DDL（树、数据 tab 或结构 tab，这些地方也可直接按 `yd`）；在函数定义弹窗里按 `y` 复制其定义 |
 | `<Space>x c/j/s/x` | 导出结果为 CSV / JSON / SQL / xlsx |
@@ -369,7 +369,7 @@ sqlvim --list-workspaces
 
 ## 自定义
 
-**按键** —— `~/.config/sqlvim/keymap.toml` 可以更换 leader，并按上下文绑定、改绑或解绑按键
+**按键** —— `~/.config/datavim/keymap.toml` 可以更换 leader，并按上下文绑定、改绑或解绑按键
 （[包含全部动作的示例](docs/examples/keymap.toml)）：
 
 ```toml
@@ -380,7 +380,7 @@ leader = ","
 "s" = ""
 ```
 
-sqlvim 启动时检查该文件，指出未知或冲突的绑定。帮助（`?`）、which-key 和各处提示都会跟随你的按键。
+datavim 启动时检查该文件，指出未知或冲突的绑定。帮助（`?`）、which-key 和各处提示都会跟随你的按键。
 控制台编辑器的 vim 键、文本输入框和弹窗列表的按键保持不变。
 
 **颜色** —— `config.toml` 中的 `[theme]` 表；值为 ANSI 色号 `"0"`–`"255"` 或 `"#rrggbb"`。
@@ -430,7 +430,7 @@ VISUAL 模式下 `<Space><Space>` 用选中的文本搜索。
 
 ## 搜索与补全
 
-sqlvim 在你第一次使用某个连接时于后台读取其目录（表、视图、列、函数）——MySQL 读整个服务器，
+datavim 在你第一次使用某个连接时于后台读取其目录（表、视图、列、函数）——MySQL 读整个服务器，
 PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新加载；在控制台执行 DDL 会自动重新加载。
 
 在控制台中，补全随输入弹出：`FROM`/`JOIN`/`UPDATE`/`INTO` 之后是表，语句中各表（及 `alias.`）的列，
@@ -442,12 +442,12 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
 ## 安全
 
 - `readonly = true`（`env = "prod"` 时默认开启）在控制台中阻止 INSERT/UPDATE/DELETE 和 DDL，
-  数据库会话本身也设为只读，作为第二道防线。`:set noreadonly` 在 sqlvim 退出前解锁该连接；
+  数据库会话本身也设为只读，作为第二道防线。`:set noreadonly` 在 datavim 退出前解锁该连接；
   不会修改 `connections.toml`。要长期修改，在新建 / 编辑连接表单里设置 `Read-only`（`auto` 跟随 `env`）。
-- SQL Server 和 Oracle 没有只读会话，所以只有 sqlvim 这一道防线，规则也更严：它检查一个批次里的每条语句（T-SQL 可以不写分号），
+- SQL Server 和 Oracle 没有只读会话，所以只有 datavim 这一道防线，规则也更严：它检查一个批次里的每条语句（T-SQL 可以不写分号），
   认不出是否安全的一律拦截——除少数只读系统过程（`sp_help`、`sp_helptext`、`sp_columns`、`sp_who` 等）以外的 `EXEC`、
   `IF` 块、`DBCC`、PL/SQL 块、`CALL` 等（允许 `ALTER SESSION SET CURRENT_SCHEMA` / `NLS_…`）。生产库建议再配一个数据库层面只读的账号。
-- Redis 同样没有只读会话：浏览只发送读命令，控制台里的只读完全由 sqlvim 在客户端保证——拒绝写命令、危险命令和
+- Redis 同样没有只读会话：浏览只发送读命令，控制台里的只读完全由 datavim 在客户端保证——拒绝写命令、危险命令和
   认不出的命令（包括模块命令）。prod 上写命令和认不出的命令要按 `y` 确认；危险命令（`FLUSHDB`、`FLUSHALL`、`CONFIG SET`、
   `CLIENT KILL`、`SHUTDOWN`、`DEBUG` 等）在任何连接上都要确认，prod 上要输入连接名；db 里超过 10,000 个 key 时拒绝 `KEYS`
   （请用 `SCAN` 或树的过滤）。多行一起执行时先检查全部再执行，所以 `MULTI` 绕不过这些规则。
@@ -463,7 +463,7 @@ PostgreSQL 每次一个数据库——并保存在内存中。`<Space>r` 重新�
 - `env = "prod"` 用红色框住 tab 区域，并在状态栏显示 `[PROD]`；prod 连接上的每条写入或 DDL 语句都会先要求按 `y` 确认。
 - 不带 `WHERE` 的 `UPDATE` / `DELETE` 需要先输入表名才会执行。
 - 手动提交模式（`<Space>t`）下，退出或关闭有未结束事务的控制台会先询问。若事务期间连接断开，
-  sqlvim 会提示事务已丢失，而不是悄悄重连。请用 `<Space>t` 而不是 `SET autocommit = 0`。
+  datavim 会提示事务已丢失，而不是悄悄重连。请用 `<Space>t` 而不是 `SET autocommit = 0`。
 - 导入在一个事务里完成，只要有一行失败就什么都不写；MySQL 上导入新建的表会被删掉。
 - 每个到达服务器的写操作都记进审计日志（`<Space>a`，存在 `state.db`，保留最近 50,000 条）：可能写入的 SQL 语句、
   Redis 的写命令和认不出的命令、Kafka 和 Schema Registry 的写操作，以及它们的结果。SQL 会隐藏密码，Redis 命令按输入
@@ -479,7 +479,7 @@ make snapshot           # build release archives locally with GoReleaser
 make demo               # re-record docs/demo.gif (needs vhs and Docker)
 ```
 
-日志：`~/.local/state/sqlvim/sqlvim.log`（`--debug` 输出更多细节）。
+日志：`~/.local/state/datavim/datavim.log`（`--debug` 输出更多细节）。
 提交 pull request 前请阅读 [CONTRIBUTING.md](CONTRIBUTING.md)。
 
 ## 许可证

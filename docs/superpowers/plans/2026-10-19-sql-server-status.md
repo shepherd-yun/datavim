@@ -22,7 +22,7 @@
 - Key names in UI text only via `keyHint`. UI text in English.
 - Refresh on the status tab must not reload the catalog.
 - One `Sample` is at most two or three round trips and reads no per-statement or per-row data; it runs every `m.timings.server` (default 2s) only while the Status section is on screen.
-- Every driver sets application name `sqlvim` unless the user's `Params` set one.
+- Every driver sets application name `datavim` unless the user's `Params` set one.
 - Conventional Commits with scope; never add a Co-Authored-By line. CHANGELOG `[Unreleased]` entry; README and README.zh-CN both.
 
 ## Review Focus
@@ -128,7 +128,7 @@ type SessionList struct {
 	Rows          *ResultSet
 	IDs           []SessionID      // row by row
 	Info          []SessionSummary // row by row
-	Self          []bool           // row by row: application name is sqlvim
+	Self          []bool           // row by row: application name is datavim
 	Total, Active int
 }
 
@@ -197,7 +197,7 @@ and `TestUnavailable`: `err := Unavailable("needs PROCESS")`; `errors.Is(err, Er
 ```go
 type ServerFixture struct {
 	// SleepSQL runs for at least 30 seconds; it contains the marker
-	// "sqlvim_contract_sleep" (in a comment or alias) so Sessions can find it.
+	// "datavim_contract_sleep" (in a comment or alias) so Sessions can find it.
 	SleepSQL string
 	// LockSQL updates one row of the standard fixture table (users, id 1),
 	// so two sessions running it inside a transaction block each other.
@@ -215,7 +215,7 @@ func RunServerContract(t *testing.T, conn db.Conn, f ServerFixture)
 Contract subtests (each `t.Run`, names exact):
 - `"info"`: `Info` ok, `Version != ""`, `SettingsTitle != ""`.
 - `"sample"`: two `Sample` calls 1s apart; same metric names in the same order; for `Counter` metrics value2 ≥ value1; `len(Facts) > 0`.
-- `"sessions"`: session S runs `SleepSQL` in a goroutine; poll `Sessions(ctx, false)` up to 5s until a row's `Info[i].SQL` contains `sqlvim_contract_sleep`; `len(IDs) == len(Info) == len(Self) == len(Rows.Rows)`; that row's `Self` is true (S is a sqlvim connection); `Total >= Active >= 1`. Also `Sessions(ctx, true)` lists at least as many rows, and includes an idle `Session` opened just for this (its row must scan even with NULL SQL).
+- `"sessions"`: session S runs `SleepSQL` in a goroutine; poll `Sessions(ctx, false)` up to 5s until a row's `Info[i].SQL` contains `datavim_contract_sleep`; `len(IDs) == len(Info) == len(Self) == len(Rows.Rows)`; that row's `Self` is true (S is a datavim connection); `Total >= Active >= 1`. Also `Sessions(ctx, true)` lists at least as many rows, and includes an idle `Session` opened just for this (its row must scan even with NULL SQL).
 - `"cancel"`: if `Info.CanCancel`, `CancelQuery(id)` → ok; the sleep goroutine returns within 10s (error or not — MySQL `SLEEP` returns 1); `S.Ping` ok. Else `CancelQuery` → `errors.Is(err, db.ErrUnavailable)`.
 - `"kill"`: start `SleepSQL` again on S, `KillSession(id)` → ok; within 10s S's call returns and the next `S.Ping` error `errors.Is(err, db.ErrConnLost)`; `KillSession(id)` again → `ok == false, err == nil`.
 - `"session changed"`: open session S2 (idle), find its row, call `KillSession(SessionID{ID: id.ID, Since: "1999-01-01 00:00:00"})` when `id.Since != ""` → `errors.Is(err, db.ErrSessionChanged)` and `S2.Ping` still ok. Skip with `t.Skip` when `id.Since == ""` (MySQL, Oracle).
@@ -223,13 +223,13 @@ Contract subtests (each `t.Run`, names exact):
 - `"settings"`: some row's first column equals `Setting` (case-insensitive).
 - `"top statements and replication"`: each returns a non-nil ResultSet or `ErrUnavailable`; nothing else.
 
-MySQL reader, per spec §6.1 (queries left to the implementer): `Info` reads `VERSION()` once and caches `>= 8.0.22`; `SettingsTitle "Variables"`, `CanCancel true`. Facts labels: `version`, `uptime` (Duration), `role`, `connections` (Count, Of = max_connections), `running`, `peak`, `buffer pool` (Bytes), `hit rate` (Percent), `aborted` (Text "clients 3 · connects 0"). Metrics in order: `QPS` (Questions), `commits/s` (Handler_commit), `running` (gauge), `slow/s` (Slow_queries), `net in` / `net out` (Bytes). `Since` is `""`. Kill: `KILL QUERY ?`/`KILL ?` with the id parsed as uint64; "Unknown thread id" (error 1094) → `ok=false, nil`. Permission errors 1227 / 1142 → `db.Unavailable("needs the PROCESS privilege")` etc. Set the connection attribute `program_name=sqlvim` unless `Params["connectionAttributes"]` is set (check go-sql-driver docs with Context7 for the DSN key).
+MySQL reader, per spec §6.1 (queries left to the implementer): `Info` reads `VERSION()` once and caches `>= 8.0.22`; `SettingsTitle "Variables"`, `CanCancel true`. Facts labels: `version`, `uptime` (Duration), `role`, `connections` (Count, Of = max_connections), `running`, `peak`, `buffer pool` (Bytes), `hit rate` (Percent), `aborted` (Text "clients 3 · connects 0"). Metrics in order: `QPS` (Questions), `commits/s` (Handler_commit), `running` (gauge), `slow/s` (Slow_queries), `net in` / `net out` (Bytes). `Since` is `""`. Kill: `KILL QUERY ?`/`KILL ?` with the id parsed as uint64; "Unknown thread id" (error 1094) → `ok=false, nil`. Permission errors 1227 / 1142 → `db.Unavailable("needs the PROCESS privilege")` etc. Set the connection attribute `program_name=datavim` unless `Params["connectionAttributes"]` is set (check go-sql-driver docs with Context7 for the DSN key).
 
 - [ ] **Step 1: Write the contract** `internal/db/dbtest/server.go` and call it from `mysql/integration_test.go` after `RunContract`:
 
 ```go
 dbtest.RunServerContract(t, conn, dbtest.ServerFixture{
-	SleepSQL: "SELECT SLEEP(30) AS sqlvim_contract_sleep",
+	SleepSQL: "SELECT SLEEP(30) AS datavim_contract_sleep",
 	LockSQL:  "UPDATE app.users SET name = name WHERE id = 1",
 	Begin:    "START TRANSACTION",
 	Setting:  "max_connections",
@@ -252,9 +252,9 @@ Add `TestServerMySQL57` in the same file: start `mysql:5.7`, run `RunServerContr
 
 **Interfaces:**
 - Consumes: Task 3's `RunServerContract`.
-- Per spec §6.2. `SettingsTitle "Settings"`, `CanCancel true`. Metrics: `TPS`, `active` (gauge), `rows read/s`, `rows written/s`. Facts: `version`, `uptime`, `role`, `connections` (Of max_connections), `active`, `idle in tx`, `cache hit` (Percent), `db size` (Bytes), `deadlocks`, `temp files` (Text), `oldest tx` (Text "00:04:12 (pid 48211)" or `—`). `SessionID{ID: pid, Since: backend_start in RFC3339Nano}`; kill/cancel run `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid = $1 AND backend_start = $2` — no row → check whether the pid exists at all: exists → `ErrSessionChanged`, not → `ok=false`. `pg_stat_statements` missing in this database → `db.Unavailable(fmt.Sprintf("pg_stat_statements is not installed in database %q", c.database))`; support `total_exec_time` (13+) and `total_time`. `<insufficient privilege>` query text is passed through as is. `application_name=sqlvim` via pgx `RuntimeParams` unless `Params["application_name"]` is set.
+- Per spec §6.2. `SettingsTitle "Settings"`, `CanCancel true`. Metrics: `TPS`, `active` (gauge), `rows read/s`, `rows written/s`. Facts: `version`, `uptime`, `role`, `connections` (Of max_connections), `active`, `idle in tx`, `cache hit` (Percent), `db size` (Bytes), `deadlocks`, `temp files` (Text), `oldest tx` (Text "00:04:12 (pid 48211)" or `—`). `SessionID{ID: pid, Since: backend_start in RFC3339Nano}`; kill/cancel run `SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid = $1 AND backend_start = $2` — no row → check whether the pid exists at all: exists → `ErrSessionChanged`, not → `ok=false`. `pg_stat_statements` missing in this database → `db.Unavailable(fmt.Sprintf("pg_stat_statements is not installed in database %q", c.database))`; support `total_exec_time` (13+) and `total_time`. `<insufficient privilege>` query text is passed through as is. `application_name=datavim` via pgx `RuntimeParams` unless `Params["application_name"]` is set.
 
-- [ ] **Step 1:** In `postgres/integration_test.go` call `RunServerContract(t, conn, dbtest.ServerFixture{SleepSQL: "SELECT pg_sleep(30) AS sqlvim_contract_sleep", LockSQL: "UPDATE public.users SET name = name WHERE id = 1", Begin: "BEGIN", Setting: "max_connections"})` (adjust the table name to the fixture's).
+- [ ] **Step 1:** In `postgres/integration_test.go` call `RunServerContract(t, conn, dbtest.ServerFixture{SleepSQL: "SELECT pg_sleep(30) AS datavim_contract_sleep", LockSQL: "UPDATE public.users SET name = name WHERE id = 1", Begin: "BEGIN", Setting: "max_connections"})` (adjust the table name to the fixture's).
 - [ ] **Step 2: Run** `go test -race -tags integration ./internal/db/postgres -run TestContract` — Expected: FAIL.
 - [ ] **Step 3: Implement** `internal/db/postgres/server.go`.
 - [ ] **Step 4: Run** — Expected: PASS, including `"session changed"`.
@@ -270,9 +270,9 @@ Add `TestServerMySQL57` in the same file: start `mysql:5.7`, run `RunServerContr
 
 **Interfaces:**
 - Per spec §6.3. `SettingsTitle "Configuration"`, `CanCancel false` → `CancelQuery` returns `db.Unavailable("cancelling a query is not supported on SQL Server")`. Metrics: `batch req/s`, `tx/s` (counters from `dm_os_performance_counters`), `running` (gauge), `connections` (gauge). Facts include `buffer hit` computed as ratio/base. `SessionID{ID: session_id, Since: login_time (RFC3339Nano)}`; kill: check `login_time` in `sys.dm_exec_sessions` then `KILL <n>` (the id is an int you format yourself; `KILL` takes no parameter). Error 6106 (process ID not active) → `ok=false`. Missing `VIEW SERVER STATE` (error 300 / 297) → `db.Unavailable("needs VIEW SERVER STATE")`. Every query must run on 2014: no `STRING_AGG`, no `dm_exec_input_buffer` without a fallback, no `sys.dm_exec_session_wait_stats`. No AG → Replication returns an empty ResultSet with its columns.
-- App name is already `sqlvim` (`sqlserver.go:79`).
+- App name is already `datavim` (`sqlserver.go:79`).
 
-- [ ] **Step 1:** Call `RunServerContract` with `SleepSQL: "WAITFOR DELAY '00:00:30'; SELECT 1 AS sqlvim_contract_sleep"`, `LockSQL: "UPDATE dbo.users SET name = name WHERE id = 1"`, `Begin: "BEGIN TRANSACTION"`, `Setting: "max server memory (MB)"`. If the marker is not visible in `dm_exec_sql_text` for a batch, put it in a leading comment: `"/* sqlvim_contract_sleep */ WAITFOR DELAY '00:00:30'"`.
+- [ ] **Step 1:** Call `RunServerContract` with `SleepSQL: "WAITFOR DELAY '00:00:30'; SELECT 1 AS datavim_contract_sleep"`, `LockSQL: "UPDATE dbo.users SET name = name WHERE id = 1"`, `Begin: "BEGIN TRANSACTION"`, `Setting: "max server memory (MB)"`. If the marker is not visible in `dm_exec_sql_text` for a batch, put it in a leading comment: `"/* datavim_contract_sleep */ WAITFOR DELAY '00:00:30'"`.
 - [ ] **Step 2: Run** `go test -race -tags integration ./internal/db/sqlserver -run TestContract` — Expected: FAIL.
 - [ ] **Step 3: Implement** `internal/db/sqlserver/server.go`.
 - [ ] **Step 4: Run** — Expected: PASS (`"cancel"` takes the `CanCancel=false` branch).
@@ -289,12 +289,12 @@ Add `TestServerMySQL57` in the same file: start `mysql:5.7`, run `RunServerContr
 **Interfaces:**
 - Per spec §6.4. `SettingsTitle "Parameters"`, `CanCancel` = major version ≥ 18. Metrics: `user calls/s`, `executions/s`, `commits/s`, `active` (gauge). `SessionID{ID: "sid,serial#", Since: ""}`; the ID string is validated as `^\d+,\d+$` before it is put into `ALTER SYSTEM KILL SESSION '<id>' IMMEDIATE` / `ALTER SYSTEM CANCEL SQL '<id>'` (no bind variables there). ORA-00030 (session does not exist) → `ok=false`. ORA-00942 / ORA-01031 → `db.Unavailable("needs SELECT_CATALOG_ROLE")` / `("needs ALTER SYSTEM")`.
 - `wrap`: also `ErrConnLost` for ORA-00028, ORA-03113, ORA-03114, ORA-01012 (match go-ora's error code, not the message).
-- Program name `sqlvim` via go-ora's connection option (look it up with Context7) unless set in `Params`.
+- Program name `datavim` via go-ora's connection option (look it up with Context7) unless set in `Params`.
 
 - [ ] **Step 1: Write the failing unit test** `TestWrapKilled` in `oracle_test.go`: for each of the four codes, an error carrying it → `errors.Is(wrap(err), db.ErrConnLost)`; ORA-00942 → not.
 - [ ] **Step 2: Run** `go test ./internal/db/oracle -run TestWrapKilled` — Expected: FAIL.
 - [ ] **Step 3: Implement** the `wrap` change.
-- [ ] **Step 4:** In `integration_test.go`, before `RunServerContract`, connect as `system` / `Sys0racle` to `FREEPDB1` and run `GRANT SELECT_CATALOG_ROLE TO sqlvim`, `GRANT ALTER SYSTEM TO sqlvim`; then reopen the `sqlvim` connection (roles apply to new sessions). Call `RunServerContract` with `SleepSQL: "SELECT /* sqlvim_contract_sleep */ COUNT(*) FROM all_objects a, all_objects b, all_objects c"`, `LockSQL: "UPDATE \"users\" SET \"name\" = \"name\" WHERE id = 1"` (match the fixture's quoting), `Begin: ""`, `Setting: "processes"`.
+- [ ] **Step 4:** In `integration_test.go`, before `RunServerContract`, connect as `system` / `Sys0racle` to `FREEPDB1` and run `GRANT SELECT_CATALOG_ROLE TO datavim`, `GRANT ALTER SYSTEM TO datavim`; then reopen the `datavim` connection (roles apply to new sessions). Call `RunServerContract` with `SleepSQL: "SELECT /* datavim_contract_sleep */ COUNT(*) FROM all_objects a, all_objects b, all_objects c"`, `LockSQL: "UPDATE \"users\" SET \"name\" = \"name\" WHERE id = 1"` (match the fixture's quoting), `Begin: ""`, `Setting: "processes"`.
 - [ ] **Step 5: Run** `go test -race -tags integration ./internal/db/oracle -run TestContract` — Expected: FAIL.
 - [ ] **Step 6: Implement** `internal/db/oracle/server.go`.
 - [ ] **Step 7: Run** unit + integration — Expected: PASS.
@@ -348,7 +348,7 @@ type sessionCheck struct {
 func guardSession(cfg config.Connection, a sessionAction, s sessionTarget, width int) sessionCheck
 ```
 
-Exact copy: refuse `"read-only connection: cannot cancel or disconnect sessions"`; titles `"Cancel the query of session <ID>?"` / `"Disconnect session <ID>?"`; body lines `"user <User> · host <Host> · db <DB>"`, `"<State> · <Elapsed>"`, the SQL clipped to `width` (one line, newlines → spaces), then for disconnect `"Its open transaction, if any, is rolled back."`, and for `Self` `"This is a sqlvim connection (maybe this one)."`. `Expect = cfg.Name` when `cfg.Env == config.EnvProd` (and not read-only, which already refused).
+Exact copy: refuse `"read-only connection: cannot cancel or disconnect sessions"`; titles `"Cancel the query of session <ID>?"` / `"Disconnect session <ID>?"`; body lines `"user <User> · host <Host> · db <DB>"`, `"<State> · <Elapsed>"`, the SQL clipped to `width` (one line, newlines → spaces), then for disconnect `"Its open transaction, if any, is rolled back."`, and for `Self` `"This is a datavim connection (maybe this one)."`. `Expect = cfg.Name` when `cfg.Env == config.EnvProd` (and not read-only, which already refused).
 
 - [ ] **Step 1: Write the failing test** `TestGuardSession` (table): read-only dev → Refuse; prod default (read-only) → Refuse; prod with `ReadOnly: &no` (`no := false`; the field is `*bool`) → Expect `"prod-db"`; dev → Expect `""`, Title for each action; Self adds the line; SQL `"SELECT\n  1"` shows as `"SELECT 1"`, and a 200-char SQL is clipped to `width`.
 - [ ] **Step 2: Run** `go test ./internal/ui -run TestGuardSession` — Expected: FAIL.
@@ -416,7 +416,7 @@ Behavior: `Context()` is `keymap.DBServer`; `Title()` `"<conn> · server"`; `Tar
 - Consumes: Task 9 tab, `fakeServer`.
 - Produces: `type sqlServerLoadedMsg struct{ tabID int; conn string; sec sqlSection; rs *db.ResultSet; sessions db.SessionList; err error }` (Sessions fills `sessions` and sets `rs = sessions.Rows`) with `TabID()`/`failure()`; `func (t *sqlServerTab) load() tea.Cmd`.
 
-Behavior: entering a non-Status section stops sampling and loads it; a `sqlServerLoadedMsg` whose `sec` is not the current section is dropped. Same grid reuse as `serverTab` (`ReplaceResult` on reload of the same section). Empty texts: Sessions `"no sessions"`, Locks `"no lock waits"`, Slow `"no statements recorded"`, Settings `"no settings"` (or `"no match for <filter>"`), Replication `"no replication configured"`. `ErrUnavailable` → the reason in `theme.Muted`; other errors `theme.Error`. Sessions: summary line `"<Total> sessions · <Active> running · idle hidden (<keyHint a>)"` / `"idle shown (<keyHint a>)"`; `a` toggles `showIdle` and reloads; rows with `Self` get `"*"` prefixed to the first cell and the summary ends `" · * sqlvim"` when any. SQL cells: the grid already shows newlines as one line — assert it. Settings filter: `F` opens the same prompt keytab uses for its filter (`keytab.go:520`), case-insensitive substring on the first column, applied client-side to the last loaded ResultSet; `f x` clears; the summary shows `"filter: <text>"`. Export works (`exportSource` like `serverTab`).
+Behavior: entering a non-Status section stops sampling and loads it; a `sqlServerLoadedMsg` whose `sec` is not the current section is dropped. Same grid reuse as `serverTab` (`ReplaceResult` on reload of the same section). Empty texts: Sessions `"no sessions"`, Locks `"no lock waits"`, Slow `"no statements recorded"`, Settings `"no settings"` (or `"no match for <filter>"`), Replication `"no replication configured"`. `ErrUnavailable` → the reason in `theme.Muted`; other errors `theme.Error`. Sessions: summary line `"<Total> sessions · <Active> running · idle hidden (<keyHint a>)"` / `"idle shown (<keyHint a>)"`; `a` toggles `showIdle` and reloads; rows with `Self` get `"*"` prefixed to the first cell and the summary ends `" · * datavim"` when any. SQL cells: the grid already shows newlines as one line — assert it. Settings filter: `F` opens the same prompt keytab uses for its filter (`keytab.go:520`), case-insensitive substring on the first column, applied client-side to the last loaded ResultSet; `f x` clears; the summary shows `"filter: <text>"`. Export works (`exportSource` like `serverTab`).
 
 - [ ] **Step 1: Write the failing tests**:
   - `TestSQLServerSections`: `]` four times walks Sessions→Locks→Slow→Settings with calls `"Sessions"`, `"Locks"`, `"TopStatements"`, `"Settings"`; the bar shows the fake's `SettingsTitle` (`"Parameters"`); `]` past the last wraps to Status and sampling restarts.
@@ -464,5 +464,5 @@ Behavior: `KillClient` → disconnect, `CancelSessionQuery` → cancel. Outside 
 
 - [ ] **Step 1:** CHANGELOG line: `- Server status for MySQL, PostgreSQL, SQL Server and Oracle (\`<leader> i\` or "Server status" in the tree menu): load and sparklines, sessions (cancel / disconnect, guarded like Redis's client kill), lock waits, top statements, settings and replication.` README feature list: one line in each language.
 - [ ] **Step 2: Run** `make lint && make test && make test-integration` — Expected: all pass (OrbStack: `orb start` first).
-- [ ] **Step 3: Manual check** `./bin/sqlvim --config <dir> --debug` against a local MySQL and PG: open the tab, create a lock wait from two consoles, see it under Locks, disconnect the blocker from Sessions, the waiter proceeds. SQL Server 2014 prod is checked by the author (spec §9).
+- [ ] **Step 3: Manual check** `./bin/datavim --config <dir> --debug` against a local MySQL and PG: open the tab, create a lock wait from two consoles, see it under Locks, disconnect the blocker from Sessions, the waiter proceeds. SQL Server 2014 prod is checked by the author (spec §9).
 - [ ] **Step 4: Commit** `docs: server status for SQL connections`

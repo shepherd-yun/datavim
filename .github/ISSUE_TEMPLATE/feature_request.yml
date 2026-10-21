@@ -1,5 +1,5 @@
 name: Feature request
-description: An idea for sqlvim
+description: An idea for datavim
 labels: [enhancement]
 body:
   - type: textarea

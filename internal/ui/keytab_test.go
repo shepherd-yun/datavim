@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
 
 func TestRenderValue(t *testing.T) {

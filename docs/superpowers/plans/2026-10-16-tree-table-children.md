@@ -48,7 +48,7 @@
 | `internal/ui/structfocus.go` (new) | `structFocus`, `target`, `applyFocus` |
 | `internal/ui/tabs.go`, `structedit.go` | `focus` field; apply / clear it on loads |
 | `internal/ui/copy.go`, `ddl.go`, `nodemenu.go`, `modify.go` | leaves in yank, context table, menu, reload after Modify Table |
-| `README.md`, `README.zh-CN.md`, `CHANGELOG.md`, `docs/superpowers/specs/2026-10-13-sqlvim-design.md` | docs |
+| `README.md`, `README.zh-CN.md`, `CHANGELOG.md`, `docs/superpowers/specs/2026-10-13-datavim-design.md` | docs |
 
 ---
 
@@ -598,8 +598,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
 
 // render lists nodes as "Group: name detail; …" for compact comparison.
@@ -704,8 +704,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
 
 // tableChildren builds what the tree shows under a table or view:
@@ -875,7 +875,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // expandUsers selects local/app/users and expands it with l.
@@ -1024,7 +1024,7 @@ package ui
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
 
 // expandNode is l: it expands the selected node, loading its children
@@ -1335,7 +1335,7 @@ func TestDDOnGroupExplains(t *testing.T) {
 }
 ```
 
-Add imports `github.com/shepherd-yun/sqlvim/internal/ui/panes/structure` and `…/panes/tree` to the test file.
+Add imports `github.com/shepherd-yun/datavim/internal/ui/panes/structure` and `…/panes/tree` to the test file.
 
 - [ ] **Step 3: Run to verify they fail**
 
@@ -1379,7 +1379,7 @@ func (m *Model) Find(s Section, name string) (int, bool) {
 ```go
 package ui
 
-import "github.com/shepherd-yun/sqlvim/internal/ui/panes/structure"
+import "github.com/shepherd-yun/datavim/internal/ui/panes/structure"
 
 // structFocus is where the tree asked a structure tab to put its cursor:
 // the row called name in section, staging its drop when drop is set.
@@ -1737,7 +1737,7 @@ git commit -m "feat(ui): 复制、结构键、操作菜单支持树中的列与�
 ### Task 7: Docs
 
 **Files:**
-- Modify: `README.md`, `README.zh-CN.md`, `CHANGELOG.md`, `docs/superpowers/specs/2026-10-13-sqlvim-design.md`, `docs/superpowers/specs/2026-10-16-tree-table-children-design.md`
+- Modify: `README.md`, `README.zh-CN.md`, `CHANGELOG.md`, `docs/superpowers/specs/2026-10-13-datavim-design.md`, `docs/superpowers/specs/2026-10-16-tree-table-children-design.md`
 
 - [ ] **Step 1: README.md** — in the key table replace
 
@@ -1790,7 +1790,7 @@ plus the matching `e` / `dd` wording and the feature-list sentence (`在树中�
   `tree.open` in `keymap.toml` to change it.
 ```
 
-- [ ] **Step 4: Main spec** — `docs/superpowers/specs/2026-10-13-sqlvim-design.md`:
+- [ ] **Step 4: Main spec** — `docs/superpowers/specs/2026-10-13-datavim-design.md`:
   - §4.1: `树面板（连接 → 库/schema → 表/视图）` → `树面板（连接 → 库/schema → 表/视图 → 列、键、外键、索引）`, and `<Space>b` → `<Space>e`.
   - §5.11: append `树中展开表也能查看列、键、外键和索引，在其上按 Enter 打开结构页并定位（见 2026-10-16-tree-table-children-design.md）。`
   - §6.2: add a line for `l` / `Enter` / the z keys in the same style as the neighbours.
@@ -1800,7 +1800,7 @@ plus the matching `e` / `dd` wording and the feature-list sentence (`在树中�
 
 - [ ] **Step 5: Verify and commit**
 
-Run: `grep -n 'Space>b' README.md README.zh-CN.md docs/superpowers/specs/2026-10-13-sqlvim-design.md` → no output. `make test && make lint` → pass.
+Run: `grep -n 'Space>b' README.md README.zh-CN.md docs/superpowers/specs/2026-10-13-datavim-design.md` → no output. `make test && make lint` → pass.
 
 ```bash
 git add README.md README.zh-CN.md CHANGELOG.md docs/superpowers/specs

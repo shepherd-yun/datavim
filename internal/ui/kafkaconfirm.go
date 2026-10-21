@@ -3,9 +3,9 @@ package ui
 import (
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/kmsgx"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 )
 
 // kafkaConfirm is how every K2 write is asked for: the Cmd that opens the

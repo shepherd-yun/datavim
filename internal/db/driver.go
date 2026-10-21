@@ -1,4 +1,4 @@
-// Package db is the only seam between sqlvim and database servers.
+// Package db is the only seam between datavim and database servers.
 package db
 
 import (

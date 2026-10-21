@@ -3,9 +3,9 @@ package datadiff
 import (
 	"fmt"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // Script writes the statements that make the target's picked rows like the

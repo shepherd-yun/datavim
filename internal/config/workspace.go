@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 )
 
-// DefaultWorkspace is the workspace sqlvim uses without -w; its files sit in
+// DefaultWorkspace is the workspace datavim uses without -w; its files sit in
 // the config and state roots, as before workspaces existed.
 const DefaultWorkspace = "default"
 

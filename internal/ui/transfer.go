@@ -11,13 +11,13 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/export"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
-	"github.com/shepherd-yun/sqlvim/internal/ui/clipboard"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/export"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/ui/clipboard"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
 )
 
 // copyToClipboard and readClipboard are replaced in tests.

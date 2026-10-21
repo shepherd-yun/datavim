@@ -1,8 +1,8 @@
-# Copy to ~/.config/sqlvim/keymap.toml. Every key is optional.
+# Copy to ~/.config/datavim/keymap.toml. Every key is optional.
 # Keys are written the way `?` shows them: gg, <leader>s, <ctrl+d>, f<.
 # Values are action IDs; "" unbinds the keys. Binding keys a context already
 # uses replaces them; new keys are added and the defaults stay.
-# sqlvim refuses to start when a binding is unknown or conflicts with another
+# datavim refuses to start when a binding is unknown or conflicts with another
 # (one sequence may not be the start of a longer one in the same context).
 #
 # Contexts: global, tree, grid (table data), structure, console (keys the vim

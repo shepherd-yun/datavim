@@ -155,7 +155,7 @@ type SessionID struct {
 type SessionList struct {
 	Rows *ResultSet
 	IDs  []SessionID // row by row
-	// Self marks rows that are sqlvim's own connections (§5.3).
+	// Self marks rows that are datavim's own connections (§5.3).
 	Self []bool
 	// Summary is the line above the table: "87 sessions · 12 running".
 	Total, Active int
@@ -216,10 +216,10 @@ Sessions、Locks（等待方和阻塞方的 SQL）和 TopStatements 里的 SQL �
 - 正在跑的 SQL，截断到确认框宽度
 - 断开会话时额外加一句：`Its open transaction, if any, is rolled back.`
 
-### 5.3 sqlvim 自己的会话
+### 5.3 datavim 自己的会话
 
-- 四个驱动在建连时都设置应用名 `sqlvim`。SQL Server 已经通过 `app name` 设置了；MySQL 用连接属性 `program_name`；PG 用 `application_name`；Oracle 用 go-ora 的 program / 模块名。具体参数写法，实现时用 Context7 查。用户在 `Params` 里自己配置的值优先。
-- `SessionList.Self` 标记应用名是 `sqlvim` 的会话。在这样的会话上取消或断开时，确认框加一行：`This is a sqlvim connection (maybe this one).`。只提醒，不拒绝。
+- 四个驱动在建连时都设置应用名 `datavim`。SQL Server 已经通过 `app name` 设置了；MySQL 用连接属性 `program_name`；PG 用 `application_name`；Oracle 用 go-ora 的 program / 模块名。具体参数写法，实现时用 Context7 查。用户在 `Params` 里自己配置的值优先。
+- `SessionList.Self` 标记应用名是 `datavim` 的会话。在这样的会话上取消或断开时，确认框加一行：`This is a datavim connection (maybe this one).`。只提醒，不拒绝。
 - 页面自己用来查询的那个连接，被断开后会走现有的连接丢失处理：下次操作时重连。因为这个页面不在事务里，这样做不违反“事务中不静默重连”。
 
 ### 5.4 执行之后

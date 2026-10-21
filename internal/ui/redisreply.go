@@ -5,9 +5,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/rcmd"
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/rcmd"
+	"github.com/shepherd-yun/datavim/internal/rdb"
 )
 
 // replyView is how one Redis console reply is shown: a table (Columns and

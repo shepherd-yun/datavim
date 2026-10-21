@@ -13,10 +13,10 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/db/dbtest"
-	"github.com/shepherd-yun/sqlvim/internal/db/postgres"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db/dbtest"
+	"github.com/shepherd-yun/datavim/internal/db/postgres"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 var fixture = []string{
@@ -38,7 +38,7 @@ func TestContract(t *testing.T) {
 	const password = "p@ss:w/rd?#%"
 	ctr, err := tcpostgres.Run(ctx, "postgres:16-alpine",
 		tcpostgres.WithDatabase("app"),
-		tcpostgres.WithUsername("sqlvim"),
+		tcpostgres.WithUsername("datavim"),
 		tcpostgres.WithPassword(password),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -54,7 +54,7 @@ func TestContract(t *testing.T) {
 	port, _ := strconv.Atoi(portStr)
 
 	conn, err := postgres.Driver{}.Open(ctx, db.ConnConfig{
-		Host: host, Port: port, User: "sqlvim", Password: password, Database: "app",
+		Host: host, Port: port, User: "datavim", Password: password, Database: "app",
 		Params: map[string]string{"sslmode": "disable"},
 	})
 	if err != nil {
@@ -69,7 +69,7 @@ func TestContract(t *testing.T) {
 	}
 	open := func(ctx context.Context, readOnly bool) (db.Conn, error) {
 		return postgres.Driver{}.Open(ctx, db.ConnConfig{
-			Host: host, Port: port, User: "sqlvim", Password: password, Database: "app",
+			Host: host, Port: port, User: "datavim", Password: password, Database: "app",
 			Params: map[string]string{"sslmode": "disable"}, ReadOnly: readOnly,
 		})
 	}
@@ -116,7 +116,7 @@ func TestContract(t *testing.T) {
 		},
 	})
 	dbtest.RunServerContract(t, conn, dbtest.ServerFixture{
-		SleepSQL:  "SELECT pg_sleep(30) AS sqlvim_contract_sleep",
+		SleepSQL:  "SELECT pg_sleep(30) AS datavim_contract_sleep",
 		LockSQL:   "UPDATE app.users SET name = name WHERE id = 1",
 		Begin:     "BEGIN",
 		SelfIDSQL: "SELECT pg_backend_pid()",
@@ -126,7 +126,7 @@ func TestContract(t *testing.T) {
 	t.Run("Locks names a relation of another database by that database", func(t *testing.T) {
 		// the server tab of a connection without a database reads from "postgres"
 		other, err := postgres.Driver{}.Open(ctx, db.ConnConfig{
-			Host: host, Port: port, User: "sqlvim", Password: password, Database: "postgres",
+			Host: host, Port: port, User: "datavim", Password: password, Database: "postgres",
 			Params: map[string]string{"sslmode": "disable"},
 		})
 		if err != nil {

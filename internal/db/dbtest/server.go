@@ -7,13 +7,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // ServerFixture is what the server status contract needs of an engine.
 type ServerFixture struct {
 	// SleepSQL runs for at least 30 seconds and contains the marker
-	// sqlvim_contract_sleep, so Sessions can find the session running it.
+	// datavim_contract_sleep, so Sessions can find the session running it.
 	SleepSQL string
 	// LockSQL updates one row of the standard fixture, so two sessions
 	// running it inside a transaction block each other.
@@ -27,7 +27,7 @@ type ServerFixture struct {
 	Setting string
 }
 
-const sleepMarker = "sqlvim_contract_sleep"
+const sleepMarker = "datavim_contract_sleep"
 
 // RunServerContract checks conn's ServerReader.
 func RunServerContract(t *testing.T, conn db.Conn, f ServerFixture) {

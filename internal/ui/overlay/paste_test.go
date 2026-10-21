@@ -5,7 +5,7 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 )
 
 // paste delivers a terminal paste (bracketed paste) to o.

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 func TestGuardSQLServerReadOnly(t *testing.T) {

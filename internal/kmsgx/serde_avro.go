@@ -13,7 +13,7 @@ import (
 
 	"github.com/hamba/avro/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 // avroSchema parses s with its references in one cache: a reference may

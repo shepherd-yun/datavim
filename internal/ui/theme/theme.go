@@ -1,4 +1,4 @@
-// Package theme holds sqlvim's colors, styles and pane frame.
+// Package theme holds datavim's colors, styles and pane frame.
 package theme
 
 import (
@@ -13,8 +13,8 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/highlight"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 )
 
 // defaults are the theme slots and their colors: ANSI indexes, so the

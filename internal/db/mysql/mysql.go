@@ -20,7 +20,7 @@ import (
 
 	gomysql "github.com/go-sql-driver/mysql"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Driver opens MySQL connections.
@@ -82,12 +82,12 @@ func dsnConfig(cfg db.ConnConfig) (*gomysql.Config, error) {
 		}
 	}
 	mc.Logger = slogLogger{}
-	// The server tab marks sqlvim's own sessions by this attribute.
+	// The server tab marks datavim's own sessions by this attribute.
 	if !strings.Contains(mc.ConnectionAttributes, "program_name:") {
 		if mc.ConnectionAttributes != "" {
 			mc.ConnectionAttributes += ","
 		}
-		mc.ConnectionAttributes += "program_name:sqlvim"
+		mc.ConnectionAttributes += "program_name:datavim"
 	}
 	// Data edits check that every UPDATE found exactly one row; without
 	// this MySQL counts only rows whose values changed.

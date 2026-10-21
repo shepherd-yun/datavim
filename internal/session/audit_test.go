@@ -10,13 +10,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/history"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
-	"github.com/shepherd-yun/sqlvim/internal/redit"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/redit"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // auditLog collects what a Manager audits.
@@ -157,9 +157,9 @@ func TestAuditSQLKinds(t *testing.T) {
 		{"USE app", sqlx.MySQL, false, "", "", false},
 		// an import's savepoints around each batch: bookkeeping inside a
 		// transaction whose BEGIN and COMMIT / ROLLBACK are recorded
-		{"SAVEPOINT sqlvim_import", sqlx.Postgres, true, "", "", false},
-		{"RELEASE SAVEPOINT sqlvim_import", sqlx.Postgres, true, "", "", false},
-		{"ROLLBACK TO SAVEPOINT sqlvim_import", sqlx.MySQL, true, "", "", false},
+		{"SAVEPOINT datavim_import", sqlx.Postgres, true, "", "", false},
+		{"RELEASE SAVEPOINT datavim_import", sqlx.Postgres, true, "", "", false},
+		{"ROLLBACK TO SAVEPOINT datavim_import", sqlx.MySQL, true, "", "", false},
 		{"ROLLBACK", sqlx.MySQL, true, "ROLLBACK", "", true},
 	} {
 		op, object, ok := auditSQL(tc.sql, tc.d, tc.inTx)

@@ -7,7 +7,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
+	"github.com/shepherd-yun/datavim/internal/ui/highlight"
 )
 
 func TestBox(t *testing.T) {

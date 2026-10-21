@@ -8,11 +8,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/history"
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
 
 // openRConsole opens the redis console on db n of cache, in NORMAL mode.
@@ -500,7 +500,7 @@ func TestRedisConsoleUnsupported(t *testing.T) {
 	m, b, _ := newRedisModel(t, config.Connection{})
 	c := openRConsole(t, m, 0)
 	runR(t, m, c, "SUBSCRIBE ch", keymap.RunStatement)
-	if c.status != "SUBSCRIBE is not supported in sqlvim" || len(sent(b)) != 0 {
+	if c.status != "SUBSCRIBE is not supported in datavim" || len(sent(b)) != 0 {
 		t.Fatalf("status %q, sent %q", c.status, sent(b))
 	}
 }

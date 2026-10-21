@@ -130,10 +130,10 @@ func TestSettingsValidation(t *testing.T) {
 func TestDirsHonorXDG(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/x/config")
 	t.Setenv("XDG_STATE_HOME", "/x/state")
-	if d, _ := Dir(); d != "/x/config/sqlvim" {
+	if d, _ := Dir(); d != "/x/config/datavim" {
 		t.Errorf("Dir = %q", d)
 	}
-	if d, _ := StateDir(); d != "/x/state/sqlvim" {
+	if d, _ := StateDir(); d != "/x/state/datavim" {
 		t.Errorf("StateDir = %q", d)
 	}
 }
@@ -141,8 +141,45 @@ func TestDirsHonorXDG(t *testing.T) {
 func TestDirsDefaultToDotConfig(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	t.Setenv("HOME", "/home/u")
-	if d, _ := Dir(); d != "/home/u/.config/sqlvim" {
+	if d, _ := Dir(); d != "/home/u/.config/datavim" {
 		t.Errorf("Dir = %q", d)
+	}
+}
+
+func mkdir(t *testing.T, dir string) {
+	t.Helper()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDirsMoveLegacyDirOver(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", base)
+	mkdir(t, filepath.Join(base, "sqlvim"))
+	writeFile(t, filepath.Join(base, "sqlvim"), "connections.toml", "# old\n")
+	d, err := Dir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(filepath.Join(d, "connections.toml")); err != nil || string(b) != "# old\n" {
+		t.Fatalf("migrated file = %q, %v", b, err)
+	}
+	if _, err := os.Stat(filepath.Join(base, "sqlvim")); !os.IsNotExist(err) {
+		t.Fatalf("legacy dir still there: %v", err)
+	}
+}
+
+func TestDirsKeepExistingDirOverLegacy(t *testing.T) {
+	base := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", base)
+	mkdir(t, filepath.Join(base, "sqlvim"))
+	mkdir(t, filepath.Join(base, "datavim"))
+	writeFile(t, filepath.Join(base, "sqlvim"), "connections.toml", "# old\n")
+	writeFile(t, filepath.Join(base, "datavim"), "connections.toml", "# new\n")
+	d, _ := Dir()
+	if b, _ := os.ReadFile(filepath.Join(d, "connections.toml")); string(b) != "# new\n" {
+		t.Fatalf("file = %q, want the new one", b)
 	}
 }
 
@@ -273,7 +310,7 @@ func TestAppendConnectionWritesReadOnly(t *testing.T) {
 }
 
 func TestAppendConnectionCreatesPrivateFile(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "new", "sqlvim")
+	dir := filepath.Join(t.TempDir(), "new", "datavim")
 	if _, err := AppendConnection(dir, Connection{Name: "a", Driver: "mysql"}); err != nil {
 		t.Fatal(err)
 	}

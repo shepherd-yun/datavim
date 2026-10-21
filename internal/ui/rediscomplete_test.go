@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/config"
 )
 
 // typeR types s into the console in INSERT mode.

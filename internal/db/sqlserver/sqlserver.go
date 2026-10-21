@@ -17,8 +17,8 @@ import (
 
 	mssql "github.com/microsoft/go-mssqldb"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // Driver opens SQL Server connections.
@@ -76,7 +76,7 @@ func dsn(cfg db.ConnConfig) string {
 	q := url.Values{}
 	q.Set("database", database)
 	q.Set("dial timeout", "10")
-	q.Set("app name", "sqlvim")
+	q.Set("app name", "datavim")
 	for k, v := range cfg.Params {
 		q.Set(k, v)
 	}

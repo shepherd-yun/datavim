@@ -47,7 +47,7 @@ func ictx(t *testing.T) context.Context {
 // container waits for a start script written after it is up.
 func startApache(t *testing.T, image string, opts ...apacheOpts) string {
 	t.Helper()
-	const script = "/tmp/sqlvim-start.sh"
+	const script = "/tmp/datavim-start.sh"
 	var o apacheOpts
 	if len(opts) > 0 {
 		o = opts[0]
@@ -430,7 +430,7 @@ func k2Suite(t *testing.T, cfg Config) {
 	}
 
 	// an aborted and a committed transaction: read_committed shows the second only
-	tx, err := kgo.NewClient(kgo.SeedBrokers(cfg.Brokers...), kgo.TransactionalID("sqlvim-it"), kgo.DefaultProduceTopic("k2-tx"))
+	tx, err := kgo.NewClient(kgo.SeedBrokers(cfg.Brokers...), kgo.TransactionalID("datavim-it"), kgo.DefaultProduceTopic("k2-tx"))
 	if err != nil {
 		t.Fatal(err)
 	}

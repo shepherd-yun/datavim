@@ -6,7 +6,7 @@ import (
 	"errors"
 	"slices"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // State is how a row differs from the server.

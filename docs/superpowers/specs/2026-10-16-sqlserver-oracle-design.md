@@ -6,7 +6,7 @@
 
 ## 1. 背景
 
-sqlvim 目前只支持 MySQL 和 PostgreSQL。作者日常要连一台公司内网的 SQL Server：版本 12.0（SQL Server 2014），用户名密码登录，端口 1433，库名 `crm_MSCRM`（Dynamics CRM），属于生产环境。在这台库上主要是查数据、看表结构，偶尔改数据。现在只能用 DataGrip 做这些事。
+datavim 目前只支持 MySQL 和 PostgreSQL。作者日常要连一台公司内网的 SQL Server：版本 12.0（SQL Server 2014），用户名密码登录，端口 1433，库名 `crm_MSCRM`（Dynamics CRM），属于生产环境。在这台库上主要是查数据、看表结构，偶尔改数据。现在只能用 DataGrip 做这些事。
 
 作者还没有用过 Oracle。加 Oracle 是为了让主流商业库都能连。它和 SQL Server 要做的改造基本是同一套（见 §4），所以两个一起设计，按 SQL Server、Oracle 的顺序实现。
 

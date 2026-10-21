@@ -1,4 +1,4 @@
-module github.com/shepherd-yun/sqlvim
+module github.com/shepherd-yun/datavim
 
 go 1.26.0
 

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
+	"github.com/shepherd-yun/datavim/internal/ui/uitest"
 )
 
 func BenchmarkViewLargeText(b *testing.B) {

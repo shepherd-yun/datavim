@@ -6,7 +6,7 @@
 
 ## 1. 背景
 
-现在可以把数据 tab 或 console 结果导出成 TSV/CSV/JSON/Markdown/SQL/XLSX（`<Space>x …`，`internal/export`），但不能反过来把文件导入数据库。DataGrip 在表上右键有 "Import Data from File"，在库上可以从文件新建表。sqlvim 要提供类似的体验。
+现在可以把数据 tab 或 console 结果导出成 TSV/CSV/JSON/Markdown/SQL/XLSX（`<Space>x …`，`internal/export`），但不能反过来把文件导入数据库。DataGrip 在表上右键有 "Import Data from File"，在库上可以从文件新建表。datavim 要提供类似的体验。
 
 数据量：通常几万行以内，偶尔几十万行，不考虑百万行级。
 
@@ -207,7 +207,7 @@ Bool 不推断（`0/1` 会推断为 `bigint`），用户可以用 `t` 修改。
 
 ### 7.4 出错
 
-- **某一批失败**：每批执行前先 `SAVEPOINT sqlvim_import`（PostgreSQL 语句失败后事务处于 aborted 状态，必须事先设好 savepoint 才能继续）。失败后 `ROLLBACK TO SAVEPOINT sqlvim_import`，把这一批逐行重新执行，第一条失败的行就是坏行，报 `line 1234: <数据库错误>`，然后 ROLLBACK 整个事务。逐行重试没有找到失败的行（例如错误与批量有关）时，报 `lines 1001–1500: <原错误>`。
+- **某一批失败**：每批执行前先 `SAVEPOINT datavim_import`（PostgreSQL 语句失败后事务处于 aborted 状态，必须事先设好 savepoint 才能继续）。失败后 `ROLLBACK TO SAVEPOINT datavim_import`，把这一批逐行重新执行，第一条失败的行就是坏行，报 `line 1234: <数据库错误>`，然后 ROLLBACK 整个事务。逐行重试没有找到失败的行（例如错误与批量有关）时，报 `lines 1001–1500: <原错误>`。
 - **取消**：取消 context，ROLLBACK，提示 `import cancelled, nothing was written`。
 - **断线**（错误 wrap `ErrConnLost`）：报 `connection lost, the transaction is gone and nothing was committed`，不重连重试。
 - **MySQL 新建表**时，以上三种情况在 ROLLBACK 后执行 `DROP TABLE` 删掉刚建的表。DROP 失败时报 `table app.orders was created but is empty; drop it manually`。

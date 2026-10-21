@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kmsgx"
 )
 
 // RegistryOpener makes a Schema Registry client; kafka.OpenRegistry

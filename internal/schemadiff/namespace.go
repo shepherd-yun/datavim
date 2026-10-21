@@ -3,7 +3,7 @@ package schemadiff
 import (
 	"sort"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // ObjectKind says how a table differs between the two sides.

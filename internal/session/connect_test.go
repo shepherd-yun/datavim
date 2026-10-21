@@ -8,8 +8,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 // connectReadMethods are the kafka.Connect methods that never change a

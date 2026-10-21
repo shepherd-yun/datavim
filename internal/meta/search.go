@@ -6,7 +6,7 @@ import (
 
 	"github.com/sahilm/fuzzy"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // ItemKind is what a search item is. The order breaks ties between equally

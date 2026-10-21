@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 func TestFormatDraftRoundTrip(t *testing.T) {

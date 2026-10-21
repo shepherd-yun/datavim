@@ -11,12 +11,12 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/datadiff"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
-	"github.com/shepherd-yun/sqlvim/internal/schemaedit"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/datadiff"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/schemadiff"
+	"github.com/shepherd-yun/datavim/internal/schemaedit"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // Fixture describes the standard fixture and engine-specific bits of the contract.
@@ -508,7 +508,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			t.Fatal(err)
 		}
 		defer func() { _ = s.Close() }()
-		createTmp, tmp := tempTable("sqlvim_tmp")
+		createTmp, tmp := tempTable("datavim_tmp")
 		for _, q := range []string{createTmp, "INSERT INTO " + tmp + " VALUES (1), (2)"} {
 			if _, err := s.Exec(ctx, q); err != nil {
 				t.Fatalf("%s: %v", q, err)
@@ -596,7 +596,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		createPrivate, private := tempTable("sqlvim_private")
+		createPrivate, private := tempTable("datavim_private")
 		if _, err := s.Exec(ctx, createPrivate); err != nil {
 			t.Fatal(err)
 		}

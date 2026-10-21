@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 )
 
 func commaModel(t *testing.T) (*Model, *fakeBackend) {

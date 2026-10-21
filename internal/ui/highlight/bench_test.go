@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // bigConsole is a console of n statements over about 3n lines.

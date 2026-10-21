@@ -3,7 +3,7 @@ package sqlserver
 import (
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // buildTableDDL writes a CREATE TABLE with its primary key, followed by

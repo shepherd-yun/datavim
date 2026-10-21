@@ -223,7 +223,7 @@
 **Interfaces:**
 - Consumes: Task 3 的 `Fixture`、Task 4 的方言、Task 6
 - Produces: `sqlserver.Driver{}`，`Name() == "sqlserver"`，`DatabaseScoped() == true`
-- `dsn(cfg db.ConnConfig) string`：`sqlserver://user:pass@host:port?database=<db>&dial+timeout=10&app+name=sqlvim` 再加 `cfg.Params` 原样透传（`encrypt`、`TrustServerCertificate`、`tlsmin` 等都通过这里）。`cfg.Database` 为空时用 `master`。DSN 不能出现在日志或错误信息里。
+- `dsn(cfg db.ConnConfig) string`：`sqlserver://user:pass@host:port?database=<db>&dial+timeout=10&app+name=datavim` 再加 `cfg.Params` 原样透传（`encrypt`、`TrustServerCertificate`、`tlsmin` 等都通过这里）。`cfg.Database` 为空时用 `master`。DSN 不能出现在日志或错误信息里。
 - `Dial`：用 `mssql.NewConnector(dsn)`，把 `connector.Dialer` 设成包装了 `cfg.Dial` 的值。字段名和接口以 `go doc github.com/microsoft/go-mssqldb Connector` 为准。
 - `ReadOnly`：服务端不做任何处理（客户端守卫见 Task 5）。在 Open 的注释里说明原因。
 - `Paginate(sql, limit, offset)`：如果 sql 在深度 0 处没有 ORDER BY，就补上 ` ORDER BY (SELECT NULL)`；然后加 ` OFFSET n ROWS FETCH NEXT m ROWS ONLY`。
@@ -238,14 +238,14 @@
 - [ ] **Step 2: 运行** `go test ./internal/db/sqlserver`，预期 FAIL。
 - [ ] **Step 3: 实现驱动**（用 Context7 / `go doc` 核对 go-mssqldb 的 API）。
 - [ ] **Step 4: 运行单元测试**，预期 PASS。
-- [ ] **Step 5: 写集成测试**：用 `modules/mssql` 启动 `mcr.microsoft.com/mssql/server:2022-latest`（`ACCEPT_EULA=Y`），按 MySQL / PG 的 integration_test 建 fixture（schema `dbo`、库 `sqlvim_test`），调用 `dbtest.RunContract`。
+- [ ] **Step 5: 写集成测试**：用 `modules/mssql` 启动 `mcr.microsoft.com/mssql/server:2022-latest`（`ACCEPT_EULA=Y`），按 MySQL / PG 的 integration_test 建 fixture（schema `dbo`、库 `datavim_test`），调用 `dbtest.RunContract`。
 - [ ] **Step 6: 运行** `go test -race -tags integration ./internal/db/sqlserver`，预期 PASS（需要 OrbStack；镜像是 amd64，走 Rosetta）。
 - [ ] **Step 7: 提交** `feat(db): SQL Server 驱动`
 
 ### Task 8: 把 SQL Server 接进应用，补文档
 
 **Files:**
-- Modify: `cmd/sqlvim/main.go:171`（注册 `sqlserver.Driver{}`）
+- Modify: `cmd/datavim/main.go:171`（注册 `sqlserver.Driver{}`）
 - Modify: `internal/ui/overlay/connform.go`（Driver 选项加上 `sqlserver`；新增 `Encrypt` 字段，选项是 `default`、`true`、`false`、`disable`，以及 `Trust cert`（`no`/`yes`），这两个字段只在驱动为 sqlserver 时显示；保存时写进 `Params["encrypt"]` 和 `Params["TrustServerCertificate"]`，`default` 和 `no` 不写）
 - Modify: `internal/ui/panes/tree/tree.go:462`（图标：Nerd 用 `` 或通用数据库图标，具体选哪个由实现者决定；plain 图标沿用现有规则）
 - Modify: `internal/ui/highlight/highlight.go:34`（`sqlx.SQLServer: lexer("tsql")`）
@@ -326,14 +326,14 @@
 
 - [ ] **Step 1: 写失败的单元测试** `TestURL`（密码含 `@` 时会被转义；service 为空时用 FREEPDB1）、`TestTrimSemicolon`（`select 1 from dual;` 去掉分号，`begin null; end;` 保留）；在 `internal/ui` 里写 `TestFetchChildrenNoDatabases`（fake meta 的 `Databases()` 返回 nil，Oracle 连接节点展开后直接得到 schema 节点，`NS{Schema: "HR"}`）。
 - [ ] **Step 2–4: 运行**，先 FAIL，实现后 PASS。
-- [ ] **Step 5: 写集成测试**：用 GenericContainer 启动 `gvenzl/oracle-free:23-slim`，环境变量 `ORACLE_PASSWORD`、`APP_USER=sqlvim`、`APP_USER_PASSWORD`，等待日志 `DATABASE IS READY TO USE!`，超时 5 分钟。fixture 建在 `SQLVIM` schema 下，要包含一张 `"MixedCase"` 表；调用 `dbtest.RunContract`。另加一个只针对 Oracle 的子测试：Session 执行 `SET TRANSACTION READ WRITE` 和 `INSERT` 之后，pooled conn 查不到这行；Session 执行 `ROLLBACK` 之后，这行也不存在。
+- [ ] **Step 5: 写集成测试**：用 GenericContainer 启动 `gvenzl/oracle-free:23-slim`，环境变量 `ORACLE_PASSWORD`、`APP_USER=datavim`、`APP_USER_PASSWORD`，等待日志 `DATABASE IS READY TO USE!`，超时 5 分钟。fixture 建在 `DATAVIM` schema 下，要包含一张 `"MixedCase"` 表；调用 `dbtest.RunContract`。另加一个只针对 Oracle 的子测试：Session 执行 `SET TRANSACTION READ WRITE` 和 `INSERT` 之后，pooled conn 查不到这行；Session 执行 `ROLLBACK` 之后，这行也不存在。
 - [ ] **Step 6: 运行** `go test -race -tags integration ./internal/db/oracle`，预期 PASS。
 - [ ] **Step 7: 提交** `feat(db): Oracle 驱动`
 
 ### Task 12: 把 Oracle 接进应用，补文档
 
 **Files:**
-- Modify: `cmd/sqlvim/main.go`（注册 `oracle.Driver{}`）
+- Modify: `cmd/datavim/main.go`（注册 `oracle.Driver{}`）
 - Modify: `internal/ui/overlay/connform.go`（Driver 选项加上 `oracle`；驱动为 oracle 时，`Database` 字段的标签显示为 `Service`，占位文字是 `FREEPDB1`）
 - Modify: `internal/ui/panes/tree/tree.go`（图标）、`internal/ui/highlight/highlight.go`（`sqlx.Oracle: lexer("plsql")`）
 - Modify: `CHANGELOG.md`、`README.md`、`README.zh-CN.md`
@@ -342,5 +342,5 @@
 - [ ] **Step 1: 写失败的测试** `TestConnFormOracleServiceLabel`、`TestHighlightPLSQL`。
 - [ ] **Step 2–4: 运行**，先 FAIL，实现后 PASS。
 - [ ] **Step 5: 运行** `make lint && make test && make test-integration`，预期全部通过。
-- [ ] **Step 6: 用 Docker 里的 Oracle 手工验证**：`./bin/sqlvim --config <dir> --debug` 连上 `gvenzl/oracle-free`，依次确认：树显示 schema → 表；查询正常；暂存修改一个无键表并提交；PL/SQL 块能执行；手动事务模式下的 COMMIT / ROLLBACK 正常；只读连接下匿名块被拦截。
+- [ ] **Step 6: 用 Docker 里的 Oracle 手工验证**：`./bin/datavim --config <dir> --debug` 连上 `gvenzl/oracle-free`，依次确认：树显示 schema → 表；查询正常；暂存修改一个无键表并提交；PL/SQL 块能执行；手动事务模式下的 COMMIT / ROLLBACK 正常；只读连接下匿名块被拦截。
 - [ ] **Step 7: 提交** `feat(ui): 支持 Oracle 连接`

@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/tree"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
 
 // tableChildren builds what the tree shows under a table or view:

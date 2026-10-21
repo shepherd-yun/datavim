@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 var (

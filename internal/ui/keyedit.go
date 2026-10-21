@@ -11,16 +11,16 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/rcmd"
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
-	"github.com/shepherd-yun/sqlvim/internal/redit"
-	"github.com/shepherd-yun/sqlvim/internal/session"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/rcmd"
+	"github.com/shepherd-yun/datavim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/redit"
+	"github.com/shepherd-yun/datavim/internal/session"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
 )
 
 const (
@@ -115,9 +115,9 @@ func (t *keyTab) editString(external bool) tea.Cmd {
 		}))
 	}
 	t.editingAt, t.editTable = [2]int{-1, -1}, nil
-	pattern := "sqlvim-*.txt"
+	pattern := "datavim-*.txt"
 	if isJSON(v) {
-		pattern = "sqlvim-*.json"
+		pattern = "datavim-*.json"
 	}
 	return writeTempEdit(t.id, v, pattern)
 }
@@ -130,9 +130,9 @@ func (t *keyTab) externalCell() tea.Cmd {
 	}
 	v := t.table.Row(row).Values[col]
 	t.editingAt, t.editTable = [2]int{row, col}, t.table
-	pattern := "sqlvim-*.txt"
+	pattern := "datavim-*.txt"
 	if isJSON(v.Text) {
-		pattern = "sqlvim-*.json"
+		pattern = "datavim-*.json"
 	}
 	return writeTempEdit(t.id, v.Text, pattern)
 }
@@ -417,7 +417,7 @@ func (m *Model) keyChanged(msg redisKeyChangedMsg) {
 	m.rebuildDB(k, s)
 }
 
-// editPolicy is what the connection allows sqlvim's own commands.
+// editPolicy is what the connection allows datavim's own commands.
 func (t *keyTab) editPolicy() rcmd.Policy {
 	cfg, _ := t.backend.Connection(t.conn)
 	return rcmd.Policy{ReadOnly: cfg.IsReadOnly(), Prod: cfg.Env == config.EnvProd, Conn: t.conn, DBSize: -1}
@@ -427,7 +427,7 @@ func (t *keyTab) editPolicy() rcmd.Policy {
 func tomb() string {
 	var b [8]byte
 	_, _ = rand.Read(b[:])
-	return "sqlvim:deleted:" + hex.EncodeToString(b[:])
+	return "datavim:deleted:" + hex.EncodeToString(b[:])
 }
 
 // plan turns the staged changes into a redit.Plan.

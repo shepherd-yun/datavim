@@ -8,7 +8,7 @@ import (
 
 	"github.com/sijms/go-ora/v2/network"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func TestURL(t *testing.T) {

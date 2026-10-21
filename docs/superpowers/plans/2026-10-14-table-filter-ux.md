@@ -87,7 +87,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
+	"github.com/shepherd-yun/datavim/internal/ui/uitest"
 )
 
 func keysInto(f *field, keys ...string) {
@@ -261,8 +261,8 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // field is a single-line text input with a cursor, edited with readline
@@ -557,7 +557,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/complete"
 )
 
 // columns completes the word before the cursor from a fixed list.
@@ -666,9 +666,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/complete"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // Completer offers completions for the word before cursor in text; start
@@ -1003,9 +1003,9 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 )
 
 const usersPage = " ORDER BY `id` LIMIT 3 OFFSET 0"
@@ -1299,7 +1299,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 - [ ] **Step 1: 写失败测试**
 
-在 `internal/ui/filter_test.go` 的 import 里加上 `"slices"`、`"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"`、`"github.com/shepherd-yun/sqlvim/internal/ui/uitest"`，然后在文件末尾追加：
+在 `internal/ui/filter_test.go` 的 import 里加上 `"slices"`、`"github.com/shepherd-yun/datavim/internal/ui/panes/complete"`、`"github.com/shepherd-yun/datavim/internal/ui/uitest"`，然后在文件末尾追加：
 
 ```go
 // filterPrompt presses F and returns the prompt.
@@ -1502,7 +1502,7 @@ func (t *dataTab) completeFilter(text string, cursor int) (int, []complete.Candi
 }
 ```
 
-在 `tabs.go` 的 import 中加入 `"slices"`、`"unicode"` 和 `"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"`。
+在 `tabs.go` 的 import 中加入 `"slices"`、`"unicode"` 和 `"github.com/shepherd-yun/datavim/internal/ui/panes/complete"`。
 
 注意 `t.cols` 是 meta 读到的 `[]db.Column`（带 `Type`）；fake 里 `name` 的类型是 `text`、`id` 是 `bigint`。
 

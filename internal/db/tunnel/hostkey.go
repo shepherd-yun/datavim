@@ -30,7 +30,7 @@ func (e *UnknownHostError) Error() string {
 func (e *UnknownHostError) Fingerprint() string { return ssh.FingerprintSHA256(e.Key) }
 
 // HostKeyChangedError means known_hosts holds a different key for the host,
-// which may be a man-in-the-middle attack. sqlvim never offers to overwrite it.
+// which may be a man-in-the-middle attack. datavim never offers to overwrite it.
 type HostKeyChangedError struct {
 	Host  string
 	Key   ssh.PublicKey

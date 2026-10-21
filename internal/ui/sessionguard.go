@@ -5,7 +5,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/config"
 )
 
 // sessionAction is what the server tab does to a session.
@@ -54,7 +54,7 @@ func guardSession(cfg config.Connection, a sessionAction, s sessionTarget, width
 		c.Body = append(c.Body, "Its open transaction, if any, is rolled back.")
 	}
 	if s.Self {
-		c.Body = append(c.Body, "This is a sqlvim connection (maybe this one).")
+		c.Body = append(c.Body, "This is a datavim connection (maybe this one).")
 	}
 	if cfg.Env == config.EnvProd {
 		c.Expect = cfg.Name

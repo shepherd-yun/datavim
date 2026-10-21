@@ -7,7 +7,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Format is an output format; its value is also the file extension.

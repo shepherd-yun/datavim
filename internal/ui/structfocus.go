@@ -1,6 +1,6 @@
 package ui
 
-import "github.com/shepherd-yun/sqlvim/internal/ui/panes/structure"
+import "github.com/shepherd-yun/datavim/internal/ui/panes/structure"
 
 // structFocus is where the tree asked a structure tab to put its cursor:
 // the row called name in section, staging its drop when drop is set.

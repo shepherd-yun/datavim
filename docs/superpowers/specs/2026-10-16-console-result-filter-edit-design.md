@@ -137,9 +137,9 @@ type resultHost interface {
 
 `edit.ApplyInTx`：
 
-1. `SAVEPOINT sqlvim_edit`
+1. `SAVEPOINT datavim_edit`
 2. 逐条执行，检查影响行数是否为 1
-3. 全部成功：`RELEASE SAVEPOINT sqlvim_edit`；任何一条失败：`ROLLBACK TO SAVEPOINT sqlvim_edit`，事务里之前的写操作保留
+3. 全部成功：`RELEASE SAVEPOINT datavim_edit`；任何一条失败：`ROLLBACK TO SAVEPOINT datavim_edit`，事务里之前的写操作保留
 
 其他规则：
 

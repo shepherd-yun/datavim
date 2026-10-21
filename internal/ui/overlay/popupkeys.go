@@ -3,7 +3,7 @@ package overlay
 import (
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 )
 
 // popupHint is "<keys> label" for the popup key bound to a, or "" when

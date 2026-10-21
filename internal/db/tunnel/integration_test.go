@@ -16,10 +16,10 @@ import (
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	tcredpanda "github.com/testcontainers/testcontainers-go/modules/redpanda"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/db/mysql"
-	"github.com/shepherd-yun/sqlvim/internal/db/postgres"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db/mysql"
+	"github.com/shepherd-yun/datavim/internal/db/postgres"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 // tunnelDial starts an SSH server and returns a dial function through it.
@@ -76,7 +76,7 @@ func TestPostgresThroughTunnel(t *testing.T) {
 	ctx := context.Background()
 	ctr, err := tcpostgres.Run(ctx, "postgres:16-alpine",
 		tcpostgres.WithDatabase("app"),
-		tcpostgres.WithUsername("sqlvim"),
+		tcpostgres.WithUsername("datavim"),
 		tcpostgres.WithPassword("secret"),
 		tcpostgres.BasicWaitStrategies(),
 	)
@@ -90,7 +90,7 @@ func TestPostgresThroughTunnel(t *testing.T) {
 	}
 	host, port := hostPort(t, endpoint)
 	conn, err := postgres.Driver{}.Open(ctx, db.ConnConfig{
-		Host: host, Port: port, User: "sqlvim", Password: "secret", Database: "app",
+		Host: host, Port: port, User: "datavim", Password: "secret", Database: "app",
 		Params: map[string]string{"sslmode": "disable"}, Dial: tunnelDial(t),
 	})
 	if err != nil {

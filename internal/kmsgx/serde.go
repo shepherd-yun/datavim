@@ -9,7 +9,7 @@ import (
 	"slices"
 	"sync"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 // Wire splits the Confluent wire format: a 0 byte, then the schema id as

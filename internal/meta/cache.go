@@ -5,7 +5,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // State is the load state of one catalog.

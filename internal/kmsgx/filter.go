@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 // Filter is a parsed message filter. The zero Filter matches everything.

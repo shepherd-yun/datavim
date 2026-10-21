@@ -10,8 +10,8 @@ import (
 
 	gomysql "github.com/go-sql-driver/mysql"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // server is the conn's db.ServerReader.
@@ -209,7 +209,7 @@ func (s server) Sessions(ctx context.Context, includeIdle bool) (db.SessionList,
 	}
 	self := map[string]bool{}
 	if as, err := s.c.Query(ctx, "SELECT PROCESSLIST_ID FROM performance_schema.session_connect_attrs "+
-		"WHERE ATTR_NAME = 'program_name' AND ATTR_VALUE = 'sqlvim'"); err == nil {
+		"WHERE ATTR_NAME = 'program_name' AND ATTR_VALUE = 'datavim'"); err == nil {
 		for _, r := range as.Rows {
 			self[r[0].Text] = true
 		}

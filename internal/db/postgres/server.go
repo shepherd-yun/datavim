@@ -10,8 +10,8 @@ import (
 
 	"github.com/jackc/pgx/v5/pgconn"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // server is the conn's db.ServerReader. Sessions, locks and settings are
@@ -213,7 +213,7 @@ func (s server) Sessions(ctx context.Context, includeIdle bool) (db.SessionList,
 		rows = append(rows, []string{r[0].Text, r[1].Text, r[2].Text, r[3].Text, r[4].Text, state, r[6].Text, elapsed, seconds(r[8]), sql})
 		list.IDs = append(list.IDs, db.SessionID{ID: r[0].Text, Since: r[10].Text})
 		list.Info = append(list.Info, db.SessionSummary{User: r[1].Text, Host: r[3].Text, DB: r[4].Text, State: state, Elapsed: elapsed, SQL: sql})
-		list.Self = append(list.Self, r[2].Text == "sqlvim")
+		list.Self = append(list.Self, r[2].Text == "datavim")
 	}
 	list.Rows = textRows([]string{"pid", "user", "application", "client", "db", "state", "wait", "time", "xact", "query"}, rows)
 	return list, nil

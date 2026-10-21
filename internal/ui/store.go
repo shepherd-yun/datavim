@@ -1,6 +1,6 @@
 package ui
 
-import "github.com/shepherd-yun/sqlvim/internal/history"
+import "github.com/shepherd-yun/datavim/internal/history"
 
 // Store keeps SQL history, console drafts, recently opened tabs, starred Redis keys and the audit log;
 // *history.Store implements it.

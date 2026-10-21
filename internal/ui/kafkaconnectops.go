@@ -16,10 +16,10 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kmsgx"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 )
 
 // connectorRecheck is how long after a pause, resume or restart the tab
@@ -152,7 +152,7 @@ func (t *connectorTab) editConfig() tea.Cmd {
 		return nil
 	}
 	t.editOld = maps.Clone(t.c.Config)
-	return writeTempEdit(t.id, editableConfig(t.editOld), "sqlvim-"+safeFileName(t.name)+"-*.json")
+	return writeTempEdit(t.id, editableConfig(t.editOld), "datavim-"+safeFileName(t.name)+"-*.json")
 }
 
 // parseEditedConfig reads the edited file back: an object of string,

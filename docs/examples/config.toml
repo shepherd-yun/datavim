@@ -1,4 +1,4 @@
-# Copy to ~/.config/sqlvim/config.toml. Every key is optional.
+# Copy to ~/.config/datavim/config.toml. Every key is optional.
 page_size        = 200            # rows per page in table data tabs
 max_column_width = 40             # widest a grid column gets
 max_rows         = 1000           # rows a console query fetches (] loads more)

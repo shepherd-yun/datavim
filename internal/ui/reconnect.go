@@ -4,7 +4,7 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // withConn runs a read-only fn on the named connection. If the connection

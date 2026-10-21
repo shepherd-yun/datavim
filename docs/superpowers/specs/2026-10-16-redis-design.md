@@ -6,7 +6,7 @@
 
 ## 1. 背景
 
-作者日常除了查 MySQL / PostgreSQL，还要查 Redis。现在查 Redis 得打开图形客户端（作者用过并认可 Redisee）。目标是在 sqlvim 里统一起来：查库、查 Redis 都在同一个终端工具里，用同一套 vim 键位，不再切到图形软件。
+作者日常除了查 MySQL / PostgreSQL，还要查 Redis。现在查 Redis 得打开图形客户端（作者用过并认可 Redisee）。目标是在 datavim 里统一起来：查库、查 Redis 都在同一个终端工具里，用同一套 vim 键位，不再切到图形软件。
 
 作者在 Redis 上主要做三件事：
 
@@ -16,7 +16,7 @@
 
 使用环境：以**单机**为主，**有生产实例，key 量很大**（几十万到几百万）。都是公司内网的**自建 Redis**（不是云厂商的托管或代理版），认证方式是**只有密码**（没有 ACL 用户名）。比如测试环境是 `172.16.96.126:6379`，加密码。具体版本还没确认（作者不在内网），见 §3.2 的版本策略。
 
-参考：Redisee 的布局是左侧按 `:` 分组的键树（文件夹带 key 数、db 切换器带 key 数、"条件扫描/筛选"输入框、类型徽标、二进制 key 转义显示、底部有收藏 / 历史页签），右侧是多标签页（key 详情、状态面板）。sqlvim 的左树右标签页结构和它一致，可以直接沿用。
+参考：Redisee 的布局是左侧按 `:` 分组的键树（文件夹带 key 数、db 切换器带 key 数、"条件扫描/筛选"输入框、类型徽标、二进制 key 转义显示、底部有收藏 / 历史页签），右侧是多标签页（key 详情、状态面板）。datavim 的左树右标签页结构和它一致，可以直接沿用。
 
 ## 2. 目标
 
@@ -38,7 +38,7 @@
 - 在生产实例上执行了 `KEYS *`，或者浏览、搜索时做了一次性的全量遍历，导致 Redis 卡顿。
 - 二进制或含特殊字符的 key 名转义显示后，用转义后的字符串去操作，结果操作了另一个 key，或者报 key 不存在。
 - 只读或 prod 连接上，通过 `EVAL`、`FCALL`、`MULTI` 包装、或者名字没收录的命令绕过拦截，执行了写操作。
-- 打开一个几百 MB 的大 String，或者几百万元素的 Hash，导致 sqlvim 卡死或内存爆掉。
+- 打开一个几百 MB 的大 String，或者几百万元素的 Hash，导致 datavim 卡死或内存爆掉。
 - 控制台 `SELECT 3` 之后，连接被悄悄重连回 db0，用户以为还在 db3 继续执行写命令。
 
 ## 3. 架构
@@ -53,7 +53,7 @@ ui ──→ session ──→ db   ──→ mysql / postgres / sqlserver / ora
   └──→ rcmd（纯包）
 ```
 
-- **`internal/rdb`**（新）：Redis 和 sqlvim 之间唯一的接口，地位相当于 `internal/db`。UI 不直接引用 go-redis。包名是我起的，避免和 go-redis 的包名 `redis` 冲突。
+- **`internal/rdb`**（新）：Redis 和 datavim 之间唯一的接口，地位相当于 `internal/db`。UI 不直接引用 go-redis。包名是我起的，避免和 go-redis 的包名 `redis` 冲突。
 - **`internal/rcmd`**（新，纯包，不碰终端和网络）：命令行切分（像 redis-cli 一样处理引号和转义）、命令分级（读 / 写 / 危险 / 不支持）、补全上下文、key 模式处理（普通文本 → glob）、事务状态（`MULTI` / `EXEC` / `DISCARD`）。地位相当于 `sqlx`。
 - 依赖方向不变：`ui` → `session` / `rcmd` → `rdb` → go-redis。
 
@@ -228,7 +228,7 @@ R1 没有写操作。但连接本身的只读开关、prod 标记要和 SQL 连�
 
 ### 5.5 不支持的命令
 
-`SUBSCRIBE`、`PSUBSCRIBE`、`SSUBSCRIBE`、`MONITOR`、`SYNC`、`PSYNC`、`CLIENT TRACKING`、`RESET`，以及 `HELLO`（会改变协议）：控制台直接拒绝，提示 `<命令> is not supported in sqlvim`，不发给服务器。
+`SUBSCRIBE`、`PSUBSCRIBE`、`SSUBSCRIBE`、`MONITOR`、`SYNC`、`PSYNC`、`CLIENT TRACKING`、`RESET`，以及 `HELLO`（会改变协议）：控制台直接拒绝，提示 `<命令> is not supported in datavim`，不发给服务器。
 
 ## 6. R3：编辑
 
@@ -271,7 +271,7 @@ SQL 编辑的规则是每条语句必须正好影响一行。Redis 上对应的�
 
 ## 7. 安全规则（R2 起，修订主设计 §5.3）
 
-Redis 没有按连接设置的只读开关（`READONLY` 命令只用于 Cluster 副本）。ACL 可以限制，但那是服务器配置，sqlvim 不改。所以和 SQL Server / Oracle 一样，**只有客户端这一层**，规则要保守。
+Redis 没有按连接设置的只读开关（`READONLY` 命令只用于 Cluster 副本）。ACL 可以限制，但那是服务器配置，datavim 不改。所以和 SQL Server / Oracle 一样，**只有客户端这一层**，规则要保守。
 
 ### 7.1 命令分级（`rcmd`）
 
@@ -297,7 +297,7 @@ Redis 没有按连接设置的只读开关（`READONLY` 命令只用于 Cluster 
 | 多行一起执行 | 先检查全部，任何一条被拒绝就一条都不执行；需要确认的合并成一个确认框 |
 
 - 规则放在 `rcmd`（或者一个类似 `runner.Guard` 的函数），和 SQL 的 `runner` 一样用表驱动测试覆盖放行和拦截的情况。
-- 编辑（R3）和批量删除走的是 sqlvim 自己生成的命令，同样要过只读和 prod 检查。
+- 编辑（R3）和批量删除走的是 datavim 自己生成的命令，同样要过只读和 prod 检查。
 - README（中英文）说明：Redis 的只读只在客户端生效，生产实例建议再配一个只读的 ACL 用户（`+@read`）。
 
 ## 8. R4：运维与增强

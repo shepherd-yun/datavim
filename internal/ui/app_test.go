@@ -11,13 +11,13 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/history"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
-	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/ui/uitest"
 )
 
 func newTestModel(t *testing.T) (*Model, *fakeBackend) {
@@ -755,7 +755,7 @@ func TestQuitAsksWithOpenTransaction(t *testing.T) {
 		t.Fatalf("screen:\n%s", screen(m))
 	}
 	if press(t, m, "n") {
-		t.Fatal("n keeps sqlvim running")
+		t.Fatal("n keeps datavim running")
 	}
 	command(t, m, "qa")
 	if !press(t, m, "y") {

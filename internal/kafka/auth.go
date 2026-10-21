@@ -13,7 +13,7 @@ import (
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // OAuthConfig is SASL "oauth": the client credentials flow against TokenURL.
@@ -83,6 +83,6 @@ func awsAuth(ctx context.Context, a AWSConfig) (func(context.Context) (aws.Auth,
 		if err != nil {
 			return aws.Auth{}, fmt.Errorf("kafka aws-msk-iam credentials: %w", err)
 		}
-		return aws.Auth{AccessKey: c.AccessKeyID, SecretKey: c.SecretAccessKey, SessionToken: c.SessionToken, UserAgent: "sqlvim"}, nil
+		return aws.Auth{AccessKey: c.AccessKeyID, SecretKey: c.SecretAccessKey, SessionToken: c.SessionToken, UserAgent: "datavim"}, nil
 	}, nil
 }

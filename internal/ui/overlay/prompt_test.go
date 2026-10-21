@@ -8,7 +8,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/complete"
 )
 
 // columns completes the word before the cursor from a fixed list.

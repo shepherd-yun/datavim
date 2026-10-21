@@ -4,7 +4,7 @@ package textview
 import (
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 )
 
 // Model holds the lines and the first visible one.

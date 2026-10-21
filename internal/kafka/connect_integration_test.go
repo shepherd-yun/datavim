@@ -21,7 +21,7 @@ import (
 // connectProps run a one-worker distributed Connect cluster on the
 // network's Kafka with the file connectors that ship with apache/kafka.
 const connectProps = `bootstrap.servers=kafka:19092
-group.id=sqlvim-connect
+group.id=datavim-connect
 key.converter=org.apache.kafka.connect.storage.StringConverter
 value.converter=org.apache.kafka.connect.storage.StringConverter
 offset.storage.topic=connect-offsets
@@ -67,7 +67,7 @@ func startConnect(t *testing.T) string {
 	return endpoint
 }
 
-// createConnector adds a connector with the REST API (sqlvim does not).
+// createConnector adds a connector with the REST API (datavim does not).
 func createConnector(t *testing.T, url, name string, cfg map[string]string) {
 	t.Helper()
 	body, _ := json.Marshal(map[string]any{"name": name, "config": cfg})

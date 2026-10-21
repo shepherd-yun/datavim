@@ -15,7 +15,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn/ctxwatch"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Driver opens PostgreSQL connections.
@@ -80,8 +80,8 @@ func connString(cfg db.ConnConfig) string {
 	}
 	q := url.Values{}
 	q.Set("connect_timeout", "10")
-	// The server tab marks sqlvim's own sessions by their application name.
-	q.Set("application_name", "sqlvim")
+	// The server tab marks datavim's own sessions by their application name.
+	q.Set("application_name", "datavim")
 	for k, v := range cfg.Params {
 		q.Set(k, v)
 	}

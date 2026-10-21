@@ -10,7 +10,7 @@ import (
 
 	"github.com/redis/go-redis/v9"
 
-	"github.com/shepherd-yun/sqlvim/internal/redit"
+	"github.com/shepherd-yun/datavim/internal/redit"
 )
 
 // ChangedError means the key is not as it was loaded: a check did not

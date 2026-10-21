@@ -19,9 +19,9 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcredis "github.com/testcontainers/testcontainers-go/modules/redis"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/redit"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/redit"
 )
 
 var images = []string{"redis:7", "redis:5"}
@@ -668,7 +668,7 @@ func TestApplyListDeleteDuplicates(t *testing.T) {
 		}, nil)
 		tb.Delete(0)
 		tb.Delete(2)
-		p, err := redit.Build(tb, redit.Target{Key: "l", Type: "list", Len: 3, Tomb: fmt.Sprintf("sqlvim:deleted:%016x", time.Now().UnixNano())})
+		p, err := redit.Build(tb, redit.Target{Key: "l", Type: "list", Len: 3, Tomb: fmt.Sprintf("datavim:deleted:%016x", time.Now().UnixNano())})
 		if err != nil {
 			t.Fatal(err)
 		}

@@ -5,11 +5,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/runner"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/runner"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 )
 
 // stager is a tab that stages changes until they are submitted: table

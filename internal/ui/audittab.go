@@ -7,14 +7,14 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/history"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // auditPage is how many audit entries one read returns.
@@ -58,7 +58,7 @@ func (m auditFilterMsg) TabID() int { return m.tabID }
 // auditGotoMsg asks the root model to open the object of an entry.
 type auditGotoMsg struct{ e history.AuditEntry }
 
-// auditTab lists the writes sqlvim sent, newest first; F searches them.
+// auditTab lists the writes datavim sent, newest first; F searches them.
 type auditTab struct {
 	id      int
 	store   Store
@@ -262,7 +262,7 @@ func (t *auditTab) View(focused bool) string {
 	return strings.Join(lines, "\n")
 }
 
-// auditGoto opens what e wrote to, when sqlvim has a tab for it.
+// auditGoto opens what e wrote to, when datavim has a tab for it.
 func (m *Model) auditGoto(e history.AuditEntry) tea.Cmd {
 	if _, ok := m.backend.Connection(e.Conn); !ok {
 		m.setStatus(fmt.Sprintf("unknown connection %q", e.Conn), true)

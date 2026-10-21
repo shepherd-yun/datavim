@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // DiffTable lists the changes that make target look like source, in the

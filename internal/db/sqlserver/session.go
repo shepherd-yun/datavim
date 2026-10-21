@@ -6,7 +6,7 @@ import (
 	"database/sql/driver"
 	"errors"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 type session struct{ c *sql.Conn }

@@ -3,7 +3,7 @@ package ui
 import (
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 )
 
 // keyHint is "<keys> label" for the keys that trigger a in ctx, or "" when

@@ -10,12 +10,12 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/schemadiff"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // compareTimeout bounds reading both sides of a comparison; a namespace
@@ -629,7 +629,7 @@ func (t *diffTab) writeScript() tea.Cmd {
 
 func (t *diffTab) scriptText(stmts, manual []string) string {
 	var b strings.Builder
-	b.WriteString("-- sqlvim schema sync\n")
+	b.WriteString("-- datavim schema sync\n")
 	fmt.Fprintf(&b, "-- source: %s\n-- target: %s\n-- generated: %s\n",
 		t.src.label(), t.tgt.label(), t.now().Format("2006-01-02 15:04:05"))
 	b.WriteString("-- These statements change the target to match the source. Review them before running.\n")

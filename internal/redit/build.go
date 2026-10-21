@@ -6,8 +6,8 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/rcmd"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/rcmd"
 )
 
 // Target is the key a table of staged rows belongs to.

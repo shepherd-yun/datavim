@@ -97,8 +97,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 func col(name string, nullable bool) db.Column {
@@ -251,8 +251,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // ErrNoKey means the rows of the two tables cannot be paired.
@@ -447,7 +447,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 var users = Spec{Columns: []string{"id", "name"}, Key: []string{"id"}}
@@ -639,7 +639,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Status says how a row differs.
@@ -902,8 +902,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 var (
@@ -970,9 +970,9 @@ package datadiff
 import (
 	"fmt"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // Script writes the statements that make the target's picked rows like the
@@ -1067,7 +1067,7 @@ git commit -m "feat(datadiff): 勾选的差异行经 edit.Plan 写成 INSERT、U
 
 - [ ] **Step 2: 写子测试**
 
-在 `t.Run("Modify Table edits round-trip through schemaedit and AlterTable", …)` 之后加（import 里补上 `"errors"`（如果还没有）和 `"github.com/shepherd-yun/sqlvim/internal/datadiff"`）：
+在 `t.Run("Modify Table edits round-trip through schemaedit and AlterTable", …)` 之后加（import 里补上 `"errors"`（如果还没有）和 `"github.com/shepherd-yun/datavim/internal/datadiff"`）：
 
 ```go
 	t.Run("data sync round-trips through datadiff and edit", func(t *testing.T) {
@@ -1506,9 +1506,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/ui/uitest"
 )
 
 var userCols = []db.ColumnInfo{{Name: "id", DatabaseType: "BIGINT"}, {Name: "name", DatabaseType: "VARCHAR"}}
@@ -1726,14 +1726,14 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/datadiff"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/schemadiff"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/datadiff"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/schemadiff"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 // dataCellWidth caps a column of the data view; l / h scroll the columns
@@ -2345,7 +2345,7 @@ git commit -m "feat(ui): Diff 标签页按 D 对比两张表的数据，列出�
 
 - [ ] **Step 1: 写失败的测试**
 
-`internal/ui/difftab_data_test.go` 末尾加（需要的 import：`"github.com/shepherd-yun/sqlvim/internal/ui/overlay"`）：
+`internal/ui/difftab_data_test.go` 末尾加（需要的 import：`"github.com/shepherd-yun/datavim/internal/ui/overlay"`）：
 
 ```go
 func TestDataViewToggle(t *testing.T) {
@@ -2435,7 +2435,7 @@ func TestDataScriptOpensConsoleOnTarget(t *testing.T) {
 	}
 	text := c.editor.Value()
 	for _, want := range []string{
-		"-- sqlvim data sync\n",
+		"-- datavim data sync\n",
 		"-- source: local · app.users\n",
 		"-- target: local · app.users_bak\n",
 		"-- key: id\n",
@@ -2533,7 +2533,7 @@ Expected: 现有的过滤测试照旧 PASS。
 
 - [ ] **Step 3: 实现勾选、交换、过滤与脚本**
 
-`internal/ui/difftab_data.go` 末尾加（import 里补上 `"github.com/shepherd-yun/sqlvim/internal/ui/overlay"` 与 `"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"`；生成时间用 `diffTab` 已有的 `t.now`）：
+`internal/ui/difftab_data.go` 末尾加（import 里补上 `"github.com/shepherd-yun/datavim/internal/ui/overlay"` 与 `"github.com/shepherd-yun/datavim/internal/ui/panes/complete"`；生成时间用 `diffTab` 已有的 `t.now`）：
 
 ```go
 // dataFilterMsg is the condition typed at F in the data view.
@@ -2622,7 +2622,7 @@ func (t *diffTab) writeDataScript() tea.Cmd {
 func (t *diffTab) dataScriptText(stmts []string) string {
 	v := t.data
 	var b strings.Builder
-	b.WriteString("-- sqlvim data sync\n")
+	b.WriteString("-- datavim data sync\n")
 	fmt.Fprintf(&b, "-- source: %s\n-- target: %s\n-- key: %s\n", v.src.label(), v.tgt.label(), strings.Join(v.spec.Key, ", "))
 	if v.where != "" {
 		fmt.Fprintf(&b, "-- where: %s\n", strings.ReplaceAll(v.where, "\n", " "))

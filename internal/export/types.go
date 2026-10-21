@@ -1,6 +1,6 @@
 package export
 
-import "github.com/shepherd-yun/sqlvim/internal/sqlx"
+import "github.com/shepherd-yun/datavim/internal/sqlx"
 
 var jsonTypes = map[string]bool{"JSON": true, "JSONB": true}
 

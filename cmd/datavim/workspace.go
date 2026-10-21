@@ -5,17 +5,17 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/config"
 )
 
 // workspaceOptions are the command line's say on the workspace.
 type workspaceOptions struct {
 	name   string // -w / --workspace
-	env    string // SQLVIM_WORKSPACE
+	env    string // DATAVIM_WORKSPACE
 	create bool   // --create
 }
 
-// selectWorkspace picks the workspace: -w, else SQLVIM_WORKSPACE, else the
+// selectWorkspace picks the workspace: -w, else DATAVIM_WORKSPACE, else the
 // default. A missing workspace is an error unless --create asks for it, so a
 // typo never opens an empty workspace.
 func selectWorkspace(cfgRoot, stateRoot string, o workspaceOptions) (config.Workspace, error) {
@@ -25,7 +25,7 @@ func selectWorkspace(cfgRoot, stateRoot string, o workspaceOptions) (config.Work
 	}
 	if name == "" {
 		if o.create {
-			return config.Workspace{}, errors.New("--create needs a workspace name (-w or SQLVIM_WORKSPACE)")
+			return config.Workspace{}, errors.New("--create needs a workspace name (-w or DATAVIM_WORKSPACE)")
 		}
 		name = config.DefaultWorkspace
 	}
@@ -52,7 +52,7 @@ func selectWorkspace(cfgRoot, stateRoot string, o workspaceOptions) (config.Work
 	if err != nil {
 		return ws, err
 	}
-	return ws, fmt.Errorf("workspace %q does not exist (have: %s)\ncreate it with: sqlvim -w %s --create",
+	return ws, fmt.Errorf("workspace %q does not exist (have: %s)\ncreate it with: datavim -w %s --create",
 		name, strings.Join(have, ", "), name)
 }
 

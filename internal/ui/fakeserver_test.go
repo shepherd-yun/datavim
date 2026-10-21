@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // fakeServer is a db.ServerReader for the server tab tests. A zero

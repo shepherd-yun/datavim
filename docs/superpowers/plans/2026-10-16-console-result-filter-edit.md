@@ -572,7 +572,7 @@ git commit -m "feat(sqlx): Filtered 把过滤条件合并进 WHERE 或包成子�
       Columns []string // table column behind each result column; nil: the same names
   }
   func ApplyInTx(ctx context.Context, s db.Querier, stmts []string) error
-  const Savepoint = "sqlvim_edit"
+  const Savepoint = "datavim_edit"
   // StatementError gains: InTx bool
   ```
 
@@ -613,7 +613,7 @@ func TestApplyInTxReleasesItsSavepoint(t *testing.T) {
 	if err := ApplyInTx(context.Background(), f, []string{"a", "b"}); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"SAVEPOINT sqlvim_edit", "a", "b", "RELEASE SAVEPOINT sqlvim_edit"}
+	want := []string{"SAVEPOINT datavim_edit", "a", "b", "RELEASE SAVEPOINT datavim_edit"}
 	if diff := cmp.Diff(want, f.execs); diff != "" {
 		t.Fatalf("execs (-want +got):\n%s", diff)
 	}
@@ -622,7 +622,7 @@ func TestApplyInTxReleasesItsSavepoint(t *testing.T) {
 func TestApplyInTxRollsBackToItsSavepoint(t *testing.T) {
 	f := &fakeQuerier{affected: map[string]int64{"b": 2}}
 	err := ApplyInTx(context.Background(), f, []string{"a", "b", "c"})
-	want := []string{"SAVEPOINT sqlvim_edit", "a", "b", "ROLLBACK TO SAVEPOINT sqlvim_edit"}
+	want := []string{"SAVEPOINT datavim_edit", "a", "b", "ROLLBACK TO SAVEPOINT datavim_edit"}
 	if diff := cmp.Diff(want, f.execs); diff != "" {
 		t.Fatalf("execs (-want +got):\n%s", diff)
 	}
@@ -707,7 +707,7 @@ func (e *StatementError) Error() string {
 }
 
 // Savepoint is where ApplyInTx rolls back to.
-const Savepoint = "sqlvim_edit"
+const Savepoint = "datavim_edit"
 
 // ApplyInTx runs stmts in the transaction already open on s (a db.Session)
 // and leaves it open. Like Apply, every statement must change exactly one
@@ -992,15 +992,15 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/runner"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
-	"github.com/shepherd-yun/sqlvim/internal/ui/overlay"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/complete"
-	"github.com/shepherd-yun/sqlvim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/runner"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/overlay"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/complete"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
 )
 
 // resultHost is the tab an editableResult belongs to: it reloads the rows
@@ -1390,9 +1390,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 )
 
 var _ stager = (*consoleTab)(nil)
@@ -1452,7 +1452,7 @@ func TestConsoleEditInOpenTransactionUsesSavepoint(t *testing.T) {
 	stageName(t, c) // manual commit: the SELECT opened the transaction
 	confirmSubmit(t, c)
 	execs := b.conn.execList()
-	want := []string{"SAVEPOINT sqlvim_edit", updateUser1, "RELEASE SAVEPOINT sqlvim_edit"}
+	want := []string{"SAVEPOINT datavim_edit", updateUser1, "RELEASE SAVEPOINT datavim_edit"}
 	if got := execs[len(execs)-3:]; !slices.Equal(got, want) {
 		t.Fatalf("execs = %v", execs)
 	}
@@ -1468,7 +1468,7 @@ func TestConsoleEditFailureInTransactionKeepsChanges(t *testing.T) {
 	c.toggleTx()
 	stageName(t, c)
 	confirmSubmit(t, c)
-	if execs := b.conn.execList(); execs[len(execs)-1] != "ROLLBACK TO SAVEPOINT sqlvim_edit" {
+	if execs := b.conn.execList(); execs[len(execs)-1] != "ROLLBACK TO SAVEPOINT datavim_edit" {
 		t.Fatalf("execs = %v", execs)
 	}
 	if c.changes() != 1 || !strings.Contains(c.status, "changes kept") || c.TxStatus() != "TX 0" {
@@ -1580,11 +1580,11 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/history"
-	"github.com/shepherd-yun/sqlvim/internal/session"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/session"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // resultFilter is the statement a console result came from and the filter
@@ -2050,7 +2050,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 )
 
 // filterFirstID runs sql and filters its result by the first row's id.
@@ -2235,7 +2235,7 @@ git commit -m "feat(ui): 控制台查询结果支持 f / F 过滤，在服务端
 ### Task 8: 文档
 
 **Files:**
-- Modify: `docs/superpowers/specs/2026-10-13-sqlvim-design.md`（§5.7、§5.8）
+- Modify: `docs/superpowers/specs/2026-10-13-datavim-design.md`（§5.7、§5.8）
 - Modify: `docs/superpowers/specs/2026-10-16-console-result-filter-edit-design.md`（状态，以及 meta 加载时机）
 - Modify: `CHANGELOG.md`
 - Modify: `README.md`、`README.zh-CN.md`
@@ -2283,7 +2283,7 @@ git commit -m "feat(ui): 控制台查询结果支持 f / F 过滤，在服务端
 Run: `make test && make lint && make test-integration`
 Expected: 全部 PASS
 
-手动验证（`make build && ./bin/sqlvim --config <dir> --debug`）：在 MySQL 和 PostgreSQL 各跑一次 `select * from <表> where …`，`ff` 过滤、`i` 改一个单元格、`:w` 提交；再用 `<Space>t` 打开手动事务重复一遍，然后 `:rollback` 确认修改被撤销。
+手动验证（`make build && ./bin/datavim --config <dir> --debug`）：在 MySQL 和 PostgreSQL 各跑一次 `select * from <表> where …`，`ff` 过滤、`i` 改一个单元格、`:w` 提交；再用 `<Space>t` 打开手动事务重复一遍，然后 `:rollback` 确认修改被撤销。
 
 - [ ] **Step 6: 提交**
 

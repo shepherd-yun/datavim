@@ -1,10 +1,10 @@
-# sqlvim
+# datavim
 
 A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows. It also browses and queries Redis and Kafka.
 
 [中文说明](README.zh-CN.md)
 
-![sqlvim demo](docs/demo.gif)
+![datavim demo](docs/demo.gif)
 
 - Browse databases, filter and sort table data, and **edit it in place**: changes are staged,
   shown as SQL and submitted in one transaction. Expand a table in the tree to see its columns,
@@ -16,30 +16,30 @@ A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys
 - Kafka: topics, consumer groups by lag, messages with jumps, filters and live tail, offset resets
   and a producer console; topic configs and partitions, deleting messages and groups, a
   Schema Registry (Avro, Protobuf and JSON Schema), ACLs, Kafka Connect and masking of message fields.
-- An audit log of every write sqlvim sent to SQL, Redis and Kafka servers (`<Space>a`).
+- An audit log of every write datavim sent to SQL, Redis and Kafka servers (`<Space>a`).
 - SSH tunnels (agent, keys, ProxyJump), production safeguards, manual transactions.
 - Your own keys (`keymap.toml`) and colors (`[theme]`).
 
 ## Install
 
 ```sh
-brew install shepherd-yun/tap/sqlvim
+brew install shepherd-yun/tap/datavim
 ```
 
 or with Go (the version in `go.mod`):
 
 ```sh
-go install github.com/shepherd-yun/sqlvim/cmd/sqlvim@latest
+go install github.com/shepherd-yun/datavim/cmd/datavim@latest
 ```
 
-Binaries for macOS and Linux are on the [releases page](https://github.com/shepherd-yun/sqlvim/releases).
+Binaries for macOS and Linux are on the [releases page](https://github.com/shepherd-yun/datavim/releases).
 
 ## Configure
 
-Create `~/.config/sqlvim/connections.toml` — see [docs/examples/connections.toml](docs/examples/connections.toml).
-On first connect sqlvim asks for the password and can save it to the macOS Keychain.
+Create `~/.config/datavim/connections.toml` — see [docs/examples/connections.toml](docs/examples/connections.toml).
+On first connect datavim asks for the password and can save it to the macOS Keychain.
 
-Optional `~/.config/sqlvim/config.toml` (see [docs/examples/config.toml](docs/examples/config.toml)):
+Optional `~/.config/datavim/config.toml` (see [docs/examples/config.toml](docs/examples/config.toml)):
 
 ```toml
 page_size        = 200
@@ -55,7 +55,7 @@ The tree draws [Nerd Font](https://www.nerdfonts.com) icons (v3): the MySQL / Po
 before each connection, and database, schema, table, folder and key icons below it. Without a
 Nerd Font they show as boxes: set `icons = "plain"`.
 
-No config yet? Start sqlvim and press `<space>n` to add a connection.
+No config yet? Start datavim and press `<space>n` to add a connection.
 
 **SQL Server** (2014–2022, user name and password): `driver = "sqlserver"`, port 1433. Values in
 `params` go to the driver as they are. Older servers often need TLS relaxed:
@@ -75,11 +75,11 @@ and import are not available on Oracle yet.
 
 **Redis** (5.0 and later, standalone servers): `driver = "redis"`,
 port 6379, and `database` is the default db number (0 when empty; the form calls it `DB`). A
-password is optional: sqlvim connects without one and asks only when the server answers
+password is optional: datavim connects without one and asks only when the server answers
 `NOAUTH`. `params`: `separator` groups the keys into folders (default `:`), `tls = "true"` and
 `tls_skip_verify = "true"`. Expanding a db scans its keys with `SCAN` in batches of 1,000 (never
 `KEYS`): a load stops after 10,000 keys, `↓ load more` goes on (at most 100,000 keys per db),
-`Ctrl-c` stops it, and on prod connections sqlvim pauses between batches. `F` on a db, folder or
+`Ctrl-c` stops it, and on prod connections datavim pauses between batches. `F` on a db, folder or
 key filters with a pattern (`user:*:sess`; text without `*` `?` `[` matches anywhere) and stops
 at 500 matches or 100,000 keys scanned; `fx` clears it. `<Space>k` opens a key by name (`Tab`
 completes the keys scanned so far). `Enter` on a key opens its tab: type, TTL, length, size and
@@ -98,7 +98,7 @@ log and `g d` on a table cell opens that key. The console keeps its own connecti
 (the tab title shows the db) and `MULTI` / `WATCH` last; the status bar shows `TX n` or `WATCH`,
 and closing the tab or quitting asks first. `Ctrl-c` cancels a blocking command such as
 `BLPOP q 0`; that drops the connection, and the next command reconnects on the same db. Inside
-`MULTI` or `WATCH` nothing reconnects: sqlvim says the transaction is lost. Typing completes
+`MULTI` or `WATCH` nothing reconnects: datavim says the transaction is lost. Typing completes
 commands, subcommands and keys (the keys the tree scanned, plus a small `SCAN` for the prefix)
 and shows the command's arguments. Known limits: other connection state (`CLIENT SETNAME` …) is
 not restored after a reconnect, `SELECT` inside `MULTI` is refused, `:e` / `:w` do not work in a
@@ -109,15 +109,15 @@ Redis keys are edited in their tab the way table data is: `i` / `Enter` edits a 
 value: the cell editor, or `$EDITOR` for long values and values with newlines; `<Space>v` always
 opens `$EDITOR`), `o` adds a field, element (`head` or `tail` in the index column says where it
 goes), member or stream entry, `dd` deletes one, `u` / `U` undo, and `<Space>w` shows the checks
-and commands before it submits. sqlvim `WATCH`es the key and checks that every value the
+and commands before it submits. datavim `WATCH`es the key and checks that every value the
 changes rely on (a field's value, the element at an index, a member's score) is still what was
 loaded; if not, or if the key is written before `EXEC`, nothing is written. Redis does not roll
 back: when a command fails inside `EXEC`, the ones before and after it are still applied, and
-sqlvim says which one failed. Strings over 1 MB (only partly loaded) and binary values are not
+datavim says which one failed. Strings over 1 MB (only partly loaded) and binary values are not
 edited in place; use the console. On a key tab `t` sets or removes the TTL, `r` renames
 (`RENAMENX`, confirming before it overwrites an existing key) and `D` deletes (`UNLINK`); in the
 tree `r` / `dd` on a key do the same, `o` creates a key, and `dd` on a folder or db deletes the
-keys matching it (the prefix, or the db's filter): sqlvim counts them, lists the first 20 and
+keys matching it (the prefix, or the db's filter): datavim counts them, lists the first 20 and
 deletes them 500 at a time; `Ctrl-c` stops it. Keys written while it runs may be missed.
 
 The server tab (`<Space>i` on a Redis connection, or `Server status` in its node menu) shows the
@@ -149,7 +149,7 @@ params = { sasl = "scram-sha-512", tls = "true" }
 
 `params`: `sasl` (`plain`, `scram-sha-256` or `scram-sha-512`; the password is asked for and
 kept in the keychain like any other), `tls = "true"`, `tls_skip_verify`, `tls_ca`, `tls_cert` and
-`tls_key` (PEM files, for mTLS), `client_id` (default `sqlvim`) and `show_internal = "true"`. The
+`tls_key` (PEM files, for mTLS), `client_id` (default `datavim`) and `show_internal = "true"`. The
 form has `SASL` and `TLS` fields. Through an SSH tunnel every broker connection goes through the
 bastion, including the brokers' advertised addresses, so the bastion must reach them.
 `broker_map = "b-1.internal:9092=localhost:19092, …"` dials another address for an advertised
@@ -159,19 +159,19 @@ broker (port forwards, NAT).
 `oauth_client_id` are required, `oauth_scope` is optional, and the client secret is asked for
 the first time it is needed. `sasl = "aws-msk-iam"` signs in to MSK with IAM (`aws_region`,
 `aws_profile`, TLS on by default): the credentials come from AWS's own chain (environment,
-`~/.aws`, SSO, instance role) and sqlvim never stores AWS keys.
+`~/.aws`, SSO, instance role) and datavim never stores AWS keys.
 
 `schema_registry_url = "https://sr.internal:8081"` adds a Schema Registry (the Confluent API;
 Redpanda's works too), with `schema_registry_user` for basic auth; its HTTP requests go through
 the same SSH tunnel and use the TLS params (`tls_ca`, `tls_cert` / `tls_key`, `tls_skip_verify`). The registry password is asked for
 when the registry first wants one. Secrets other than the connection password live in the
 keychain as `<connection>#schema-registry` and `<connection>#oauth`, or come from
-`SQLVIM_PASSWORD_<NAME>_SCHEMA_REGISTRY` / `SQLVIM_PASSWORD_<NAME>_OAUTH`.
+`DATAVIM_PASSWORD_<NAME>_SCHEMA_REGISTRY` / `DATAVIM_PASSWORD_<NAME>_OAUTH`.
 
 `connect_url = "main=http://connect-1:8083, cdc=https://connect-2:8083"` adds Kafka Connect
 clusters (one bare URL is the cluster `connect`), with `connect_user` for basic auth on all of
 them; the password is asked for when a cluster first wants it and kept as
-`<connection>#connect` (`SQLVIM_PASSWORD_<NAME>_CONNECT`). Their HTTP requests go through the
+`<connection>#connect` (`DATAVIM_PASSWORD_<NAME>_CONNECT`). Their HTTP requests go through the
 SSH tunnel too. The tree's Kafka Connect section lists the connectors (under each cluster when
 there are several) with their state and running tasks, failed ones in red; `Enter` opens a
 connector: Status, Tasks (`K` shows a task's trace) and Config, with passwords, secrets, tokens
@@ -261,9 +261,9 @@ node menu of a connection or database) opens its server tab; `[` / `]` switch se
   like, with sparklines of the load (QPS / TPS, running sessions, rows or network per second).
   It samples every 2 seconds, only while it is on screen.
 - **Sessions** — who is connected, what they run and for how long, and whether they are in a
-  transaction (idle sessions hidden; `a` shows them, `*` marks sqlvim's own). `c` cancels the
+  transaction (idle sessions hidden; `a` shows them, `*` marks datavim's own). `c` cancels the
   session's query, `dd` disconnects it: refused on read-only connections, confirmed everywhere,
-  with the connection name typed on prod; sqlvim checks that the id still names the same
+  with the connection name typed on prod; datavim checks that the id still names the same
   session first. SQL Server cannot cancel a query (only disconnect), nor can Oracle before 18c.
 - **Locks** — who waits for a lock and who holds it, with both statements.
 - **Slow queries** — the top statements by total time: `performance_schema` digests on MySQL,
@@ -292,7 +292,7 @@ env      = "prod"
 ssh      = "bastion"
 ```
 
-sqlvim reads `HostName`, `Port`, `User`, `IdentityFile`, `ProxyJump` (any number of hops)
+datavim reads `HostName`, `Port`, `User`, `IdentityFile`, `ProxyJump` (any number of hops)
 and `UserKnownHostsFile`. It tries ssh-agent first, then your identity files, and asks
 for a key's passphrase only when nothing else works (passphrases are kept in memory).
 Unknown hosts show their fingerprint and are added to `known_hosts` once you type `yes`;
@@ -305,25 +305,25 @@ Each has its own `connections.toml`, keychain passwords, history and console dra
 theme and keys are shared.
 
 ```sh
-sqlvim -w personal --create   # create it once
-sqlvim -w personal            # or: SQLVIM_WORKSPACE=personal sqlvim
-sqlvim --list-workspaces
+datavim -w personal --create   # create it once
+datavim -w personal            # or: DATAVIM_WORKSPACE=personal datavim
+datavim --list-workspaces
 ```
 
-Without `-w` sqlvim opens the `default` workspace, which is the files it has always used.
+Without `-w` datavim opens the `default` workspace, which is the files it has always used.
 The workspace name shows in the status bar and the window title.
 
 | | default | `personal` |
 |---|---|---|
-| connections | `~/.config/sqlvim/connections.toml` | `~/.config/sqlvim/workspaces/personal/connections.toml` |
-| history, drafts | `~/.local/state/sqlvim/state.db` | `~/.local/state/sqlvim/workspaces/personal/state.db` |
+| connections | `~/.config/datavim/connections.toml` | `~/.config/datavim/workspaces/personal/connections.toml` |
+| history, drafts | `~/.local/state/datavim/state.db` | `~/.local/state/datavim/workspaces/personal/state.db` |
 | keychain account | `<connection>` | `personal/<connection>` |
 
 To move connections into a workspace, create it, cut their `[[connection]]` blocks into its
 `connections.toml`, and enter each password once more on first connect. Their history stays
 in the default workspace.
 
-With [direnv](https://direnv.net), `export SQLVIM_WORKSPACE=work` in a project's `.envrc`
+With [direnv](https://direnv.net), `export DATAVIM_WORKSPACE=work` in a project's `.envrc`
 picks the workspace by directory.
 
 ## Keys
@@ -368,7 +368,7 @@ picks the workspace by directory.
 | `Ctrl-j` / `Ctrl-k` | Console: results / editor; `M` toggles the message log |
 | `<Space>v` | Edit the console in `$EDITOR` |
 | `<Space>h` | SQL history |
-| `<Space>a` | Audit log of the writes sqlvim sent (`:audit <connection>` for one connection); `F` searches, `gd` opens the object |
+| `<Space>a` | Audit log of the writes datavim sent (`:audit <connection>` for one connection); `F` searches, `gd` opens the object |
 | `<Space>y t/c/j/m/i` | Copy result as TSV / CSV / JSON / Markdown / INSERT; in a grid `y t/c/j/m/i` too |
 | `<Space>yd` | Copy the DDL of the table under the cursor (tree, data or structure tab; there `yd` too); `y` in a routine's definition copies it |
 | `<Space>x c/j/s/x` | Export result as CSV / JSON / SQL / xlsx |
@@ -442,7 +442,7 @@ Press `<Space>` and wait to see every leader key. These are the defaults; see Cu
 
 ## Customize
 
-**Keys** — `~/.config/sqlvim/keymap.toml` changes the leader and binds, rebinds or unbinds
+**Keys** — `~/.config/datavim/keymap.toml` changes the leader and binds, rebinds or unbinds
 keys per context ([example with every action](docs/examples/keymap.toml)):
 
 ```toml
@@ -453,7 +453,7 @@ leader = ","
 "s" = ""
 ```
 
-sqlvim checks the file at startup and names the binding that is unknown or conflicts.
+datavim checks the file at startup and names the binding that is unknown or conflicts.
 Help (`?`), which-key and the hints follow your keys. The console editor's vim keys, text
 inputs and popup lists keep their keys.
 
@@ -509,7 +509,7 @@ Not built in: macros, ex ranges, windows, `/` search — `<Space>v` opens the co
 
 ## Search and completion
 
-sqlvim reads each connection's catalog (tables, views, columns, routines) in the
+datavim reads each connection's catalog (tables, views, columns, routines) in the
 background the first time you use it — the whole server for MySQL, one database at a time
 for PostgreSQL — and keeps it in memory. `<Space>r` reloads it; running DDL in a console
 reloads it automatically.
@@ -527,16 +527,16 @@ with a syntax error, the cursor jumps to where the server says the error is.
 
 - `readonly = true` (the default for `env = "prod"`) blocks INSERT/UPDATE/DELETE and DDL
   in the console, and the database session itself is read-only as a second line of defence.
-  `:set noreadonly` unlocks the connection until sqlvim exits; `connections.toml` is not changed.
+  `:set noreadonly` unlocks the connection until datavim exits; `connections.toml` is not changed.
   To change it for good, set `Read-only` in the new/edit connection form (`auto` follows `env`).
-- SQL Server and Oracle have no read-only session, so there sqlvim is the only guard, and a stricter one:
+- SQL Server and Oracle have no read-only session, so there datavim is the only guard, and a stricter one:
   it reads every statement of a batch (T-SQL needs no semicolons) and blocks anything it does
   not know to be harmless — `EXEC` of any procedure but a few read-only system ones
   (`sp_help`, `sp_helptext`, `sp_columns`, `sp_who` …), `IF` blocks, `DBCC`, PL/SQL blocks, `CALL`
   and the like (`ALTER SESSION SET CURRENT_SCHEMA` / `NLS_…` are allowed). For a
   production server also use an account that can only read.
 - Redis has no read-only session either: browsing sends only read commands, and in the console
-  sqlvim alone enforces read-only — it refuses write, dangerous and unknown commands (module
+  datavim alone enforces read-only — it refuses write, dangerous and unknown commands (module
   commands included). On prod, writes and unknown commands ask for `y`; dangerous commands
   (`FLUSHDB`, `FLUSHALL`, `CONFIG SET`, `CLIENT KILL`, `SHUTDOWN`, `DEBUG` …) ask on every
   connection and on prod want the connection name typed; `KEYS` is refused on a db of more than
@@ -561,7 +561,7 @@ with a syntax error, the cursor jumps to where the server says the error is.
   write or DDL statement on a prod connection asks for `y` first.
 - `UPDATE` / `DELETE` without `WHERE` asks you to type the table name before it runs.
 - In manual commit mode (`<Space>t`) quitting or closing a console with an open transaction
-  asks first. If the connection drops during a transaction, sqlvim says the transaction is
+  asks first. If the connection drops during a transaction, datavim says the transaction is
   lost instead of reconnecting silently. Use `<Space>t` rather than `SET autocommit = 0`.
 - Imports run in one transaction and write nothing unless every row goes in; on MySQL a table the import created is dropped again.
 - Every write that reaches a server is kept in an audit log (`<Space>a`, in `state.db`, the latest
@@ -580,7 +580,7 @@ make snapshot           # build release archives locally with GoReleaser
 make demo               # re-record docs/demo.gif (needs vhs and Docker)
 ```
 
-Logs: `~/.local/state/sqlvim/sqlvim.log` (`--debug` for more detail).
+Logs: `~/.local/state/datavim/datavim.log` (`--debug` for more detail).
 See [CONTRIBUTING.md](CONTRIBUTING.md) before sending a pull request.
 
 ## License

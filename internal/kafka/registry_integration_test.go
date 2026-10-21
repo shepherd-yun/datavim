@@ -18,8 +18,8 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcredpanda "github.com/testcontainers/testcontainers-go/modules/redpanda"
 
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
-	"github.com/shepherd-yun/sqlvim/internal/kmsgx"
+	"github.com/shepherd-yun/datavim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/kmsgx"
 )
 
 const (

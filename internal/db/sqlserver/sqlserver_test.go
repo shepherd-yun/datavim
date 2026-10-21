@@ -9,7 +9,7 @@ import (
 
 	mssql "github.com/microsoft/go-mssqldb"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func TestDSN(t *testing.T) {
@@ -30,7 +30,7 @@ func TestDSN(t *testing.T) {
 	q := u.Query()
 	for k, want := range map[string]string{
 		"database": "crm_MSCRM", "encrypt": "disable", "tlsmin": "1.0", "TrustServerCertificate": "true",
-		"dial timeout": "10", "app name": "sqlvim",
+		"dial timeout": "10", "app name": "datavim",
 	} {
 		if got := q.Get(k); got != want {
 			t.Errorf("%s = %q, want %q", k, got, want)

@@ -1,10 +1,10 @@
 version: 2
-project_name: sqlvim
+project_name: datavim
 
 builds:
-  - id: sqlvim
-    main: ./cmd/sqlvim
-    binary: sqlvim
+  - id: datavim
+    main: ./cmd/datavim
+    binary: datavim
     env:
       - CGO_ENABLED=0
     goos: [darwin, linux]
@@ -33,20 +33,20 @@ checksum:
 release:
   github:
     owner: shepherd-yun
-    name: sqlvim
+    name: datavim
 
 homebrew_casks:
-  - name: sqlvim
+  - name: datavim
     repository:
       owner: shepherd-yun
       name: homebrew-tap
       token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
-    homepage: https://github.com/shepherd-yun/sqlvim
+    homepage: https://github.com/shepherd-yun/datavim
     description: Terminal SQL client for MySQL and PostgreSQL with vim keys
     license: MIT
     hooks:
       post:
         install: |
           if OS.mac?
-            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/sqlvim"]
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/datavim"]
           end

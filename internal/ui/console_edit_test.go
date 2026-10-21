@@ -7,9 +7,9 @@ import (
 
 	tea "charm.land/bubbletea/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
-	"github.com/shepherd-yun/sqlvim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 )
 
 var _ stager = (*consoleTab)(nil)
@@ -69,7 +69,7 @@ func TestConsoleEditInOpenTransactionUsesSavepoint(t *testing.T) {
 	stageName(t, c) // manual commit: the SELECT opened the transaction
 	confirmSubmit(t, c)
 	execs := b.conn.execList()
-	want := []string{"SAVEPOINT sqlvim_edit", consoleUpdateUser1, "RELEASE SAVEPOINT sqlvim_edit"}
+	want := []string{"SAVEPOINT datavim_edit", consoleUpdateUser1, "RELEASE SAVEPOINT datavim_edit"}
 	if got := execs[len(execs)-3:]; !slices.Equal(got, want) {
 		t.Fatalf("execs = %v", execs)
 	}
@@ -85,7 +85,7 @@ func TestConsoleEditFailureInTransactionKeepsChanges(t *testing.T) {
 	c.toggleTx()
 	stageName(t, c)
 	confirmSubmit(t, c)
-	if execs := b.conn.execList(); execs[len(execs)-1] != "ROLLBACK TO SAVEPOINT sqlvim_edit" {
+	if execs := b.conn.execList(); execs[len(execs)-1] != "ROLLBACK TO SAVEPOINT datavim_edit" {
 		t.Fatalf("execs = %v", execs)
 	}
 	if c.changes() != 1 || !strings.Contains(c.status, "changes kept") || c.TxStatus() != "TX 0" {

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Key names one cached catalog: a connection and, for PostgreSQL, the

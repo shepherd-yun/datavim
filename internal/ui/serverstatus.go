@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/rdb"
+	"github.com/shepherd-yun/datavim/internal/rdb"
 )
 
 const (

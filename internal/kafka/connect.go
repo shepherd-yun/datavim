@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // ConnectConfig is what OpenConnect needs, as RegistryConfig. User and
@@ -129,7 +129,7 @@ func (c *connect) do(ctx context.Context, method, path string, in, out any) erro
 		return fmt.Errorf("kafka connect: %w", err)
 	}
 	req.Header.Set("Accept", "application/json")
-	req.Header.Set("User-Agent", "sqlvim")
+	req.Header.Set("User-Agent", "datavim")
 	if in != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

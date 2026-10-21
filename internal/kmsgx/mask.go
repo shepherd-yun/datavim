@@ -7,8 +7,8 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
 // Masked is the text a masked field shows; in JSON it is the string "******".

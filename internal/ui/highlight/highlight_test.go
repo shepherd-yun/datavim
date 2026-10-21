@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 func classAt(spans []Span, off int) Class {

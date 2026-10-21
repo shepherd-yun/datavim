@@ -1,4 +1,4 @@
-// Package config loads sqlvim's TOML configuration files.
+// Package config loads datavim's TOML configuration files.
 package config
 
 import (
@@ -437,23 +437,42 @@ func AppendConnection(dir string, c Connection) (Connection, error) {
 	return c, f.Close()
 }
 
-// Dir returns $XDG_CONFIG_HOME/sqlvim or ~/.config/sqlvim.
+// Dir returns $XDG_CONFIG_HOME/datavim or ~/.config/datavim.
 func Dir() (string, error) {
 	return xdgDir("XDG_CONFIG_HOME", ".config")
 }
 
-// StateDir returns $XDG_STATE_HOME/sqlvim or ~/.local/state/sqlvim.
+// StateDir returns $XDG_STATE_HOME/datavim or ~/.local/state/datavim.
 func StateDir() (string, error) {
 	return xdgDir("XDG_STATE_HOME", filepath.Join(".local", "state"))
 }
 
+// legacyName is the name the project had before datavim; its directories
+// are moved over the first time they are looked up.
+const legacyName = "sqlvim"
+
 func xdgDir(env, fallback string) (string, error) {
-	if base := os.Getenv(env); base != "" {
-		return filepath.Join(base, "sqlvim"), nil
+	base := os.Getenv(env)
+	if base == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", err
+		}
+		base = filepath.Join(home, fallback)
 	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", err
+	dir := filepath.Join(base, "datavim")
+	migrateLegacyDir(filepath.Join(base, legacyName), dir)
+	return dir, nil
+}
+
+// migrateLegacyDir renames old to dir when only old exists. A failure leaves
+// both alone: datavim then starts with a fresh directory.
+func migrateLegacyDir(old, dir string) {
+	if _, err := os.Lstat(dir); !errors.Is(err, fs.ErrNotExist) {
+		return
 	}
-	return filepath.Join(home, fallback, "sqlvim"), nil
+	if info, err := os.Stat(old); err != nil || !info.IsDir() {
+		return
+	}
+	_ = os.Rename(old, dir)
 }

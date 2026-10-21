@@ -1,4 +1,4 @@
-// Package rdb is sqlvim's only link to Redis servers, what internal/db is
+// Package rdb is datavim's only link to Redis servers, what internal/db is
 // for SQL ones. The UI never imports go-redis. Keys and values are Go
 // strings used as byte strings: nothing here converts or escapes them.
 package rdb
@@ -16,8 +16,8 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/redis/go-redis/v9/maintnotifications"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/redit"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/redit"
 )
 
 // Config is what Open needs.
@@ -226,7 +226,7 @@ func infoValue(info, field string) string {
 	return ""
 }
 
-// wrap turns go-redis errors into sqlvim's: NOAUTH is ErrAuthRequired,
+// wrap turns go-redis errors into datavim's: NOAUTH is ErrAuthRequired,
 // server replies stay as they are, cancellation is ctx.Err() and
 // everything else (network, closed pool) is db.ErrConnLost.
 func wrap(ctx context.Context, err error) error {

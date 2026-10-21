@@ -23,7 +23,7 @@ import (
 	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/crypto/ssh/knownhosts"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // testServer is an SSH server on 127.0.0.1 that accepts the given user keys
@@ -197,7 +197,7 @@ func startAgent(t *testing.T, keys ...ed25519.PrivateKey) string {
 	t.Helper()
 	// Unix socket paths are limited to about 104 bytes on macOS, and
 	// t.TempDir() paths there are long.
-	dir, err := os.MkdirTemp("", "sqlvim-agent")
+	dir, err := os.MkdirTemp("", "datavim-agent")
 	if err != nil {
 		t.Fatal(err)
 	}

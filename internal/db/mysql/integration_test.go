@@ -13,10 +13,10 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcmysql "github.com/testcontainers/testcontainers-go/modules/mysql"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/db/dbtest"
-	"github.com/shepherd-yun/sqlvim/internal/db/mysql"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db/dbtest"
+	"github.com/shepherd-yun/datavim/internal/db/mysql"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 var fixture = []string{
@@ -123,7 +123,7 @@ func TestContract(t *testing.T) {
 }
 
 var serverFixture = dbtest.ServerFixture{
-	SleepSQL:  "SELECT SLEEP(30) AS sqlvim_contract_sleep",
+	SleepSQL:  "SELECT SLEEP(30) AS datavim_contract_sleep",
 	LockSQL:   "UPDATE app.users SET name = CONCAT(name, '') WHERE id = 1",
 	Begin:     "START TRANSACTION",
 	SelfIDSQL: "SELECT CONNECTION_ID()",

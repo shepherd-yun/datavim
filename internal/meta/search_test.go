@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 func snap(k Key, c db.Catalog) *Snapshot { return NewSnapshot(k, c, time.Now()) }

@@ -10,7 +10,7 @@ Set Theme "Catppuccin Mocha"
 Set TypingSpeed 60ms
 
 Hide
-Type "export SQLVIM_PASSWORD_SHOP=demo XDG_STATE_HOME=$(mktemp -d) PATH=$PWD/bin:$PATH && clear && sqlvim --config docs/demo"
+Type "export DATAVIM_PASSWORD_SHOP=demo XDG_STATE_HOME=$(mktemp -d) PATH=$PWD/bin:$PATH && clear && datavim --config docs/demo"
 Enter
 Sleep 2s
 Show

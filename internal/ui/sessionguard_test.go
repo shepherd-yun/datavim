@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/config"
 )
 
 func TestGuardSession(t *testing.T) {
@@ -33,13 +33,13 @@ func TestGuardSession(t *testing.T) {
 		{
 			name: "dev cancel", cfg: dev, act: actCancel, target: target, title: "Cancel the query of session 48211?",
 			lines:  []string{"user app · host 10.0.3.21 · db shop", "active · 4m12s", "SELECT 1"},
-			absent: []string{"Its open transaction, if any, is rolled back.", "This is a sqlvim connection (maybe this one)."},
+			absent: []string{"Its open transaction, if any, is rolled back.", "This is a datavim connection (maybe this one)."},
 		},
 		{
-			name: "dev disconnect of sqlvim's own", cfg: dev, act: actDisconnect,
+			name: "dev disconnect of datavim's own", cfg: dev, act: actDisconnect,
 			target: func() sessionTarget { s := target; s.Self = true; return s }(),
 			title:  "Disconnect session 48211?",
-			lines:  []string{"Its open transaction, if any, is rolled back.", "This is a sqlvim connection (maybe this one)."},
+			lines:  []string{"Its open transaction, if any, is rolled back.", "This is a datavim connection (maybe this one)."},
 		},
 	}
 	for _, c := range cases {

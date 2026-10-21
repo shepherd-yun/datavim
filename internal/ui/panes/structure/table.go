@@ -6,7 +6,7 @@ import (
 	"charm.land/lipgloss/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/textutil"
+	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 )
 
 // table lays rows out under headers like textutil.Table and styles each

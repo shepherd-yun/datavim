@@ -254,7 +254,7 @@ func clientCert(t *testing.T, dir string) (certFile, keyFile string) {
 		t.Fatal(err)
 	}
 	tmpl := &x509.Certificate{
-		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "sqlvim"},
+		SerialNumber: big.NewInt(1), Subject: pkix.Name{CommonName: "datavim"},
 		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
 		ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth}, KeyUsage: x509.KeyUsageDigitalSignature,
 	}

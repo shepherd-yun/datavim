@@ -17,8 +17,8 @@ import (
 	go_ora "github.com/sijms/go-ora/v2"
 	"github.com/sijms/go-ora/v2/network"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // Driver opens Oracle connections.
@@ -74,8 +74,8 @@ func connURL(cfg db.ConnConfig) string {
 		service = defaultService
 	}
 	q := url.Values{}
-	// The server tab marks sqlvim's own sessions by v$session.program.
-	q.Set("PROGRAM", "sqlvim")
+	// The server tab marks datavim's own sessions by v$session.program.
+	q.Set("PROGRAM", "datavim")
 	for k, v := range cfg.Params {
 		if strings.EqualFold(k, "program") {
 			q.Del("PROGRAM")

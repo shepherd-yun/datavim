@@ -121,7 +121,7 @@ func TestAWSAuthFromChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := aws.Auth{AccessKey: "AK", SecretKey: "SK", SessionToken: "ST", UserAgent: "sqlvim"}
+	want := aws.Auth{AccessKey: "AK", SecretKey: "SK", SessionToken: "ST", UserAgent: "datavim"}
 	if a != want {
 		t.Fatalf("auth = %+v", a)
 	}

@@ -10,8 +10,8 @@ import (
 
 	mssql "github.com/microsoft/go-mssqldb"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // server is the conn's db.ServerReader. Every query runs on SQL Server
@@ -198,7 +198,7 @@ func (s server) Sessions(ctx context.Context, includeIdle bool) (db.SessionList,
 		rows = append(rows, []string{r[0].Text, r[1].Text, r[2].Text, r[3].Text, r[4].Text, state, r[6].Text, elapsed, r[8].Text, sql})
 		list.IDs = append(list.IDs, db.SessionID{ID: r[0].Text, Since: r[10].Text})
 		list.Info = append(list.Info, db.SessionSummary{User: r[1].Text, Host: r[2].Text, DB: r[4].Text, State: state, Elapsed: elapsed, SQL: sql})
-		list.Self = append(list.Self, r[3].Text == "sqlvim")
+		list.Self = append(list.Self, r[3].Text == "datavim")
 	}
 	list.Rows = textRows([]string{"id", "login", "host", "program", "db", "status", "wait", "time", "open tran", "sql"}, rows)
 	return list, nil

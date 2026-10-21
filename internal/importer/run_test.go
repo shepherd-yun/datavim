@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 type call struct {
@@ -125,7 +125,7 @@ func TestRunCommitsInBatches(t *testing.T) {
 	if err != nil || n != 1001 || done.Load() != 1001 {
 		t.Fatalf("n = %d, done = %d, err = %v", n, done.Load(), err)
 	}
-	batch := []string{"SAVEPOINT sqlvim_import", "", "RELEASE SAVEPOINT sqlvim_import"}
+	batch := []string{"SAVEPOINT datavim_import", "", "RELEASE SAVEPOINT datavim_import"}
 	want := []string{"BEGIN"}
 	for _, rows := range []int{500, 500, 1} {
 		batch[1] = "INSERT " + strconv.Itoa(rows) + " rows"
@@ -161,7 +161,7 @@ func TestRunFindsTheRejectedRow(t *testing.T) {
 	if !errors.As(err, &le) || le.Line != 3 || err.Error() != "line 3: duplicate key" {
 		t.Fatalf("err = %v", err)
 	}
-	want := []string{"START TRANSACTION", "SAVEPOINT sqlvim_import", "INSERT 3 rows", "ROLLBACK TO SAVEPOINT sqlvim_import", "INSERT 1 rows", "INSERT 1 rows", "ROLLBACK"}
+	want := []string{"START TRANSACTION", "SAVEPOINT datavim_import", "INSERT 3 rows", "ROLLBACK TO SAVEPOINT datavim_import", "INSERT 1 rows", "INSERT 1 rows", "ROLLBACK"}
 	if got := q.statements(); !slices.Equal(got, want) {
 		t.Fatalf("statements:\n%v\nwant\n%v", got, want)
 	}
@@ -198,7 +198,7 @@ func TestRunCreatesAndDropsOnMySQL(t *testing.T) {
 	}
 	q := &fakeQuerier{fail: failOn("1")}
 	_, err := Run(context.Background(), q, job(t, "mysql"), new(atomic.Int64))
-	want := []string{"CREATE TABLE t", "START TRANSACTION", "SAVEPOINT sqlvim_import", "INSERT 1 rows", "ROLLBACK TO SAVEPOINT sqlvim_import", "INSERT 1 rows", "ROLLBACK", "DROP TABLE t"}
+	want := []string{"CREATE TABLE t", "START TRANSACTION", "SAVEPOINT datavim_import", "INSERT 1 rows", "ROLLBACK TO SAVEPOINT datavim_import", "INSERT 1 rows", "ROLLBACK", "DROP TABLE t"}
 	if got := q.statements(); err == nil || !slices.Equal(got, want) {
 		t.Fatalf("mysql: err %v, statements\n%v\nwant\n%v", err, got, want)
 	}
@@ -217,7 +217,7 @@ func TestRunCreatesAndDropsOnMySQL(t *testing.T) {
 
 	q = &fakeQuerier{fail: failOn("1")}
 	_, err = Run(context.Background(), q, job(t, "postgres"), new(atomic.Int64))
-	want = []string{"BEGIN", "CREATE TABLE t", "SAVEPOINT sqlvim_import", "INSERT 1 rows", "ROLLBACK TO SAVEPOINT sqlvim_import", "INSERT 1 rows", "ROLLBACK"}
+	want = []string{"BEGIN", "CREATE TABLE t", "SAVEPOINT datavim_import", "INSERT 1 rows", "ROLLBACK TO SAVEPOINT datavim_import", "INSERT 1 rows", "ROLLBACK"}
 	if got := q.statements(); err == nil || !slices.Equal(got, want) {
 		t.Fatalf("postgres: err %v, statements\n%v\nwant\n%v", err, got, want)
 	}
@@ -236,7 +236,7 @@ func TestRunCancelAndConnLost(t *testing.T) {
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancel: %v", err)
 	}
-	if got := q.statements(); got[len(got)-1] != "ROLLBACK" || slices.Contains(got, "ROLLBACK TO SAVEPOINT sqlvim_import") {
+	if got := q.statements(); got[len(got)-1] != "ROLLBACK" || slices.Contains(got, "ROLLBACK TO SAVEPOINT datavim_import") {
 		t.Fatalf("cancel statements %v", got)
 	}
 
@@ -247,7 +247,7 @@ func TestRunCancelAndConnLost(t *testing.T) {
 		return nil
 	}}
 	_, err = Run(context.Background(), q, Job{Path: idsFile(t, 2), Options: DefaultOptions("ids.csv"), Plan: idsPlan("mysql")}, new(atomic.Int64))
-	if !db.IsConnLost(err) || slices.Contains(q.statements(), "ROLLBACK TO SAVEPOINT sqlvim_import") {
+	if !db.IsConnLost(err) || slices.Contains(q.statements(), "ROLLBACK TO SAVEPOINT datavim_import") {
 		t.Fatalf("conn lost: %v, %v", err, q.statements())
 	}
 }
@@ -271,7 +271,7 @@ func TestRunGeneratesIDs(t *testing.T) {
 	if err != nil || n != 2 {
 		t.Fatalf("n = %d, err = %v", n, err)
 	}
-	want := []string{"START TRANSACTION", "SELECT COALESCE(MAX(`id`), 0) FROM `app`.`t` FOR UPDATE", "SAVEPOINT sqlvim_import", "INSERT 2 rows", "RELEASE SAVEPOINT sqlvim_import", "COMMIT"}
+	want := []string{"START TRANSACTION", "SELECT COALESCE(MAX(`id`), 0) FROM `app`.`t` FOR UPDATE", "SAVEPOINT datavim_import", "INSERT 2 rows", "RELEASE SAVEPOINT datavim_import", "COMMIT"}
 	if got := q.statements(); !slices.Equal(got, want) {
 		t.Fatalf("statements:\n%v\nwant\n%v", got, want)
 	}
@@ -284,7 +284,7 @@ func TestRunGeneratesIDs(t *testing.T) {
 	if _, err := Run(context.Background(), q, Job{Path: p, Options: DefaultOptions(p), Plan: namesPlan("postgres", "integer"), Rows: 2}, new(atomic.Int64)); err != nil {
 		t.Fatal(err)
 	}
-	want = []string{"BEGIN", `LOCK TABLE "public"."t" IN SHARE ROW EXCLUSIVE MODE`, `SELECT COALESCE(MAX("id"), 0) FROM "public"."t"`, "SAVEPOINT sqlvim_import"}
+	want = []string{"BEGIN", `LOCK TABLE "public"."t" IN SHARE ROW EXCLUSIVE MODE`, `SELECT COALESCE(MAX("id"), 0) FROM "public"."t"`, "SAVEPOINT datavim_import"}
 	if got := q.statements(); !slices.Equal(got[:4], want) || !slices.Equal(q.calls[4].args, []any{"a", "1", "b", "2"}) {
 		t.Fatalf("postgres: %v %v", got, q.calls[4].args)
 	}

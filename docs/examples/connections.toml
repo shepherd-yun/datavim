@@ -1,7 +1,7 @@
-# Copy to ~/.config/sqlvim/connections.toml
-# Passwords are NOT stored here: sqlvim asks on first connect and can save
-# them to the macOS Keychain (service "sqlvim", account = connection name).
-# SQLVIM_PASSWORD_<NAME> (e.g. SQLVIM_PASSWORD_LOCAL_MYSQL) overrides the keychain.
+# Copy to ~/.config/datavim/connections.toml
+# Passwords are NOT stored here: datavim asks on first connect and can save
+# them to the macOS Keychain (service "datavim", account = connection name).
+# DATAVIM_PASSWORD_<NAME> (e.g. DATAVIM_PASSWORD_LOCAL_MYSQL) overrides the keychain.
 
 [[connection]]
 name     = "local-mysql"
@@ -44,7 +44,7 @@ host     = "10.0.3.9"
 port     = 1433
 user     = "reader"
 database = "crm"
-env      = "prod"          # SQL Server: read-only is enforced by sqlvim only
+env      = "prod"          # SQL Server: read-only is enforced by datavim only
 params   = { encrypt = "disable" }   # older servers; or TrustServerCertificate = "true", tlsmin = "1.0"
 
 [[connection]]

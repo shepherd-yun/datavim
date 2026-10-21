@@ -11,7 +11,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 	"golang.org/x/crypto/ssh"
 
-	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
+	"github.com/shepherd-yun/datavim/internal/db/tunnel"
 )
 
 func testHostKey(t *testing.T) ssh.PublicKey {

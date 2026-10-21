@@ -12,9 +12,9 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/ui/uitest"
 )
 
 func TestFormatFact(t *testing.T) {
@@ -311,7 +311,7 @@ func TestSQLServerSessions(t *testing.T) {
 	m, _, _ := openSQLServer(t, srv)
 	pressHold(t, m, "]")
 	s := screen(m)
-	for _, w := range []string{"2 sessions · 1 running · idle hidden (a)", "* sqlvim", "*50117", "SELECT↵  1"} {
+	for _, w := range []string{"2 sessions · 1 running · idle hidden (a)", "* datavim", "*50117", "SELECT↵  1"} {
 		if !strings.Contains(s, w) {
 			t.Errorf("screen lacks %q:\n%s", w, s)
 		}
@@ -465,7 +465,7 @@ func TestSQLServerKillSelfWarns(t *testing.T) {
 	srv := withSections(mysqlServer())
 	m := openSessions(t, srv, config.Connection{Env: config.EnvDev})
 	pressHold(t, m, "j", "d", "d")
-	if s := screen(m); !strings.Contains(s, "This is a sqlvim connection (maybe this one).") {
+	if s := screen(m); !strings.Contains(s, "This is a datavim connection (maybe this one).") {
 		t.Fatalf("screen:\n%s", s)
 	}
 }
@@ -477,7 +477,7 @@ func TestSQLServerInfoError(t *testing.T) {
 	if s := screen(m); !strings.Contains(s, "ORA-00942: table or view does not exist") {
 		t.Fatalf("Info error not shown:\n%s", s)
 	}
-	// without Info sqlvim cannot tell whether cancelling works
+	// without Info datavim cannot tell whether cancelling works
 	pressHold(t, m, "c")
 	if s := tabStatus(m); strings.Contains(s, "not supported") || !strings.Contains(s, "server info") || m.overlay != nil {
 		t.Fatalf("c without Info: status %q, overlay %T", s, m.overlay)

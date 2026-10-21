@@ -33,7 +33,7 @@
 
 ### 3.1 `:e <path>` / `:edit <path>`
 
-- 路径支持 `~` 展开，相对路径按 sqlvim 启动时的工作目录解析，然后转成绝对路径并 `filepath.Clean`。
+- 路径支持 `~` 展开，相对路径按 datavim 启动时的工作目录解析，然后转成绝对路径并 `filepath.Clean`。
 - 连接和库取当前上下文：
   - 当前 tab 是 console、数据 tab 或结构 tab：用它的 `Target()`（连接 + Namespace）。
   - 焦点在树上：用光标所在节点的连接和库（连接节点用连接的默认库，PostgreSQL 没有默认库时和 `<Space>c` 的处理一致）。
@@ -147,4 +147,4 @@ UI 测试，文件放在 `t.TempDir()`：
 - 出错时让用户选停止、跳过、全部跳过；可选整体包在一个事务里。
 - 执行前扫一遍整个文件，按语句类型计数，交给 Guard：只读连接拒绝，prod 弹确认。
 - 结束后给汇总（成功、失败、影响行数），失败的语句能在文件 console 里定位。
-- 之后再考虑命令行 `sqlvim run -c <conn> file.sql`。
+- 之后再考虑命令行 `datavim run -c <conn> file.sql`。

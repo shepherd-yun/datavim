@@ -6,10 +6,18 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- **Renamed to datavim.** The command is `datavim`, Homebrew installs it with
+  `brew install shepherd-yun/tap/datavim`, and the repository is now
+  `github.com/shepherd-yun/datavim`. On first start the old `~/.config/sqlvim` and
+  `~/.local/state/sqlvim` directories are moved to `datavim`, and passwords saved in the
+  keychain under `sqlvim` are moved over the first time they are used. `SQLVIM_*`
+  environment variables still work, but `DATAVIM_*` ones are now preferred.
+
 ### Added
 - Masking Kafka messages: `[[mask]]` rules in `config.toml` (by `connections` or `env`, `topics`
   globs, `fields` as `key` / `value` or JSON paths like `value.cards[].number`, and `headers`)
-  show those fields as `"******"` everywhere sqlvim shows, copies, exports or searches a message,
+  show those fields as `"******"` everywhere datavim shows, copies, exports or searches a message,
   in every format. Non-JSON parts a path reaches are masked whole, Schema Registry values stay
   masked until decoded, and masked messages are left out of copies to a producer console. The
   topic tab says `masked`; the messages themselves are not changed.
@@ -26,9 +34,9 @@ All notable changes to this project are documented here. The format follows
   `dd` deletes the ACL under the cursor after you type its principal, `F` filters by principal,
   resource type or name, and `gd` opens the topic or
   group of a literal ACL. A delete matches every field of the ACL, so it never takes a prefixed or
-  wildcard ACL with it; if the cluster deletes more anyway, sqlvim says so. A cluster without an
+  wildcard ACL with it; if the cluster deletes more anyway, datavim says so. A cluster without an
   authorizer says ACLs are off.
-- An audit log of the writes sqlvim sent: SQL statements that may write (DML, DDL, unknown
+- An audit log of the writes datavim sent: SQL statements that may write (DML, DDL, unknown
   statements, and `BEGIN` / `COMMIT` / `ROLLBACK` in a console), Redis write, dangerous and
   unknown commands and key-tab edits, and every Kafka and Schema Registry write. Each entry
   keeps the time, connection, database, operation, object, a detail (SQL with passwords
@@ -539,15 +547,15 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/sqlvim/compare/v2.4.0...HEAD
-[2.4.0]: https://github.com/shepherd-yun/sqlvim/compare/v2.3.0...v2.4.0
-[2.3.0]: https://github.com/shepherd-yun/sqlvim/compare/v2.2.0...v2.3.0
-[2.2.0]: https://github.com/shepherd-yun/sqlvim/compare/v2.1.1...v2.2.0
-[2.1.1]: https://github.com/shepherd-yun/sqlvim/compare/v2.1.0...v2.1.1
-[2.1.0]: https://github.com/shepherd-yun/sqlvim/compare/v2.0.3...v2.1.0
-[2.0.3]: https://github.com/shepherd-yun/sqlvim/compare/v2.0.2...v2.0.3
-[2.0.2]: https://github.com/shepherd-yun/sqlvim/compare/v2.0.1...v2.0.2
-[2.0.1]: https://github.com/shepherd-yun/sqlvim/compare/v2.0.0...v2.0.1
-[2.0.0]: https://github.com/shepherd-yun/sqlvim/compare/v1.1.0...v2.0.0
-[1.1.0]: https://github.com/shepherd-yun/sqlvim/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/shepherd-yun/sqlvim/releases/tag/v1.0.0
+[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v2.4.0...HEAD
+[2.4.0]: https://github.com/shepherd-yun/datavim/compare/v2.3.0...v2.4.0
+[2.3.0]: https://github.com/shepherd-yun/datavim/compare/v2.2.0...v2.3.0
+[2.2.0]: https://github.com/shepherd-yun/datavim/compare/v2.1.1...v2.2.0
+[2.1.1]: https://github.com/shepherd-yun/datavim/compare/v2.1.0...v2.1.1
+[2.1.0]: https://github.com/shepherd-yun/datavim/compare/v2.0.3...v2.1.0
+[2.0.3]: https://github.com/shepherd-yun/datavim/compare/v2.0.2...v2.0.3
+[2.0.2]: https://github.com/shepherd-yun/datavim/compare/v2.0.1...v2.0.2
+[2.0.1]: https://github.com/shepherd-yun/datavim/compare/v2.0.0...v2.0.1
+[2.0.0]: https://github.com/shepherd-yun/datavim/compare/v1.1.0...v2.0.0
+[1.1.0]: https://github.com/shepherd-yun/datavim/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/shepherd-yun/datavim/releases/tag/v1.0.0

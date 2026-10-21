@@ -8,7 +8,7 @@ import (
 
 	gomysql "github.com/go-sql-driver/mysql"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // nearRE matches the tail of a MySQL syntax error message. The quoted text

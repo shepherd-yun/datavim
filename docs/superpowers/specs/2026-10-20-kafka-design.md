@@ -23,7 +23,7 @@
 
 参考过的开源项目：ktea（Go + Bubble Tea v2，功能和交互）、kafui（安全 / 审计 / 脱敏设计）、kaskade（消费和解码选项）。**它们只作参考**，界面、按键、功能取舍都按本项目自己的设计来，不照搬。
 
-项目将改名为 **datavim**。改名是一个单独的改动（`refactor!`），不和 Kafka 混在一起；本文仍用 sqlvim 指代本项目。
+项目将改名为 **datavim**。改名是一个单独的改动（`refactor!`），不和 Kafka 混在一起；本文仍用 datavim 指代本项目。
 
 ## 2. 目标、非目标、反目标
 
@@ -50,7 +50,7 @@
 
 - 浏览消息时加入了 consumer group 或提交了 offset，导致生产消费者 rebalance 或者消费进度被改。
 - 发消息或读元数据时，因为 topic 名打错而**自动创建**了 topic。
-- 打开一个大 partition、开着 live tail 放一晚上，导致 sqlvim 内存一直涨。
+- 打开一个大 partition、开着 live tail 放一晚上，导致 datavim 内存一直涨。
 - 重置 offset 时作用到了别的 group、别的 partition，或者在消费者还在线时"成功"了一半。
 - 只读或 prod 连接上，通过某条没被拦截的路径执行了写操作（发消息、删 topic、改配置、重置 offset）。
 - SASL 密码、Schema Registry 凭据、OAuth token 出现在日志或界面上。
@@ -69,7 +69,7 @@ ui ──→ session ──→ db    ──→ mysql / postgres / sqlserver / or
   └──→ kmsgx（纯包）
 ```
 
-- **`internal/kafka`**（新）：Kafka 和 sqlvim 之间唯一的接口，地位相当于 `internal/db` / `internal/rdb`。UI 不直接引用 franz-go。
+- **`internal/kafka`**（新）：Kafka 和 datavim 之间唯一的接口，地位相当于 `internal/db` / `internal/rdb`。UI 不直接引用 franz-go。
 - **`internal/kmsgx`**（新，纯包，不碰终端和网络）：消息解码（text / JSON / hex / base64，K2 加 Schema Registry 线格式）、起始位置表达式解析（`earliest`、`-100`、`@2026-10-20 09:12`、`p1:1180002` 等，§5.3）、producer 草稿格式的解析和生成（§6）、重置 offset 的目标计算和预览（§5.6）、消息过滤表达式、写操作分级（§8.1）。地位相当于 `sqlx` / `rcmd`。包名由实现者决定，避开 franz-go 的 `kmsg`。
 - 依赖方向不变：`ui` → `session` / `kmsgx` → `kafka` → franz-go。
 
@@ -141,11 +141,11 @@ key、value、header 一律用 `[]byte` 原样保存，**不做编码转换**。
 | `user` | SASL 用户名；留空表示不用 SASL（除非是 MSK IAM / OAuth） |
 | `database` | 不用 |
 | `ssh` | 和现有一样 |
-| `params` | `sasl`（K1：`plain` / `scram-sha-256` / `scram-sha-512`；K2 加 `oauth` / `aws-msk-iam`）、`tls = "true"`、`tls_skip_verify`、`tls_ca`、`tls_cert`、`tls_key`（文件路径）、`aws_region`、`aws_profile`、`oauth_token_url`、`oauth_client_id`、`oauth_scope`、`schema_registry_url`、`schema_registry_user`、`client_id`（默认 `sqlvim`）、`show_internal = "true"` |
+| `params` | `sasl`（K1：`plain` / `scram-sha-256` / `scram-sha-512`；K2 加 `oauth` / `aws-msk-iam`）、`tls = "true"`、`tls_skip_verify`、`tls_ca`、`tls_cert`、`tls_key`（文件路径）、`aws_region`、`aws_profile`、`oauth_token_url`、`oauth_client_id`、`oauth_scope`、`schema_registry_url`、`schema_registry_user`、`client_id`（默认 `datavim`）、`show_internal = "true"` |
 
 - 密码：SASL 密码、OAuth client secret、Schema Registry 密码都进钥匙串，**不写进 toml**。钥匙串里一个连接需要存多个秘密，key 的命名方式由实现者决定（比如 `<连接名>`、`<连接名>#schema-registry`）。
 - 秘密怎么输入（我的决定）：SASL 密码用连接表单现有的 Password 字段，和 SQL / Redis 一样。其他秘密（K2 的 Schema Registry 密码、OAuth client secret）不加表单字段，**第一次需要时弹出输入框**，输入后存进钥匙串，和现有的 `ErrPasswordRequired` 流程一致；认证失败时重新询问。
-- MSK IAM（K2）：凭据走 AWS 标准凭据链（环境变量、`~/.aws`、SSO），sqlvim 不保存 AWS 密钥。
+- MSK IAM（K2）：凭据走 AWS 标准凭据链（环境变量、`~/.aws`、SSO），datavim 不保存 AWS 密钥。
 - 连接表单：驱动选 kafka 时，`Host` 标签显示为 `Brokers`，`Database` 隐藏，增加 SASL 机制和 TLS 的选项。Schema Registry 和 TLS 文件路径是否放进表单由实现者决定，至少要能在 `params` 里配。
 - `session.Manager` 增加 `Kafka(ctx, name) (kafka.Client, error)` 和 `KafkaReader(ctx, name) (kafka.Reader, error)`，`ui.Backend` 增加同名方法。密码、隧道、`Reset`、`SetReadOnly` 走现有逻辑。
 - **隧道和 advertised 地址**：通过 SSH 隧道连接时，broker 返回的 advertised 地址由跳板机去解析和连接，所以跳板机必须能访问这些地址。在 README 里写明这一点。如果作者的环境里需要把 advertised 地址改写成别的地址，再加一个 `params.broker_map`（K2，实现者决定格式）。
@@ -306,7 +306,7 @@ Kafka 服务器不支持按内容过滤，所有过滤都在客户端完成。�
 key: ord-1
 partition: 2               ← 可选；不写就按 key 的哈希分配
 header: trace-id=abc123
-header: source=sqlvim
+header: source=datavim
 
 {"id": 1, "amount": 99}
 ===
@@ -407,12 +407,12 @@ K1 里的写操作有：发消息、新建 topic、删除 topic、重置 offset�
 - 消费的隔离级别：Messages 头部可以切换 `read_committed`（默认）/ `read_uncommitted`。
 - `params.broker_map`（§3.4），如果作者的环境需要。
 - **OAuth 和 AWS MSK IAM 认证**（作者的决定：从 K1 挪到 K2）：
-  - OAuth：`sasl = "oauth"`，sqlvim 用 client credentials 流程向 `oauth_token_url` 取 token，token 快过期时自动刷新。client secret 按 §3.4 存钥匙串。token 不写日志。
-  - MSK IAM：`sasl = "aws-msk-iam"`，凭据走 AWS 标准凭据链（`aws_profile`、`aws_region`），凭据过期时用 franz-go 的回调重新取。sqlvim 不保存 AWS 密钥。这一项没法用容器做集成测试，用单元测试覆盖配置组装，再连作者的 MSK 手工验证。
+  - OAuth：`sasl = "oauth"`，datavim 用 client credentials 流程向 `oauth_token_url` 取 token，token 快过期时自动刷新。client secret 按 §3.4 存钥匙串。token 不写日志。
+  - MSK IAM：`sasl = "aws-msk-iam"`，凭据走 AWS 标准凭据链（`aws_profile`、`aws_region`），凭据过期时用 franz-go 的回调重新取。datavim 不保存 AWS 密钥。这一项没法用容器做集成测试，用单元测试覆盖配置组装，再连作者的 MSK 手工验证。
 
 ## 8. 安全规则（修订主设计 §5.3）
 
-Kafka 服务器端有 ACL，但那是服务器配置，sqlvim 不改。和 Redis 一样，sqlvim 在**客户端这一层**做保守的拦截。README（中英文）建议生产集群使用只有读权限的 ACL 账号。
+Kafka 服务器端有 ACL，但那是服务器配置，datavim 不改。和 Redis 一样，datavim 在**客户端这一层**做保守的拦截。README（中英文）建议生产集群使用只有读权限的 ACL 账号。
 
 ### 8.1 写操作分级（`kmsgx`）
 

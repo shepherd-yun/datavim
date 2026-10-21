@@ -6,10 +6,10 @@ import (
 	"database/sql/driver"
 	"errors"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 	"github.com/sijms/go-ora/v2/network"
 
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // session is one connection. go-ora commits every statement unless a

@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/uitest"
+	"github.com/shepherd-yun/datavim/internal/ui/uitest"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/kafka"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/kafka"
 
-	"github.com/shepherd-yun/sqlvim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/history"
 )
 
 func TestRecentListsWhatWasOpened(t *testing.T) {

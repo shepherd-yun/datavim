@@ -6,7 +6,7 @@
 
 ## 1. 背景
 
-DataGrip 在表上右键可以 Modify Table、Drop Table、Rename Table，还可以用 Compare With… 对比两张表（或两个 schema）的结构和数据，并生成同步脚本。sqlvim 目前只能看结构（`<Space>s` / `<Space>S`）、复制 DDL（`<Space>yd`），表结构的变更都要在 console 里手写 SQL。
+DataGrip 在表上右键可以 Modify Table、Drop Table、Rename Table，还可以用 Compare With… 对比两张表（或两个 schema）的结构和数据，并生成同步脚本。datavim 目前只能看结构（`<Space>s` / `<Space>S`）、复制 DDL（`<Space>yd`），表结构的变更都要在 console 里手写 SQL。
 
 作者的对比场景有三种：
 

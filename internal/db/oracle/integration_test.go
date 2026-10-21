@@ -12,11 +12,11 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/wait"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/db/dbtest"
-	"github.com/shepherd-yun/sqlvim/internal/db/oracle"
-	"github.com/shepherd-yun/sqlvim/internal/runner"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db/dbtest"
+	"github.com/shepherd-yun/datavim/internal/db/oracle"
+	"github.com/shepherd-yun/datavim/internal/runner"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // Table names are quoted lower case like the other engines' fixtures;
@@ -42,7 +42,7 @@ func TestContract(t *testing.T) {
 	ctr, err := testcontainers.Run(ctx, "gvenzl/oracle-free:23-slim",
 		testcontainers.WithExposedPorts("1521/tcp"),
 		testcontainers.WithEnv(map[string]string{
-			"ORACLE_PASSWORD": "Sys0racle", "APP_USER": "sqlvim", "APP_USER_PASSWORD": password,
+			"ORACLE_PASSWORD": "Sys0racle", "APP_USER": "datavim", "APP_USER_PASSWORD": password,
 		}),
 		testcontainers.WithWaitStrategy(wait.ForLog("DATABASE IS READY TO USE!").WithStartupTimeout(5*time.Minute)),
 	)
@@ -57,7 +57,7 @@ func TestContract(t *testing.T) {
 	host, portStr, _ := net.SplitHostPort(endpoint)
 	port, _ := strconv.Atoi(portStr)
 	conn, err := oracle.Driver{}.Open(ctx, db.ConnConfig{
-		Host: host, Port: port, User: "sqlvim", Password: password, Database: "FREEPDB1",
+		Host: host, Port: port, User: "datavim", Password: password, Database: "FREEPDB1",
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestContract(t *testing.T) {
 	}
 	dbtest.RunContract(t, conn, dbtest.Fixture{
 		Dialect:     sqlx.Oracle,
-		NS:          db.Namespace{Schema: "SQLVIM"},
+		NS:          db.Namespace{Schema: "DATAVIM"},
 		EmptyIsNull: true,
 		FoldsUpper:  true,
 		SleepSQL:    "SELECT COUNT(*) FROM all_objects a, all_objects b, all_objects c",
@@ -130,7 +130,7 @@ func TestContract(t *testing.T) {
 		if _, err := conn.Exec(ctx, `CREATE TABLE "MixedEdit" ("Id" INT PRIMARY KEY, "Name" VARCHAR2(20))`); err != nil {
 			t.Fatal(err)
 		}
-		ref := db.TableRef{Namespace: db.Namespace{Schema: "SQLVIM"}, Name: "MixedEdit"}
+		ref := db.TableRef{Namespace: db.Namespace{Schema: "DATAVIM"}, Name: "MixedEdit"}
 		if _, err := conn.Exec(ctx, `INSERT INTO `+sqlx.QualifiedName(sqlx.Oracle, ref)+` VALUES (1, 'a')`); err != nil {
 			t.Fatal(err)
 		}
@@ -142,7 +142,7 @@ func TestContract(t *testing.T) {
 	})
 
 	t.Run("the console runs CALL and PL/SQL blocks", func(t *testing.T) {
-		if _, err := conn.Exec(ctx, "CREATE PROCEDURE sqlvim_noop IS BEGIN NULL; END;"); err != nil {
+		if _, err := conn.Exec(ctx, "CREATE PROCEDURE datavim_noop IS BEGIN NULL; END;"); err != nil {
 			t.Fatal(err)
 		}
 		s, err := conn.Session(ctx)
@@ -150,7 +150,7 @@ func TestContract(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer func() { _ = s.Close() }()
-		for _, st := range sqlx.Split("CALL sqlvim_noop();\nbegin\n  sqlvim_noop;\nend;\n/\n", sqlx.Oracle) {
+		for _, st := range sqlx.Split("CALL datavim_noop();\nbegin\n  datavim_noop;\nend;\n/\n", sqlx.Oracle) {
 			if r := runner.RunOne(ctx, s, st.Text, sqlx.Oracle, 100); r.Err != nil {
 				t.Fatalf("%s: %v", st.Text, r.Err)
 			}
@@ -165,21 +165,21 @@ func TestContract(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, g := range []string{"GRANT SELECT_CATALOG_ROLE TO sqlvim", "GRANT ALTER SYSTEM TO sqlvim"} {
+	for _, g := range []string{"GRANT SELECT_CATALOG_ROLE TO datavim", "GRANT ALTER SYSTEM TO datavim"} {
 		if _, err := sys.Exec(ctx, g); err != nil {
 			t.Fatalf("%s: %v", g, err)
 		}
 	}
 	_ = sys.Close()
 	srvConn, err := oracle.Driver{}.Open(ctx, db.ConnConfig{
-		Host: host, Port: port, User: "sqlvim", Password: password, Database: "FREEPDB1",
+		Host: host, Port: port, User: "datavim", Password: password, Database: "FREEPDB1",
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = srvConn.Close() })
 	dbtest.RunServerContract(t, srvConn, dbtest.ServerFixture{
-		SleepSQL:  "SELECT /* sqlvim_contract_sleep */ COUNT(*) FROM all_objects a, all_objects b, all_objects c",
+		SleepSQL:  "SELECT /* datavim_contract_sleep */ COUNT(*) FROM all_objects a, all_objects b, all_objects c",
 		LockSQL:   `UPDATE "users" SET name = name WHERE id = 1`,
 		Begin:     "SET TRANSACTION READ WRITE",
 		SelfIDSQL: "SELECT sys_context('USERENV', 'SID') FROM dual",

@@ -11,8 +11,8 @@ import (
 
 	"github.com/sijms/go-ora/v2/network"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 // server is the conn's db.ServerReader. It reads the v$ views
@@ -184,7 +184,7 @@ func (s server) Sessions(ctx context.Context, includeIdle bool) (db.SessionList,
 		rows = append(rows, []string{r[0].Text, r[1].Text, r[2].Text, r[3].Text, r[4].Text, status, r[6].Text, elapsed, sql})
 		list.IDs = append(list.IDs, db.SessionID{ID: r[0].Text})
 		list.Info = append(list.Info, db.SessionSummary{User: r[1].Text, Host: r[2].Text, DB: r[4].Text, State: status, Elapsed: elapsed, SQL: sql})
-		list.Self = append(list.Self, r[3].Text == "sqlvim")
+		list.Self = append(list.Self, r[3].Text == "datavim")
 	}
 	list.Rows = textRows([]string{"sid,serial#", "user", "machine", "program", "schema", "status", "event", "time", "sql"}, rows)
 	return list, nil

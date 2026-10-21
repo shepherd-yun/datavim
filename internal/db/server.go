@@ -114,7 +114,7 @@ type SessionList struct {
 	Rows          *ResultSet
 	IDs           []SessionID
 	Info          []SessionSummary
-	Self          []bool // the session's application name is sqlvim
+	Self          []bool // the session's application name is datavim
 	Total, Active int
 }
 

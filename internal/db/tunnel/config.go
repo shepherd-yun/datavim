@@ -99,7 +99,7 @@ func lookup(cfg *ssh_config.Config, alias string, env Env) (Hop, []jump, error) 
 		return strings.TrimSpace(v)
 	}
 	if pc := get("ProxyCommand"); pc != "" && !strings.EqualFold(pc, "none") {
-		return Hop{}, nil, fmt.Errorf("ssh host %q uses ProxyCommand, which sqlvim does not support; use ProxyJump instead", alias)
+		return Hop{}, nil, fmt.Errorf("ssh host %q uses ProxyCommand, which datavim does not support; use ProxyJump instead", alias)
 	}
 	h := Hop{Alias: alias, Host: alias, Port: 22, User: env.User}
 	if v := get("HostName"); v != "" {

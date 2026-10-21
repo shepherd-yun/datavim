@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/edit"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
 )
 
 func table(names []string, rows ...[]string) *edit.Table {

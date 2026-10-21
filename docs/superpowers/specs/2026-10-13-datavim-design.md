@@ -1,17 +1,17 @@
-# sqlvim 设计文档
+# datavim 设计文档
 
 - 日期：2026-10-13
 - 状态：待审阅
-- 范围：sqlvim v0.1 → v1.0 的整体设计；每个版本另行编写实现计划
+- 范围：datavim v0.1 → v1.0 的整体设计；每个版本另行编写实现计划
 
 ## 1. 背景与目标
 
-sqlvim 是一个终端里的 SQL 客户端（TUI），用于对 MySQL 和 PostgreSQL 做增删改查。
+datavim 是一个终端里的 SQL 客户端（TUI），用于对 MySQL 和 PostgreSQL 做增删改查。
 
 - **用户**：作者本人，在 macOS + Ghostty 下日常使用；代码以 MIT 协议在 GitHub 开源。
 - **定位**：日常主力工具，目标是替代 DataGrip 的日常使用场景。
 - **交互**：vim 键位，lazygit 风格的多面板布局；DataGrip 的快捷键能力用 leader 键组合实现。
-- **成功标准**：日常查库、写 SQL、改数据时，作者愿意打开 sqlvim 而不是 DataGrip。
+- **成功标准**：日常查库、写 SQL、改数据时，作者愿意打开 datavim 而不是 DataGrip。
 
 ### 1.1 使用环境
 
@@ -25,7 +25,7 @@ SQLite、ClickHouse 等其他数据库；ER 图；EXPLAIN 可视化；多结果�
 
 ### 1.3 与已有项目的差异
 
-jorgerojas26/lazysql（Go + tview）定位相近，作者用过后体验不佳。sqlvim 的差异点：内置 vim 编辑器并可与 nvim 联动；DataGrip 式全局搜索和 leader 键体系；数据修改先暂存，预览 SQL 后再提交；SSH 隧道；生产库保护。
+jorgerojas26/lazysql（Go + tview）定位相近，作者用过后体验不佳。datavim 的差异点：内置 vim 编辑器并可与 nvim 联动；DataGrip 式全局搜索和 leader 键体系；数据修改先暂存，预览 SQL 后再提交；SSH 隧道；生产库保护。
 
 ## 2. 技术选型
 
@@ -63,10 +63,10 @@ jorgerojas26/lazysql（Go + tview）定位相近，作者用过后体验不佳�
 ### 3.1 目录结构
 
 ```
-sqlvim/
-├── cmd/sqlvim/main.go          # 入口：解析参数，启动 TUI
+datavim/
+├── cmd/datavim/main.go          # 入口：解析参数，启动 TUI
 ├── internal/
-│   ├── config/                 # ~/.config/sqlvim/ 下的配置：连接、按键、主题
+│   ├── config/                 # ~/.config/datavim/ 下的配置：连接、按键、主题
 │   ├── secret/                 # 密码存取：Keychain；其他平台降级为环境变量
 │   ├── db/                     # 数据库抽象层
 │   │   ├── driver.go           #   Driver / Conn 接口及公共类型
@@ -175,7 +175,7 @@ lazygit 风格的多面板布局：
 
 ### 5.1 连接管理
 
-配置文件 `~/.config/sqlvim/connections.toml`：
+配置文件 `~/.config/datavim/connections.toml`：
 
 ```toml
 [[connection]]
@@ -189,7 +189,7 @@ env      = "prod"            # dev | staging | prod，默认 dev
 readonly = true              # env=prod 时默认为 true
 ssh      = "bastion"         # ~/.ssh/config 中的 Host 别名，可选
 params   = { sslmode = "require" }   # 透传给驱动 DSN
-# 密码不写在这里，存在 Keychain：service="sqlvim", account=<name>
+# 密码不写在这里，存在 Keychain：service="datavim", account=<name>
 ```
 
 - `<Space>n` 打开新建连接表单，保存时把密码写入 Keychain。
@@ -339,18 +339,18 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 ### 6.4 实现
 
 - `keymap` 包维护一棵按键树：模式 × 上下文 → 按键序列 → 动作 ID。动作带描述文本，帮助浮层和 which-key 都由这棵树生成，保证提示和实际绑定一致。
-- 用户可在 `~/.config/sqlvim/keymap.toml` 中覆盖绑定和 leader 键。启动时校验冲突，有冲突则报错并指出位置。
+- 用户可在 `~/.config/datavim/keymap.toml` 中覆盖绑定和 leader 键。启动时校验冲突，有冲突则报错并指出位置。
 - 文档提供 Ghostty 配置片段，把 Cmd 快捷键映射为 leader 序列，例如 `keybind = cmd+e=text:\x20e`。
 
 ## 7. 本地数据
 
 | 路径 | 内容 |
 |---|---|
-| `~/.config/sqlvim/connections.toml` | 连接配置 |
-| `~/.config/sqlvim/config.toml` | 通用设置（max_rows、主题、编辑器命令、导出目录） |
-| `~/.config/sqlvim/keymap.toml` | 自定义按键 |
-| `~/.local/state/sqlvim/state.db` | SQL 历史、最近打开、各连接的控制台草稿 |
-| `~/.local/state/sqlvim/sqlvim.log` | 日志（slog，默认 info 级别，`--debug` 时为 debug 级别） |
+| `~/.config/datavim/connections.toml` | 连接配置 |
+| `~/.config/datavim/config.toml` | 通用设置（max_rows、主题、编辑器命令、导出目录） |
+| `~/.config/datavim/keymap.toml` | 自定义按键 |
+| `~/.local/state/datavim/state.db` | SQL 历史、最近打开、各连接的控制台草稿 |
+| `~/.local/state/datavim/datavim.log` | 日志（slog，默认 info 级别，`--debug` 时为 debug 级别） |
 
 非默认工作空间的 connections.toml 和 state.db 位于 workspaces/<name>/ 下，见 2026-10-16-workspaces-design.md。
 
@@ -393,7 +393,7 @@ params   = { sslmode = "require" }   # 透传给驱动 DSN
 
 ## 11. 开源规范
 
-- 仓库：`github.com/<user>/sqlvim`，MIT 许可证
+- 仓库：`github.com/<user>/datavim`，MIT 许可证
 - 包含 README（中英文）、CONTRIBUTING、CHANGELOG（Keep a Changelog 格式）、Issue/PR 模板
 - 提交信息遵循 Conventional Commits；版本号遵循 SemVer
 - 代码遵循 Effective Go；`internal/` 下的包不对外暴露 API

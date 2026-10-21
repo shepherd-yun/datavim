@@ -16,7 +16,7 @@ const (
 var secretKinds = []string{SecretSchemaRegistry, SecretOAuth, SecretConnect}
 
 // SecretRequiredError is a secret other than the connection's password
-// that sqlvim does not know yet, or one the server refused (Wrong).
+// that datavim does not know yet, or one the server refused (Wrong).
 type SecretRequiredError struct {
 	Conn, Kind string
 	Wrong      bool

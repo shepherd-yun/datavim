@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
-	"github.com/shepherd-yun/sqlvim/internal/sqlx"
+	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
 const rollbackTimeout = 5 * time.Second
@@ -117,7 +117,7 @@ func ApplyDDL(ctx context.Context, s db.Querier, d sqlx.Dialect, stmts []string)
 }
 
 // Savepoint is where ApplyInTx rolls back to.
-const Savepoint = "sqlvim_edit"
+const Savepoint = "datavim_edit"
 
 // ApplyInTx runs stmts in the transaction already open on s (a db.Session)
 // and leaves it open. Like Apply, every statement must change exactly one

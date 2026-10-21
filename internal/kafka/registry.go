@@ -14,7 +14,7 @@ import (
 	"github.com/twmb/franz-go/pkg/sr"
 	"golang.org/x/sync/errgroup"
 
-	"github.com/shepherd-yun/sqlvim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/db"
 )
 
 // Schema is one version of a subject in a Schema Registry.
@@ -105,7 +105,7 @@ func OpenRegistry(cfg RegistryConfig) (Registry, error) {
 		TLSClientConfig: tc,
 	}}
 	opts := []sr.ClientOpt{
-		sr.URLs(u.String()), sr.HTTPClient(hc), sr.UserAgent("sqlvim"),
+		sr.URLs(u.String()), sr.HTTPClient(hc), sr.UserAgent("datavim"),
 		// GET /config/{subject} falls back to the global level on some
 		// registries unless told not to; Compatibility wants to know which.
 		sr.PreReq(func(req *http.Request) error {

@@ -6,7 +6,7 @@ import (
 
 	"charm.land/lipgloss/v2"
 
-	"github.com/shepherd-yun/sqlvim/internal/ui/highlight"
+	"github.com/shepherd-yun/datavim/internal/ui/highlight"
 )
 
 func TestApplyOverridesColors(t *testing.T) {

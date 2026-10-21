@@ -1,7 +1,7 @@
 .PHONY: build test test-integration lint run snapshot release-notes demo
 
 build:
-	go build -o bin/sqlvim ./cmd/sqlvim
+	go build -o bin/datavim ./cmd/datavim
 
 test:
 	go test -race ./...
@@ -13,7 +13,7 @@ lint:
 	golangci-lint run
 
 run: build
-	./bin/sqlvim
+	./bin/datavim
 
 snapshot:
 	HOMEBREW_TAP_GITHUB_TOKEN=dummy goreleaser release --snapshot --clean

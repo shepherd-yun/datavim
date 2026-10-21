@@ -9,10 +9,10 @@ import (
 
 	"github.com/zalando/go-keyring"
 
-	"github.com/shepherd-yun/sqlvim/internal/config"
-	"github.com/shepherd-yun/sqlvim/internal/db/tunnel"
-	"github.com/shepherd-yun/sqlvim/internal/history"
-	"github.com/shepherd-yun/sqlvim/internal/ui/theme"
+	"github.com/shepherd-yun/datavim/internal/config"
+	"github.com/shepherd-yun/datavim/internal/db/tunnel"
+	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
 
 func TestRunPrintsVersion(t *testing.T) {
@@ -20,8 +20,8 @@ func TestRunPrintsVersion(t *testing.T) {
 	if err := run([]string{"--version"}, &out); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	if got := out.String(); !strings.Contains(got, "sqlvim dev") {
-		t.Fatalf("output = %q, want it to contain %q", got, "sqlvim dev")
+	if got := out.String(); !strings.Contains(got, "datavim dev") {
+		t.Fatalf("output = %q, want it to contain %q", got, "datavim dev")
 	}
 }
 
@@ -74,20 +74,20 @@ func TestNewManagerPersistsEditsAndRemovals(t *testing.T) {
 	keyring.MockInit() // never touch the real keychain
 	dir := t.TempDir()
 	mgr := newManager(&config.Config{}, config.Workspace{Name: config.DefaultWorkspace, ConfigDir: dir}, nil)
-	if err := mgr.AddConnection(config.Connection{Name: "sqlvim-test-a", Driver: "mysql"}, "", false); err != nil {
+	if err := mgr.AddConnection(config.Connection{Name: "datavim-test-a", Driver: "mysql"}, "", false); err != nil {
 		t.Fatal(err)
 	}
-	if err := mgr.UpdateConnection("sqlvim-test-a", config.Connection{Name: "sqlvim-test-b", Driver: "postgres"}, "", false); err != nil {
+	if err := mgr.UpdateConnection("datavim-test-a", config.Connection{Name: "datavim-test-b", Driver: "postgres"}, "", false); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err := config.Load(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(cfg.Connections) != 1 || cfg.Connections[0].Name != "sqlvim-test-b" || cfg.Connections[0].Driver != "postgres" {
+	if len(cfg.Connections) != 1 || cfg.Connections[0].Name != "datavim-test-b" || cfg.Connections[0].Driver != "postgres" {
 		t.Fatalf("connections = %+v", cfg.Connections)
 	}
-	if err := mgr.RemoveConnection("sqlvim-test-b"); err != nil {
+	if err := mgr.RemoveConnection("datavim-test-b"); err != nil {
 		t.Fatal(err)
 	}
 	if cfg, _ := config.Load(dir); len(cfg.Connections) != 0 {
@@ -152,11 +152,11 @@ func TestExamplesLoad(t *testing.T) {
 
 func TestRunRejectsMissingWorkspace(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv("SQLVIM_WORKSPACE", "")
+	t.Setenv("DATAVIM_WORKSPACE", "")
 	dir := t.TempDir()
 	err := run([]string{"--config", dir, "-w", "personal"}, &bytes.Buffer{})
 	if err == nil || !strings.Contains(err.Error(), `workspace "personal" does not exist (have: default)`) ||
-		!strings.Contains(err.Error(), "sqlvim -w personal --create") {
+		!strings.Contains(err.Error(), "datavim -w personal --create") {
 		t.Fatalf("err = %v", err)
 	}
 	err = run([]string{"--config", dir, "--workspace", "Work"}, &bytes.Buffer{})
@@ -206,7 +206,7 @@ func TestNewManagerPersistsToWorkspace(t *testing.T) {
 	if rootCfg, _ := config.Load(root); len(rootCfg.Connections) != 0 {
 		t.Fatalf("the default workspace got %+v", rootCfg.Connections)
 	}
-	if got, err := keyring.Get("sqlvim", "personal/home"); err != nil || got != "pw" {
+	if got, err := keyring.Get("datavim", "personal/home"); err != nil || got != "pw" {
 		t.Fatalf("keychain personal/home = %q, %v", got, err)
 	}
 }
