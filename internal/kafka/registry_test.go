@@ -172,3 +172,37 @@ func TestRegistryCachesByID(t *testing.T) {
 		t.Fatalf("missing id err = %v", err)
 	}
 }
+
+// TestRegistrySubjectsOneRequest: subjects with their latest version come
+// from one GET /schemas?latestOnly; a registry without it is asked per subject.
+func TestRegistrySubjectsOneRequest(t *testing.T) {
+	reg := srfake.New()
+	defer reg.Close()
+	reg.SeedSchema("orders-value", 1, 1, sr.Schema{Schema: orderAvro})
+	reg.SeedSchema("orders-value", 2, 2, sr.Schema{Schema: orderAvro})
+	reg.SeedSchema("payments-value", 1, 3, sr.Schema{Schema: `{"type":"object"}`, Type: sr.TypeJSON})
+	var reqs atomic.Int32
+	var noAll atomic.Bool
+	reg.Intercept(func(w http.ResponseWriter, req *http.Request) bool {
+		reqs.Add(1)
+		if noAll.Load() && req.URL.Path == "/schemas" {
+			w.WriteHeader(http.StatusNotFound)
+			return true
+		}
+		return false
+	})
+	want := []Subject{{Name: "orders-value", Latest: 2, Type: "AVRO"}, {Name: "payments-value", Latest: 1, Type: "JSON"}}
+	r := openRegistry(t, reg, RegistryConfig{})
+	subs, err := r.Subjects(ctx(t))
+	if err != nil || !slices.Equal(subs, want) {
+		t.Fatalf("subjects = %+v, %v", subs, err)
+	}
+	if n := reqs.Load(); n != 1 {
+		t.Fatalf("%d requests, want 1", n)
+	}
+	noAll.Store(true)
+	subs, err = r.Subjects(ctx(t))
+	if err != nil || !slices.Equal(subs, want) {
+		t.Fatalf("fallback subjects = %+v, %v", subs, err)
+	}
+}

@@ -195,6 +195,28 @@ func (r *registry) remember(s Schema) {
 }
 
 func (r *registry) Subjects(ctx context.Context) ([]Subject, error) {
+	// one request where the registry has GET /schemas?latestOnly
+	all, err := r.cl.AllSchemas(sr.WithParams(ctx, sr.LatestOnly))
+	var re *sr.ResponseError
+	switch {
+	case err == nil:
+		out := make([]Subject, 0, len(all))
+		for _, ss := range all {
+			s := fromSR(ss)
+			r.remember(s)
+			out = append(out, Subject{Name: s.Subject, Latest: s.Version, Type: s.Type})
+		}
+		slices.SortFunc(out, func(a, b Subject) int { return strings.Compare(a.Name, b.Name) })
+		return out, nil
+	case !errors.As(err, &re) || re.StatusCode == http.StatusUnauthorized || re.StatusCode == http.StatusForbidden:
+		return nil, regErr(err)
+	}
+	return r.subjectsOneByOne(ctx)
+}
+
+// subjectsOneByOne lists the subjects, then each one's latest version; a
+// subject deleted in between is left out.
+func (r *registry) subjectsOneByOne(ctx context.Context) ([]Subject, error) {
 	names, err := r.cl.Subjects(ctx)
 	if err != nil {
 		return nil, regErr(err)
@@ -205,10 +227,15 @@ func (r *registry) Subjects(ctx context.Context) ([]Subject, error) {
 	g.SetLimit(8)
 	for i, name := range names {
 		g.Go(func() error {
-			s, err := r.Schema(gctx, name, -1)
-			if err != nil {
-				return err
+			ss, err := r.cl.SchemaByVersion(gctx, name, -1)
+			if notFound(err, 0) {
+				return nil
 			}
+			if err != nil {
+				return regErr(err)
+			}
+			s := fromSR(ss)
+			r.remember(s)
 			out[i] = Subject{Name: name, Latest: s.Version, Type: s.Type}
 			return nil
 		})
@@ -216,7 +243,7 @@ func (r *registry) Subjects(ctx context.Context) ([]Subject, error) {
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	return out, nil
+	return slices.DeleteFunc(out, func(s Subject) bool { return s.Name == "" }), nil
 }
 
 func (r *registry) Versions(ctx context.Context, subject string) ([]int, error) {
