@@ -55,6 +55,8 @@ type msgView struct {
 	// uncommitted reads read_uncommitted: aborted and open transactions'
 	// messages too. Off (read_committed) in every new view.
 	uncommitted bool
+	// decoded holds the Schema Registry decodes of wire-format messages.
+	decoded map[recID]decodedRec
 
 	filter    kmsgx.Filter
 	shown     []int      // the indexes of the recs that pass the filter, one per grid row
@@ -91,7 +93,7 @@ func (v *msgView) recIndex() int {
 func (v *msgView) refilter() {
 	v.shown = v.shown[:0]
 	for i, r := range v.recs {
-		if v.filter.Match(r) {
+		if v.filter.Match(v.decodedRecord(r)) {
 			v.shown = append(v.shown, i)
 		}
 	}
@@ -340,6 +342,7 @@ func (t *topicTab) msgsLoaded(m msgsLoadedMsg) tea.Cmd {
 	v.bounds = m.bounds
 	if m.dir == 0 {
 		v.tail = nil
+		v.decoded = nil
 		v.pos, v.single, v.loaded = m.pos, singlePartition(m.pos), true
 		v.read = map[int32]int64{}
 		for p, b := range m.bounds {
@@ -369,7 +372,7 @@ func (t *topicTab) msgsLoaded(m msgsLoadedMsg) tea.Cmd {
 	if slices.ContainsFunc(m.recs, func(r kafka.Record) bool { return r.Truncated }) && t.status == "" {
 		t.setStatus("some values were cut to their first 1 MB", false)
 	}
-	return nil
+	return t.decodeCmd(m.recs)
 }
 
 // jumpCursor is the row a jump lands on: the asked offset, the first
@@ -428,14 +431,17 @@ func (t *topicTab) msgsResult() *db.ResultSet {
 		if r.Truncated {
 			size += "+"
 		}
+		if v.failed(r) {
+			size = "!" + size // the error is in K's detail
+		}
 		row := []string{
 			strconv.Itoa(int(r.Partition)), groupDigits(r.Offset), r.Time.In(time.Local).Format("01-02 15:04:05.000"),
-			kmsgx.Preview(r.Key, r.KeyNull, previewWidth),
+			v.partPreview(r, true),
 		}
 		if v.headers {
 			row = append(row, headersPreview(r.Headers))
 		}
-		rows[i] = append(row, size, kmsgx.Preview(r.Value, r.ValueNull, previewWidth))
+		rows[i] = append(row, size, v.partPreview(r, false))
 	}
 	return textResult(cols, rows)
 }
@@ -655,6 +661,8 @@ func (t *topicTab) msgsUpdate(msg tea.Msg) (tea.Cmd, bool) {
 		return nil, true
 	case searchStepMsg:
 		return t.searchStepped(m), true
+	case msgsDecodedMsg:
+		return t.decodedUpdate(m), true
 	case msgEditDoneMsg:
 		_ = os.Remove(m.path)
 		if m.err != nil {
@@ -742,6 +750,9 @@ func (t *topicTab) yankText(a keymap.Action) (text, what string, ok bool) {
 		lines, _ := renderBytes(r.Key, r.KeyNull, t.msgs.format)
 		return strings.Join(lines, "\n"), "key", true
 	case "VALUE":
+		if d := t.msgs.decodedOf(r, false); d != nil && d.Err == nil {
+			return prettyJSON(d.JSON), "value" + cut, true
+		}
 		if t.msgs.format == fmtAuto && !r.ValueNull && utf8.Valid(r.Value) {
 			return string(r.Value), "value" + cut, true
 		}
@@ -836,6 +847,9 @@ func (d *msgDetail) lines(width int) []string {
 			r.Time.In(time.Local).Format("2006-01-02 15:04:05.000"), r.TimeType, msgSize(r.Size)),
 	}
 	key, _ := renderBytes(r.Key, r.KeyNull, fmtAuto)
+	if d := v.decodedOf(r, true); d != nil && d.Err == nil {
+		key = []string{string(d.JSON)}
+	}
 	lines = append(lines, "key      "+strings.Join(key, " "))
 	if len(r.Headers) > 0 {
 		lines = append(lines, fmt.Sprintf("headers  %s   (%d)", headersPreview(r.Headers), len(r.Headers)))
@@ -844,11 +858,18 @@ func (d *msgDetail) lines(width int) []string {
 		lines = append(lines, theme.Error.Render("showing first 1 MB of "+msgSize(r.Size)))
 	}
 	val, used := renderBytes(r.Value, r.ValueNull, v.format)
+	head, dval, dused, decoded := v.decodedValueLines(r)
+	if decoded {
+		val, used = dval, dused
+	}
 	f := v.format.String()
 	if v.format == fmtAuto {
 		f += ": " + used.String()
 	}
 	lines = append(lines, theme.Muted.Render(strings.Repeat("─", max(width-14, 10))+" "+f))
+	if decoded {
+		lines = append(lines, head)
+	}
 	for _, l := range val {
 		lines = append(lines, textutil.Wrap(textutil.Sanitize(l), width)...)
 	}
@@ -956,6 +977,7 @@ type searchStepMsg struct {
 	conn       string
 	ranges     map[int32]kafka.Range
 	recs       []kafka.Record
+	dec        map[recID]decodedRec // the recs decoded, for the filter
 	err        error
 }
 
@@ -1000,6 +1022,7 @@ func (t *topicTab) searchFilter(forward bool) (tea.Cmd, bool) {
 func (t *topicTab) searchStep(edges map[int32]int64) tea.Cmd {
 	v := t.msgs
 	tabCtx, id, gen, b, conn, topic, reader, dir := t.ctx, t.id, v.searchGen, t.backend, t.conn, t.topic, v.reader, v.search.dir
+	decode := t.hasRegistry()
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(tabCtx, loadTimeout)
 		defer cancel()
@@ -1017,7 +1040,16 @@ func (t *topicTab) searchStep(edges map[int32]int64) tea.Cmd {
 			if len(msg.ranges) == 0 {
 				return nil
 			}
-			msg.recs, err = reader.Range(ctx, topic, msg.ranges)
+			if msg.recs, err = reader.Range(ctx, topic, msg.ranges); err != nil || !decode {
+				return err
+			}
+			var wire []kafka.Record
+			for _, r := range msg.recs {
+				if inWire(r.Key, r.KeyNull) || inWire(r.Value, r.ValueNull) {
+					wire = append(wire, r)
+				}
+			}
+			msg.dec, err = decodeRecs(ctx, b, conn, wire)
 			return err
 		})
 		return msg
@@ -1047,14 +1079,21 @@ func (t *topicTab) searchStepped(m searchStepMsg) tea.Cmd {
 		}
 		return nil
 	}
+	if v.decoded == nil && len(m.dec) > 0 {
+		v.decoded = map[recID]decodedRec{}
+	}
+	for id, d := range m.dec {
+		v.decoded[id] = d
+	}
+	match := func(r kafka.Record) bool { return v.filter.Match(v.decodedRecord(r)) }
 	recs := slices.Clone(m.recs)
 	slices.SortStableFunc(recs, compareRecs(v.single))
 	found := -1
 	if s.dir > 0 {
-		found = slices.IndexFunc(recs, v.filter.Match)
+		found = slices.IndexFunc(recs, match)
 	} else {
 		for i := len(recs) - 1; i >= 0 && found < 0; i-- {
-			if v.filter.Match(recs[i]) {
+			if match(recs[i]) {
 				found = i
 			}
 		}
@@ -1062,7 +1101,7 @@ func (t *topicTab) searchStepped(m searchStepMsg) tea.Cmd {
 	if found >= 0 {
 		keep := slices.Clone(recs[max(found-contextRows, 0):found])
 		for _, r := range recs {
-			if v.filter.Match(r) {
+			if match(r) {
 				keep = append(keep, r)
 			}
 		}
@@ -1307,6 +1346,7 @@ func (t *topicTab) tailPolled(m tailPollMsg) tea.Cmd {
 		}
 		t.renderMsgs(cur)
 		t.setStatus("live · +"+groupDigits(int64(v.tail.added))+" new", false)
+		return tea.Batch(t.poll(), t.decodeCmd(m.recs))
 	}
 	return t.poll()
 }
