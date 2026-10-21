@@ -125,7 +125,8 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker,
 		tree.KindSchemaSubject, tree.KindSchemaVersion, tree.KindKafkaACLs, tree.KindConnectCluster, tree.KindConnector:
 		entries = kafkaMenu(n)
-	case tree.KindESSection, tree.KindIndexFolder, tree.KindESIndex, tree.KindESAlias, tree.KindDataStream, tree.KindESTemplate:
+	case tree.KindESSection, tree.KindIndexFolder, tree.KindESIndex, tree.KindESAlias, tree.KindDataStream, tree.KindESTemplate,
+		tree.KindESPolicy, tree.KindESPipeline:
 		entries = esMenu(n)
 	case tree.KindDatabase, tree.KindSchema:
 		entries = []entry{
@@ -287,6 +288,10 @@ func esMenu(n *tree.Node) []menuEntry {
 		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open data stream"}, menuEntry{a: keymap.OpenKey, desc: "Open document by _id…"})
 	case tree.KindESTemplate:
 		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open template"}, menuEntry{a: keymap.DeleteNode, desc: "Delete template…"})
+	case tree.KindESPolicy:
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open ILM policy"}, menuEntry{a: keymap.DeleteNode, desc: "Delete ILM policy…"})
+	case tree.KindESPipeline:
+		entries = append(entries, menuEntry{a: keymap.Open, desc: "Open pipeline"}, menuEntry{a: keymap.DeleteNode, desc: "Delete pipeline…"})
 	case tree.KindIndexFolder:
 		entries = append(entries, menuEntry{a: keymap.Open, desc: "Expand / collapse"},
 			menuEntry{desc: "Open " + n.Key + "* as one tab", msg: openIndexMsg{conn: n.Conn, target: n.Key + "*", kind: targetPattern}},
@@ -302,7 +307,8 @@ func esMenu(n *tree.Node) []menuEntry {
 // isESNode reports whether n is a node under an elasticsearch connection.
 func isESNode(n *tree.Node) bool {
 	switch n.Kind {
-	case tree.KindESSection, tree.KindIndexFolder, tree.KindESIndex, tree.KindESAlias, tree.KindDataStream, tree.KindESTemplate:
+	case tree.KindESSection, tree.KindIndexFolder, tree.KindESIndex, tree.KindESAlias, tree.KindDataStream, tree.KindESTemplate,
+		tree.KindESPolicy, tree.KindESPipeline:
 		return true
 	}
 	return false

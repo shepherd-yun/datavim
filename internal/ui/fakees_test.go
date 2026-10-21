@@ -38,6 +38,8 @@ type fakeES struct {
 	csettings map[string]map[string]any // scope → key → value
 	tasks     []es.Task
 	templates []es.Template
+	policies  map[string]string // ILM policy name → its GET _ilm/policy entry
+	pipelines map[string]string // pipeline name → its definition
 }
 
 type fakeIndex struct {
@@ -376,6 +378,18 @@ func (f *fakeES) answer(r es.Request) es.Response {
 			return jsonResp(map[string]any{"component_templates": list})
 		}
 		return jsonResp(map[string]any{"index_templates": list})
+	case r.Method == "GET" && p == "_ilm/policy":
+		out := map[string]json.RawMessage{}
+		for n, v := range f.policies {
+			out[n] = json.RawMessage(v)
+		}
+		return jsonResp(out)
+	case r.Method == "GET" && p == "_ingest/pipeline":
+		out := map[string]json.RawMessage{}
+		for n, v := range f.pipelines {
+			out[n] = json.RawMessage(v)
+		}
+		return jsonResp(out)
 	case r.Method == "HEAD" && len(segs) == 1:
 		if len(f.resolve(p)) == 0 {
 			return es.Response{Status: 404}

@@ -28,6 +28,8 @@ const (
 	esSecAliases   = "aliases"
 	esSecStreams   = "streams"
 	esSecTemplates = "templates"
+	esSecPolicies  = "policies"
+	esSecPipelines = "pipelines"
 )
 
 var errESUnsupported = errors.New("not supported for elasticsearch")
@@ -50,6 +52,8 @@ type esTree struct {
 	aliases    []es.Alias
 	streams    []es.DataStream
 	templates  []es.Template
+	policies   []es.Policy // none on OpenSearch
+	pipelines  []es.Pipeline
 	errs       map[string]string // section -> why it could not load
 	showSystem bool
 	sortBy     esSort
@@ -127,6 +131,8 @@ type esTreeMsg struct {
 	aliases   []es.Alias
 	streams   []es.DataStream
 	templates []es.Template
+	policies  []es.Policy
+	pipelines []es.Pipeline
 	errs      map[string]string
 	err       error
 }
@@ -155,6 +161,14 @@ func loadESTree(b Backend, n *tree.Node) tea.Cmd {
 				return err
 			}
 			if msg.templates, err = es.Templates(ctx, d); esSectionErr(msg.errs, esSecTemplates, err) != nil {
+				return err
+			}
+			if info, _ := b.ESInfo(conn); !info.OpenSearch() {
+				if msg.policies, err = es.Policies(ctx, d); esSectionErr(msg.errs, esSecPolicies, err) != nil {
+					return err
+				}
+			}
+			if msg.pipelines, err = es.Pipelines(ctx, d); esSectionErr(msg.errs, esSecPipelines, err) != nil {
 				return err
 			}
 			return nil
@@ -192,7 +206,7 @@ func (m *Model) esTreeLoaded(msg esTreeMsg) tea.Cmd {
 		m.esTrees[n.Conn] = st
 	}
 	st.info, st.health, st.indices, st.aliases, st.streams, st.errs = msg.info, msg.health, msg.indices, msg.aliases, msg.streams, msg.errs
-	st.templates = msg.templates
+	st.templates, st.policies, st.pipelines = msg.templates, msg.policies, msg.pipelines
 	m.buildESTree(n.Conn)
 	return nil
 }
@@ -250,6 +264,12 @@ func (m *Model) buildESTree(conn string) {
 	}
 	templates := buildTemplateNodes(conn, st)
 	sections = append(sections, sec(esSecTemplates, "Index Templates", len(templates), templates))
+	if !st.info.OpenSearch() {
+		policies := buildPolicyNodes(conn, st)
+		sections = append(sections, sec(esSecPolicies, "ILM Policies", len(policies), policies))
+	}
+	pipelines := buildPipelineNodes(conn, st)
+	sections = append(sections, sec(esSecPipelines, "Ingest Pipelines", len(pipelines), pipelines))
 	var reopen func([]*tree.Node)
 	reopen = func(nodes []*tree.Node) {
 		for _, c := range nodes {
@@ -428,12 +448,12 @@ func buildStreamNodes(conn string, ss []es.DataStream) []*tree.Node {
 	return out
 }
 
-// buildTemplateNodes are the index templates, "." ones only while system
-// indices are shown.
+// buildTemplateNodes are the index templates, the cluster's own only
+// while system indices are shown.
 func buildTemplateNodes(conn string, st *esTree) []*tree.Node {
 	var out []*tree.Node
 	for _, t := range st.templates {
-		if strings.HasPrefix(t.Name, ".") && !st.showSystem {
+		if t.System && !st.showSystem {
 			continue
 		}
 		detail := t.Kind.String()
@@ -447,11 +467,50 @@ func buildTemplateNodes(conn string, st *esTree) []*tree.Node {
 	return out
 }
 
+// buildPolicyNodes are the ILM policies, the cluster's own only while
+// system indices are shown.
+func buildPolicyNodes(conn string, st *esTree) []*tree.Node {
+	var out []*tree.Node
+	for _, p := range st.policies {
+		if p.System && !st.showSystem {
+			continue
+		}
+		detail := strings.Join(p.Phases, " → ")
+		if p.InUse >= 0 {
+			detail += " · " + indexCount(p.InUse)
+		}
+		out = append(out, &tree.Node{
+			Kind: tree.KindESPolicy, Conn: conn, Section: esSecPolicies, Key: objKey(objPolicy, p.Name), Name: p.Name, Detail: detail,
+		})
+	}
+	return out
+}
+
+// buildPipelineNodes are the ingest pipelines, the cluster's own only
+// while system indices are shown.
+func buildPipelineNodes(conn string, st *esTree) []*tree.Node {
+	var out []*tree.Node
+	for _, p := range st.pipelines {
+		if p.System && !st.showSystem {
+			continue
+		}
+		detail := p.Description
+		if detail == "" {
+			detail = fmt.Sprintf("%d processors", p.Processors)
+		}
+		out = append(out, &tree.Node{
+			Kind: tree.KindESPipeline, Conn: conn, Section: esSecPipelines, Key: objKey(objPipeline, p.Name), Name: p.Name, Detail: detail,
+		})
+	}
+	return out
+}
+
 // openESNode opens the Index tab of an index, alias, data stream or
-// rollover group node, or a template's tab; nil for other nodes.
+// rollover group node, or an object's tab; nil for other nodes.
 func (m *Model) openESNode(n *tree.Node) tea.Cmd {
-	if n.Kind == tree.KindESTemplate {
-		msg := esOpenTemplateMsg{conn: n.Conn, key: n.Key}
+	switch n.Kind {
+	case tree.KindESTemplate, tree.KindESPolicy, tree.KindESPipeline:
+		msg := esOpenObjectMsg{conn: n.Conn, key: n.Key}
 		return func() tea.Msg { return msg }
 	}
 	msg := openIndexMsg{conn: n.Conn, target: n.Key}

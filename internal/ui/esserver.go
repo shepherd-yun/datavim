@@ -78,6 +78,9 @@ func (m esServerLoadedMsg) failure() (string, error) { return m.conn, m.err }
 
 type esServerTickMsg struct{ tabID, gen int }
 
+// esServerReloadMsg reads conn's open cluster tab again.
+type esServerReloadMsg struct{ conn string }
+
 func (m esServerTickMsg) TabID() int { return m.tabID }
 
 // esServerTab is an Elasticsearch cluster's status in sections (spec §7),

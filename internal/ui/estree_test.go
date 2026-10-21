@@ -56,7 +56,7 @@ func TestESTreeLoads(t *testing.T) {
 	f.streams = []es.DataStream{{Name: "logs-ds", Template: "logs", Indices: []string{".ds-logs-ds-2026.10.21-000001"}}}
 	pressAll(t, m, "l")
 	root := m.tree.Roots()[0]
-	if got := names(root.Children); !slices.Equal(got, []string{"Indices (11)", "Aliases (1)", "Data Streams (1)", "Index Templates (0)"}) {
+	if got := names(root.Children); !slices.Equal(got, []string{"Indices (11)", "Aliases (1)", "Data Streams (1)", "Index Templates (0)", "ILM Policies (0)", "Ingest Pipelines (0)"}) {
 		t.Fatalf("sections = %v", got)
 	}
 	if root.Detail != "[8.11.0 · green]" {
@@ -169,7 +169,7 @@ func TestESTreeNoDataStreams(t *testing.T) {
 	f.info = es.Info{Version: "7.10.2", Distribution: "elasticsearch", Major: 7, Minor: 10}
 	f.addIndex("orders", "", 1)
 	pressAll(t, m, "l")
-	if got := names(m.tree.Roots()[0].Children); !slices.Equal(got, []string{"Indices (1)", "Aliases (0)", "Index Templates (0)"}) {
+	if got := names(m.tree.Roots()[0].Children); !slices.Equal(got, []string{"Indices (1)", "Aliases (0)", "Index Templates (0)", "ILM Policies (0)", "Ingest Pipelines (0)"}) {
 		t.Fatalf("sections = %v", got)
 	}
 }
@@ -184,7 +184,7 @@ func TestESTreeAuthPrompt(t *testing.T) {
 	}
 	typeText(t, m, "pw")
 	pressAll(t, m, "enter")
-	if root := m.tree.Roots()[0]; len(root.Children) != 3 {
+	if root := m.tree.Roots()[0]; len(root.Children) != 5 {
 		t.Fatalf("after the password: %v", names(root.Children))
 	}
 }
