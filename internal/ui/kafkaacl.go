@@ -44,6 +44,11 @@ type (
 		sel   *kafka.ACL
 		err   error
 	}
+	// aclFilterMsg is the text F filters the ACLs by.
+	aclFilterMsg struct {
+		tabID int
+		text  string
+	}
 	// aclNewMsg asks the root model for the new-ACL form.
 	aclNewMsg struct{ tabID int }
 	// aclCreateMsg and aclDeleteMsg are confirmed writes.
@@ -69,6 +74,7 @@ func (m aclsLoadedMsg) TabID() int               { return m.tabID }
 func (m aclsLoadedMsg) kafkaMsg()                {}
 func (m aclsLoadedMsg) failure() (string, error) { return m.conn, m.err }
 func (m aclCreateMsg) TabID() int                { return m.tabID }
+func (m aclFilterMsg) TabID() int                { return m.tabID }
 func (m aclDeleteMsg) TabID() int                { return m.tabID }
 func (m aclWrittenMsg) TabID() int               { return m.tabID }
 
@@ -80,6 +86,8 @@ type aclTab struct {
 	conn    string
 	grid    *grid.Model
 	acls    []kafka.ACL
+	filter  string      // F: text in the principal, resource type or name
+	shown   []kafka.ACL // the acls that pass the filter, one per grid row
 	loaded  bool
 	err     string
 	status  string
@@ -133,10 +141,14 @@ func (t *aclTab) Update(msg tea.Msg) tea.Cmd {
 		t.err, t.acls = "", m.acls
 		t.render()
 		if m.sel != nil {
-			if i := slices.Index(t.acls, *m.sel); i >= 0 {
+			if i := slices.Index(t.shown, *m.sel); i >= 0 {
 				t.grid.SetCursor(i, 0)
 			}
 		}
+	case aclFilterMsg:
+		t.filter = strings.TrimSpace(m.text)
+		t.render()
+		t.grid.SetCursor(0, 0)
 	case aclCreateMsg:
 		t.setStatus(fmt.Sprintf("creating %s…", plural(len(m.acls), "ACL")), false)
 		return t.write(fmt.Sprintf("created %s", plural(len(m.acls), "ACL")), &m.acls[0], func(ctx context.Context, c kafka.Client) error {
@@ -175,14 +187,30 @@ func (t *aclTab) write(done string, sel *kafka.ACL, fn func(context.Context, kaf
 	}
 }
 
+// aclMatches reports whether a's principal, resource type or name
+// contains filter, ignoring case.
+func aclMatches(a kafka.ACL, filter string) bool {
+	f := strings.ToLower(filter)
+	for _, s := range []string{a.Principal, a.ResourceType, a.ResourceName} {
+		if strings.Contains(strings.ToLower(s), f) {
+			return true
+		}
+	}
+	return false
+}
+
 func (t *aclTab) render() {
-	rows := make([][]string, len(t.acls))
-	for i, a := range t.acls {
+	t.shown = t.acls
+	if t.filter != "" {
+		t.shown = slices.DeleteFunc(slices.Clone(t.acls), func(a kafka.ACL) bool { return !aclMatches(a, t.filter) })
+	}
+	rows := make([][]string, len(t.shown))
+	for i, a := range t.shown {
 		rows[i] = []string{a.Principal, a.Host, a.ResourceType, a.ResourceName, a.Pattern, a.Operation, a.Permission}
 	}
 	t.grid.ReplaceResult(textResult(aclColumns, rows))
 	t.grid.SetMarks(func(row, _ int) grid.Mark {
-		if row < len(t.acls) && t.acls[row].Permission == "deny" {
+		if row < len(t.shown) && t.shown[row].Permission == "deny" {
 			return grid.MarkError
 		}
 		return grid.MarkNone
@@ -191,10 +219,10 @@ func (t *aclTab) render() {
 
 func (t *aclTab) current() (kafka.ACL, bool) {
 	r, _ := t.grid.Position()
-	if r < 0 || r >= len(t.acls) {
+	if r < 0 || r >= len(t.shown) {
 		return kafka.ACL{}, false
 	}
-	return t.acls[r], true
+	return t.shown[r], true
 }
 
 func (t *aclTab) Handle(a keymap.Action) tea.Cmd {
@@ -202,6 +230,14 @@ func (t *aclTab) Handle(a keymap.Action) tea.Cmd {
 	switch a {
 	case keymap.Refresh:
 		return t.load(nil)
+	case keymap.FilterPrompt:
+		id := t.id
+		return openOverlay(overlay.NewPrompt("Filter ACLs", "text in the principal, resource type or name", t.filter,
+			func(text string) tea.Msg { return aclFilterMsg{tabID: id, text: text} }))
+	case keymap.FilterClear:
+		t.filter = ""
+		t.render()
+		return nil
 	case keymap.NewKey:
 		if cfg, _ := t.backend.Connection(t.conn); cfg.IsReadOnly() {
 			t.setStatus(readOnlyHint, true)
@@ -245,6 +281,9 @@ func (t *aclTab) Handle(a keymap.Action) tea.Cmd {
 
 func (t *aclTab) View(focused bool) string {
 	head := theme.Muted.Render(plural(len(t.acls), "ACL"))
+	if t.filter != "" {
+		head += theme.Muted.Render(fmt.Sprintf(" · filter %s · %d shown", t.filter, len(t.shown)))
+	}
 	if t.status != "" {
 		style := theme.Muted
 		if t.statusE {

@@ -357,7 +357,7 @@ sqlvim --list-workspaces
 | `m` / `C` / `c` | Kafka Schema 标签页：标记版本 / 与标记的或最新的版本对比 / 修改兼容级别 |
 | `<Space>v` / `d d` | Kafka Schema 标签页：在 `$EDITOR` 里注册新版本 / 软删除这个版本 |
 | `:send <file>` | Kafka producer console：发送 JSON Lines 文件 |
-| `o` / `d d` / `g d` | Kafka ACL 标签页：新建 ACL / 删除这条 ACL / 打开它的 topic 或 group |
+| `o` / `d d` / `g d` / `F` | Kafka ACL 标签页：新建 ACL / 删除这条 ACL / 打开它的 topic 或 group / 按 principal、资源类型或资源名过滤（`fx` 清除） |
 | `p` / `R` / `<Space>v` | Kafka connector 标签页：暂停或继续 / 重启（在 Tasks 里重启这个 task）/ 在 `$EDITOR` 里修改配置 |
 | `↓` / `↑`, `Ctrl-n` / `Ctrl-p`, `Ctrl-j` / `Ctrl-k`, `Tab` / `Shift-Tab` | 控制台插入模式：下一个 / 上一个补全（弹窗关闭时 `Ctrl-n` / `Ctrl-p` 打开它） |
 | `Enter` / `Ctrl-y` | 控制台插入模式：接受补全（`Esc` 关闭弹窗，再按一次 `Esc` 离开插入模式） |

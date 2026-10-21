@@ -150,3 +150,41 @@ func TestACLGoto(t *testing.T) {
 		t.Fatalf("active tab = %T, status %q", m.activeTab(), a.status)
 	}
 }
+
+// TestACLFilter: F keeps the ACLs whose principal, resource type or name
+// contains the text; dd then deletes the row under the cursor, not the
+// unfiltered list's row.
+func TestACLFilter(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.acls = []kafka.ACL{
+		testACL("User:alice", "topic", "orders", "literal"),
+		testACL("User:bob", "group", "billing", "literal"),
+		testACL("User:carol", "topic", "payments", "literal"),
+	}
+	a := openACLs(t, m)
+	pressAll(t, m, "F")
+	typeText(t, m, "topic")
+	pressAll(t, m, "enter")
+	if rows := a.grid.Result().Rows; len(rows) != 2 || rows[1][0].Text != "User:carol" {
+		t.Fatalf("filtered rows = %v", rows)
+	}
+	if !strings.Contains(screen(m), "filter topic") {
+		t.Fatalf("screen:\n%s", screen(m))
+	}
+	pressAll(t, m, "j", "d", "d")
+	typeText(t, m, "User:carol")
+	pressAll(t, m, "enter")
+	if got := k.callsOf("DeleteACLs"); len(got) != 1 || !strings.Contains(got[0], "User:carol") {
+		t.Fatalf("calls = %v", got)
+	}
+	pressAll(t, m, "f", "x", "F") // the prompt starts from the current filter
+	typeText(t, m, "ALICE")
+	pressAll(t, m, "enter")
+	if rows := a.grid.Result().Rows; len(rows) != 1 || rows[0][0].Text != "User:alice" {
+		t.Fatalf("case-insensitive filter rows = %v", rows)
+	}
+	pressAll(t, m, "f", "x")
+	if rows := a.grid.Result().Rows; len(rows) != 2 {
+		t.Fatalf("after fx: %v", rows)
+	}
+}

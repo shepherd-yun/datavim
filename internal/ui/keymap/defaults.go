@@ -272,6 +272,8 @@ func DefaultBindings() []Binding {
 		Binding{KafkaACL, keys("o"), NewKey, "New ACL…"},
 		Binding{KafkaACL, keys("d", "d"), DeleteRow, "Delete the ACL"},
 		Binding{KafkaACL, keys("g", "d"), OpenCellKey, "Open the topic or group"},
+		Binding{KafkaACL, keys("F"), FilterPrompt, "Filter by principal, resource type or name"},
+		Binding{KafkaACL, keys("f", "x"), FilterClear, "Clear the filter"},
 	)
 	b = append(b, gridBindings(Audit)...)
 	b = append(b,

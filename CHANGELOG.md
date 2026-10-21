@@ -23,7 +23,8 @@ All notable changes to this project are documented here. The format follows
   key; `******` keeps the old value, and a config someone changed meanwhile is not overwritten.
 - Kafka ACLs: `ACLs` under a Kafka connection in the tree opens the cluster's ACLs (principal,
   host, resource, pattern, operation, permission). `o` adds ACLs from a form (one per operation),
-  `dd` deletes the ACL under the cursor after you type its principal, and `gd` opens the topic or
+  `dd` deletes the ACL under the cursor after you type its principal, `F` filters by principal,
+  resource type or name, and `gd` opens the topic or
   group of a literal ACL. A delete matches every field of the ACL, so it never takes a prefixed or
   wildcard ACL with it; if the cluster deletes more anyway, sqlvim says so. A cluster without an
   authorizer says ACLs are off.

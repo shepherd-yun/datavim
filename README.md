@@ -414,7 +414,7 @@ picks the workspace by directory.
 | `m` / `C` / `c` | Kafka schema tab: mark a version / diff with the marked one or the latest / set the compatibility level |
 | `<Space>v` / `d d` | Kafka schema tab: register a new version in `$EDITOR` / soft-delete the version |
 | `:send <file>` | Kafka producer console: send a JSON Lines file |
-| `o` / `d d` / `g d` | Kafka ACL tab: new ACLs / delete the ACL / open its topic or group |
+| `o` / `d d` / `g d` / `F` | Kafka ACL tab: new ACLs / delete the ACL / open its topic or group / filter by principal, resource type or name (`fx` clears) |
 | `p` / `R` / `<Space>v` | Kafka connector tab: pause or resume / restart (in Tasks: the task) / edit the config in `$EDITOR` |
 | `F` / `fx` | Tree, on a Redis db, folder or key: filter the keys with a pattern / clear the filter |
 | `<Space>k` | Open a Redis key by name |
