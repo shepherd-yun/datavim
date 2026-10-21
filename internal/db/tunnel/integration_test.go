@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/testcontainers/testcontainers-go"
+	tces "github.com/testcontainers/testcontainers-go/modules/elasticsearch"
 	tcmysql "github.com/testcontainers/testcontainers-go/modules/mysql"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	tcredpanda "github.com/testcontainers/testcontainers-go/modules/redpanda"
@@ -19,6 +20,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/db"
 	"github.com/shepherd-yun/datavim/internal/db/mysql"
 	"github.com/shepherd-yun/datavim/internal/db/postgres"
+	"github.com/shepherd-yun/datavim/internal/es"
 	"github.com/shepherd-yun/datavim/internal/kafka"
 )
 
@@ -176,5 +178,31 @@ func TestKafkaThroughTunnel(t *testing.T) {
 	}
 	if !slices.Contains(s.dialed(), broker) {
 		t.Fatalf("the SSH server dialed %v, not %s", s.dialed(), broker)
+	}
+}
+
+// TestESThroughTunnel sends Elasticsearch requests through the tunnel.
+func TestESThroughTunnel(t *testing.T) {
+	ctx := context.Background()
+	ctr, err := tces.Run(ctx, "docker.elastic.co/elasticsearch/elasticsearch:7.10.2")
+	testcontainers.CleanupContainer(t, ctr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, h, _ := direct(t)
+	dial, err := h.pool("").Connect(ctx, "bastion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := es.Open(es.Config{URLs: []string{ctr.Settings.Address}, Dial: dial})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+	if info, err := es.GetInfo(ctx, c); err != nil || info.Version != "7.10.2" {
+		t.Fatalf("info = %+v, %v", info, err)
+	}
+	if len(s.dialed()) == 0 {
+		t.Fatal("the SSH server dialed nothing")
 	}
 }
