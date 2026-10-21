@@ -630,6 +630,9 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		if isRedis(m.backend, conn) {
 			return m.openRedisConsole(conn, redisDBOf(ns))
 		}
+		if isES(m.backend, conn) {
+			return m.openESConsole(conn)
+		}
 		if isKafka(m.backend, conn) {
 			if kconn, topic := m.kafkaContextTopic(); topic != "" {
 				return m.openProducer(kconn, topic)
