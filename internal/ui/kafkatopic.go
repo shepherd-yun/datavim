@@ -126,7 +126,9 @@ func newTopicTab(id int, b Backend, keys *keymap.Keymap, s config.Settings, conn
 func (m *Model) openTopic(conn, topic string) tea.Cmd {
 	rec := history.Recent{Kind: history.RecentKafkaTopic, Conn: conn, Name: topic}
 	return m.openTab(topicTabKey(conn, topic), rec, func(id int) tab {
-		return newTopicTab(id, m.backend, m.keys, m.settings, conn, topic)
+		t := newTopicTab(id, m.backend, m.keys, m.settings, conn, topic)
+		t.msgs.masker = m.maskerFor(conn, topic)
+		return t
 	})
 }
 

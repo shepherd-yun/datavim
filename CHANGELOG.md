@@ -7,6 +7,12 @@ All notable changes to this project are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Masking Kafka messages: `[[mask]]` rules in `config.toml` (by `connections` or `env`, `topics`
+  globs, `fields` as `key` / `value` or JSON paths like `value.cards[].number`, and `headers`)
+  show those fields as `"******"` everywhere sqlvim shows, copies, exports or searches a message,
+  in every format. Non-JSON parts a path reaches are masked whole, Schema Registry values stay
+  masked until decoded, and masked messages are left out of copies to a producer console. The
+  topic tab says `masked`; the messages themselves are not changed.
 - Kafka Connect: `params.connect_url` (`name=url` items separated by commas, or one URL) adds
   Connect clusters to a Kafka connection, with `connect_user` for basic auth (the password is asked
   for and kept as `<connection>#connect`); requests go through the SSH tunnel. The tree lists

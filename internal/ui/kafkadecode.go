@@ -195,6 +195,8 @@ func (v *msgView) partPreview(r kafka.Record, key bool) string {
 	switch d := v.decodedOf(r, key); {
 	case d == nil:
 		return kmsgx.Preview(b, null, previewWidth)
+	case d.Err != nil && v.isMasked(r):
+		return kmsgx.Masked // its bytes are gone: the error is in the detail
 	case d.Err != nil:
 		return kmsgx.Preview([]byte(hex.EncodeToString(b)), false, previewWidth)
 	default:
@@ -233,6 +235,9 @@ func (v *msgView) decodedValueLines(r kafka.Record) (head string, body []string,
 	if d == nil {
 		return "", nil, fmtAuto, false
 	}
+	if d.Err != nil && v.isMasked(r) {
+		return theme.Error.Render(d.Err.Error()), []string{kmsgx.Masked}, fmtText, true
+	}
 	if d.Err != nil {
 		body, _ = renderBytes(r.Value, false, fmtHex)
 		return theme.Error.Render(d.Err.Error()), body, fmtHex, true
@@ -254,6 +259,7 @@ func (t *topicTab) decodedUpdate(m msgsDecodedMsg) tea.Cmd {
 	if v.decoded == nil {
 		v.decoded = map[recID]decodedRec{}
 	}
+	t.maskDecoded(m.dec)
 	for id, d := range m.dec {
 		v.decoded[id] = d
 	}

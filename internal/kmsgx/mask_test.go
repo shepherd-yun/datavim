@@ -164,3 +164,20 @@ func FuzzMask(f *testing.F) {
 		}
 	})
 }
+
+func TestMaskJSON(t *testing.T) {
+	mk := NewMasker([]config.MaskRule{{Env: "prod", Fields: []string{"value.phone", "key"}}}, "k", "prod", "t")
+	if got, ch := mk.MaskJSON(false, []byte(`{"phone":"5","id":1}`)); !ch || string(got) != `{"phone":"******","id":1}` {
+		t.Fatalf("value = %s %v", got, ch)
+	}
+	if got, ch := mk.MaskJSON(false, []byte(`{"id":1}`)); ch || string(got) != `{"id":1}` {
+		t.Fatalf("no path = %s %v", got, ch)
+	}
+	if got, ch := mk.MaskJSON(true, []byte(`{"id":1}`)); !ch || string(got) != `"******"` {
+		t.Fatalf("whole key = %s %v", got, ch)
+	}
+	var none *Masker
+	if got, ch := none.MaskJSON(false, []byte(`1`)); ch || string(got) != "1" {
+		t.Fatal("nil masker")
+	}
+}

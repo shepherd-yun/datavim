@@ -120,8 +120,10 @@ type Model struct {
 	topicFormConn string
 	// aclFormTab is the ACL tab the open new-ACL form adds to.
 	aclFormTab int
-	bulk       *bulkDelete // the running pattern delete, or nil
-	bulkGen    int
+	// masks are config.toml's [[mask]] rules.
+	masks   []config.MaskRule
+	bulk    *bulkDelete // the running pattern delete, or nil
+	bulkGen int
 }
 
 // registerUser is a tab or popup with a vim editor.

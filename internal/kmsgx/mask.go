@@ -244,3 +244,15 @@ func jsonString(s string) []byte {
 	_ = enc.Encode(s)
 	return bytes.TrimSuffix(b.Bytes(), []byte("\n"))
 }
+
+// MaskJSON masks the decoded JSON of a key or a value (Schema Registry
+// messages decoded after they arrived): js unchanged when nothing applies.
+func (m *Masker) MaskJSON(key bool, js []byte) ([]byte, bool) {
+	if m == nil {
+		return js, false
+	}
+	if key {
+		return m.key.mask(js, nil, false)
+	}
+	return m.value.mask(js, nil, false)
+}

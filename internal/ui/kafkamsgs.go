@@ -57,6 +57,12 @@ type msgView struct {
 	uncommitted bool
 	// decoded holds the Schema Registry decodes of wire-format messages.
 	decoded map[recID]decodedRec
+	// masker hides what config.toml's [[mask]] rules name (nil: nothing);
+	// masked are the messages it changed, pending their wire-format parts
+	// (key, value) waiting for a decode.
+	masker  *kmsgx.Masker
+	masked  map[recID]bool
+	pending map[recID][2]bool
 
 	filter    kmsgx.Filter
 	shown     []int      // the indexes of the recs that pass the filter, one per grid row
@@ -342,7 +348,7 @@ func (t *topicTab) msgsLoaded(m msgsLoadedMsg) tea.Cmd {
 	v.bounds = m.bounds
 	if m.dir == 0 {
 		v.tail = nil
-		v.decoded = nil
+		v.decoded, v.masked, v.pending = nil, nil, nil
 		v.pos, v.single, v.loaded = m.pos, singlePartition(m.pos), true
 		v.read = map[int32]int64{}
 		for p, b := range m.bounds {
@@ -360,7 +366,7 @@ func (t *topicTab) msgsLoaded(m msgsLoadedMsg) tea.Cmd {
 		}
 		return nil
 	}
-	recs, cur, dropped := mergeRecords(v.recs, m.recs, m.dir, v.single, v.limit, v.recIndex())
+	recs, cur, dropped := mergeRecords(v.recs, t.maskIn(m.recs, nil), m.dir, v.single, v.limit, v.recIndex())
 	v.recs = recs
 	if m.dir == 0 {
 		cur = t.jumpCursor(m)
@@ -489,6 +495,9 @@ func (t *topicTab) msgsHeader() string {
 	}
 	if v.from != "" {
 		parts = append(parts, "from group "+v.from)
+	}
+	if v.masker != nil {
+		parts = append(parts, "masked")
 	}
 	return strings.Join(parts, " · ")
 }
@@ -1084,11 +1093,12 @@ func (t *topicTab) searchStepped(m searchStepMsg) tea.Cmd {
 	if v.decoded == nil && len(m.dec) > 0 {
 		v.decoded = map[recID]decodedRec{}
 	}
+	recs := t.maskIn(m.recs, m.dec) // masks m.dec too
 	for id, d := range m.dec {
 		v.decoded[id] = d
 	}
 	match := func(r kafka.Record) bool { return v.filter.Match(v.decodedRecord(r)) }
-	recs := slices.Clone(m.recs)
+	recs = slices.Clone(recs)
 	slices.SortStableFunc(recs, compareRecs(v.single))
 	found := -1
 	if s.dir > 0 {
@@ -1340,7 +1350,7 @@ func (t *topicTab) tailPolled(m tailPollMsg) tea.Cmd {
 	if len(m.recs) > 0 {
 		row, _ := v.grid.Position()
 		follow := len(v.shown) == 0 || row >= len(v.shown)-1
-		recs, cur, _ := mergeRecords(v.recs, m.recs, 1, v.single, v.limit, v.recIndex())
+		recs, cur, _ := mergeRecords(v.recs, t.maskIn(m.recs, nil), 1, v.single, v.limit, v.recIndex())
 		v.recs = recs
 		v.tail.added += len(m.recs)
 		if follow {

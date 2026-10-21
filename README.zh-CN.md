@@ -393,6 +393,22 @@ focus  = "#7aa2f7"
 accent = "14"
 ```
 
+**Kafka 消息打码** —— `config.toml` 里的 `[[mask]]` 表在指定的连接（按名字，或某个 `env` 的所有连接）和 topic 上隐藏
+消息字段：
+
+```toml
+[[mask]]
+env = "prod"                       # 或者 connections = ["prod-kafka"]
+topics = ["orders", "payments.*"]  # glob；不写表示所有 topic
+fields = ["value.customer.phone", "value.cards[].number", "value.*.email", "key.ssn"]
+headers = ["authorization", "x-user-*"]
+```
+
+字段是 `key` 或 `value`（整个），或者其中的 JSON 路径：键之间用 `.`，`name[]` 表示数组的每个元素，`[]` 表示顶层数组的
+每个元素，`*` 表示任意键（键名里含 `.` 的字段不支持）。被打码的值在表格、详情的每种格式（包括 hex 和 base64）、复制、导出、
+`<Space>v` 打开的文件里都显示为 `"******"`，过滤和查找也只匹配打码后的内容。路径规则覆盖的部分不是 JSON 时整体打码，
+Schema Registry 的值在解码完成前也先打码。集群上的消息不会改变；被打码的消息不能复制到 producer console（`p` / `P` 会跳过）。
+
 **Ghostty** —— 用 [docs/examples/ghostty.conf](docs/examples/ghostty.conf) 把 Cmd 快捷键映射到 leader 键，
 例如 `keybind = cmd+e=text:\x20e`。
 

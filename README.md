@@ -467,6 +467,25 @@ focus  = "#7aa2f7"
 accent = "14"
 ```
 
+**Masking Kafka messages** — `[[mask]]` tables in `config.toml` hide message fields on the
+connections (by name, or every connection of an `env`) and topics they name:
+
+```toml
+[[mask]]
+env = "prod"                       # or connections = ["prod-kafka"]
+topics = ["orders", "payments.*"]  # globs; leave out for every topic
+fields = ["value.customer.phone", "value.cards[].number", "value.*.email", "key.ssn"]
+headers = ["authorization", "x-user-*"]
+```
+
+A field is `key` or `value` (all of it) or a JSON path below one: `.` between keys, `name[]`
+for every element of an array, `[]` for every element of a top-level array, `*` for any key
+(keys that contain `.` can't be named). Masked values show as `"******"` in the table, the
+detail in every format (hex and base64 too), copies, exports, the file `<Space>v` opens and
+what filters and searches match. A part a path reaches that is not JSON is masked whole, and a
+Schema Registry value waits masked until it is decoded. The messages on the cluster are not
+changed; masked messages can't be copied to a producer console (`p` / `P` leave them out).
+
 **Ghostty** — map Cmd shortcuts to leader keys with
 [docs/examples/ghostty.conf](docs/examples/ghostty.conf), e.g. `keybind = cmd+e=text:\x20e`.
 

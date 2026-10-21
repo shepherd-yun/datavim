@@ -128,6 +128,7 @@ func run(args []string, stdout io.Writer) error {
 	slog.Info("starting", "version", version, "workspace", ws.Name, "connections", len(cfg.Connections))
 	model := ui.New(mgr, st, cfg.Settings)
 	model.SetKeymap(keys)
+	model.SetMasks(cfg.Masks)
 	model.SetWorkspace(ws.Name)
 	if _, err := tea.NewProgram(model).Run(); err != nil {
 		slog.Error("program exited", "err", err)

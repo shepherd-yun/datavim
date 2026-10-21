@@ -30,6 +30,7 @@ type (
 	resendPickMsg struct {
 		conn, topic, draft string
 		count, skipped     int
+		masked             int // left out: [[mask]] rules hid some of them
 	}
 	// resendTopicsMsg is the topics the copy may go to.
 	resendTopicsMsg struct {
@@ -42,6 +43,7 @@ type (
 	resendMsg struct {
 		conn, topic, draft string
 		count, skipped     int
+		masked             int
 		confirmed          bool
 	}
 )
@@ -53,14 +55,17 @@ func (m resendTopicsMsg) failure() (string, error) { return m.conn, m.err }
 func (t *topicTab) resend(all bool) tea.Cmd {
 	v := t.msgs
 	var recs []kafka.Record
-	skipped := 0
+	skipped, masked := 0, 0
 	if all {
 		for _, i := range v.shown {
-			if v.recs[i].Truncated {
+			switch {
+			case v.recs[i].Truncated:
 				skipped++
-				continue
+			case v.isMasked(v.recs[i]):
+				masked++
+			default:
+				recs = append(recs, v.recs[i])
 			}
-			recs = append(recs, v.recs[i])
 		}
 	} else {
 		r, ok := v.current()
@@ -69,6 +74,10 @@ func (t *topicTab) resend(all bool) tea.Cmd {
 		}
 		if r.Truncated {
 			t.setStatus(fmt.Sprintf("p%d:%d has only its first 1 MB here; it can't be sent again as it was", r.Partition, r.Offset), true)
+			return nil
+		}
+		if v.isMasked(r) {
+			t.setStatus(fmt.Sprintf("p%d:%d has masked fields; it can't be sent again as it was", r.Partition, r.Offset), true)
 			return nil
 		}
 		recs = []kafka.Record{r}
@@ -87,7 +96,7 @@ func (t *topicTab) resend(all bool) tea.Cmd {
 		t.setStatus(why, true)
 		return nil
 	}
-	msg := resendPickMsg{conn: t.conn, topic: t.topic, draft: draft, count: len(recs), skipped: skipped}
+	msg := resendPickMsg{conn: t.conn, topic: t.topic, draft: draft, count: len(recs), skipped: skipped, masked: masked}
 	return func() tea.Msg { return msg }
 }
 
@@ -123,7 +132,7 @@ func (m *Model) resendTopics(msg resendTopicsMsg) {
 	}
 	p := msg.resendPickMsg
 	m.overlay = overlay.NewPicker(fmt.Sprintf("Copy %s to the producer console of", plural(p.count, "message")), names, func(i int) tea.Msg {
-		return resendMsg{conn: p.conn, topic: names[i], draft: p.draft, count: p.count, skipped: p.skipped}
+		return resendMsg{conn: p.conn, topic: names[i], draft: p.draft, count: p.count, skipped: p.skipped, masked: p.masked}
 	})
 }
 
@@ -152,7 +161,10 @@ func (m *Model) resendTo(msg resendMsg) tea.Cmd {
 	if msg.skipped > 0 {
 		status += fmt.Sprintf(" · skipped %d cut to their first 1 MB", msg.skipped)
 	}
-	m.setStatus(status, msg.skipped > 0)
+	if msg.masked > 0 {
+		status += fmt.Sprintf(" · skipped %d with masked fields", msg.masked)
+	}
+	m.setStatus(status, msg.skipped+msg.masked > 0)
 	return tea.Batch(open, p.appendDraft(msg.draft))
 }
 
