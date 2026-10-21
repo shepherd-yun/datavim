@@ -34,7 +34,7 @@ require (
 	github.com/zalando/go-keyring v0.2.8
 	golang.org/x/crypto v0.55.0
 	golang.org/x/oauth2 v0.37.0
-	golang.org/x/sync v0.23.0
+	golang.org/x/sync v0.24.0
 	golang.org/x/text v0.41.0
 	google.golang.org/protobuf v1.36.12
 	modernc.org/sqlite v1.60.1
