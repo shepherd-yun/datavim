@@ -219,3 +219,44 @@ func TestESConsoleError(t *testing.T) {
 	}
 	_ = overlay.Confirm{}
 }
+
+func popupLabels(c *esConsoleTab) []string {
+	if c.popup == nil {
+		return nil
+	}
+	var out []string
+	for _, cand := range c.popup.Items() {
+		out = append(out, cand.Label)
+	}
+	return out
+}
+
+func TestESConsoleComplete(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	f.addIndex("orders", ordersMapping, 1)
+	f.addIndex("users", "", 1)
+	for _, tc := range []struct {
+		typed, want string
+	}{
+		{"GET or", "orders"},
+		{"GET orders/_se", "_search"},
+		{"GET _cat/ind", "indices"},
+		{"GET orders/_search\n{\"query\": {\"b", "bool"},
+		{"GET orders/_search\n{\"query\": {\"term\": {\"", "user.name"},
+	} {
+		c := openESConsoleWith(t, m, "", 0)
+		c.editor.ReplaceAll("")
+		press(t, m, "i")
+		for _, r := range tc.typed {
+			if r == '\n' {
+				press(t, m, "enter")
+				continue
+			}
+			press(t, m, string(r))
+		}
+		if got := popupLabels(c); !slices.Contains(got, tc.want) {
+			t.Errorf("%q: popup %v, want %q", tc.typed, got, tc.want)
+		}
+		press(t, m, "esc", "esc")
+	}
+}

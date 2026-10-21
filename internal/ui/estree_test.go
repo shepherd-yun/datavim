@@ -227,3 +227,10 @@ func TestESSQLActionsRefused(t *testing.T) {
 		t.Errorf("status = %q", m.status)
 	}
 }
+
+func TestESHasNoSQLCatalog(t *testing.T) {
+	_, b, _ := newESModel(t, config.Connection{})
+	if _, ok := metaKeyFor(b, "search", ""); ok {
+		t.Error("an elasticsearch connection gets a SQL catalog")
+	}
+}

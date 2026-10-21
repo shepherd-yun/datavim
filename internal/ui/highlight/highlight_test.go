@@ -234,3 +234,35 @@ func TestCode(t *testing.T) {
 		t.Fatalf("unknown language = %+v", spans)
 	}
 }
+
+func TestHighlightES(t *testing.T) {
+	src := "# find\nGET orders/_search\n{\n  \"query\": {\"term\": {\"n\": 12}},\n  \"x\": \"str\", \"ok\": true\n}\n"
+	spans := ES(src)
+	at := func(sub string, nth int) int {
+		i := -1
+		for range nth + 1 {
+			i += 1 + strings.Index(src[i+1:], sub)
+		}
+		return i
+	}
+	for _, tc := range []struct {
+		sub  string
+		nth  int
+		want Class
+	}{
+		{"# find", 0, Comment},
+		{"GET", 0, Keyword},
+		{"orders/_search", 0, Builtin},
+		{`"query"`, 0, Builtin},
+		{"12", 0, Number},
+		{`"str"`, 0, String},
+		{"true", 0, Keyword},
+	} {
+		if got := classAt(spans, at(tc.sub, tc.nth)); got != tc.want {
+			t.Errorf("%s: %v, want %v", tc.sub, got, tc.want)
+		}
+	}
+	if c := classAt(spans, at("{", 0)); c != Plain && c != -1 {
+		t.Error("a brace is not plain")
+	}
+}

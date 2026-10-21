@@ -502,3 +502,27 @@ func (m *Model) esTreeFiltered(msg esFilterTreeMsg) {
 		m.buildESTree(msg.conn)
 	}
 }
+
+// esTreeNames are the indices (not the system ones), aliases and data
+// streams of conn's tree, once read.
+func (m *Model) esTreeNames(conn string) []string {
+	st := m.esTrees[conn]
+	if st == nil {
+		return nil
+	}
+	var out []string
+	for _, i := range st.indices {
+		if !i.System {
+			out = append(out, i.Name)
+		}
+	}
+	for _, a := range st.aliases {
+		if !slices.Contains(out, a.Name) {
+			out = append(out, a.Name)
+		}
+	}
+	for _, s := range st.streams {
+		out = append(out, s.Name)
+	}
+	return out
+}

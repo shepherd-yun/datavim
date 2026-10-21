@@ -18,7 +18,9 @@ import (
 	"github.com/shepherd-yun/datavim/internal/es"
 	"github.com/shepherd-yun/datavim/internal/esx"
 	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/ui/highlight"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/complete"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/editor"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/textview"
@@ -38,6 +40,7 @@ func (m *Model) openESConsole(conn string) tea.Cmd {
 	return m.openTab(esConsoleTabKey(conn), rec, func(id int) tab {
 		t := newESConsoleTab(id, m.backend, m.store, conn, m.settings, m.timings)
 		t.keys = m.keys
+		t.treeNames = func() []string { return m.esTreeNames(conn) }
 		return t
 	})
 }
@@ -115,6 +118,12 @@ type esConsoleTab struct {
 	tabs      resultTabs
 	clipPaste *vimedit.ClipboardPaste
 
+	popup      *complete.Model
+	popStart   int                 // byte offset the popup's word starts at
+	treeNames  func() []string     // the tree's indices, aliases and data streams
+	indexNames []string            // nil until read
+	fieldCache map[string][]string // field names by index, until a refresh
+
 	run     *esRun
 	running bool
 	cancel  context.CancelFunc
@@ -134,6 +143,7 @@ func newESConsoleTab(id int, b Backend, st Store, conn string, s config.Settings
 		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), view: textview.New(), keys: keymap.Default(),
 	}
 	t.editor.SetPlaceholder("GET _search  (a request line, then its JSON body)")
+	t.editor.SetHighlighter(highlight.ES)
 	return t
 }
 
@@ -215,6 +225,9 @@ func (t *esConsoleTab) log(line string) {
 
 func (t *esConsoleTab) Input(msg tea.Msg) tea.Cmd {
 	if k, ok := msg.(tea.KeyPressMsg); ok {
+		if cmd, used := t.popupKey(k.String()); used {
+			return cmd
+		}
 		switch k.String() {
 		case "ctrl+enter", "ctrl+j":
 			return t.runAtCursor()
@@ -224,10 +237,11 @@ func (t *esConsoleTab) Input(msg tea.Msg) tea.Cmd {
 	}
 	before := t.editor.Version()
 	cmd := editorEffects(t.id, t.editor.Update(msg), &t.clipPaste)
-	if t.editor.Version() == before {
+	if t.editor.Version() == before || !t.editor.Insert() {
+		t.popup = nil
 		return cmd
 	}
-	return tea.Batch(cmd, t.scheduleDraft())
+	return tea.Batch(cmd, t.suggest(false), t.scheduleDraft())
 }
 
 func (t *esConsoleTab) Paste(msg tea.PasteMsg) tea.Cmd {
@@ -280,6 +294,11 @@ func (t *esConsoleTab) Handle(a keymap.Action) tea.Cmd {
 			d = -1
 		}
 		t.selectResult(t.tabs.step(d))
+		return nil
+	}
+	if a == keymap.Refresh {
+		t.indexNames, t.fieldCache = nil, nil
+		t.setStatus("completion reads the index and field names again", false)
 		return nil
 	}
 	if t.onResults {
@@ -632,6 +651,9 @@ func (t *esConsoleTab) cancelRun() tea.Cmd {
 }
 
 func (t *esConsoleTab) Update(msg tea.Msg) tea.Cmd {
+	if cmd, ok := t.completeUpdate(msg); ok {
+		return cmd
+	}
 	switch m := msg.(type) {
 	case runTickMsg:
 		if t.running && m.gen == t.gen {
@@ -872,7 +894,11 @@ func (t *esConsoleTab) Framed(title string, focused, danger bool) string {
 	w := t.width + 2
 	top := theme.Frame(title, t.editor.View(), w, t.editorH+2, onEditor, danger)
 	bottom := theme.Frame(t.resultsTitle(), results+"\n"+t.statusLine(), w, t.resultsH+3, onResults, danger)
-	return top + "\n" + bottom
+	view := top + "\n" + bottom
+	if !t.CapturesInput() {
+		return view
+	}
+	return placePopup(view, t.popup, t.editor, t.width, t.height)
 }
 
 func (t *esConsoleTab) resultsTitle() string {

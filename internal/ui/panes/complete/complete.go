@@ -125,6 +125,9 @@ func (m *Model) Selected() (Candidate, bool) {
 	return m.items[m.sel], true
 }
 
+// Items are the popup's candidates.
+func (m *Model) Items() []Candidate { return m.items }
+
 // Chosen is the candidate to insert: the selected one, else the first.
 func (m *Model) Chosen() Candidate {
 	if c, ok := m.Selected(); ok {

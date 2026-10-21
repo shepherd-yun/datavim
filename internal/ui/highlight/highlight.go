@@ -277,3 +277,77 @@ func Code(src, lang string) []Span {
 	}
 	return out
 }
+
+// esMethods start an Elasticsearch console request line.
+var esMethods = map[string]bool{"GET": true, "POST": true, "PUT": true, "DELETE": true, "HEAD": true}
+
+// ES classifies an Elasticsearch REST console: a request line's method
+// is a Keyword and its path a Builtin; in the bodies, keys are Builtins,
+// other strings Strings, numbers Numbers, true / false / null Keywords;
+// # and // lines are Comments.
+func ES(src string) []Span {
+	var out []Span
+	start := 0
+	for line := range strings.SplitSeq(src, "\n") {
+		t := strings.TrimSpace(line)
+		lead := len(line) - len(strings.TrimLeft(line, " \t"))
+		switch f := strings.Fields(t); {
+		case t == "":
+		case strings.HasPrefix(t, "#") || strings.HasPrefix(t, "//"):
+			out = append(out, Span{Start: start, End: start + len(line), Class: Comment})
+		case len(f) == 2 && esMethods[strings.ToUpper(f[0])]:
+			m := start + lead
+			out = append(out, Span{Start: m, End: m + len(f[0]), Class: Keyword})
+			p := start + strings.Index(line[lead+len(f[0]):], f[1]) + lead + len(f[0])
+			out = append(out, Span{Start: p, End: p + len(f[1]), Class: Builtin})
+		default:
+			out = append(out, jsonSpans(line, start)...)
+		}
+		start += len(line) + 1
+	}
+	return out
+}
+
+// jsonSpans classifies one line of JSON.
+func jsonSpans(line string, off int) []Span {
+	var out []Span
+	for i := 0; i < len(line); {
+		c := line[i]
+		switch {
+		case c == '"':
+			j := i + 1
+			for j < len(line) && line[j] != '"' {
+				if line[j] == '\\' {
+					j++
+				}
+				j++
+			}
+			j = min(j+1, len(line))
+			class := String
+			if k := strings.TrimLeft(line[j:], " \t"); strings.HasPrefix(k, ":") {
+				class = Builtin
+			}
+			out = append(out, Span{Start: off + i, End: off + j, Class: class})
+			i = j
+		case c == '-' || c >= '0' && c <= '9':
+			j := i + 1
+			for j < len(line) && strings.IndexByte("0123456789.eE+-", line[j]) >= 0 {
+				j++
+			}
+			out = append(out, Span{Start: off + i, End: off + j, Class: Number})
+			i = j
+		case c >= 'a' && c <= 'z':
+			j := i
+			for j < len(line) && line[j] >= 'a' && line[j] <= 'z' {
+				j++
+			}
+			if w := line[i:j]; w == "true" || w == "false" || w == "null" {
+				out = append(out, Span{Start: off + i, End: off + j, Class: Keyword})
+			}
+			i = j
+		default:
+			i++
+		}
+	}
+	return out
+}
