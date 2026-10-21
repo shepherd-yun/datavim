@@ -21,6 +21,10 @@ import (
 // it shows a preview and asks first (design §7.4).
 const sendPreviewOver = 1000
 
+// resendMaxBytes is the largest draft a copy makes: a bigger one would
+// slow the editor and the saved draft. A var so tests can lower it.
+var resendMaxBytes = 16 << 20
+
 type (
 	// resendPickMsg asks the root model for the topic to copy messages to.
 	resendPickMsg struct {
@@ -73,7 +77,17 @@ func (t *topicTab) resend(all bool) tea.Cmd {
 		t.setStatus("no message to copy", true)
 		return nil
 	}
-	msg := resendPickMsg{conn: t.conn, topic: t.topic, draft: kmsgx.FormatDraft(recs), count: len(recs), skipped: skipped}
+	draft := kmsgx.FormatDraft(recs)
+	if len(draft) > resendMaxBytes {
+		why := fmt.Sprintf("%s are %s as a draft (over %s): filter fewer", plural(len(recs), "message"),
+			humanBytes(int64(len(draft))), humanBytes(int64(resendMaxBytes)))
+		if exp := keyHint(t.keys, keymap.Global, keymap.ExportAs("jsonl"), "export them"); exp != "" {
+			why += ", or " + exp + " and :send the file"
+		}
+		t.setStatus(why, true)
+		return nil
+	}
+	msg := resendPickMsg{conn: t.conn, topic: t.topic, draft: draft, count: len(recs), skipped: skipped}
 	return func() tea.Msg { return msg }
 }
 

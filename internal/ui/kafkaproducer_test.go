@@ -300,6 +300,24 @@ func TestResendShownOtherTopic(t *testing.T) {
 	}
 }
 
+// TestResendTooBig: a copy whose draft is over resendMaxBytes is refused
+// and points to exporting the messages and sending the file.
+func TestResendTooBig(t *testing.T) {
+	old := resendMaxBytes
+	resendMaxBytes = 200
+	t.Cleanup(func() { resendMaxBytes = old })
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 12)
+	tt := openTopicTab(t, m, "orders")
+	pressAll(t, m, "P")
+	if _, ok := m.activeTab().(*producerTab); ok || m.overlay != nil {
+		t.Fatalf("copied anyway: tab %T, overlay %T", m.activeTab(), m.overlay)
+	}
+	if !strings.Contains(tt.status, "12 messages") || !strings.Contains(tt.status, "<space>xl") || !strings.Contains(tt.status, ":send") {
+		t.Fatalf("status = %q", tt.status)
+	}
+}
+
 func TestResendTruncated(t *testing.T) {
 	m, _, k := newKafkaModel(t, config.Connection{})
 	k.addTopic("orders", 1, 0, 3)
