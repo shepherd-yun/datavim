@@ -109,3 +109,52 @@ func TestDraftAt(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+func TestParseDraftK2(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		text string
+		want DraftRecord
+	}{
+		{"hex key", "key-encoding: hex\nkey: 00ff\n\nv", DraftRecord{Line: 1, EndLine: 4, Key: []byte{0, 0xff}, Partition: -1, Value: []byte("v")}},
+		{"base64 value", "value-encoding: base64\n\nAP8=\n", DraftRecord{Line: 1, EndLine: 3, KeyNull: true, Partition: -1, Value: []byte{0, 0xff}}},
+		{"hex value", "value-encoding: hex\n 00ff \n", DraftRecord{Line: 1, EndLine: 2, KeyNull: true, Partition: -1, Value: []byte{0, 0xff}}},
+		{"base64 header", "header-base64: h=AP8=\nheader: t=x\nv", DraftRecord{
+			Line: 1, EndLine: 3, KeyNull: true, Partition: -1, Value: []byte("v"),
+			Headers: []kafka.Header{{Key: "h", Value: []byte{0, 0xff}}, {Key: "t", Value: []byte("x")}},
+		}},
+		{"value schema", "value-schema: orders-value@3#shop.Order\n{}", DraftRecord{
+			Line: 1, EndLine: 2, KeyNull: true, Partition: -1, Value: []byte("{}"),
+			ValueSchema: &SchemaSpec{Subject: "orders-value", Version: 3, Message: "shop.Order"},
+		}},
+		{"key schema, latest", "key-schema: orders-key\nkey: {\"id\":1}\n{}", DraftRecord{
+			Line: 1, EndLine: 3, Key: []byte(`{"id":1}`), Partition: -1, Value: []byte("{}"),
+			KeySchema: &SchemaSpec{Subject: "orders-key", Version: -1},
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := ParseDraft(tc.text)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(got) != 1 || !reflect.DeepEqual(got[0], tc.want) {
+				t.Fatalf("got  %+v\nwant %+v", got, tc.want)
+			}
+		})
+	}
+	for _, tc := range []struct{ text, want string }{
+		{"value-schema: s@x\n{}", "line 1: value-schema wants subject[@version][#message]"},
+		{"value-schema: s#\n{}", "line 1: value-schema wants subject[@version][#message]"},
+		{"value-schema: s\nvalue-encoding: hex\n00", "line 2: value-schema and value-encoding can't both be given"},
+		{"key-encoding: hex\nkey-schema: s\nkey: 00\nv", "line 2: key-schema and key-encoding can't both be given"},
+		{"value-encoding: rot13\nv", "line 1: value-encoding must be base64 or hex"},
+		{"value-encoding: hex\nzz", "line 2: the body is not hex"},
+		{"header-base64: h=!!\nv", "line 1: header-base64 needs name=<base64>"},
+	} {
+		_, err := ParseDraft(tc.text)
+		var de DraftError
+		if err == nil || err.Error() != tc.want || !errors.As(err, &de) {
+			t.Errorf("ParseDraft(%q) err = %v, want %q", tc.text, err, tc.want)
+		}
+	}
+}
