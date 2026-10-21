@@ -767,3 +767,35 @@ host = "h2"
 		t.Fatalf("%+v, err %v", cfg.Connections, err)
 	}
 }
+
+func TestKafkaConnectClusters(t *testing.T) {
+	conn := func(v string) Connection { return Connection{Name: "k", Driver: "kafka", Params: map[string]string{"connect_url": v}} }
+	for _, tc := range []struct {
+		in   string
+		want []ConnectCluster
+		err  string
+	}{
+		{"", nil, ""},
+		{"http://c1:8083", []ConnectCluster{{"connect", "http://c1:8083"}}, ""},
+		{"main=http://c1:8083, cdc = https://u:p@c2:8083/", []ConnectCluster{{"main", "http://c1:8083"}, {"cdc", "https://u:p@c2:8083/"}}, ""},
+		{"http://c1:8083/?a=b", []ConnectCluster{{"connect", "http://c1:8083/?a=b"}}, ""},
+		{"main=http://c1:8083?x=1", []ConnectCluster{{"main", "http://c1:8083?x=1"}}, ""},
+		{"main=http://c1:8083, http://c2:8083", nil, "want name=http(s)://host:port"},
+		{"a=http://c1:8083, a=http://c2:8083", nil, `duplicate connect cluster "a"`},
+		{"ftp://c1", nil, "want name=http(s)://host:port"},
+		{"main=", nil, "want name=http(s)://host:port"},
+	} {
+		got, err := KafkaConnectClusters(conn(tc.in))
+		switch {
+		case tc.err != "" && (err == nil || !strings.Contains(err.Error(), tc.err)):
+			t.Errorf("%q: err = %v, want %q", tc.in, err, tc.err)
+		case tc.err == "" && err != nil:
+			t.Errorf("%q: %v", tc.in, err)
+		case tc.err == "" && !slices.Equal(got, tc.want):
+			t.Errorf("%q = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+	if _, err := Normalize(conn("ftp://c1")); err == nil || !strings.Contains(err.Error(), `connection "k": params.connect_url`) {
+		t.Fatalf("Normalize: %v", err)
+	}
+}

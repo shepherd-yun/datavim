@@ -63,11 +63,14 @@ func TestSecretRequiredErrorText(t *testing.T) {
 	if got := (&SecretRequiredError{Kind: SecretOAuth}).Error(); got != "oauth client secret required" {
 		t.Errorf("oauth: %q", got)
 	}
+	if got := (&SecretRequiredError{Kind: SecretConnect}).Error(); got != "kafka connect password required" {
+		t.Errorf("connect: %q", got)
+	}
 }
 
 func TestRemoveConnectionDeletesSecrets(t *testing.T) {
 	m, _, sec := setupKafka(config.Connection{})
-	sec.m["k"], sec.m["k#oauth"], sec.m["k#schema-registry"] = "a", "b", "c"
+	sec.m["k"], sec.m["k#oauth"], sec.m["k#schema-registry"], sec.m["k#connect"] = "a", "b", "c", "d"
 	if err := m.RemoveConnection("k"); err != nil {
 		t.Fatal(err)
 	}

@@ -10,9 +10,10 @@ import (
 const (
 	SecretSchemaRegistry = "schema-registry"
 	SecretOAuth          = "oauth"
+	SecretConnect        = "connect" // connect_user's password, for every Connect cluster
 )
 
-var secretKinds = []string{SecretSchemaRegistry, SecretOAuth}
+var secretKinds = []string{SecretSchemaRegistry, SecretOAuth, SecretConnect}
 
 // SecretRequiredError is a secret other than the connection's password
 // that sqlvim does not know yet, or one the server refused (Wrong).
@@ -22,8 +23,11 @@ type SecretRequiredError struct {
 }
 
 func (e *SecretRequiredError) Error() string {
-	if e.Kind == SecretOAuth {
+	switch e.Kind {
+	case SecretOAuth:
 		return "oauth client secret required"
+	case SecretConnect:
+		return "kafka connect password required"
 	}
 	return "schema registry password required"
 }

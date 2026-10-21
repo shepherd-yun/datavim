@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"slices"
 	"strings"
 
 	"github.com/pelletier/go-toml/v2"
@@ -251,10 +252,52 @@ func normalizeKafka(c Connection) (Connection, error) {
 	if _, err := KafkaBrokerMap(c); err != nil {
 		return c, fmt.Errorf("connection %q: %w", c.Name, err)
 	}
-	if u := c.Params["schema_registry_url"]; u != "" && !strings.HasPrefix(u, "http://") && !strings.HasPrefix(u, "https://") {
+	if u := c.Params["schema_registry_url"]; u != "" && !httpURL(u) {
 		return c, fmt.Errorf("connection %q: params.schema_registry_url must start with http:// or https://", c.Name)
 	}
+	if _, err := KafkaConnectClusters(c); err != nil {
+		return c, fmt.Errorf("connection %q: %w", c.Name, err)
+	}
 	return c, nil
+}
+
+func httpURL(u string) bool { return strings.HasPrefix(u, "http://") || strings.HasPrefix(u, "https://") }
+
+// ConnectCluster is one Kafka Connect cluster of a kafka connection.
+type ConnectCluster struct{ Name, URL string }
+
+// KafkaConnectClusters parses params.connect_url: "name=url" items
+// separated by commas, or one bare url named "connect". Names are unique;
+// urls are http(s).
+func KafkaConnectClusters(c Connection) ([]ConnectCluster, error) {
+	v := strings.TrimSpace(c.Params["connect_url"])
+	if v == "" {
+		return nil, nil
+	}
+	errFormat := errors.New("params.connect_url: want name=http(s)://host:port, …")
+	items := strings.Split(v, ",")
+	var out []ConnectCluster
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" {
+			continue
+		}
+		cl := ConnectCluster{Name: "connect", URL: item}
+		// an = before :// names the cluster; one after it is the URL's query
+		if eq, scheme := strings.Index(item, "="), strings.Index(item, "://"); eq >= 0 && (scheme < 0 || eq < scheme) {
+			cl.Name, cl.URL = strings.TrimSpace(item[:eq]), strings.TrimSpace(item[eq+1:])
+		} else if len(items) > 1 {
+			return nil, errFormat // only a lone URL goes without a name
+		}
+		if cl.Name == "" || !httpURL(cl.URL) || len(cl.URL) <= len("https://") {
+			return nil, errFormat
+		}
+		if slices.ContainsFunc(out, func(o ConnectCluster) bool { return o.Name == cl.Name }) {
+			return nil, fmt.Errorf("params.connect_url: duplicate connect cluster %q", cl.Name)
+		}
+		out = append(out, cl)
+	}
+	return out, nil
 }
 
 // KafkaBrokerMap parses params.broker_map, "from=to" pairs of host:port
