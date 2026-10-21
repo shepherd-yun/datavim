@@ -127,6 +127,9 @@ func (f *fakeES) resolve(expr string) []*fakeIndex {
 			}
 		}
 		for _, ix := range f.indices {
+			if strings.HasPrefix(part, "-") {
+				continue
+			}
 			if ok, _ := path.Match(part, ix.info.Name); ok || part == "_all" {
 				add(ix)
 			}
@@ -311,6 +314,11 @@ func (f *fakeES) answer(r es.Request) es.Response {
 		c := &fakeCursor{hits: f.matching(segs[0], r.Body)}
 		f.cursors[id] = c
 		return f.page(c, b.Size, id, "_scroll_id")
+	case len(segs) == 2 && segs[1] == "_search" && r.Method == "POST":
+		var b struct{ Size int `json:"size"` }
+		json.Unmarshal(r.Body, &b)
+		c := &fakeCursor{hits: f.matching(segs[0], r.Body)}
+		return f.page(c, b.Size, "", "_none")
 	case p == "_search/scroll" && r.Method == "POST":
 		var b struct{ ScrollID string `json:"scroll_id"` }
 		json.Unmarshal(r.Body, &b)

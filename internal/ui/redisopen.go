@@ -104,6 +104,9 @@ func (m *Model) redisContext() (redisDBKey, bool) {
 // openKeyPrompt is <space>k: it asks for a key name, completing the keys
 // already scanned in that db.
 func (m *Model) openKeyPrompt() tea.Cmd {
+	if m.openIDPrompt() {
+		return nil
+	}
 	k, ok := m.redisContext()
 	if !ok {
 		m.setStatus("select a redis connection first", true)

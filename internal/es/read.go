@@ -473,3 +473,29 @@ func resolveByCat(ctx context.Context, d Doer, expr string) (Resolved, error) {
 	slices.Sort(out.Indices)
 	return out, nil
 }
+
+// SearchIDs finds the documents with _id id in target: an alias or
+// pattern may hold several.
+func SearchIDs(ctx context.Context, d Doer, target, id string) ([]esx.Hit, error) {
+	body, _ := json.Marshal(map[string]any{
+		"query": map[string]any{"ids": map[string]any{"values": []string{id}}},
+		"size":  100, "seq_no_primary_term": true, "version": true,
+	})
+	resp, err := do(ctx, d, Request{Method: "POST", Path: indexPath(target) + "/_search", Body: body})
+	if err != nil {
+		return nil, err
+	}
+	var r struct {
+		Hits struct {
+			Hits []rawHit `json:"hits"`
+		} `json:"hits"`
+	}
+	if err := json.Unmarshal(resp.Body, &r); err != nil {
+		return nil, err
+	}
+	out := make([]esx.Hit, len(r.Hits.Hits))
+	for i, h := range r.Hits.Hits {
+		out[i] = h.hit()
+	}
+	return out, nil
+}

@@ -214,3 +214,16 @@ func TestResolveIndex(t *testing.T) {
 		t.Errorf("fallback: %+v %v", got, err)
 	}
 }
+
+func TestSearchIDs(t *testing.T) {
+	d := &fakeDoer{table: map[string]Response{"POST orders/_search": ok(`{"hits":{"hits":[
+	  {"_index":"orders-1","_id":"x","_seq_no":3,"_primary_term":1,"_source":{"a":1}},
+	  {"_index":"orders-2","_id":"x","_seq_no":4,"_primary_term":1,"_source":{"a":2}}]}}`)}}
+	hits, err := SearchIDs(ctx, d, "orders", "x")
+	if err != nil || len(hits) != 2 || hits[1].Index != "orders-2" || hits[1].SeqNo != 4 {
+		t.Fatalf("hits %+v %v", hits, err)
+	}
+	if b := string(d.requests()[0].Body); !strings.Contains(b, `"ids":{"values":["x"]}`) || !strings.Contains(b, `"seq_no_primary_term":true`) {
+		t.Errorf("body = %s", b)
+	}
+}

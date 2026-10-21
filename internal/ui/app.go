@@ -248,6 +248,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.openGroup(msg.conn, msg.group)
 	case openIndexMsg:
 		return m, m.openIndex(msg.conn, msg.target, msg.kind)
+	case esOpenIDMsg:
+		return m, m.lookUpID(msg)
+	case esIDFoundMsg:
+		return m, m.idFound(msg)
 	case openTopicAtMsg:
 		return m, m.openTopicAtMsg(msg)
 	case resetTimesMsg:

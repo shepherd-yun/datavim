@@ -104,6 +104,7 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 		case isES(m.backend, n.Conn):
 			entries = append([]entry{
 				{keymap.OpenConsole, "REST console"},
+				{keymap.OpenKey, "Open document by _id…"},
 				{keymap.ServerInfo, "Cluster status"},
 				{keymap.ToggleInternal, "Show / hide system indices"},
 				{keymap.SortGroups, "Sort indices: name / docs / size"},
@@ -266,11 +267,11 @@ func esMenu(n *tree.Node) []menuEntry {
 	var entries []menuEntry
 	switch n.Kind {
 	case tree.KindESIndex:
-		entries = append(entries, menuEntry{keymap.Open, "Open index"})
+		entries = append(entries, menuEntry{keymap.Open, "Open index"}, menuEntry{keymap.OpenKey, "Open document by _id…"})
 	case tree.KindESAlias:
-		entries = append(entries, menuEntry{keymap.Open, "Open alias"})
+		entries = append(entries, menuEntry{keymap.Open, "Open alias"}, menuEntry{keymap.OpenKey, "Open document by _id…"})
 	case tree.KindDataStream:
-		entries = append(entries, menuEntry{keymap.Open, "Open data stream"})
+		entries = append(entries, menuEntry{keymap.Open, "Open data stream"}, menuEntry{keymap.OpenKey, "Open document by _id…"})
 	case tree.KindIndexFolder:
 		entries = append(entries, menuEntry{keymap.Open, "Expand / collapse"})
 	}

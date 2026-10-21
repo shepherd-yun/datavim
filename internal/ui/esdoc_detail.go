@@ -19,9 +19,10 @@ import (
 // indented JSON whose objects and arrays fold like the tree (the Tree's
 // fold keys); n / N show the next / previous document.
 type esDocDetail struct {
-	tab     *esIndexTab
-	doc     esx.Hit // a fixed document (opened by _id), or
-	row     int     // the row of the Documents view it shows
+	keys    *keymap.Keymap
+	docs    *esDocs // the view it shows a row of; nil for one document
+	doc     esx.Hit // the document when docs is nil
+	row     int     // the row of docs it shows
 	lines   []string
 	folded  map[int]bool // the folded blocks by their first line
 	cur     int          // the cursor, a line of lines
@@ -30,23 +31,23 @@ type esDocDetail struct {
 }
 
 func newESDocDetail(t *esIndexTab, row int) *esDocDetail {
-	d := &esDocDetail{tab: t, row: row}
+	d := &esDocDetail{keys: t.keys, docs: t.docs, row: row}
 	d.reset()
 	return d
 }
 
-// newESDocDetailOf shows one document that is not a row of the view.
-func newESDocDetailOf(t *esIndexTab, h esx.Hit) *esDocDetail {
-	d := &esDocDetail{tab: t, row: -1, doc: h}
+// newESDocDetailOf shows one document that is not a row of a view.
+func newESDocDetailOf(keys *keymap.Keymap, h esx.Hit) *esDocDetail {
+	d := &esDocDetail{keys: keys, row: -1, doc: h}
 	d.reset()
 	return d
 }
 
 func (d *esDocDetail) hit() esx.Hit {
-	if d.row < 0 || d.row >= len(d.tab.docs.hits) {
+	if d.docs == nil || d.row < 0 || d.row >= len(d.docs.hits) {
 		return d.doc
 	}
-	return d.tab.docs.hits[d.row]
+	return d.docs.hits[d.row]
 }
 
 func (d *esDocDetail) reset() {
@@ -95,7 +96,7 @@ func (d *esDocDetail) blockAt(line int) int {
 }
 
 func (d *esDocDetail) trigger(ctx keymap.Context, a keymap.Action, key string) bool {
-	return d.tab.keys.Triggers(ctx, a, key)
+	return d.keys.Triggers(ctx, a, key)
 }
 
 // fold reads the fold key sequences of the tree (zo, zc, za by default).
@@ -103,7 +104,7 @@ func (d *esDocDetail) fold(key string) (handled bool) {
 	d.pending = append(d.pending, key)
 	prefix := false
 	for _, a := range []keymap.Action{keymap.FoldOpen, keymap.FoldClose, keymap.FoldToggle} {
-		seq := d.tab.keys.SeqFor(keymap.Tree, a)
+		seq := d.keys.SeqFor(keymap.Tree, a)
 		if len(seq) < 2 {
 			continue
 		}
@@ -141,7 +142,7 @@ func (d *esDocDetail) HandleKey(msg tea.KeyPressMsg) (overlay.Overlay, tea.Cmd) 
 	if d.fold(key) {
 		return d, nil
 	}
-	docs := d.tab.docs
+	docs := d.docs
 	switch {
 	case key == "esc" || key == "q" || d.trigger(keymap.ESDocs, keymap.CellDetail, key):
 		return nil, nil
@@ -149,7 +150,7 @@ func (d *esDocDetail) HandleKey(msg tea.KeyPressMsg) (overlay.Overlay, tea.Cmd) 
 		d.cur = min(d.cur+1, len(d.visible())-1)
 	case key == "k" || key == "up":
 		d.cur = max(d.cur-1, 0)
-	case d.row >= 0 && (d.trigger(keymap.ESDocs, keymap.SearchNext, key) || d.trigger(keymap.ESDocs, keymap.SearchPrev, key)):
+	case docs != nil && (d.trigger(keymap.ESDocs, keymap.SearchNext, key) || d.trigger(keymap.ESDocs, keymap.SearchPrev, key)):
 		step := 1
 		if d.trigger(keymap.ESDocs, keymap.SearchPrev, key) {
 			step = -1
@@ -241,7 +242,7 @@ func (d *esDocDetail) View(width, height int) string {
 	for i, l := range body {
 		body[i] = textutil.Fit(l, w-2)
 	}
-	k := d.tab.keys
+	k := d.keys
 	own := func(ctx keymap.Context, a keymap.Action, label string) string {
 		if seq := k.SeqFor(ctx, a); seq != nil {
 			return k.Display(seq) + " " + label
@@ -249,7 +250,7 @@ func (d *esDocDetail) View(width, height int) string {
 		return ""
 	}
 	hints := []string{"document", own(keymap.Tree, keymap.FoldToggle, "fold")}
-	if d.row >= 0 {
+	if d.docs != nil {
 		hints = append(hints, own(keymap.ESDocs, keymap.SearchNext, "next"), own(keymap.ESDocs, keymap.SearchPrev, "prev"))
 	}
 	title := joinHints(append(hints, "y copy", "esc close")...)
