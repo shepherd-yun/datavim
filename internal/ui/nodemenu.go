@@ -101,6 +101,13 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 				{keymap.OpenKey, "Open key by name…"},
 				{keymap.Favorites, "Starred keys"},
 			}, entries[1:]...)...)
+		case isES(m.backend, n.Conn):
+			entries = append([]entry{
+				{keymap.OpenConsole, "REST console"},
+				{keymap.ServerInfo, "Cluster status"},
+				{keymap.ToggleInternal, "Show / hide system indices"},
+				{keymap.SortGroups, "Sort indices: name / docs / size"},
+			}, entries[1:]...)
 		case isKafka(m.backend, n.Conn):
 			entries = append([]entry{
 				{keymap.ServerInfo, "Cluster status"},
@@ -113,6 +120,8 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker,
 		tree.KindSchemaSubject, tree.KindSchemaVersion, tree.KindKafkaACLs, tree.KindConnectCluster, tree.KindConnector:
 		entries = kafkaMenu(n)
+	case tree.KindESSection, tree.KindIndexFolder, tree.KindESIndex, tree.KindESAlias, tree.KindDataStream:
+		entries = esMenu(n)
 	case tree.KindDatabase, tree.KindSchema:
 		entries = []entry{
 			{keymap.OpenConsole, "Open console"},
@@ -250,6 +259,35 @@ func kafkaMenu(n *tree.Node) []menuEntry {
 		entries = append(entries, menuEntry{keymap.DeleteNode, "Soft-delete version…"})
 	}
 	return entries
+}
+
+// esMenu is the actions menu of a node under an elasticsearch connection.
+func esMenu(n *tree.Node) []menuEntry {
+	var entries []menuEntry
+	switch n.Kind {
+	case tree.KindESIndex:
+		entries = append(entries, menuEntry{keymap.Open, "Open index"})
+	case tree.KindESAlias:
+		entries = append(entries, menuEntry{keymap.Open, "Open alias"})
+	case tree.KindDataStream:
+		entries = append(entries, menuEntry{keymap.Open, "Open data stream"})
+	case tree.KindIndexFolder:
+		entries = append(entries, menuEntry{keymap.Open, "Expand / collapse"})
+	}
+	if n.Section == esSecIndices {
+		entries = append(entries, menuEntry{keymap.FilterPrompt, "Filter indices…"}, menuEntry{keymap.FilterClear, "Clear the index filter"},
+			menuEntry{keymap.ToggleInternal, "Show / hide system indices"}, menuEntry{keymap.SortGroups, "Sort: name / docs / size"})
+	}
+	return append(entries, menuEntry{keymap.OpenConsole, "REST console"}, menuEntry{keymap.ServerInfo, "Cluster status"}, menuEntry{keymap.Refresh, "Refresh"})
+}
+
+// isESNode reports whether n is a node under an elasticsearch connection.
+func isESNode(n *tree.Node) bool {
+	switch n.Kind {
+	case tree.KindESSection, tree.KindIndexFolder, tree.KindESIndex, tree.KindESAlias, tree.KindDataStream:
+		return true
+	}
+	return false
 }
 
 // isKafkaNode reports whether n is a node under a kafka connection.

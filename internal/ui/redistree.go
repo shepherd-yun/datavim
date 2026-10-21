@@ -231,8 +231,8 @@ func isRedis(b Backend, conn string) bool {
 	return ok && cfg.Driver == "redis"
 }
 
-// refuseRedis is the guard of the SQL-only actions: on a redis or kafka
-// connection it says so and reports true.
+// refuseRedis is the guard of the SQL-only actions: on a redis, kafka or
+// elasticsearch connection it says so and reports true.
 func (m *Model) refuseRedis(conn string) bool {
 	switch {
 	case conn == "":
@@ -241,6 +241,8 @@ func (m *Model) refuseRedis(conn string) bool {
 		m.setStatus(errRedisUnsupported.Error(), true)
 	case isKafka(m.backend, conn):
 		m.setStatus(errKafkaUnsupported.Error(), true)
+	case isES(m.backend, conn):
+		m.setStatus(errESUnsupported.Error(), true)
 	default:
 		return false
 	}

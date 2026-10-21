@@ -116,6 +116,7 @@ type Model struct {
 	revealing   *revealTarget
 	scans       map[redisDBKey]*keyScan // the key scans behind the redis db nodes
 	kafkaTrees  map[string]*kafkaTree   // what the kafka connections' trees are built from
+	esTrees     map[string]*esTree      // what the elasticsearch connections' trees are built from
 	// topicFormConn is the connection the open new-topic form adds to.
 	topicFormConn string
 	// aclFormTab is the ACL tab the open new-ACL form adds to.
@@ -165,6 +166,7 @@ func New(b Backend, st Store, settings config.Settings) *Model {
 		timings:       defaultTimings,
 		scans:         map[redisDBKey]*keyScan{},
 		kafkaTrees:    map[string]*kafkaTree{},
+		esTrees:       map[string]*esTree{},
 	}
 }
 
@@ -234,6 +236,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.scanned(msg)
 	case kafkaTreeMsg:
 		return m, m.kafkaTreeLoaded(msg)
+	case esTreeMsg:
+		return m, m.esTreeLoaded(msg)
+	case esFilterTreeMsg:
+		m.esTreeFiltered(msg)
 	case kafkaLagMsg:
 		return m, m.kafkaLagged(msg)
 	case kafkaFilterMsg:
@@ -718,6 +724,11 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 			return cmd
 		}
 	}
+	if n := t.Selected(); n != nil && isES(m.backend, n.Conn) {
+		if cmd, ok := m.esTreeAction(a, n); ok {
+			return cmd
+		}
+	}
 	if sqlOnlyTreeAction(a, t.Selected()) {
 		if n := t.Selected(); n != nil && m.refuseRedis(n.Conn) {
 			return nil
@@ -820,7 +831,7 @@ func sqlOnlyTreeAction(a keymap.Action, n *tree.Node) bool {
 	if n != nil && a == keymap.DeleteNode && (n.Kind == tree.KindRedisKey || n.Kind == tree.KindRedisDB || n.Kind == tree.KindKeyFolder) {
 		return false
 	}
-	if a == keymap.NodeActions && n != nil && (n.Kind == tree.KindConn || isRedisNode(n) || isKafkaNode(n)) {
+	if a == keymap.NodeActions && n != nil && (n.Kind == tree.KindConn || isRedisNode(n) || isKafkaNode(n) || isESNode(n)) {
 		return false // the menu lists only what the node can do
 	}
 	switch a {
@@ -1669,6 +1680,7 @@ func (m *Model) connUpdated(msg connUpdatedMsg) tea.Cmd {
 	c := msg.conn
 	m.catalogs.Forget(msg.old)
 	delete(m.kafkaTrees, msg.old)
+	delete(m.esTrees, msg.old)
 	cmd := m.closeTabsOf(msg.old)
 	m.tree.ReplaceRoot(msg.old, connNode(c))
 	m.setFocus(focusTree)
@@ -1687,6 +1699,7 @@ func (m *Model) connRemoved(msg connRemovedMsg) tea.Cmd {
 	}
 	m.catalogs.Forget(msg.name)
 	delete(m.kafkaTrees, msg.name)
+	delete(m.esTrees, msg.name)
 	cmd := m.closeTabsOf(msg.name)
 	m.tree.RemoveRoot(msg.name)
 	m.setFocus(focusTree)

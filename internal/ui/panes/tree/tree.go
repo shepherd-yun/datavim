@@ -39,6 +39,15 @@ const (
 	KindKafkaACLs      // the ACLs line of a kafka connection: a leaf that opens the ACL tab
 	KindConnectCluster // a Kafka Connect cluster; Key is its name
 	KindConnector      // Key is "cluster\x00name"
+	// The nodes under an elasticsearch connection: its sections
+	// (Section "indices", "aliases" or "streams"), rollover groups of
+	// indices (Key is the shared prefix) and the indices, aliases and data
+	// streams, each with its name in Key.
+	KindESSection
+	KindIndexFolder
+	KindESIndex
+	KindESAlias
+	KindDataStream
 )
 
 // Group tells the groups under a table apart.
@@ -79,7 +88,8 @@ type Node struct {
 func (n *Node) Parent() *Node { return n.parent }
 func (n *Node) Expandable() bool {
 	switch n.Kind {
-	case KindGroup, KindRedisDB, KindKeyFolder, KindKafkaSection, KindTopicFolder, KindSchemaSubject, KindConnectCluster:
+	case KindGroup, KindRedisDB, KindKeyFolder, KindKafkaSection, KindTopicFolder, KindSchemaSubject, KindConnectCluster,
+		KindESSection, KindIndexFolder:
 		return true
 	}
 	return n.Kind <= KindView
@@ -506,7 +516,7 @@ func icon(n *Node, style IconStyle) string {
 	case KindView:
 		return arrow + " ◦"
 	case KindColumn, KindKey, KindForeignKey, KindIndex, KindTopic, KindKafkaGroup, KindBroker, KindSchemaVersion,
-		KindKafkaACLs, KindConnector:
+		KindKafkaACLs, KindConnector, KindESIndex, KindESAlias, KindDataStream:
 		return "·"
 	}
 	return arrow
@@ -525,6 +535,8 @@ func nerdGlyph(n *Node) string {
 			return "\ue76d" // dev-redis
 		case "kafka":
 			return "\ue72e" // dev-apachekafka
+		case "elasticsearch":
+			return "\U000f0349" // md-magnify
 		}
 		return "\U000f01bc" // md-database
 	case KindDatabase, KindRedisDB:
@@ -559,7 +571,21 @@ func nerdGlyph(n *Node) string {
 		return "\U000f0341" // md-lock
 	case KindConnectCluster, KindConnector:
 		return "\U000f0337" // md-lan_connect
-	case KindGroup, KindKeyFolder, KindTopicFolder:
+	case KindESSection:
+		switch n.Section {
+		case "aliases":
+			return "\U000f0337" // md-lan_connect
+		case "streams":
+			return "\U000f0369" // md-message_text
+		}
+		return "\U000f04eb" // md-table
+	case KindESIndex:
+		return "\U000f04eb" // md-table
+	case KindESAlias:
+		return "\U000f0337" // md-lan_connect
+	case KindDataStream:
+		return "\U000f0369" // md-message_text
+	case KindGroup, KindKeyFolder, KindTopicFolder, KindIndexFolder:
 		if n.Expanded {
 			return "\U000f0770" // md-folder_open
 		}
