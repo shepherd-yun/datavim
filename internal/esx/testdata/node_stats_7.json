@@ -1,0 +1,10 @@
+{
+  "name":"es-1","roles":["data","ingest","master"],
+  "jvm":{"uptime_in_millis":90061000,"mem":{"heap_used_in_bytes":1288490188,"heap_max_in_bytes":2147483648,"heap_used_percent":60},
+    "gc":{"collectors":{"young":{"collection_count":120},"old":{"collection_count":2}}}},
+  "os":{"cpu":{"percent":7,"load_average":{"1m":0.52,"5m":0.4,"15m":0.3}},"mem":{"total_in_bytes":8589934592,"used_in_bytes":4294967296}},
+  "fs":{"total":{"total_in_bytes":107374182400,"available_in_bytes":64424509440}},
+  "process":{"open_file_descriptors":512},
+  "indices":{"docs":{"count":8812301},"store":{"size_in_bytes":4400000000},"search":{"query_total":1234},"indexing":{"index_total":5678}},
+  "thread_pool":{"search":{"rejected":0},"write":{"rejected":3}}
+}

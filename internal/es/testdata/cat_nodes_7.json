@@ -1,0 +1,4 @@
+[
+  {"id":"n1aaaa","name":"es-1","ip":"10.0.0.1","node.role":"dilmrt","master":"*","heap.percent":"62","ram.percent":"91","cpu":"7","load_1m":"0.52","disk.used_percent":"41.27","disk.used":"44300000000","disk.total":"107300000000","version":"7.10.2"},
+  {"id":"n2bbbb","name":"es-2","ip":"10.0.0.2","node.role":"dilrt","master":"-","heap.percent":"90","ram.percent":"80","cpu":"12","load_1m":null,"disk.used_percent":null,"disk.used":null,"disk.total":null,"version":"7.10.2"}
+]

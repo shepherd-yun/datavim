@@ -1,0 +1,5 @@
+{
+  "persistent":{"cluster.routing.allocation.awareness.attributes":["zone"],"cluster.max_shards_per_node":"2000"},
+  "transient":{"cluster.routing.allocation.enable":"primaries"},
+  "defaults":{"cluster.routing.allocation.disk.watermark.high":"90%","action.auto_create_index":"true"}
+}

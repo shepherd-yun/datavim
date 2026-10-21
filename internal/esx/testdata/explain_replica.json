@@ -1,0 +1,12 @@
+{
+  "index":"orders","shard":0,"primary":false,"current_state":"unassigned",
+  "unassigned_info":{"reason":"INDEX_CREATED","at":"2026-10-22T08:00:00.000Z","last_allocation_status":"no_attempt"},
+  "can_allocate":"no",
+  "allocate_explanation":"cannot allocate because allocation is not permitted to any of the nodes",
+  "node_allocation_decisions":[
+    {"node_id":"n1aaaa","node_name":"es-1","node_decision":"no","deciders":[
+      {"decider":"same_shard","decision":"NO","explanation":"a copy of this shard is already allocated to this node"},
+      {"decider":"disk_threshold","decision":"YES","explanation":"enough disk"}
+    ]}
+  ]
+}

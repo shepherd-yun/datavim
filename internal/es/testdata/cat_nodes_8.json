@@ -1,0 +1,4 @@
+[
+  {"id":"n1aaaa","name":"es-1","ip":"10.0.0.1","node.role":"cdfhilmrstw","master":"*","heap.percent":"62","ram.percent":"91","cpu":"7","load_1m":"0.52","disk.used_percent":"41.27","disk.used":"44300000000","disk.total":"107300000000","version":"8.15.0"},
+  {"id":"n2bbbb","name":"es-2","ip":"10.0.0.2","node.role":"cdfhilmrstw","master":"-","heap.percent":"90","ram.percent":"80","cpu":"12","load_1m":"1.20","disk.used_percent":"88.00","disk.used":"88000000000","disk.total":"100000000000","version":"8.15.0"}
+]

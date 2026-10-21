@@ -1,0 +1,4 @@
+[
+  {"shards":"12","disk.indices":"5000000","disk.used":"44300000000","disk.avail":"63000000000","disk.total":"107300000000","disk.percent":"41","host":"10.0.0.1","ip":"10.0.0.1","node":"es-1"},
+  {"shards":"3","disk.indices":null,"disk.used":null,"disk.avail":null,"disk.total":null,"disk.percent":null,"host":null,"ip":null,"node":"UNASSIGNED"}
+]

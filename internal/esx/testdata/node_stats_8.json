@@ -1,0 +1,8 @@
+{
+  "name":"es-2","roles":["data_hot","master"],
+  "jvm":{"uptime_in_millis":3600000,"mem":{"heap_used_in_bytes":1288490188,"heap_max_in_bytes":2147483648,"heap_used_percent":60},
+    "gc":{"collectors":{"young":{"collection_count":9},"old":{"collection_count":0}}}},
+  "os":{"cpu":{"percent":3},"mem":{"total_in_bytes":8589934592,"used_in_bytes":4294967296}},
+  "fs":{"total":{"total_in_bytes":107374182400,"available_in_bytes":64424509440}},
+  "indices":{"docs":{"count":10},"store":{"size_in_bytes":1000}}
+}

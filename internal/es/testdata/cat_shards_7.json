@@ -1,0 +1,5 @@
+[
+  {"index":"orders","shard":"0","prirep":"p","state":"STARTED","docs":"1200","store":"340000","node":"es-1","unassigned.reason":null},
+  {"index":"orders","shard":"0","prirep":"r","state":"UNASSIGNED","docs":null,"store":null,"node":null,"unassigned.reason":"INDEX_CREATED"},
+  {"index":"logs-2026.10","shard":"1","prirep":"p","state":"RELOCATING","docs":"5","store":"900","node":"es-1 -> 10.0.0.2 n2bbbb es-2","unassigned.reason":null}
+]
