@@ -220,28 +220,28 @@ func resetRefusal(t GroupType) error {
 	return fmt.Errorf("can't reset offsets of a %s group", t)
 }
 
-// ResetOffsets commits commits for group, only when the group is Empty and
-// every partition's committed offset is still what the preview showed.
-// Only the partitions in commits are touched.
-func (c *client) ResetOffsets(ctx context.Context, group string, commits []OffsetCommit) ([]CommitResult, error) {
+// groupEmpty reads group's state again, here and not from the UI's old
+// copy: refusal's error for a group type that cannot be changed, and
+// ErrGroupNotEmpty unless the group is Empty (or Dead).
+func (c *client) groupEmpty(ctx context.Context, group string, refusal func(GroupType) error) error {
 	what := "group " + group
 	g, err := c.findGroup(ctx, group)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	if err := resetRefusal(g.Type); err != nil {
-		return nil, err
+	if err := refusal(g.Type); err != nil {
+		return err
 	}
 	state := g.State
 	switch g.Type {
 	case GroupClassic:
 		ds, err := c.adm.DescribeGroups(ctx, group)
 		if err != nil {
-			return nil, wrap(ctx, err, what)
+			return wrap(ctx, err, what)
 		}
 		dg := ds[group]
 		if dg.Err != nil {
-			return nil, wrap(ctx, dg.Err, what)
+			return wrap(ctx, dg.Err, what)
 		}
 		state = normalizeState(dg.State)
 		if len(dg.Members) > 0 {
@@ -250,14 +250,25 @@ func (c *client) ResetOffsets(ctx context.Context, group string, commits []Offse
 	case GroupConsumer:
 		s, _, members, err := c.describeConsumerGroup(ctx, group)
 		if err != nil {
-			return nil, wrap(ctx, err, what)
+			return wrap(ctx, err, what)
 		}
 		if state = s; len(members) > 0 {
 			state = "Stable"
 		}
 	}
 	if state != "Empty" && state != "Dead" {
-		return nil, ErrGroupNotEmpty
+		return ErrGroupNotEmpty
+	}
+	return nil
+}
+
+// ResetOffsets commits commits for group, only when the group is Empty and
+// every partition's committed offset is still what the preview showed.
+// Only the partitions in commits are touched.
+func (c *client) ResetOffsets(ctx context.Context, group string, commits []OffsetCommit) ([]CommitResult, error) {
+	what := "group " + group
+	if err := c.groupEmpty(ctx, group, resetRefusal); err != nil {
+		return nil, err
 	}
 	fetched, err := c.adm.FetchOffsets(ctx, group)
 	if err != nil {

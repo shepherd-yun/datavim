@@ -226,3 +226,43 @@ func TestRangeReusesBoundsClient(t *testing.T) {
 		}
 	}
 }
+
+func TestReaderReadCommitted(t *testing.T) {
+	c := newCluster(t)
+	tx, err := kgo.NewClient(kgo.SeedBrokers(c.ListenAddrs()...), kgo.TransactionalID("tx"),
+		kgo.RecordPartitioner(kgo.ManualPartitioner()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Close()
+	write := func(n int, end kgo.TransactionEndTry) {
+		if err := tx.BeginTransaction(); err != nil {
+			t.Fatal(err)
+		}
+		for i := range n {
+			if err := tx.ProduceSync(ctx(t), &kgo.Record{Topic: "orders", Value: []byte{byte(i)}}).FirstErr(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := tx.EndTransaction(ctx(t), end); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(3, kgo.TryAbort)
+	write(2, kgo.TryCommit)
+	all := map[int32]Range{0: {0, 100}}
+	recs, err := openReader(t, c, ReaderConfig{}).Range(ctx(t), "orders", all)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recs) != 2 {
+		t.Fatalf("read_committed: %d records %v", len(recs), offsets(recs))
+	}
+	recs, err = openReader(t, c, ReaderConfig{ReadUncommitted: true}).Range(ctx(t), "orders", all)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(recs) != 5 {
+		t.Fatalf("read_uncommitted: %d records %v", len(recs), offsets(recs))
+	}
+}

@@ -23,7 +23,7 @@ var ErrReadOnly = errors.New("read-only connection · :set noreadonly allows cha
 // gains a method that is in neither this list nor the tests' read list.
 var kafkaWriteMethods = []string{
 	"Produce", "CreateTopic", "DeleteTopic", "ResetOffsets",
-	"AlterTopicConfigs", "AddPartitions",
+	"AlterTopicConfigs", "AddPartitions", "DeleteRecords", "DeleteGroup", "DeleteGroupOffsets",
 }
 
 // guardedKafka is the one place Kafka writes are checked against the
@@ -86,6 +86,27 @@ func (g *guardedKafka) AddPartitions(ctx context.Context, topic string, total in
 		return err
 	}
 	return g.Client.AddPartitions(ctx, topic, total)
+}
+
+func (g *guardedKafka) DeleteRecords(ctx context.Context, topic string, before map[int32]int64) ([]kafka.DeleteResult, error) {
+	if err := g.check(); err != nil {
+		return nil, err
+	}
+	return g.Client.DeleteRecords(ctx, topic, before)
+}
+
+func (g *guardedKafka) DeleteGroup(ctx context.Context, group string) error {
+	if err := g.check(); err != nil {
+		return err
+	}
+	return g.Client.DeleteGroup(ctx, group)
+}
+
+func (g *guardedKafka) DeleteGroupOffsets(ctx context.Context, group, topic string) ([]kafka.CommitResult, error) {
+	if err := g.check(); err != nil {
+		return nil, err
+	}
+	return g.Client.DeleteGroupOffsets(ctx, group, topic)
 }
 
 // Kafka returns the connection's client, opening it on first use. Every

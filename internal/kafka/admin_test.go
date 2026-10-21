@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/twmb/franz-go/pkg/kadm"
+	"github.com/twmb/franz-go/pkg/kfake"
 	"github.com/twmb/franz-go/pkg/kgo"
 )
 
@@ -102,5 +103,87 @@ func TestAddPartitions(t *testing.T) {
 	err = cl.AddPartitions(ctx(t), "orders", 4)
 	if err == nil || !strings.Contains(err.Error(), "can only grow (orders has 5)") {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestDeleteRecords(t *testing.T) {
+	c := newCluster(t)
+	fill(t, c, "orders", 1, 10)
+	cl := open(t, c)
+	res, err := cl.DeleteRecords(ctx(t), "orders", map[int32]int64{0: 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res) != 1 || res[0].Partition != 0 || res[0].Start != 4 || res[0].Err != nil {
+		t.Fatalf("results = %+v", res)
+	}
+	d, err := cl.TopicDetail(ctx(t), "orders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Parts[0].Start != 4 {
+		t.Fatalf("p0 start = %d", d.Parts[0].Start)
+	}
+	_, err = cl.DeleteRecords(ctx(t), "orders", map[int32]int64{0: 20})
+	var oor ErrOutOfRange
+	if !errors.As(err, &oor) || err.Error() != "p0 has offsets 4 to 10 only" {
+		t.Fatalf("err = %v", err)
+	}
+	if d, _ := cl.TopicDetail(ctx(t), "orders"); d.Parts[0].Start != 4 {
+		t.Fatalf("an out-of-range delete was sent: start %d", d.Parts[0].Start)
+	}
+}
+
+func TestDeleteGroupNotEmpty(t *testing.T) {
+	c := newCluster(t)
+	fill(t, c, "orders", 3, 2)
+	member := consume(t, c, "billing", "orders")
+	cl := open(t, c)
+	if err := cl.DeleteGroup(ctx(t), "billing"); !errors.Is(err, ErrGroupNotEmpty) {
+		t.Fatalf("err = %v, want ErrGroupNotEmpty", err)
+	}
+	member.Close()
+	if err := cl.DeleteGroup(ctx(t), "billing"); err != nil {
+		t.Fatal(err)
+	}
+	gs, err := cl.Groups(ctx(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range gs {
+		if g.Name == "billing" {
+			t.Fatalf("billing is still there: %+v", gs)
+		}
+	}
+}
+
+func TestDeleteGroupOffsets(t *testing.T) {
+	c := newCluster(t, kfake.SeedTopics(1, "refunds"))
+	fill(t, c, "orders", 3, 2)
+	fill(t, c, "refunds", 1, 2)
+	commit(t, c, "billing",
+		kadm.Offset{Topic: "orders", Partition: 0, At: 1, LeaderEpoch: -1},
+		kadm.Offset{Topic: "refunds", Partition: 0, At: 1, LeaderEpoch: -1})
+	cl := open(t, c)
+	res, err := cl.DeleteGroupOffsets(ctx(t), "billing", "orders")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range res {
+		if r.Err != nil {
+			t.Fatalf("result %+v", r)
+		}
+	}
+	d, err := cl.GroupDetail(ctx(t), "billing")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, l := range d.Lag {
+		if l.Topic != "refunds" {
+			t.Fatalf("lag left on %s: %+v", l.Topic, d.Lag)
+		}
+	}
+	if len(d.Lag) == 0 {
+		t.Fatal("refunds' offsets went too")
 	}
 }

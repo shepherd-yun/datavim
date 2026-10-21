@@ -18,6 +18,9 @@ type ReaderConfig struct {
 	// MaxValueBytes cuts longer values to this many bytes and sets
 	// Record.Truncated; 0 keeps them whole.
 	MaxValueBytes int
+	// ReadUncommitted also shows the messages of aborted and open
+	// transactions; false reads read_committed.
+	ReadUncommitted bool
 }
 
 // ErrOutOfRange is a read of offsets the partition does not have.
@@ -88,6 +91,7 @@ func (r *reader) consumer(topic string, from map[int32]int64) (*kgo.Client, erro
 		kgo.ConsumePartitions(map[string]map[int32]kgo.Offset{topic: ps}),
 		kgo.ConsumeResetOffset(kgo.NoResetOffset()),
 		kgo.KeepControlRecords(),
+		kgo.FetchIsolationLevel(r.isolation()),
 	)
 	return kgo.NewClient(opts...)
 }
@@ -119,7 +123,7 @@ func (r *reader) Range(ctx context.Context, topic string, ranges map[int32]Range
 			return nil, err
 		}
 	}
-	starts, ends, err := partitionBounds(ctx, kadm.NewClient(r.bounds), topic)
+	starts, ends, err := partitionBounds(ctx, kadm.NewClient(r.bounds), topic, !r.rc.ReadUncommitted)
 	if err != nil {
 		return nil, wrap(ctx, err, what)
 	}
@@ -199,12 +203,26 @@ func fetchErr(fs kgo.Fetches, topic string) error {
 	return nil
 }
 
-func partitionBounds(ctx context.Context, adm *kadm.Client, topic string) (starts, ends map[int32]int64, err error) {
+func (r *reader) isolation() kgo.IsolationLevel {
+	if r.rc.ReadUncommitted {
+		return kgo.ReadUncommitted()
+	}
+	return kgo.ReadCommitted()
+}
+
+// partitionBounds is each partition's start and end offset; committed
+// ends at the last stable offset, where a read_committed fetch stops
+// while a transaction is open.
+func partitionBounds(ctx context.Context, adm *kadm.Client, topic string, committed bool) (starts, ends map[int32]int64, err error) {
 	s, err := adm.ListStartOffsets(ctx, topic)
 	if err != nil {
 		return nil, nil, err
 	}
-	e, err := adm.ListEndOffsets(ctx, topic)
+	list := adm.ListEndOffsets
+	if committed {
+		list = adm.ListCommittedOffsets
+	}
+	e, err := list(ctx, topic)
 	if err != nil {
 		return nil, nil, err
 	}

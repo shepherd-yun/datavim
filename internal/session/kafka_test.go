@@ -64,6 +64,21 @@ func (c *fakeKafkaClient) AddPartitions(context.Context, string, int) error {
 	return nil
 }
 
+func (c *fakeKafkaClient) DeleteRecords(context.Context, string, map[int32]int64) ([]kafka.DeleteResult, error) {
+	c.record("DeleteRecords")
+	return nil, nil
+}
+
+func (c *fakeKafkaClient) DeleteGroup(context.Context, string) error {
+	c.record("DeleteGroup")
+	return nil
+}
+
+func (c *fakeKafkaClient) DeleteGroupOffsets(context.Context, string, string) ([]kafka.CommitResult, error) {
+	c.record("DeleteGroupOffsets")
+	return nil, nil
+}
+
 func (c *fakeKafkaClient) Close() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -171,6 +186,14 @@ func callWrite(c kafka.Client, name string) error {
 		return c.AlterTopicConfigs(ctx, "t", nil)
 	case "AddPartitions":
 		return c.AddPartitions(ctx, "t", 2)
+	case "DeleteRecords":
+		_, err := c.DeleteRecords(ctx, "t", nil)
+		return err
+	case "DeleteGroup":
+		return c.DeleteGroup(ctx, "g")
+	case "DeleteGroupOffsets":
+		_, err := c.DeleteGroupOffsets(ctx, "g", "t")
+		return err
 	}
 	panic("no call for " + name)
 }

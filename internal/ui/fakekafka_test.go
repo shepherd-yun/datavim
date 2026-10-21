@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -56,6 +57,7 @@ type fakeKafka struct {
 	produceErr  error
 	resetResult func([]kafka.OffsetCommit) ([]kafka.CommitResult, error)
 	alters      [][]kafka.ConfigChange // AlterTopicConfigs calls
+	deletes     []map[int32]int64      // DeleteRecords calls
 }
 
 func newFakeKafka() *fakeKafka {
@@ -418,6 +420,68 @@ func (c *fakeKafkaClient) AddPartitions(_ context.Context, topic string, total i
 	defer k.mu.Unlock()
 	k.call(fmt.Sprintf("AddPartitions %s %d", topic, total))
 	return k.errs["AddPartitions"]
+}
+
+func (c *fakeKafkaClient) DeleteRecords(_ context.Context, topic string, before map[int32]int64) ([]kafka.DeleteResult, error) {
+	if c.ro {
+		return nil, session.ErrReadOnly
+	}
+	k := c.k
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.call("DeleteRecords " + topic)
+	k.deletes = append(k.deletes, maps.Clone(before))
+	if err := k.errs["DeleteRecords"]; err != nil {
+		return nil, err
+	}
+	var out []kafka.DeleteResult
+	for p, o := range before {
+		if t := k.topics[topic]; t != nil && int(p) < len(t.detail.Parts) {
+			t.detail.Parts[p].Start = o
+		}
+		out = append(out, kafka.DeleteResult{Partition: p, Start: o})
+	}
+	slices.SortFunc(out, func(a, b kafka.DeleteResult) int { return int(a.Partition - b.Partition) })
+	return out, nil
+}
+
+func (c *fakeKafkaClient) DeleteGroup(_ context.Context, group string) error {
+	if c.ro {
+		return session.ErrReadOnly
+	}
+	k := c.k
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.call("DeleteGroup " + group)
+	if err := k.errs["DeleteGroup"]; err != nil {
+		return err
+	}
+	delete(k.groups, group)
+	return nil
+}
+
+func (c *fakeKafkaClient) DeleteGroupOffsets(_ context.Context, group, topic string) ([]kafka.CommitResult, error) {
+	if c.ro {
+		return nil, session.ErrReadOnly
+	}
+	k := c.k
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	k.call("DeleteGroupOffsets " + group + " " + topic)
+	if err := k.errs["DeleteGroupOffsets"]; err != nil {
+		return nil, err
+	}
+	d := k.groups[group]
+	var out []kafka.CommitResult
+	d.Lag = slices.DeleteFunc(d.Lag, func(l kafka.PartitionLag) bool {
+		if l.Topic == topic {
+			out = append(out, kafka.CommitResult{TP: l.TP, Offset: -1})
+			return true
+		}
+		return false
+	})
+	k.groups[group] = d
+	return out, nil
 }
 
 func (c *fakeKafkaClient) Close() {}

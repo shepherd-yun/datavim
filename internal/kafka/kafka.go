@@ -104,6 +104,14 @@ type Client interface {
 	AlterTopicConfigs(ctx context.Context, topic string, changes []ConfigChange) error
 	// AddPartitions grows topic to total partitions; fewer than now is an error.
 	AddPartitions(ctx context.Context, topic string, total int) error
+	// DeleteRecords deletes each partition's messages before before[p];
+	// offsets outside [start, end] are an error before any request.
+	DeleteRecords(ctx context.Context, topic string, before map[int32]int64) ([]DeleteResult, error)
+	// DeleteGroup deletes an Empty group (ErrGroupNotEmpty otherwise).
+	DeleteGroup(ctx context.Context, group string) error
+	// DeleteGroupOffsets deletes the group's committed offsets on topic;
+	// the group must be Empty or no longer subscribe to topic.
+	DeleteGroupOffsets(ctx context.Context, group, topic string) ([]CommitResult, error)
 
 	Close()
 }
