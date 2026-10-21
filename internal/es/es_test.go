@@ -18,7 +18,7 @@ func closedURL(t *testing.T) string {
 		t.Fatal(err)
 	}
 	addr := l.Addr().String()
-	l.Close()
+	_ = l.Close()
 	return "http://" + addr
 }
 
@@ -26,7 +26,7 @@ func TestDoBasicAndAPIKey(t *testing.T) {
 	var got []string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		got = append(got, r.Header.Get("Authorization")+" "+r.Header.Get("Content-Type"))
-		w.Write([]byte(`{}`))
+		_, _ = w.Write([]byte(`{}`))
 	}))
 	defer srv.Close()
 	for _, cfg := range []Config{
@@ -43,7 +43,7 @@ func TestDoBasicAndAPIKey(t *testing.T) {
 		}
 	}
 	c, _ := Open(Config{URLs: []string{srv.URL}})
-	c.Do(context.Background(), Request{Method: "POST", Path: "_bulk", Body: []byte("{}\n"), NDJSON: true})
+	_, _ = c.Do(context.Background(), Request{Method: "POST", Path: "_bulk", Body: []byte("{}\n"), NDJSON: true})
 	want := []string{" application/json", "Basic ZWxhc3RpYzpwdw== application/json", "ApiKey k1 application/json", " application/x-ndjson"}
 	if strings.Join(got, "|") != strings.Join(want, "|") {
 		t.Errorf("got %q", got)
@@ -52,7 +52,7 @@ func TestDoBasicAndAPIKey(t *testing.T) {
 
 func TestDoPathPrefixAndQuery(t *testing.T) {
 	var got string
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		got = r.Method + " " + r.URL.RequestURI()
 	}))
 	defer srv.Close()
@@ -68,7 +68,7 @@ func TestDoPathPrefixAndQuery(t *testing.T) {
 
 func TestDoFailover(t *testing.T) {
 	var hits atomic.Int32
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1) }))
+	srv := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { hits.Add(1) }))
 	defer srv.Close()
 	c, _ := Open(Config{URLs: []string{closedURL(t), srv.URL}})
 	for range 2 {
@@ -83,9 +83,9 @@ func TestDoFailover(t *testing.T) {
 
 func TestDoNoRetryOnHTTPError(t *testing.T) {
 	var second atomic.Int32
-	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(500) }))
+	bad := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(500) }))
 	defer bad.Close()
-	good := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { second.Add(1) }))
+	good := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { second.Add(1) }))
 	defer good.Close()
 	c, _ := Open(Config{URLs: []string{bad.URL, good.URL}})
 	resp, err := c.Do(context.Background(), Request{Method: "GET", Path: "/"})
@@ -95,8 +95,8 @@ func TestDoNoRetryOnHTTPError(t *testing.T) {
 }
 
 func TestDoBodyLimit(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(strings.Repeat("x", 11)))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(strings.Repeat("x", 11)))
 	}))
 	defer srv.Close()
 	c, _ := Open(Config{URLs: []string{srv.URL}, MaxBody: 10})
@@ -111,7 +111,7 @@ func TestDoBodyLimit(t *testing.T) {
 }
 
 func TestDial(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`ok`)) }))
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(`ok`)) }))
 	defer srv.Close()
 	var dialed []string
 	c, _ := Open(Config{
@@ -171,13 +171,19 @@ func TestGetInfo(t *testing.T) {
 		want Info
 		os   bool
 	}{
-		{`{"name":"n1","cluster_name":"c","cluster_uuid":"u","version":{"number":"7.10.2","build_flavor":"default"},"tagline":"You Know, for Search"}`,
-			Info{Name: "n1", ClusterName: "c", UUID: "u", Version: "7.10.2", Distribution: "elasticsearch", Major: 7, Minor: 10}, false},
-		{`{"name":"n1","cluster_name":"c","cluster_uuid":"u","version":{"distribution":"opensearch","number":"2.11.0"}}`,
-			Info{Name: "n1", ClusterName: "c", UUID: "u", Version: "2.11.0", Distribution: "opensearch", Major: 2, Minor: 11}, true},
+		{
+			`{"name":"n1","cluster_name":"c","cluster_uuid":"u","version":{"number":"7.10.2","build_flavor":"default"},"tagline":"You Know, for Search"}`,
+			Info{Name: "n1", ClusterName: "c", UUID: "u", Version: "7.10.2", Distribution: "elasticsearch", Major: 7, Minor: 10},
+			false,
+		},
+		{
+			`{"name":"n1","cluster_name":"c","cluster_uuid":"u","version":{"distribution":"opensearch","number":"2.11.0"}}`,
+			Info{Name: "n1", ClusterName: "c", UUID: "u", Version: "2.11.0", Distribution: "opensearch", Major: 2, Minor: 11},
+			true,
+		},
 	}
 	for _, tc := range cases {
-		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(tc.body)) }))
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { _, _ = w.Write([]byte(tc.body)) }))
 		c, _ := Open(Config{URLs: []string{srv.URL}})
 		got, err := GetInfo(context.Background(), c)
 		srv.Close()

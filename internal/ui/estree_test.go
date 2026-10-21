@@ -27,8 +27,10 @@ func newESModel(t *testing.T, cfg config.Connection) (*Model, *fakeBackend, *fak
 
 // twelveIndices fills f with the indices of the tree tests.
 func twelveIndices(f *fakeES) {
-	for i, n := range []string{"orders", "users", "logs-app-2026.10.19", "logs-app-2026.10.21", "logs-app-2026.10.20",
-		".kibana_1", "products", "audit", "metrics", "carts", "events", "zeta"} {
+	for i, n := range []string{
+		"orders", "users", "logs-app-2026.10.19", "logs-app-2026.10.21", "logs-app-2026.10.20",
+		".kibana_1", "products", "audit", "metrics", "carts", "events", "zeta",
+	} {
 		ix := f.addIndex(n, "", 0)
 		ix.info.Docs, ix.info.PriStoreBytes = int64(i*1000), int64((12-i)*1<<20)
 	}

@@ -1,11 +1,11 @@
 package ui
 
 import (
-	tea "charm.land/bubbletea/v2"
-
 	"strings"
 	"testing"
 	"time"
+
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/shepherd-yun/datavim/internal/config"
 	"github.com/shepherd-yun/datavim/internal/es"

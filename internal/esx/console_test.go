@@ -3,6 +3,7 @@ package esx
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -93,11 +94,7 @@ func TestParseConsoleErrors(t *testing.T) {
 	}
 }
 
-func asParseError(err error, pe **ParseError) bool {
-	p, ok := err.(*ParseError)
-	*pe = p
-	return ok
-}
+func asParseError(err error, pe **ParseError) bool { return errors.As(err, pe) }
 
 func TestRequestAt(t *testing.T) {
 	text := "# top\nGET a/_search\n{\n  \"size\": 1\n}\n\nGET b\n"

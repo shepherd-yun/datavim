@@ -559,7 +559,7 @@ func (t *esIndexTab) statsResult() *db.ResultSet {
 	for _, i := range t.indices {
 		shards[i.Name] = fmt.Sprintf("%dp / %dr", i.Primaries, i.Replicas)
 	}
-	n := func(v int64) string { return groupDigits(v) }
+	n := groupDigits
 	rows := make([][]string, len(t.stats))
 	for i, s := range t.stats {
 		rows[i] = []string{
@@ -567,8 +567,10 @@ func (t *esIndexTab) statsResult() *db.ResultSet {
 			n(s.Segments), n(s.Refreshes), n(s.Flushes), n(s.Merges), n(s.Queries), n(s.Indexed),
 		}
 	}
-	return textResult([]string{"index", "docs", "deleted", "pri size", "size", "shards", "segments",
-		"refreshes", "flushes", "merges", "queries", "indexed"}, rows)
+	return textResult([]string{
+		"index", "docs", "deleted", "pri size", "size", "shards", "segments",
+		"refreshes", "flushes", "merges", "queries", "indexed",
+	}, rows)
 }
 
 func (t *esIndexTab) sectionLine() string {

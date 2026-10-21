@@ -239,9 +239,11 @@ func (f *fakeES) answer(r es.Request) es.Response {
 		return jsonResp(map[string]any{"data_streams": ds})
 	case r.Method == "GET" && p == "_cluster/health":
 		h := f.health
-		return jsonResp(map[string]any{"status": h.Status, "number_of_nodes": h.Nodes, "number_of_data_nodes": h.DataNodes,
+		return jsonResp(map[string]any{
+			"status": h.Status, "number_of_nodes": h.Nodes, "number_of_data_nodes": h.DataNodes,
 			"active_primary_shards": h.ActivePrimary, "active_shards": h.Active, "relocating_shards": h.Relocating,
-			"initializing_shards": h.Initializing, "unassigned_shards": h.Unassigned, "number_of_pending_tasks": h.PendingTasks})
+			"initializing_shards": h.Initializing, "unassigned_shards": h.Unassigned, "number_of_pending_tasks": h.PendingTasks,
+		})
 	case r.Method == "GET" && p == "_cluster/stats":
 		var docs int64
 		for _, ix := range f.indices {
@@ -290,7 +292,7 @@ func (f *fakeES) answer(r es.Request) es.Response {
 			ID       string `json:"id"`
 			ScrollID string `json:"scroll_id"`
 		}
-		json.Unmarshal(r.Body, &b)
+		_ = json.Unmarshal(r.Body, &b)
 		delete(f.cursors, b.ID+b.ScrollID)
 		return jsonResp(map[string]bool{"succeeded": true})
 	case p == "_search" && r.Method == "POST":
@@ -298,7 +300,7 @@ func (f *fakeES) answer(r es.Request) es.Response {
 			Size int                 `json:"size"`
 			Pit  struct{ ID string } `json:"pit"`
 		}
-		json.Unmarshal(r.Body, &b)
+		_ = json.Unmarshal(r.Body, &b)
 		c := f.cursors[b.Pit.ID]
 		if c == nil {
 			return errResp(404, "search_context_missing_exception", "No search context found for id ["+b.Pit.ID+"]")
@@ -311,7 +313,7 @@ func (f *fakeES) answer(r es.Request) es.Response {
 		var b struct {
 			Size int `json:"size"`
 		}
-		json.Unmarshal(r.Body, &b)
+		_ = json.Unmarshal(r.Body, &b)
 		id := fmt.Sprintf("scroll-%d", len(f.cursors)+1)
 		c := &fakeCursor{hits: f.matching(segs[0], r.Body)}
 		f.cursors[id] = c
@@ -320,14 +322,14 @@ func (f *fakeES) answer(r es.Request) es.Response {
 		var b struct {
 			Size int `json:"size"`
 		}
-		json.Unmarshal(r.Body, &b)
+		_ = json.Unmarshal(r.Body, &b)
 		c := &fakeCursor{hits: f.matching(segs[0], r.Body)}
 		return f.page(c, b.Size, "", "_none")
 	case p == "_search/scroll" && r.Method == "POST":
 		var b struct {
 			ScrollID string `json:"scroll_id"`
 		}
-		json.Unmarshal(r.Body, &b)
+		_ = json.Unmarshal(r.Body, &b)
 		c := f.cursors[b.ScrollID]
 		if c == nil {
 			return errResp(404, "search_context_missing_exception", "No search context found")
@@ -481,7 +483,7 @@ func (f *fakeBackend) ES(_ context.Context, name string) (es.Doer, error) {
 	return nil, fmt.Errorf("connection %q is not an elasticsearch connection", name)
 }
 
-func (f *fakeBackend) ESInfo(name string) (es.Info, bool) {
+func (f *fakeBackend) ESInfo(string) (es.Info, bool) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	if f.es == nil {

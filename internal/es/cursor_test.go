@@ -34,7 +34,7 @@ func body(t *testing.T, r Request) map[string]any {
 func info(dist, version string) Info {
 	var i Info
 	i.Distribution, i.Version = dist, version
-	fmt.Sscanf(version, "%d.%d", &i.Major, &i.Minor)
+	_, _ = fmt.Sscanf(version, "%d.%d", &i.Major, &i.Minor)
 	return i
 }
 
@@ -76,7 +76,7 @@ func TestCursorPIT(t *testing.T) {
 	if b2["pit"].(map[string]any)["id"] != "pit2" || fmt.Sprint(b2["search_after"]) != "[1 1]" {
 		t.Errorf("second search = %s", reqs[2].Body)
 	}
-	c.Close(ctx)
+	_ = c.Close(ctx)
 	last := d.requests()[len(d.requests())-1]
 	if last.Method != "DELETE" || last.Path != "_pit" || body(t, last)["id"] != "pit3" {
 		t.Errorf("close = %s %s %s", last.Method, last.Path, last.Body)
@@ -91,7 +91,7 @@ func TestCursorSort(t *testing.T) {
 		return hitsPage(0, 0, 0, ""), nil
 	}}
 	c := OpenCursor(info("elasticsearch", "8.11.0"), d, SearchSpec{Target: "orders", PageSize: 10, Sort: []SortField{{Field: "@timestamp", Desc: true}, {Field: "_score"}}})
-	c.Next(ctx)
+	_, _ = c.Next(ctx)
 	b := body(t, d.requests()[1])
 	if got := fmt.Sprint(b["sort"]); got != "[map[@timestamp:map[order:desc]] map[_score:map[order:asc]] map[_shard_doc:asc]]" {
 		t.Errorf("sort = %s", got)
@@ -133,7 +133,7 @@ func TestCursorScroll710(t *testing.T) {
 	if reqs[1].Path != "_search/scroll" || body(t, reqs[1])["scroll_id"] != "s1" || body(t, reqs[1])["scroll"] != "5m" {
 		t.Errorf("second = %s %s", reqs[1].Path, reqs[1].Body)
 	}
-	c.Close(ctx)
+	_ = c.Close(ctx)
 	last := d.requests()[len(d.requests())-1]
 	if last.Method != "DELETE" || last.Path != "_search/scroll" || body(t, last)["scroll_id"] != "s2" {
 		t.Errorf("close = %s %s %s", last.Method, last.Path, last.Body)
@@ -157,7 +157,7 @@ func TestCursorExpired(t *testing.T) {
 	expired := Response{Status: 404, Body: []byte(`{"error":{"root_cause":[{"type":"search_context_missing_exception","reason":"No search context found for id [1]"}],"type":"search_phase_execution_exception","reason":"all shards failed"},"status":404}`)}
 	d := scrollDoer(hitsPage(0, 2, 5, `"_scroll_id":"s1",`), expired)
 	c := OpenCursor(info("elasticsearch", "7.10.2"), d, SearchSpec{Target: "orders", PageSize: 2})
-	c.Next(ctx)
+	_, _ = c.Next(ctx)
 	if _, err := c.Next(ctx); !errors.Is(err, ErrCursorExpired) {
 		t.Errorf("err = %v", err)
 	}
@@ -172,9 +172,9 @@ func TestCursorReadOnly(t *testing.T) {
 			return hitsPage(0, 2, 4, `"_scroll_id":"s","pit_id":"p",`), nil
 		}}
 		c := OpenCursor(v, d, SearchSpec{Target: "orders", PageSize: 2, Highlight: true})
-		c.Next(ctx)
-		c.Next(ctx)
-		c.Close(ctx)
+		_, _ = c.Next(ctx)
+		_, _ = c.Next(ctx)
+		_ = c.Close(ctx)
 		for _, r := range d.requests() {
 			if cl := esx.Classify(r.Method, r.Path, r.Body); cl.Level != esx.LevelRead {
 				t.Errorf("%s: %s %s is %v", v.Version, r.Method, r.Path, cl.Level)
@@ -211,7 +211,7 @@ func TestCursorHighlightRetry(t *testing.T) {
 func TestCursorClosesTwice(t *testing.T) {
 	d := scrollDoer(hitsPage(0, 2, 5, `"_scroll_id":"s1",`))
 	c := OpenCursor(info("elasticsearch", "7.10.2"), d, SearchSpec{Target: "orders", PageSize: 2})
-	c.Next(ctx)
+	_, _ = c.Next(ctx)
 	if err := c.Close(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -229,7 +229,7 @@ func TestCursorClosesTwice(t *testing.T) {
 	}
 	// closing a cursor that never opened sends nothing
 	d = scrollDoer()
-	OpenCursor(info("elasticsearch", "7.10.2"), d, SearchSpec{Target: "orders"}).Close(ctx)
+	_ = OpenCursor(info("elasticsearch", "7.10.2"), d, SearchSpec{Target: "orders"}).Close(ctx)
 	if len(d.requests()) != 0 {
 		t.Errorf("sent %v", d.requests())
 	}

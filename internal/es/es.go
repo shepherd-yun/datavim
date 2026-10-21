@@ -192,7 +192,7 @@ func (c *Client) do(ctx context.Context, base *url.URL, r Request) (resp Respons
 		}
 		return Response{}, &connError{host: base.Host, err: err}
 	}
-	defer hr.Body.Close()
+	defer func() { _ = hr.Body.Close() }()
 	b, err := io.ReadAll(io.LimitReader(hr.Body, c.cfg.MaxBody+1))
 	took := time.Since(t0)
 	slog.Debug("elasticsearch request", "method", req.Method, "path", "/"+path, "status", hr.StatusCode, "took", took)

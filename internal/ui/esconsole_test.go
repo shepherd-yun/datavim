@@ -195,7 +195,7 @@ func TestESConsoleUnknownIsDanger(t *testing.T) {
 
 func TestESConsoleCurl(t *testing.T) {
 	m, b, _ := newESModel(t, config.Connection{Host: "es1", User: "elastic"})
-	b.SetPassword("search", "hunter2", false)
+	_ = b.SetPassword("search", "hunter2", false)
 	clip := captureClipboard(t)
 	openESConsoleWith(t, m, "POST orders/_search\n{\"size\":1}\n", 1)
 	press(t, m, "enter", "y", "u")

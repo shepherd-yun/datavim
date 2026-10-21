@@ -124,7 +124,7 @@ func TestESReadsPassOnReadOnly(t *testing.T) {
 		t.Errorf("sent %d", f.count())
 	}
 	// :set noreadonly applies to the Doer already handed out
-	m.SetReadOnly("e", false)
+	_ = m.SetReadOnly("e", false)
 	if _, err := d.Do(context.Background(), es.Request{Method: "PUT", Path: "o/_doc/1", Body: []byte(`{}`)}); err != nil {
 		t.Errorf("after noreadonly: %v", err)
 	}
@@ -135,9 +135,9 @@ func TestESAudit(t *testing.T) {
 	var got []history.AuditEntry
 	m.Audit = func(e history.AuditEntry) { got = append(got, e) }
 	d, _ := m.ES(context.Background(), "e")
-	d.Do(context.Background(), es.Request{Method: "GET", Path: "o/_search"})
-	d.Do(context.Background(), es.Request{Method: "PUT", Path: "orders/_doc/1?refresh=wait_for", Body: []byte(`{"secret":"hunter2"}`)})
-	d.Do(context.Background(), es.Request{Method: "DELETE", Path: "logs-*"})
+	_, _ = d.Do(context.Background(), es.Request{Method: "GET", Path: "o/_search"})
+	_, _ = d.Do(context.Background(), es.Request{Method: "PUT", Path: "orders/_doc/1?refresh=wait_for", Body: []byte(`{"secret":"hunter2"}`)})
+	_, _ = d.Do(context.Background(), es.Request{Method: "DELETE", Path: "logs-*"})
 	if len(got) != 2 {
 		t.Fatalf("audit = %+v", got)
 	}
@@ -158,7 +158,7 @@ func TestESConfig(t *testing.T) {
 	if _, err := m.ES(context.Background(), "e"); !errors.Is(err, ErrPasswordRequired) {
 		t.Fatalf("no password: %v", err)
 	}
-	m.SetPassword("e", "pw", false)
+	_ = m.SetPassword("e", "pw", false)
 	if _, err := m.ES(context.Background(), "e"); err != nil {
 		t.Fatal(err)
 	}
@@ -194,7 +194,7 @@ func TestESAPIKeyPrompt(t *testing.T) {
 		t.Errorf("closed %d", f.closed)
 	}
 	f.status = 0
-	m.SetSecret("e", SecretAPIKey, "k2")
+	_ = m.SetSecret("e", SecretAPIKey, "k2")
 	if _, err := m.ES(context.Background(), "e"); err != nil {
 		t.Fatal(err)
 	}
@@ -205,7 +205,7 @@ func TestESAPIKeyPrompt(t *testing.T) {
 
 func TestESBasicRefused(t *testing.T) {
 	m, f, _ := setupES(config.Connection{User: "elastic"})
-	m.SetPassword("e", "bad", false)
+	_ = m.SetPassword("e", "bad", false)
 	f.status = 401
 	if _, err := m.ES(context.Background(), "e"); !errors.Is(err, ErrPasswordRequired) {
 		t.Fatalf("err = %v", err)
@@ -220,7 +220,7 @@ func TestESResetReopens(t *testing.T) {
 		t.Fatalf("opened %d times", len(*cfgs))
 	}
 	m.Reset("e")
-	m.ES(context.Background(), "e")
+	_, _ = m.ES(context.Background(), "e")
 	if len(*cfgs) != 2 {
 		t.Errorf("opened %d times after reset", len(*cfgs))
 	}
