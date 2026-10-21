@@ -70,7 +70,7 @@ var kinds = map[Context]map[Action][]Kind{
 	ESSnapshot:        withKinds(sqlOnlyGrid, map[Action][]Kind{RestoreSnapshot: es}),
 	ESResults:         sqlOnlyGrid,
 	ESClusterSettings: sqlOnlyGrid,
-	ESObject:        sqlOnlyGrid,
+	ESObject:          sqlOnlyGrid,
 	Grid:              {CopyDDL: sql, CopyAs("sql"): sql},
 	Results:           {CopyDDL: sql, CopyAs("sql"): sql},
 	Structure:         {CopyDDL: sql},
