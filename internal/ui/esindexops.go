@@ -258,8 +258,10 @@ func (m *Model) esTreeWrite(a keymap.Action, n *tree.Node) (tea.Cmd, bool) {
 			return nil, false
 		case tree.KindESIndex, tree.KindIndexFolder:
 			return m.askDeleteIndex(n), true
+		case tree.KindESTemplate:
+			return m.askDeleteTemplate(n), true
 		}
-		m.setStatus("only indices (and the connection) can be deleted here", true)
+		m.setStatus("only indices, templates (and the connection) can be deleted here", true)
 		return nil, true
 	}
 	return nil, false

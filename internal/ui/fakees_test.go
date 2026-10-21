@@ -37,6 +37,7 @@ type fakeES struct {
 	pending   []es.PendingTask
 	csettings map[string]map[string]any // scope → key → value
 	tasks     []es.Task
+	templates []es.Template
 }
 
 type fakeIndex struct {
@@ -346,6 +347,28 @@ func (f *fakeES) answer(r es.Request) es.Response {
 			"allocate_explanation": "cannot allocate because allocation is not permitted to any of the nodes",
 			"node_allocation_decisions": []map[string]any{{"node_name": "es-1", "deciders": []map[string]string{
 				{"decider": "same_shard", "decision": "NO", "explanation": "a copy of this shard is already allocated to this node"}}}}})
+	case r.Method == "GET" && (p == "_index_template" || p == "_template" || p == "_component_template"):
+		kind := map[string]es.TemplateKind{"_index_template": es.TemplateComposable, "_template": es.TemplateLegacy, "_component_template": es.TemplateComponent}[p]
+		var list []map[string]any
+		legacy := map[string]json.RawMessage{}
+		for _, t := range f.templates {
+			if t.Kind != kind {
+				continue
+			}
+			legacy[t.Name] = t.Body
+			key := "index_template"
+			if kind == es.TemplateComponent {
+				key = "component_template"
+			}
+			list = append(list, map[string]any{"name": t.Name, key: t.Body})
+		}
+		switch kind {
+		case es.TemplateLegacy:
+			return jsonResp(legacy)
+		case es.TemplateComponent:
+			return jsonResp(map[string]any{"component_templates": list})
+		}
+		return jsonResp(map[string]any{"index_templates": list})
 	case r.Method == "HEAD" && len(segs) == 1:
 		if len(f.resolve(p)) == 0 {
 			return es.Response{Status: 404}

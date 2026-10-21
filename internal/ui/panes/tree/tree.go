@@ -48,6 +48,7 @@ const (
 	KindESIndex
 	KindESAlias
 	KindDataStream
+	KindESTemplate // an index template; Key is "<kind>/<name>"
 )
 
 // Group tells the groups under a table apart.
@@ -516,7 +517,7 @@ func icon(n *Node, style IconStyle) string {
 	case KindView:
 		return arrow + " ◦"
 	case KindColumn, KindKey, KindForeignKey, KindIndex, KindTopic, KindKafkaGroup, KindBroker, KindSchemaVersion,
-		KindKafkaACLs, KindConnector, KindESIndex, KindESAlias, KindDataStream:
+		KindKafkaACLs, KindConnector, KindESIndex, KindESAlias, KindDataStream, KindESTemplate:
 		return "·"
 	}
 	return arrow
@@ -577,8 +578,12 @@ func nerdGlyph(n *Node) string {
 			return "\U000f0337" // md-lan_connect
 		case "streams":
 			return "\U000f0369" // md-message_text
+		case "templates":
+			return "\U000f0219" // md-file_document
 		}
 		return "\U000f04eb" // md-table
+	case KindESTemplate:
+		return "\U000f0219" // md-file_document
 	case KindESIndex:
 		return "\U000f04eb" // md-table
 	case KindESAlias:

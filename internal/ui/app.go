@@ -267,6 +267,14 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.esIndexFormed(msg)
 	case esReindexMsg:
 		return m, m.esReindex(msg)
+	case esOpenTemplateMsg:
+		return m, m.openESTemplate(msg.conn, msg.key)
+	case esTreeReloadMsg:
+		return m, m.reloadESTree(msg.conn)
+	case esTemplateDeleteMsg:
+		return m, m.esTemplateDelete(msg)
+	case esTemplateDeletedMsg:
+		return m, m.esTemplateDeleted(msg)
 	case overlay.ReindexFormMsg:
 		return m, m.esReindexFormed(msg)
 	case esReindexPlanMsg:

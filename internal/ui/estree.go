@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -23,9 +24,10 @@ import (
 
 // The sections under an elasticsearch connection.
 const (
-	esSecIndices = "indices"
-	esSecAliases = "aliases"
-	esSecStreams = "streams"
+	esSecIndices   = "indices"
+	esSecAliases   = "aliases"
+	esSecStreams   = "streams"
+	esSecTemplates = "templates"
 )
 
 var errESUnsupported = errors.New("not supported for elasticsearch")
@@ -47,6 +49,7 @@ type esTree struct {
 	indices    []es.IndexInfo
 	aliases    []es.Alias
 	streams    []es.DataStream
+	templates  []es.Template
 	errs       map[string]string // section -> why it could not load
 	showSystem bool
 	sortBy     esSort
@@ -117,14 +120,15 @@ func esSectionErr(errs map[string]string, sec string, err error) error {
 
 // esTreeMsg is the load of an elasticsearch connection's tree.
 type esTreeMsg struct {
-	node    *tree.Node
-	info    es.Info
-	health  es.Health
-	indices []es.IndexInfo
-	aliases []es.Alias
-	streams []es.DataStream
-	errs    map[string]string
-	err     error
+	node      *tree.Node
+	info      es.Info
+	health    es.Health
+	indices   []es.IndexInfo
+	aliases   []es.Alias
+	streams   []es.DataStream
+	templates []es.Template
+	errs      map[string]string
+	err       error
 }
 
 func (m esTreeMsg) failure() (string, error) { return m.node.Conn, m.err }
@@ -148,6 +152,9 @@ func loadESTree(b Backend, n *tree.Node) tea.Cmd {
 				return err
 			}
 			if msg.streams, err = es.DataStreams(ctx, d); esSectionErr(msg.errs, esSecStreams, err) != nil {
+				return err
+			}
+			if msg.templates, err = es.Templates(ctx, d); esSectionErr(msg.errs, esSecTemplates, err) != nil {
 				return err
 			}
 			return nil
@@ -185,6 +192,7 @@ func (m *Model) esTreeLoaded(msg esTreeMsg) tea.Cmd {
 		m.esTrees[n.Conn] = st
 	}
 	st.info, st.health, st.indices, st.aliases, st.streams, st.errs = msg.info, msg.health, msg.indices, msg.aliases, msg.streams, msg.errs
+	st.templates = msg.templates
 	m.buildESTree(n.Conn)
 	return nil
 }
@@ -240,6 +248,8 @@ func (m *Model) buildESTree(conn string) {
 	if len(st.streams) > 0 {
 		sections = append(sections, sec(esSecStreams, "Data Streams", len(st.streams), buildStreamNodes(conn, st.streams)))
 	}
+	templates := buildTemplateNodes(conn, st)
+	sections = append(sections, sec(esSecTemplates, "Index Templates", len(templates), templates))
 	var reopen func([]*tree.Node)
 	reopen = func(nodes []*tree.Node) {
 		for _, c := range nodes {
@@ -418,9 +428,32 @@ func buildStreamNodes(conn string, ss []es.DataStream) []*tree.Node {
 	return out
 }
 
+// buildTemplateNodes are the index templates, "." ones only while system
+// indices are shown.
+func buildTemplateNodes(conn string, st *esTree) []*tree.Node {
+	var out []*tree.Node
+	for _, t := range st.templates {
+		if strings.HasPrefix(t.Name, ".") && !st.showSystem {
+			continue
+		}
+		detail := t.Kind.String()
+		if t.Kind != es.TemplateComponent {
+			detail += " · " + strings.Join(t.Patterns, ", ") + " · p" + strconv.Itoa(t.Priority)
+		}
+		out = append(out, &tree.Node{
+			Kind: tree.KindESTemplate, Conn: conn, Section: esSecTemplates, Key: templateKey(t), Name: t.Name, Detail: detail,
+		})
+	}
+	return out
+}
+
 // openESNode opens the Index tab of an index, alias, data stream or
-// rollover group node; nil for other nodes.
+// rollover group node, or a template's tab; nil for other nodes.
 func (m *Model) openESNode(n *tree.Node) tea.Cmd {
+	if n.Kind == tree.KindESTemplate {
+		msg := esOpenTemplateMsg{conn: n.Conn, key: n.Key}
+		return func() tea.Msg { return msg }
+	}
 	msg := openIndexMsg{conn: n.Conn, target: n.Key}
 	switch n.Kind {
 	case tree.KindESIndex:
