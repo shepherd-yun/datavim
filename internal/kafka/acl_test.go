@@ -38,7 +38,7 @@ func TestDeleteACLsExact(t *testing.T) {
 	lit := aclOn("User:alice", "topic", "orders", "literal")
 	pre := aclOn("User:alice", "topic", "orders", "prefixed")
 	any := aclOn("User:*", "topic", "orders", "literal")
-	if err := cl.CreateACLs(ctx(t), []ACL{lit, pre, any}); err != nil {
+	if err := cl.CreateACLs(ctx(t), []ACL{lit, pre, wild}); err != nil {
 		t.Fatal(err)
 	}
 	deleted, err := cl.DeleteACLs(ctx(t), []ACL{lit})
@@ -52,7 +52,7 @@ func TestDeleteACLsExact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !slices.Equal(left, []ACL{any, pre}) {
+	if !slices.Equal(left, []ACL{wild, pre}) {
 		t.Fatalf("left = %+v", left)
 	}
 }

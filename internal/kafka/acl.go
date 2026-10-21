@@ -78,8 +78,10 @@ func (a ACL) toWire() (wireACL, error) {
 		field, v string
 		allowed  []string
 	}{
-		{"resource type", a.ResourceType, aclResourceTypes}, {"pattern", a.Pattern, aclPatterns},
-		{"operation", a.Operation, aclOperations}, {"permission", a.Permission, aclPermissions},
+		{"resource type", a.ResourceType, aclResourceTypes},
+		{"pattern", a.Pattern, aclPatterns},
+		{"operation", a.Operation, aclOperations},
+		{"permission", a.Permission, aclPermissions},
 	} {
 		if err := oneOf(c.field, c.v, c.allowed); err != nil {
 			return w, err
