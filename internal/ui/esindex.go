@@ -316,6 +316,22 @@ func (t *esIndexTab) Update(msg tea.Msg) tea.Cmd {
 	switch m := msg.(type) {
 	case esFilterMsg:
 		return t.docs.filtered(m.text)
+	case esCellMsg:
+		t.docs.cellEdited(m)
+	case esSubmitMsg:
+		return t.docs.send()
+	case esSubmittedMsg:
+		return t.docs.submitted(m)
+	case editFileMsg:
+		return t.editorFile(m)
+	case editDoneMsg:
+		return readEditedFile(t.id, m)
+	case editTextMsg:
+		if m.err != nil {
+			t.setStatus("editor: "+m.err.Error(), true)
+			return nil
+		}
+		t.docs.edited(m.text)
 	case esPageMsg:
 		return t.docs.paged(m)
 	case esHeadMsg:

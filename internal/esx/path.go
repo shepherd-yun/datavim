@@ -178,3 +178,23 @@ func TruncateSource(src json.RawMessage, limit int) json.RawMessage {
 	}
 	return keep.encode()
 }
+
+// RemoveKey drops a top-level key of a JSON object, keeping the order of
+// the rest.
+func RemoveKey(src json.RawMessage, key string) (json.RawMessage, error) {
+	obj, err := decodeObject(src)
+	if err != nil {
+		return nil, err
+	}
+	out := obj[:0]
+	for _, m := range obj {
+		if m.Key != key {
+			out = append(out, m)
+		}
+	}
+	var b bytes.Buffer
+	if err := json.Compact(&b, out.encode()); err != nil {
+		return nil, err
+	}
+	return b.Bytes(), nil
+}

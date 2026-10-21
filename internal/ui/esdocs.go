@@ -94,11 +94,19 @@ type esDocs struct {
 	gen      int // bumped by every reload: pages of an older one are dropped
 	limit    int
 	dropped  int // rows dropped off the top so far
+
+	changes  map[string]*esChange // staged, by docKey ("new\x00n" for new documents)
+	order    []string             // the keys of changes in staging order
+	ops      []esOp               // undo
+	creates  int                  // new documents staged so far
+	editing  string               // the document $EDITOR has open; "" a new one
+	editPath string               // that temp file
 }
 
 func newESDocs(t *esIndexTab) *esDocs {
 	d := &esDocs{tab: t, grid: grid.New(nil, t.settings.MaxColumnWidth), limit: esDocLimit}
 	d.grid.SetHighlight(d.cellWords)
+	d.grid.SetMarks(d.mark)
 	return d
 }
 
@@ -324,8 +332,9 @@ func (d *esDocs) result() *db.ResultSet {
 	}
 	for r, h := range d.hits {
 		row := make([]db.Value, len(d.cols), len(rs.Columns))
+		v := d.view(h)
 		for i, c := range d.cols {
-			row[i] = cell(h, c)
+			row[i] = cell(v, c)
 		}
 		if anyExtra {
 			row = append(row, db.Value{Text: extra[r]})
@@ -417,6 +426,23 @@ func (d *esDocs) handle(a keymap.Action) (tea.Cmd, bool) {
 			return nil, true
 		}
 		return d.reload(), true
+	case keymap.EditCell:
+		return d.editCell(), true
+	case keymap.InsertRow:
+		return d.externalEdit(true), true
+	case keymap.ExternalEdit:
+		return d.externalEdit(false), true
+	case keymap.DeleteRow:
+		d.deleteRow()
+		return nil, true
+	case keymap.UndoEdit:
+		d.undo()
+		return nil, true
+	case keymap.UndoAllEdits:
+		d.undoAll()
+		return nil, true
+	case keymap.SubmitEdits:
+		return d.submit(), true
 	case keymap.FilterPrompt:
 		return d.prompt(d.query, ""), true
 	case keymap.FilterEqual, keymap.FilterNotEqual, keymap.FilterContains, keymap.FilterGreater,

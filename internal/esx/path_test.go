@@ -72,3 +72,16 @@ func TestSetPath(t *testing.T) {
 		t.Error("set below a scalar: no error")
 	}
 }
+
+func TestRemoveKey(t *testing.T) {
+	for _, tc := range []struct{ src, want string }{
+		{`{"_id":"x","a":1,"b":{"c":2}}`, `{"a":1,"b":{"c":2}}`},
+		{`{"a":1}`, `{"a":1}`},
+		{`{"a":1,"_id":""}`, `{"a":1}`},
+	} {
+		got, err := RemoveKey([]byte(tc.src), "_id")
+		if err != nil || string(got) != tc.want {
+			t.Errorf("%s: %s %v", tc.src, got, err)
+		}
+	}
+}
