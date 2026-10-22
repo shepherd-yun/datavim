@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.3.0] - 2026-10-22
+
 ### Added
 - The connection form shows the `params` it has no field for (such as `broker_map` or `sslmode`) as
   rows you can edit; an empty value removes the key, and `Add param` takes `key=value`.
@@ -655,7 +657,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.2.1...HEAD
+[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.3.0...HEAD
+[3.3.0]: https://github.com/shepherd-yun/datavim/compare/v3.2.1...v3.3.0
 [3.2.1]: https://github.com/shepherd-yun/datavim/compare/v3.2.0...v3.2.1
 [3.2.0]: https://github.com/shepherd-yun/datavim/compare/v3.1.0...v3.2.0
 [3.1.0]: https://github.com/shepherd-yun/datavim/compare/v3.0.0...v3.1.0
