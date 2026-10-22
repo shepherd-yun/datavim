@@ -71,6 +71,8 @@ func TestDataStreams(t *testing.T) {
 		ok(`{"data_streams":[]}`),
 		{Status: 400, Body: []byte(`{"error":"no handler found for uri [/_data_stream] and method [GET]"}`)},
 		{Status: 404, Body: []byte(`{}`)},
+		// a cluster without x-pack routes the path to the index handler
+		{Status: 400, Body: []byte(`{"error":{"root_cause":[{"type":"invalid_index_name_exception","reason":"Invalid index name [_data_stream], must not start with '_'."}],"type":"invalid_index_name_exception","reason":"Invalid index name [_data_stream], must not start with '_'."},"status":400}`)},
 	} {
 		d := &fakeDoer{table: map[string]Response{"GET _data_stream": resp}}
 		if got, err := DataStreams(ctx, d); err != nil || len(got) != 0 {

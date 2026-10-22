@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- Elasticsearch clusters without x-pack (OpenDistro builds such as Huawei Cloud CSS) failed to load the
+  tree with `invalid_index_name_exception: Invalid index name [_data_stream]`; they now show no data
+  streams.
+
 ## [3.2.0] - 2026-10-22
 
 ### Added

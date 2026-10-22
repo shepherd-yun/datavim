@@ -138,7 +138,11 @@ type DataStream struct {
 // DataStreams lists the data streams; a cluster without them gives none.
 func DataStreams(ctx context.Context, d Doer) ([]DataStream, error) {
 	resp, err := do(ctx, d, Request{Method: "GET", Path: "_data_stream"})
-	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrUnsupported) {
+	// without x-pack (OpenDistro, some cloud builds) the path falls through
+	// to the index handler: invalid_index_name_exception
+	var apiErr *APIError
+	if errors.Is(err, ErrNotFound) || errors.Is(err, ErrUnsupported) ||
+		errors.As(err, &apiErr) && apiErr.Status == 400 && apiErr.hasType("invalid_index_name_exception") {
 		return nil, nil
 	}
 	if err != nil {
