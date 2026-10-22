@@ -3,10 +3,12 @@ package overlay
 import (
 	"fmt"
 	"maps"
+	"slices"
 	"strconv"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/datavim/internal/config"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
@@ -24,6 +26,7 @@ type ConnFormMsg struct {
 
 type formField struct {
 	label   string
+	key     string // a param row's params key
 	input   field
 	choices []string
 	choice  int
@@ -47,6 +50,8 @@ const (
 	ffEnv
 	ffReadOnly
 	ffSave
+	ffAddParam // "key=value" adds a param row
+	// the param rows follow, one per params key the fields above do not set
 )
 
 // ConnForm is the <space>n new-connection form.
@@ -56,7 +61,7 @@ type ConnForm struct {
 	cur      int
 	err      string
 	original string // editing this connection; empty for a new one
-	// kept from the edited connection: the form does not show them
+	// kept from the edited connection: the keys the fields above set
 	params map[string]string
 }
 
@@ -68,7 +73,7 @@ const oracleDefaultService = "FREEPDB1"
 var encryptChoices = []string{"default", "true", "false", "disable"}
 
 // saslChoices are kafka's params.sasl; none leaves it out.
-var saslChoices = []string{"none", "plain", "scram-sha-256", "scram-sha-512"}
+var saslChoices = []string{"none", "plain", "scram-sha-256", "scram-sha-512", "oauth", "aws-msk-iam"}
 
 // kafkaTLSChoices map to params.tls and params.tls_skip_verify.
 var kafkaTLSChoices = []string{"off", "on", "on, skip verify"}
@@ -98,6 +103,7 @@ func NewConnForm(keys *keymap.Keymap) *ConnForm {
 		ffEnv:      {label: "Env", choices: []string{"dev", "staging", "prod"}},
 		ffReadOnly: {label: "Read-only", choices: readOnlyChoices},
 		ffSave:     {label: "Save password", choices: []string{"yes", "no"}},
+		ffAddParam: {label: "Add param"},
 	}}
 }
 
@@ -105,7 +111,14 @@ func NewConnForm(keys *keymap.Keymap) *ConnForm {
 func NewEditConnForm(keys *keymap.Keymap, c config.Connection) *ConnForm {
 	f := NewConnForm(keys)
 	f.original = c.Name
-	f.params = maps.Clone(c.Params)
+	f.params = map[string]string{}
+	for _, k := range slices.Sorted(maps.Keys(c.Params)) {
+		if formParam(c.Driver, k) {
+			f.params[k] = c.Params[k]
+		} else {
+			f.fields = append(f.fields, formField{label: k, key: k, input: newField(c.Params[k])})
+		}
+	}
 	set := func(i int, v string) { f.fields[i].input = newField(v) }
 	set(ffName, c.Name)
 	set(ffHost, c.Host)
@@ -163,6 +176,32 @@ func param(p map[string]string, key string) string {
 	return ""
 }
 
+// formParam reports whether a field of the form sets params key k for driver.
+func formParam(driver, k string) bool {
+	switch driver {
+	case "sqlserver":
+		return strings.EqualFold(k, "encrypt") || strings.EqualFold(k, "TrustServerCertificate")
+	case "kafka":
+		return k == "sasl" || k == "tls" || k == "tls_skip_verify"
+	case "elasticsearch":
+		return k == "auth" || k == "tls" || k == "tls_skip_verify"
+	}
+	return false
+}
+
+// order is the fields' display order: the param rows and Add param go
+// between Read-only and Save password.
+func (f *ConnForm) order() []int {
+	o := make([]int, 0, len(f.fields))
+	for i := range ffSave {
+		o = append(o, i)
+	}
+	for i := ffAddParam + 1; i < len(f.fields); i++ {
+		o = append(o, i)
+	}
+	return append(o, ffAddParam, ffSave)
+}
+
 // shown reports whether field i applies to the chosen driver.
 func (f *ConnForm) shown(i int) bool {
 	switch i {
@@ -182,12 +221,37 @@ func (f *ConnForm) shown(i int) bool {
 
 // step moves the cursor by dir to the next shown field, wrapping around.
 func (f *ConnForm) step(dir int) {
+	o := f.order()
+	at := slices.Index(o, f.cur)
 	for {
-		f.cur = (f.cur + dir + len(f.fields)) % len(f.fields)
-		if f.shown(f.cur) {
+		at = (at + dir + len(o)) % len(o)
+		if f.shown(o[at]) {
+			f.cur = o[at]
 			return
 		}
 	}
+}
+
+// addParam turns Add param's "key=value" into a param row; an empty
+// field is a no-op.
+func (f *ConnForm) addParam() error {
+	text := f.text(ffAddParam)
+	if text == "" {
+		return nil
+	}
+	k, v, ok := strings.Cut(text, "=")
+	k, v = strings.TrimSpace(k), strings.TrimSpace(v)
+	switch {
+	case !ok || k == "" || v == "" || strings.ContainsAny(k, " \t"):
+		return fmt.Errorf("add param: want key=value, got %q", text)
+	case formParam(f.value(ffDriver), k):
+		return fmt.Errorf("add param: %s is set by the fields above", k)
+	case slices.ContainsFunc(f.fields[ffAddParam+1:], func(fd formField) bool { return fd.key == k }):
+		return fmt.Errorf("add param: %s is already listed", k)
+	}
+	f.fields = append(f.fields, formField{label: k, key: k, input: newField(v)})
+	f.fields[ffAddParam].input = newField("")
+	return nil
 }
 
 func (f *ConnForm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
@@ -203,10 +267,17 @@ func (f *ConnForm) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 	case "shift+tab", "up":
 		f.step(-1)
 	case "enter":
-		if f.cur == len(f.fields)-1 {
+		switch f.cur {
+		case ffSave:
 			return f.submit()
+		case ffAddParam:
+			f.err = ""
+			if err := f.addParam(); err != nil {
+				f.err = err.Error()
+			}
+		default:
+			f.step(1)
 		}
-		f.step(1)
 	default:
 		if fd.choices == nil {
 			fd.input.handle(msg)
@@ -234,6 +305,10 @@ func (f *ConnForm) text(i int) string { return strings.TrimSpace(f.fields[i].inp
 func (f *ConnForm) value(i int) string { return f.fields[i].choices[f.fields[i].choice] }
 
 func (f *ConnForm) submit() (Overlay, tea.Cmd) {
+	if err := f.addParam(); err != nil {
+		f.err = err.Error()
+		return f, nil
+	}
 	port := 0
 	if p := f.text(ffPort); p != "" {
 		n, err := strconv.Atoi(p)
@@ -270,12 +345,18 @@ func (f *ConnForm) submitReadOnly() *bool {
 	return nil
 }
 
-// submitParams are the edited connection's params with the SQL Server,
-// Kafka and Elasticsearch fields applied: default, no, none and off remove their key.
+// submitParams are the param rows (an empty one removes its key) with the
+// SQL Server, Kafka and Elasticsearch fields applied: default, no, none
+// and off remove their key.
 func (f *ConnForm) submitParams() map[string]string {
 	p := maps.Clone(f.params)
 	if p == nil {
 		p = map[string]string{}
+	}
+	for _, fd := range f.fields[ffAddParam+1:] {
+		if v := strings.TrimSpace(fd.input.String()); v != "" {
+			p[fd.key] = v
+		}
 	}
 	// go-mssqldb reads keys in any case and refuses one given twice
 	maps.DeleteFunc(p, func(k, _ string) bool {
@@ -319,8 +400,13 @@ func (f *ConnForm) submitParams() map[string]string {
 
 func (f *ConnForm) View(width, _ int) string {
 	w := max(min(width-4, 60), 30)
-	lines := make([]string, 0, len(f.fields)+4)
-	for i, fd := range f.fields {
+	lw := 14 // label width; a long param key widens it
+	for _, fd := range f.fields[ffAddParam+1:] {
+		lw = min(max(lw, len(fd.key)+2), w/2)
+	}
+	lines := make([]string, 0, len(f.fields)+5)
+	for _, i := range f.order() {
+		fd := f.fields[i]
 		if !f.shown(i) {
 			continue
 		}
@@ -339,10 +425,12 @@ func (f *ConnForm) View(width, _ int) string {
 		if i == ffHost && f.value(ffDriver) == "elasticsearch" {
 			name = "URLs" // [scheme://]host[:port], comma-separated
 		}
-		label := fmt.Sprintf("%-14s", name)
+		label := fmt.Sprintf("%-*s", lw, ansi.Truncate(textutil.Sanitize(name), lw-1, "…"))
 		switch {
 		case oracleService && i != f.cur && fd.input.Len() == 0:
 			v = theme.Muted.Render(oracleDefaultService)
+		case i == ffAddParam && i != f.cur && fd.input.Len() == 0:
+			v = theme.Muted.Render("key=value")
 		case i == ffReadOnly && f.value(ffReadOnly) == "auto":
 			on := "off"
 			if config.Env(f.value(ffEnv)) == config.EnvProd {
@@ -352,9 +440,9 @@ func (f *ConnForm) View(width, _ int) string {
 		case fd.choices != nil:
 			v = "‹ " + fd.choices[fd.choice] + " ›"
 		case i == f.cur && fd.secret:
-			v = fd.input.ViewMasked(w-16, '•')
+			v = fd.input.ViewMasked(w-lw-2, '•')
 		case i == f.cur:
-			v = fd.input.View(w - 16)
+			v = fd.input.View(w - lw - 2)
 		case fd.secret:
 			v = strings.Repeat("•", fd.input.Len())
 		default:
@@ -376,6 +464,7 @@ func (f *ConnForm) View(width, _ int) string {
 	}
 	lines = append(lines, theme.Muted.Render("SSH host: a Host alias from ~/.ssh/config (optional)"))
 	lines = append(lines, theme.Muted.Render("Read-only: auto is on for prod"))
+	lines = append(lines, theme.Muted.Render("Params: enter adds key=value · an empty value removes it"))
 	lines = append(lines, theme.Muted.Render(footer("tab next · enter next/save", popupHint(f.keys, keymap.SaveForm, "save"), "esc cancel")))
 	return theme.Box(title, strings.Join(lines, "\n"), w, len(lines)+2, true)
 }

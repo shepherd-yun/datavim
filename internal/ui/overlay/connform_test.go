@@ -24,6 +24,7 @@ func TestConnFormSubmit(t *testing.T) {
 		"b", "a", "s", "t", "i", "o", "n", "tab", // ssh host
 		"l", "l", "tab", // env -> prod
 		"l", "l", "tab", // read-only: auto -> yes -> no
+		"tab",            // add param stays empty
 		"right", "enter", // save -> no, submit
 	}
 	o, msg := send(t, f, keys...)
@@ -270,7 +271,7 @@ func TestConnFormKafka(t *testing.T) {
 	}
 	// host, port, user, password -> SASL (Database is hidden)
 	_, msg = send(t, f, "tab", "tab", "a", "p", "p", "tab", "tab",
-		"left", "tab", // SASL: none -> scram-sha-512 (last)
+		"left", "left", "left", "tab", // SASL: none -> scram-sha-512 (before oauth, aws-msk-iam)
 		"left", // TLS: off -> on, skip verify (last)
 		"ctrl+s")
 	c := msg.(ConnFormMsg).Conn
@@ -338,5 +339,89 @@ func TestConnFormES(t *testing.T) {
 	_, msg = send(t, f, "left", "ctrl+s") // api key -> basic
 	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, map[string]string{"page_size": "50"}) {
 		t.Fatalf("edited params = %v", p)
+	}
+}
+
+func TestConnFormParamRows(t *testing.T) {
+	orig := config.Connection{
+		Name: "k", Driver: "kafka", User: "app",
+		Params: map[string]string{"sasl": "scram-sha-512", "broker_map": "1.2.3.4:9094=127.0.0.1:9094", "client_id": "me"},
+	}
+	f := NewEditConnForm(keymap.Default(), orig)
+	v := ansi.Strip(f.View(80, 30))
+	if !strings.Contains(v, "broker_map") || !strings.Contains(v, "1.2.3.4:9094=127.0.0.1:9094") || !strings.Contains(v, "client_id") {
+		t.Fatalf("param rows:\n%s", v)
+	}
+	if strings.Contains(v, "sasl ") {
+		t.Fatalf("sasl has its own field:\n%s", v)
+	}
+	// rows sit between Read-only and Save password, sorted by key
+	f.cur = ffReadOnly
+	send(t, f, "tab")
+	if f.fields[f.cur].key != "broker_map" {
+		t.Fatalf("after read-only: %q", f.fields[f.cur].label)
+	}
+	send(t, f, "tab") // client_id
+	send(t, f, "ctrl+u")
+	send(t, f, "tab") // add param
+	if f.cur != ffAddParam {
+		t.Fatalf("cur = %d, want add param", f.cur)
+	}
+	send(t, f, strings.Split("show_internal=true", "")...)
+	if o, msg := send(t, f, "enter"); o == nil || msg != nil {
+		t.Fatal("enter on add param adds a row")
+	}
+	if v := ansi.Strip(f.View(80, 30)); !strings.Contains(v, "show_internal") || f.text(ffAddParam) != "" {
+		t.Fatalf("added row:\n%s", v)
+	}
+	_, msg := send(t, f, "ctrl+s")
+	want := map[string]string{"sasl": "scram-sha-512", "broker_map": "1.2.3.4:9094=127.0.0.1:9094", "show_internal": "true"}
+	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, want) {
+		t.Fatalf("params = %v, want %v", p, want)
+	}
+}
+
+func TestConnFormAddParamErrors(t *testing.T) {
+	for _, tc := range []struct{ text, err string }{
+		{"novalue", "want key=value"},
+		{"=x", "want key=value"},
+		{"a b=x", "want key=value"},
+		{"sasl=plain", "set by the fields above"},
+		{"client_id=x", "already listed"},
+	} {
+		t.Run(tc.text, func(t *testing.T) {
+			f := NewEditConnForm(keymap.Default(), config.Connection{Name: "k", Driver: "kafka", Params: map[string]string{"client_id": "me"}})
+			f.cur = ffAddParam
+			send(t, f, strings.Split(tc.text, "")...)
+			send(t, f, "enter")
+			if !strings.Contains(f.err, tc.err) {
+				t.Fatalf("err = %q, want %q", f.err, tc.err)
+			}
+			// ctrl+s does not drop the pending text either
+			if o, msg := send(t, f, "ctrl+s"); o == nil || msg != nil {
+				t.Fatal("a bad pending param blocks save")
+			}
+		})
+	}
+}
+
+func TestConnFormSubmitTakesPendingParam(t *testing.T) {
+	f := NewConnForm(keymap.Default())
+	send(t, f, "p", "g")
+	f.cur = ffAddParam
+	send(t, f, strings.Split("sslmode=disable", "")...)
+	_, msg := send(t, f, "ctrl+s")
+	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, map[string]string{"sslmode": "disable"}) {
+		t.Fatalf("params = %v", p)
+	}
+}
+
+func TestEditConnFormKeepsOAuthSASL(t *testing.T) {
+	orig := config.Connection{Name: "k", Driver: "kafka", Params: map[string]string{
+		"sasl": "oauth", "oauth_token_url": "https://idp/token", "oauth_client_id": "dv",
+	}}
+	_, msg := send(t, NewEditConnForm(keymap.Default(), orig), "ctrl+s")
+	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, orig.Params) {
+		t.Fatalf("params = %v", p)
 	}
 }

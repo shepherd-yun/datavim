@@ -6,6 +6,14 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- The connection form shows the `params` it has no field for (such as `broker_map` or `sslmode`) as
+  rows you can edit; an empty value removes the key, and `Add param` takes `key=value`.
+
+### Fixed
+- Editing a Kafka connection with `sasl = "oauth"` or `"aws-msk-iam"` in the connection form dropped
+  its SASL setting; the SASL field now offers both.
+
 ## [3.2.1] - 2026-10-22
 
 ### Fixed

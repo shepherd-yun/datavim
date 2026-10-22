@@ -61,7 +61,9 @@ The tree draws [Nerd Font](https://www.nerdfonts.com) icons (v3): the MySQL / Po
 before each connection, and database, schema, table, folder and key icons below it. Without a
 Nerd Font they show as boxes: set `icons = "plain"`.
 
-No config yet? Start datavim and press `<space>n` to add a connection.
+No config yet? Start datavim and press `<space>n` to add a connection. The form lists every `params`
+key it has no field for on a row of its own: edit the value, empty it to remove the key, or type
+`key=value` in `Add param` and press enter.
 
 **SQL Server** (2014–2022, user name and password): `driver = "sqlserver"`, port 1433. Values in
 `params` go to the driver as they are. Older servers often need TLS relaxed:

@@ -55,7 +55,8 @@ icons            = "nerd"        # tree icons: "nerd" (needs a Nerd Font) or "pl
 树使用 [Nerd Font](https://www.nerdfonts.com)（v3）图标：连接前显示 MySQL / PostgreSQL / Redis / Kafka 的标志，
 下面的库、schema、表、文件夹、键也各有图标。终端没有 Nerd Font 时会显示成方框，设置 `icons = "plain"` 即可。
 
-还没有配置？启动 datavim 后按 `<space>n` 添加连接。
+还没有配置？启动 datavim 后按 `<space>n` 添加连接。表单没有专门字段的 `params` 各占一行：可以直接改值，
+清空值即删除该项；在 `Add param` 里输入 `key=value` 后回车可新增一项。
 
 **SQL Server**（2014–2022，用户名密码登录）：`driver = "sqlserver"`，端口 1433。`params` 里的值原样传给驱动。
 较老的服务器通常要放宽 TLS：`params = { encrypt = "disable" }`；自签名证书用 `TrustServerCertificate = "true"`；
