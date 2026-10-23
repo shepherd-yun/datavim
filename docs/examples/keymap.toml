@@ -127,7 +127,7 @@
 #   tree.fold.open_all     Expand everything loaded under the cursor
 #   tree.fold.open_tree    Expand everything loaded
 #   tree.fold.toggle       Toggle expanded
-#   tree.open              Open: table data, a column or index in the structure, a foreign key's table
+#   tree.open              Open: table data, a column or index in the structure, a foreign key's table · otherwise expand / collapse
 #   tree.toggle            Toggle tree
 #   tx.toggle              Toggle manual commit
 #   yank.cell              Copy cell

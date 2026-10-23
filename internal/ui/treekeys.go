@@ -32,7 +32,7 @@ func (m *Model) expandNode() tea.Cmd {
 	return nil
 }
 
-// openNode is Enter: a table's data; a group toggles; anything else expands.
+// openNode is Enter: a table's data; anything else that expands toggles.
 func (m *Model) openNode() tea.Cmd {
 	n := m.tree.Selected()
 	if n == nil {
@@ -41,11 +41,6 @@ func (m *Model) openNode() tea.Cmd {
 	switch n.Kind {
 	case tree.KindTable, tree.KindView:
 		return m.openData(n.Conn, n.TableRef())
-	case tree.KindGroup, tree.KindKeyFolder:
-		if n.Expanded {
-			n.Expanded = false
-			return nil
-		}
 	case tree.KindRedisKey:
 		k, _ := redisKeyOf(n)
 		return m.openKey(k.conn, k.db, n.Key)
@@ -58,7 +53,7 @@ func (m *Model) openNode() tea.Cmd {
 	case tree.KindForeignKey:
 		return m.reveal(n.Conn, tablePath(n.Ref.Namespace, n.Ref.Name))
 	}
-	return m.expandNode()
+	return m.toggleNode()
 }
 
 // toggleNode is za.

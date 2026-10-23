@@ -52,6 +52,20 @@ func TestEnterOnGroupToggles(t *testing.T) {
 	}
 }
 
+func TestEnterOnDatabaseToggles(t *testing.T) {
+	m, b := newTestModel(t)
+	expandUsers(t, m, b)
+	selectNode(t, m, "local", "app")
+	press(t, m, "enter")
+	if m.tree.Selected().Expanded {
+		t.Fatal("Enter on an expanded database closes it")
+	}
+	press(t, m, "enter")
+	if !m.tree.Selected().Expanded {
+		t.Fatal("Enter again opens it")
+	}
+}
+
 func TestZKeysFold(t *testing.T) {
 	m, b := newTestModel(t)
 	expandUsers(t, m, b)

@@ -85,7 +85,7 @@ var kindDescs = map[Context]map[Action][4]string{ // [SQL, Redis, Kafka, ES]
 		OpenKey:     {"", "", "", "Open a document by _id"},
 	},
 	Tree: {
-		Open:           {"Open: table data, a column or index in the structure, a foreign key's table", "Open the key", "Open the topic / group", "Open the index / alias / data stream"},
+		Open:           {"Open: table data, a column or index in the structure, a foreign key's table · otherwise expand / collapse", "Open the key", "Open the topic / group", "Open the index / alias / data stream"},
 		EditNode:       {"Edit connection / modify table", "Edit connection", "Edit connection", "Edit connection"},
 		DeleteNode:     {"Delete connection / drop table or view", "Delete connection / delete Redis keys", "Delete connection / delete topic / delete group / soft-delete schema version", "Delete connection / index / template / ILM policy / pipeline / snapshot / repository"},
 		RenameTable:    {"Rename table or view", "Rename Redis key", "", ""},

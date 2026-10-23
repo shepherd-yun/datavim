@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- `Enter` in the tree now collapses an expanded connection, database, schema or folder, so pressing it
+  again toggles the node; on a table it still opens the data.
+
 ## [3.3.0] - 2026-10-22
 
 ### Added

@@ -63,7 +63,7 @@ func DefaultBindings() []Binding {
 	b = append(b,
 		Binding{Tree, keys("l"), Expand, "Expand"},
 		Binding{Tree, keys("right"), Expand, "Expand"},
-		Binding{Tree, keys("enter"), Open, "Open: table data, a column or index in the structure, a foreign key's table"},
+		Binding{Tree, keys("enter"), Open, "Open: table data, a column or index in the structure, a foreign key's table · otherwise expand / collapse"},
 		Binding{Tree, keys("h"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("left"), Collapse, "Collapse / parent"},
 		Binding{Tree, keys("p"), Password, "Enter password"},
