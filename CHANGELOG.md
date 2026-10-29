@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.5.0] - 2026-10-29
+
 ### Added
 - Linux and WSL: the clipboard uses the Windows clipboard in WSL (through `powershell.exe`), and
   `wl-copy` / `wl-paste` or `xclip` / `xsel` on a Linux desktop, before falling back to OSC 52.
@@ -685,7 +687,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.4.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.5.0...HEAD
+[3.5.0]: https://github.com/shepherd-yun/datavim/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/shepherd-yun/datavim/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/shepherd-yun/datavim/compare/v3.2.1...v3.3.0
 [3.2.1]: https://github.com/shepherd-yun/datavim/compare/v3.2.0...v3.2.1

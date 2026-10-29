@@ -40,7 +40,7 @@ macOS 与 Linux 的二进制包在 [Releases 页面](https://github.com/shepherd
 下载 `linux_amd64` 包（ARM 用 `linux_arm64`），把 `datavim` 放到 `PATH` 里即可。它是静态二进制，没有依赖：
 
 ```sh
-VERSION=3.4.0   # 最新的版本
+VERSION=3.5.0   # 最新的版本
 curl -fsSLO https://github.com/shepherd-yun/datavim/releases/download/v$VERSION/datavim_${VERSION}_linux_amd64.tar.gz
 tar xzf datavim_${VERSION}_linux_amd64.tar.gz datavim && sudo install datavim /usr/local/bin/
 ```
