@@ -50,18 +50,25 @@ func TestTopicTabSections(t *testing.T) {
 	if tt.Context() != keymap.KafkaMessages {
 		t.Fatalf("context = %s", tt.Context())
 	}
-	want := []topicSection{secPartitions, secConfig, secConsumers, secConsumers}
+	want := []topicSection{secPartitions, secConfig, secConsumers, secMessages}
 	for _, w := range want {
 		pressAll(t, m, "]")
 		ctx := keymap.KafkaTopic
-		if w == secConfig {
+		switch w {
+		case secConfig:
 			ctx = keymap.KafkaConfig
+		case secMessages:
+			ctx = keymap.KafkaMessages
 		}
 		if tt.section != w || tt.Context() != ctx {
 			t.Fatalf("section = %d (want %d), context %s", tt.section, w, tt.Context())
 		}
 	}
-	pressAll(t, m, "[", "[", "[", "[")
+	pressAll(t, m, "[")
+	if tt.section != secConsumers {
+		t.Fatalf("[ before the first: section = %d", tt.section)
+	}
+	pressAll(t, m, "]")
 	if tt.section != secMessages {
 		t.Fatalf("section = %d", tt.section)
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/textview"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
@@ -225,6 +226,11 @@ func (t *keyTab) Init() tea.Cmd           { return t.load(true) }
 
 func (t *keyTab) Target() (string, db.TableRef) {
 	return t.conn, db.TableRef{Namespace: db.Namespace{Database: strconv.Itoa(t.db)}, Name: t.key}
+}
+
+func (t *keyTab) treeNodes() []nodeMatch {
+	ns := strconv.Itoa(t.db)
+	return []nodeMatch{func(n *tree.Node) bool { return n.Kind == tree.KindRedisKey && n.NS.Database == ns && n.Key == t.key }}
 }
 
 func (t *keyTab) activeGrid() *grid.Model     { return t.grid }

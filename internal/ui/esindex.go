@@ -16,6 +16,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/history"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
@@ -187,8 +188,20 @@ func (t *esIndexTab) Context() keymap.Context {
 	return keymap.ESIndex
 }
 func (t *esIndexTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
-func (t *esIndexTab) SetSize(w, h int)              { t.width, t.height = max(w, 0), max(h, 0) }
-func (t *esIndexTab) Init() tea.Cmd                 { return tea.Batch(t.loadHead(), t.loadMapping()) }
+func (t *esIndexTab) treeNodes() []nodeMatch {
+	kind, key := tree.KindESIndex, t.target
+	switch t.kind {
+	case targetAlias:
+		kind = tree.KindESAlias
+	case targetStream:
+		kind = tree.KindDataStream
+	case targetPattern:
+		kind, key = tree.KindIndexFolder, strings.TrimSuffix(t.target, "*")
+	}
+	return []nodeMatch{matchNode(kind, key)}
+}
+func (t *esIndexTab) SetSize(w, h int) { t.width, t.height = max(w, 0), max(h, 0) }
+func (t *esIndexTab) Init() tea.Cmd    { return tea.Batch(t.loadHead(), t.loadMapping()) }
 
 // shutdown cancels the loads and releases the Documents cursor when the
 // tab closes or datavim quits.
@@ -458,9 +471,9 @@ func (t *esIndexTab) Handle(a keymap.Action) tea.Cmd {
 	}
 	switch a {
 	case keymap.NextSection:
-		return t.setSection(min(t.section+1, idxSections-1))
+		return t.setSection(textutil.Cycle(t.section, 1, idxSections))
 	case keymap.PrevSection:
-		return t.setSection(max(t.section-1, 0))
+		return t.setSection(textutil.Cycle(t.section, -1, idxSections))
 	case keymap.Refresh:
 		switch t.section {
 		case idxMapping:

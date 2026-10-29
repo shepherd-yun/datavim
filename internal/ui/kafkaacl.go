@@ -15,6 +15,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
@@ -105,6 +106,7 @@ func (t *aclTab) Title() string                    { return t.conn + " · ACLs" 
 func (t *aclTab) Key() string                      { return aclTabKey(t.conn) }
 func (t *aclTab) Context() keymap.Context          { return keymap.KafkaACL }
 func (t *aclTab) Target() (string, db.TableRef)    { return t.conn, db.TableRef{} }
+func (t *aclTab) treeNodes() []nodeMatch           { return []nodeMatch{matchNode(tree.KindKafkaACLs, secACLs)} }
 func (t *aclTab) SetSize(w, h int)                 { t.width, t.height = max(w, 0), max(h, 0) }
 func (t *aclTab) Init() tea.Cmd                    { return t.load(nil) }
 func (t *aclTab) retryAfterPassword() tea.Cmd      { return t.load(nil) }

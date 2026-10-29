@@ -40,10 +40,32 @@ go install github.com/shepherd-yun/datavim/cmd/datavim@latest
 
 Binaries for macOS and Linux are on the [releases page](https://github.com/shepherd-yun/datavim/releases).
 
+### Linux and WSL
+
+Take the `linux_amd64` archive (`linux_arm64` on ARM) and put `datavim` on your `PATH`; it is a
+static binary with no dependencies:
+
+```sh
+VERSION=3.4.0   # the latest release
+curl -fsSLO https://github.com/shepherd-yun/datavim/releases/download/v$VERSION/datavim_${VERSION}_linux_amd64.tar.gz
+tar xzf datavim_${VERSION}_linux_amd64.tar.gz datavim && sudo install datavim /usr/local/bin/
+```
+
+- **Passwords** are saved to the Secret Service (GNOME Keyring, KWallet) of the desktop session.
+  Without one, as in WSL or on a server, datavim still asks for the password but keeps it for the
+  run only, and the prompt says so. To skip the prompt, set `DATAVIM_PASSWORD_<CONNECTION>`: the
+  name in upper case with anything but letters and digits as `_` (`prod-pg` →
+  `DATAVIM_PASSWORD_PROD_PG`).
+- **Clipboard**: in WSL datavim uses the Windows clipboard (through `powershell.exe`); on a Linux
+  desktop `wl-copy` / `wl-paste` (Wayland) or `xclip` / `xsel` (X11). Over SSH, or without those
+  tools, it falls back to the terminal's OSC 52, which kitty, WezTerm, foot, Alacritty, iTerm2 and
+  Windows Terminal support (GNOME Terminal does not).
+
 ## Configure
 
 Create `~/.config/datavim/connections.toml` — see [docs/examples/connections.toml](docs/examples/connections.toml).
-On first connect datavim asks for the password and can save it to the macOS Keychain.
+On first connect datavim asks for the password and can save it to the keychain (the macOS Keychain,
+or the Secret Service on Linux; see [Linux and WSL](#linux-and-wsl)).
 
 Optional `~/.config/datavim/config.toml` (see [docs/examples/config.toml](docs/examples/config.toml)):
 
@@ -480,16 +502,17 @@ picks the workspace by directory.
 | `<Space>e` | Toggle tree |
 | `+` / `=` | Full screen: the focused pane fills the screen (in a console, the editor or the results). It follows the focus and stays on while you switch tabs |
 | `-` / `_` | Leave full screen |
-| `<Space>l` | Locate the current tab in the tree: the table, or the database / schema of a console (also `:locate`) |
+| `<Space>l` | Locate the current tab in the tree: the table, the Kafka topic / group / subject / connector, the Elasticsearch index / template / policy / pipeline / snapshot, the Redis key, or the database / schema of a console (also `:locate`) |
 | `<Space>r` | Refresh the tree node or tab and reload the connection's metadata |
 | `?` | Help for the focused pane: its own keys and the common global ones (`Tab` lists every global key) |
 | `:q` / `:qa` | Close tab / quit |
+| `<Space>q o` / `<Space>q a` | Close the other tabs (`:only`) / every tab (`:closeall`), asking first about open transactions and unsaved changes |
 | `:e <file>` | Open a `.sql` file in a console on the connection / database in context |
 | `:w` / `:w <file>` / `:wq` | File console: save / save as (a plain console becomes a file console) / save and close; `:w!` overwrites a file changed on disk |
 | `<Space>t` | Console: toggle manual commit (`TX n` in the status bar) |
 | `:commit` / `:rollback` | Console: end the transaction |
 | `:set noreadonly` / `:set readonly` | Unlock / lock the connection for this session |
-| `:q!` / `:qa!` | Close / quit without asking about open transactions |
+| `:q!` / `:qa!` | Close / quit without asking about open transactions (also `:only!`, `:closeall!`) |
 | `<Space><Space>` | Search tables, views, columns, routines, schemas and databases in every connection, loading the metadata of those not opened yet (`db.table.column`, `table.column` or any part of it narrows by parent, fuzzily, and opening a column puts the cursor on it; `@` searches only the connection in context; `Enter` opens, `Ctrl-o` opens the structure). `Tab` / `Shift-Tab` switch to the lines of the open consoles (`Enter` jumps to the line) or the SQL history (an empty query lists the recent statements, `Enter` inserts one as `<Space>h` does) |
 | `<Space>f` | Recently opened tables, structures, consoles, files, Redis keys, Kafka topics and groups |
 | `.` / `s` | Tree, on a Kafka connection: show / hide internal topics / sort consumer groups by lag or name |
@@ -526,7 +549,7 @@ picks the workspace by directory.
 | `o` | Tree, on a Redis db, folder or key: new key |
 | `g d` | Redis console results: open the key in the cell |
 | `<Space>i` | Server tab: status, sessions, locks, … (Redis: status, slow log, clients) |
-| `[` / `]` | Server tab: previous / next section |
+| `[` / `]` | Server, Kafka and Elasticsearch tabs: previous / next section (wraps) |
 | `dd` | Server tab: disconnect the session / kill the Redis client |
 | `c` | SQL server tab, sessions: cancel the session's query |
 | `a` | SQL server tab, sessions: show / hide idle sessions |

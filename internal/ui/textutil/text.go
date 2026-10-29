@@ -123,6 +123,15 @@ func Clamp(v, lo, hi int) int {
 	return v
 }
 
+// Cycle steps v by dir through [0, n), wrapping at both ends; n <= 0
+// gives 0.
+func Cycle[T ~int](v T, dir int, n T) T {
+	if n <= 0 {
+		return 0
+	}
+	return ((v+T(dir))%n + n) % n
+}
+
 // PrettyJSON indents a JSON object or array by two spaces; anything else
 // comes back as it is.
 func PrettyJSON(s string) string {

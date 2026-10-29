@@ -82,6 +82,16 @@ func TestClamp(t *testing.T) {
 	}
 }
 
+func TestCycle(t *testing.T) {
+	for _, tt := range []struct{ v, dir, n, want int }{
+		{0, 1, 3, 1}, {2, 1, 3, 0}, {0, -1, 3, 2}, {1, -1, 3, 0}, {0, 1, 0, 0},
+	} {
+		if got := Cycle(tt.v, tt.dir, tt.n); got != tt.want {
+			t.Errorf("Cycle(%d, %d, %d) = %d, want %d", tt.v, tt.dir, tt.n, got, tt.want)
+		}
+	}
+}
+
 func TestSanitizeText(t *testing.T) {
 	if got := SanitizeText("a\tb\r\n\x1b[31mc\n"); got != "a b\n�[31mc\n" {
 		t.Fatalf("SanitizeText = %q", got)

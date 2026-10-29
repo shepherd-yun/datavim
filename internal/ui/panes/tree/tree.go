@@ -255,6 +255,39 @@ func (m *Model) SelectWhere(match func(*Node) bool) bool {
 	return false
 }
 
+// RevealWhere selects the first loaded node under conn's root that match
+// accepts, expanding its ancestors, and reports whether there was one.
+// Unlike Reveal it loads nothing.
+func (m *Model) RevealWhere(conn string, match func(*Node) bool) bool {
+	var find func(n *Node) *Node
+	find = func(n *Node) *Node {
+		for _, c := range n.Children {
+			if match(c) {
+				return c
+			}
+			if f := find(c); f != nil {
+				return f
+			}
+		}
+		return nil
+	}
+	for _, r := range m.roots {
+		if r.Conn != conn {
+			continue
+		}
+		f := find(r)
+		if f == nil {
+			return false
+		}
+		for p := f.parent; p != nil; p = p.parent {
+			p.Expanded = true
+		}
+		m.selected = f
+		return true
+	}
+	return false
+}
+
 // Collapse closes the selected node, or selects its parent if already closed.
 func (m *Model) Collapse() {
 	n := m.Selected()

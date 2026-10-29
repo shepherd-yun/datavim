@@ -17,6 +17,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/kmsgx"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
@@ -92,11 +93,14 @@ func (m *Model) openGroup(conn, group string) tea.Cmd {
 	})
 }
 
-func (t *groupTab) ID() int                        { return t.id }
-func (t *groupTab) Title() string                  { return t.group }
-func (t *groupTab) Key() string                    { return groupTabKey(t.conn, t.group) }
-func (t *groupTab) Context() keymap.Context        { return keymap.KafkaGroup }
-func (t *groupTab) Target() (string, db.TableRef)  { return t.conn, db.TableRef{} }
+func (t *groupTab) ID() int                       { return t.id }
+func (t *groupTab) Title() string                 { return t.group }
+func (t *groupTab) Key() string                   { return groupTabKey(t.conn, t.group) }
+func (t *groupTab) Context() keymap.Context       { return keymap.KafkaGroup }
+func (t *groupTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
+func (t *groupTab) treeNodes() []nodeMatch {
+	return []nodeMatch{matchNode(tree.KindKafkaGroup, t.group)}
+}
 func (t *groupTab) SetSize(w, h int)               { t.width, t.height = max(w, 0), max(h, 0) }
 func (t *groupTab) Init() tea.Cmd                  { return t.load() }
 func (t *groupTab) retryAfterPassword() tea.Cmd    { return t.load() }
@@ -277,10 +281,10 @@ func (t *groupTab) Handle(a keymap.Action) tea.Cmd {
 	t.status = ""
 	switch a {
 	case keymap.NextSection:
-		t.section = min(t.section+1, groupSections-1)
+		t.section = textutil.Cycle(t.section, 1, groupSections)
 		return nil
 	case keymap.PrevSection:
-		t.section = max(t.section-1, 0)
+		t.section = textutil.Cycle(t.section, -1, groupSections)
 		return nil
 	case keymap.Refresh:
 		if !t.loading {

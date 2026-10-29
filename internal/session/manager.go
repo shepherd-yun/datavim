@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"slices"
 	"strconv"
 	"sync"
@@ -79,6 +80,7 @@ type Manager struct {
 	mu        sync.Mutex
 	conns     []config.Connection
 	passwords map[string]string
+	keychain  error // the keychain cannot be used (secret.ErrUnavailable); nil until it fails
 	open      map[connKey]db.Conn
 	redis     map[connKey]rdb.Client
 	kafka     map[string]*guardedKafka
@@ -255,7 +257,9 @@ func (m *Manager) RemoveConnection(name string) error {
 	}
 	m.mu.Unlock()
 	for _, acct := range accounts(name) {
-		errs = append(errs, m.secrets.Delete(acct))
+		if err := m.secrets.Delete(acct); !errors.Is(err, secret.ErrUnavailable) {
+			errs = append(errs, err) // without a keychain nothing was saved
+		}
 	}
 	if err := errors.Join(errs...); err != nil {
 		return fmt.Errorf("connection removed, but its keychain password was not: %w", errors.Join(ErrKeychain, err))
@@ -526,9 +530,31 @@ func (m *Manager) SetPassword(name, password string, save bool) error {
 	m.resetLocked(name)
 	m.mu.Unlock()
 	if save {
-		return m.secrets.Set(name, password)
+		err := m.secrets.Set(name, password)
+		if errors.Is(err, secret.ErrUnavailable) {
+			m.keychainFailed(err)
+		}
+		return err
 	}
 	return nil
+}
+
+// keychainFailed records that the keychain cannot be used, logging it once.
+func (m *Manager) keychainFailed(err error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.keychain == nil {
+		slog.Warn("keychain unavailable: passwords are kept for this run only", "err", err)
+		m.keychain = err
+	}
+}
+
+// KeychainError is why passwords cannot be saved to the keychain (a
+// secret.ErrUnavailable), or nil while it works or was not used yet.
+func (m *Manager) KeychainError() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.keychain
 }
 
 // CloseAll closes every open connection.
@@ -591,6 +617,12 @@ func (m *Manager) password(name string) (string, error) {
 		return pw, nil
 	}
 	pw, err := m.secrets.Get(name)
+	if errors.Is(err, secret.ErrUnavailable) {
+		// No keychain (Linux or WSL without a Secret Service): ask, as
+		// for a password never saved.
+		m.keychainFailed(err)
+		return "", ErrPasswordRequired
+	}
 	if errors.Is(err, secret.ErrNotFound) {
 		return "", ErrPasswordRequired
 	}

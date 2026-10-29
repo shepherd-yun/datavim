@@ -3,6 +3,8 @@ package session
 import (
 	"errors"
 	"fmt"
+
+	"github.com/shepherd-yun/datavim/internal/secret"
 )
 
 // The secrets a connection may need besides its password, each kept in
@@ -55,7 +57,10 @@ func (m *Manager) SetSecret(conn, kind, value string) error {
 	m.resetLocked(conn)
 	m.mu.Unlock()
 	if err := m.secrets.Set(acct, value); err != nil {
-		return fmt.Errorf("%w: %w", ErrKeychain, err)
+		if errors.Is(err, secret.ErrUnavailable) {
+			m.keychainFailed(err)
+		}
+		return fmt.Errorf("%w (kept for this run): %w", ErrKeychain, err)
 	}
 	return nil
 }

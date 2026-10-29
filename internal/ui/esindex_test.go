@@ -61,12 +61,12 @@ func TestESIndexSections(t *testing.T) {
 		t.Fatalf("stats: %v", tab.section)
 	}
 	press(t, m, "]")
-	if tab.section != idxStats {
-		t.Errorf("past the end: %v", tab.section)
-	}
-	press(t, m, "[", "[", "[", "[", "[")
 	if tab.section != idxDocuments {
-		t.Errorf("back: %v", tab.section)
+		t.Errorf("past the end wraps to the first: %v", tab.section)
+	}
+	press(t, m, "[")
+	if tab.section != idxStats {
+		t.Errorf("before the first wraps to the last: %v", tab.section)
 	}
 	// the same index again: the same tab
 	n := len(m.tabs)

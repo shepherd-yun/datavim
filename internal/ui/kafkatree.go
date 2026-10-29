@@ -161,7 +161,7 @@ func (m *Model) kafkaTreeLoaded(msg kafkaTreeMsg) tea.Cmd {
 	if errors.Is(msg.err, session.ErrPasswordRequired) {
 		m.tree.CancelLoad(n)
 		m.retryNode = n
-		m.overlay = overlay.NewPassword(n.Conn)
+		m.overlay = m.passwordPrompt(n.Conn)
 		return nil
 	}
 	if m.userPrompt(msg.err) != nil {

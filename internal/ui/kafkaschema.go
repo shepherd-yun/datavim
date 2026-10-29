@@ -19,6 +19,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/ui/highlight"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
@@ -110,11 +111,14 @@ func (m *Model) openSchema(conn, subject string, version int) tea.Cmd {
 	})
 }
 
-func (t *schemaTab) ID() int                        { return t.id }
-func (t *schemaTab) Title() string                  { return t.subject }
-func (t *schemaTab) Key() string                    { return schemaTabKey(t.conn, t.subject) }
-func (t *schemaTab) Context() keymap.Context        { return keymap.KafkaSchema }
-func (t *schemaTab) Target() (string, db.TableRef)  { return t.conn, db.TableRef{} }
+func (t *schemaTab) ID() int                       { return t.id }
+func (t *schemaTab) Title() string                 { return t.subject }
+func (t *schemaTab) Key() string                   { return schemaTabKey(t.conn, t.subject) }
+func (t *schemaTab) Context() keymap.Context       { return keymap.KafkaSchema }
+func (t *schemaTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
+func (t *schemaTab) treeNodes() []nodeMatch {
+	return []nodeMatch{matchNode(tree.KindSchemaSubject, t.subject)}
+}
 func (t *schemaTab) SetSize(w, h int)               { t.width, t.height = max(w, 0), max(h, 0) }
 func (t *schemaTab) Init() tea.Cmd                  { return t.load() }
 func (t *schemaTab) retryAfterPassword() tea.Cmd    { return t.load() }
@@ -235,10 +239,10 @@ func (t *schemaTab) Handle(a keymap.Action) tea.Cmd {
 	}
 	switch a {
 	case keymap.NextSection:
-		t.section = min(t.section+1, schemaSections-1)
+		t.section = textutil.Cycle(t.section, 1, schemaSections)
 		return nil
 	case keymap.PrevSection:
-		t.section = max(t.section-1, 0)
+		t.section = textutil.Cycle(t.section, -1, schemaSections)
 		return nil
 	case keymap.Refresh:
 		if !t.loading {

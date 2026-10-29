@@ -17,13 +17,22 @@ type PasswordSubmittedMsg struct {
 
 // Password prompts for a connection password.
 type Password struct {
-	conn  string
-	input field
-	save  bool
+	conn   string
+	input  field
+	save   bool
+	envVar string // set: the keychain is unavailable, and this variable can hold the password
 }
 
 // NewPassword builds a prompt; saving to the keychain is on by default.
 func NewPassword(conn string) *Password { return &Password{conn: conn, save: true} }
+
+// WithoutKeychain is the prompt when the keychain cannot be used: the
+// password is kept for this run, and envVar is named as the way to set it
+// for good.
+func (p *Password) WithoutKeychain(envVar string) *Password {
+	p.save, p.envVar = false, envVar
+	return p
+}
 
 func (p *Password) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 	switch msg.String() {
@@ -32,7 +41,7 @@ func (p *Password) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 	case "enter":
 		return nil, emit(PasswordSubmittedMsg{Conn: p.conn, Password: p.input.String(), Save: p.save})
 	case "tab":
-		p.save = !p.save
+		p.save = !p.save && p.envVar == ""
 	default:
 		p.input.handle(msg)
 	}
@@ -41,18 +50,21 @@ func (p *Password) HandleKey(msg tea.KeyPressMsg) (Overlay, tea.Cmd) {
 
 func (p *Password) View(width, _ int) string {
 	w := max(min(width-4, 50), 10)
-	check := "[ ]"
+	check := "[ ] save to Keychain (tab)"
 	if p.save {
-		check = "[✓]"
+		check = "[✓] save to Keychain (tab)"
 	}
-	body := strings.Join([]string{
+	lines := []string{
 		"Password for " + theme.Title.Render(p.conn) + ":",
 		"> " + p.input.ViewMasked(w-4, '•'),
 		"",
-		check + " save to Keychain (tab)",
-		theme.Muted.Render("enter connect · esc cancel"),
-	}, "\n")
-	return theme.Box("Connect", body, w, 7, true)
+		check,
+	}
+	if p.envVar != "" {
+		lines = append(lines[:3], theme.Muted.Render("keychain unavailable: kept for this run"), theme.Muted.Render("(or set "+p.envVar+")"))
+	}
+	lines = append(lines, theme.Muted.Render("enter connect · esc cancel"))
+	return theme.Box("Connect", strings.Join(lines, "\n"), w, len(lines)+2, true)
 }
 
 // Paste inserts text at the cursor.

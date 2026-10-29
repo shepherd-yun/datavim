@@ -35,10 +35,27 @@ go install github.com/shepherd-yun/datavim/cmd/datavim@latest
 
 macOS 与 Linux 的二进制包在 [Releases 页面](https://github.com/shepherd-yun/datavim/releases)。
 
+### Linux 与 WSL
+
+下载 `linux_amd64` 包（ARM 用 `linux_arm64`），把 `datavim` 放到 `PATH` 里即可。它是静态二进制，没有依赖：
+
+```sh
+VERSION=3.4.0   # 最新的版本
+curl -fsSLO https://github.com/shepherd-yun/datavim/releases/download/v$VERSION/datavim_${VERSION}_linux_amd64.tar.gz
+tar xzf datavim_${VERSION}_linux_amd64.tar.gz datavim && sudo install datavim /usr/local/bin/
+```
+
+- **密码**保存在桌面会话的 Secret Service（GNOME Keyring、KWallet）里。没有它的环境（WSL、服务器）下，
+  datavim 照样询问密码，但只在本次运行内记住，弹窗里会说明。不想每次输入，可以设置环境变量
+  `DATAVIM_PASSWORD_<连接名>`：连接名转大写，字母数字以外的字符换成 `_`（`prod-pg` → `DATAVIM_PASSWORD_PROD_PG`）。
+- **剪贴板**：WSL 里用 Windows 剪贴板（通过 `powershell.exe`）；Linux 桌面用 `wl-copy` / `wl-paste`（Wayland）
+  或 `xclip` / `xsel`（X11）。通过 SSH 使用、或者没有这些工具时，退回终端的 OSC 52，kitty、WezTerm、foot、
+  Alacritty、iTerm2 和 Windows Terminal 支持，GNOME Terminal 不支持。
+
 ## 配置
 
 创建 `~/.config/datavim/connections.toml`，参见 [docs/examples/connections.toml](docs/examples/connections.toml)。
-首次连接时 datavim 会询问密码，并可保存到 macOS 钥匙串。
+首次连接时 datavim 会询问密码，并可保存到钥匙串（macOS 钥匙串，Linux 上是 Secret Service；参见 [Linux 与 WSL](#linux-与-wsl)）。
 
 可选的 `~/.config/datavim/config.toml`（参见 [docs/examples/config.toml](docs/examples/config.toml)）：
 
@@ -387,7 +404,7 @@ datavim --list-workspaces
 | `<Space>e` | 显示 / 隐藏树 |
 | `+` / `=` | 全屏：当前焦点所在的面板占满屏幕（在控制台中是编辑器或结果）。切换焦点时全屏会跟着走，切换 tab 时保持全屏 |
 | `-` / `_` | 退出全屏 |
-| `<Space>l` | 在树中定位当前 tab：表，或 console 所在的数据库 / schema（也可用 `:locate`） |
+| `<Space>l` | 在树中定位当前 tab：表，Kafka 的 topic / group / subject / connector，Elasticsearch 的 index / template / policy / pipeline / snapshot，Redis 的 key，或 console 所在的数据库 / schema（也可用 `:locate`） |
 | `F` / `fx` | 树里 Redis 的 db、文件夹或 key 上：按模式过滤 key / 清除过滤 |
 | `<Space>k` | 按名字打开 Redis key |
 | `v` | Redis key 详情页：String 按 auto / text / JSON / hex 显示 |
@@ -396,7 +413,7 @@ datavim --list-workspaces
 | `o` | 树里 Redis 的 db、文件夹或 key 上：新建 key |
 | `g d` | Redis 控制台结果：打开单元格里的 key |
 | `<Space>i` | 服务器页：状态、会话、锁等（Redis：状态、慢查询、客户端） |
-| `[` / `]` | 服务器页：上一个 / 下一个分区 |
+| `[` / `]` | 服务器页、Kafka 和 Elasticsearch 标签页：上一个 / 下一个分区（首尾循环） |
 | `dd` | 服务器页：断开会话 / 杀掉 Redis 客户端 |
 | `c` | SQL 服务器页的会话列表：取消会话正在执行的查询 |
 | `a` | SQL 服务器页的会话列表：显示 / 隐藏空闲会话 |
@@ -407,12 +424,13 @@ datavim --list-workspaces
 | `<Space>r` | 刷新树节点或 tab，并重新加载该连接的元数据 |
 | `?` | 当前面板的帮助：只列出该区域自己的按键和常用全局键（`Tab` 查看全部全局键） |
 | `:q` / `:qa` | 关闭 tab / 退出 |
+| `<Space>q o` / `<Space>q a` | 关闭其他 tab（`:only`）/ 关闭全部 tab（`:closeall`），有未结束的事务或未保存的修改时先询问 |
 | `:e <file>` | 在当前上下文的连接 / 数据库上，用控制台打开 `.sql` 文件 |
 | `:w` / `:w <file>` / `:wq` | 文件控制台：保存 / 另存为（普通控制台会变成文件控制台）/ 保存并关闭；`:w!` 覆盖磁盘上已被修改的文件 |
 | `<Space>t` | 控制台：切换手动提交（状态栏显示 `TX n`） |
 | `:commit` / `:rollback` | 控制台：结束事务 |
 | `:set noreadonly` / `:set readonly` | 本次会话解锁 / 锁定连接 |
-| `:q!` / `:qa!` | 关闭 / 退出，不询问未结束的事务 |
+| `:q!` / `:qa!` | 关闭 / 退出，不询问未结束的事务（`:only!`、`:closeall!` 同理） |
 | `<Space><Space>` | 搜索表、视图、列、函数、schema 和数据库，范围是所有连接，并加载尚未打开的连接的元数据（可以用 `db.table.column`、`table.column` 或其中一段按上级模糊限定，打开列时光标直接落在该列；`@` 开头只搜当前上下文的连接；`Enter` 打开，`Ctrl-o` 打开结构）。`Tab` / `Shift-Tab` 切换到搜索已打开 console 的内容（`Enter` 跳到那一行）或 SQL 历史（查询为空时列出最近的语句，`Enter` 像 `<Space>h` 一样插入语句） |
 | `<Space>f` | 最近打开的表、结构、控制台、文件、Redis key、Kafka topic 和 group |
 | `.` / `s` | 树里 Kafka 连接上：显示 / 隐藏内部 topic / consumer group 按 lag 或名字排序 |

@@ -49,10 +49,35 @@ type routineLoadedMsg struct {
 
 func (m routineLoadedMsg) failure() (string, error) { return m.conn, m.err }
 
-// revealTarget is a tree path being opened for a search result.
+// revealTarget is a tree path being opened for a search result, and the
+// node below it a located tab wants selected once it is there.
 type revealTarget struct {
 	conn string
 	path []string
+	node *nodeTarget
+}
+
+// nodeMatch picks a tree node.
+type nodeMatch func(*tree.Node) bool
+
+// matchNode picks the node of kind whose Key is key.
+func matchNode(kind tree.Kind, key string) nodeMatch {
+	return func(n *tree.Node) bool { return n.Kind == kind && n.Key == key }
+}
+
+// nodeTarget is a located tab's own node: the first of matches found
+// among the loaded nodes, most specific first (a later one stands in for
+// a node not loaded yet).
+type nodeTarget struct {
+	title   string
+	matches []nodeMatch
+}
+
+// treeLocator is a tab whose node is not a table or namespace path (kafka
+// topics, elasticsearch indices, redis keys …). treeNodes is nil when the
+// tab has no node of its own.
+type treeLocator interface {
+	treeNodes() []nodeMatch
 }
 
 // openSearch shows the <space><space> popup. It searches every
@@ -398,22 +423,46 @@ func (m *Model) routineLoaded(msg routineLoadedMsg) {
 // reveal expands the tree along path and selects its end; children that
 // are not loaded yet are loaded on the way (continueReveal resumes).
 func (m *Model) reveal(conn string, path []string) tea.Cmd {
+	return m.revealNode(conn, path, nil)
+}
+
+// revealNode is reveal, then the selection of node (when not nil) below
+// the path.
+func (m *Model) revealNode(conn string, path []string, node *nodeTarget) tea.Cmd {
 	m.setFocus(focusTree)
 	m.revealing = nil
 	n, res := m.tree.Reveal(conn, path)
 	switch res {
 	case tree.NeedsLoad:
-		m.revealing = &revealTarget{conn: conn, path: path}
+		m.revealing = &revealTarget{conn: conn, path: path, node: node}
 		return loadChildren(m.backend, n)
 	case tree.Waiting:
-		m.revealing = &revealTarget{conn: conn, path: path}
+		m.revealing = &revealTarget{conn: conn, path: path, node: node}
 	case tree.NotFound:
 		m.setStatus(strings.Join(path, "/")+" is not in the tree of "+conn, true)
+	case tree.Revealed:
+		if node != nil {
+			m.selectNode(conn, node)
+		}
 	}
 	return nil
 }
 
-// locate reveals what the active tab shows in the tree: its table, or the
+// selectNode selects the first of node's matches in conn's loaded tree.
+func (m *Model) selectNode(conn string, node *nodeTarget) {
+	for i, match := range node.matches {
+		if m.tree.RevealWhere(conn, match) {
+			if i > 0 {
+				m.setStatus(node.title+" is not loaded in the tree yet: its parent is selected", false)
+			}
+			return
+		}
+	}
+	m.setStatus(node.title+" is not in the tree of "+conn+" (filtered, hidden or not loaded)", true)
+}
+
+// locate reveals what the active tab shows in the tree: its table, its
+// own node (a kafka topic, an elasticsearch index, a redis key …), or the
 // namespace (else the connection) of a console.
 func (m *Model) locate() tea.Cmd {
 	t := m.activeTab()
@@ -422,14 +471,20 @@ func (m *Model) locate() tea.Cmd {
 		return nil
 	}
 	conn, ref := t.Target()
+	var node *nodeTarget
+	if l, ok := t.(treeLocator); ok {
+		if ms := l.treeNodes(); len(ms) > 0 {
+			node = &nodeTarget{title: t.Title(), matches: ms}
+		}
+	}
 	if k, ok := t.(*keyTab); ok {
-		return m.reveal(conn, []string{"db" + strconv.Itoa(k.db)})
+		return m.revealNode(conn, []string{"db" + strconv.Itoa(k.db)}, node)
 	}
 	path := nsPath(ref.Namespace)
 	if ref.Name != "" && len(path) > 0 {
 		path = append(path, ref.Name)
 	}
-	return m.reveal(conn, path)
+	return m.revealNode(conn, path, node)
 }
 
 // continueReveal resumes a reveal once children of its connection loaded.
@@ -442,5 +497,5 @@ func (m *Model) continueReveal(msg childrenLoadedMsg) tea.Cmd {
 		m.revealing = nil
 		return nil
 	}
-	return m.reveal(r.conn, r.path)
+	return m.revealNode(r.conn, r.path, r.node)
 }

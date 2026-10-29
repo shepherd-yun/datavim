@@ -18,6 +18,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/export"
 	"github.com/shepherd-yun/datavim/internal/history"
 	"github.com/shepherd-yun/datavim/internal/meta"
+	"github.com/shepherd-yun/datavim/internal/secret"
 	"github.com/shepherd-yun/datavim/internal/session"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/overlay"
@@ -66,6 +67,8 @@ type whichKeyMsg struct{ gen int }
 type (
 	quitConfirmedMsg     struct{}
 	closeTabConfirmedMsg struct{ tabID int }
+	// closeTabsConfirmedMsg comes from the confirm of :only / :closeall.
+	closeTabsConfirmedMsg struct{ tabIDs []int }
 )
 
 // Model is the root Bubble Tea model.
@@ -473,6 +476,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, m.closeTab(i)
 			}
 		}
+	case closeTabsConfirmedMsg:
+		return m, m.closeTabs(msg.tabIDs)
 	case openOverlayMsg:
 		if r, ok := msg.overlay.(registerUser); ok {
 			r.UseRegisters(m.regs)
@@ -756,6 +761,10 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 		return loadRecent(m.store)
 	case keymap.Locate:
 		return m.locate()
+	case keymap.CloseOtherTabs:
+		return m.requestCloseTabs(true, false)
+	case keymap.CloseAllTabs:
+		return m.requestCloseTabs(false, false)
 	case keymap.NewConnection:
 		m.overlay = overlay.NewConnForm(m.keys)
 	case keymap.OpenKey:
@@ -873,7 +882,7 @@ func (m *Model) treeAction(a keymap.Action) tea.Cmd {
 	case keymap.Password:
 		if n := t.Selected(); n != nil {
 			m.retryNode = nil
-			m.overlay = overlay.NewPassword(n.Conn)
+			m.overlay = m.passwordPrompt(n.Conn)
 		}
 	case keymap.EditNode:
 		return m.editNode()
@@ -968,7 +977,7 @@ func (m *Model) childrenLoaded(msg childrenLoadedMsg) tea.Cmd {
 	if errors.Is(msg.err, session.ErrPasswordRequired) {
 		m.tree.CancelLoad(msg.node)
 		m.retryNode = msg.node
-		m.overlay = overlay.NewPassword(msg.node.Conn)
+		m.overlay = m.passwordPrompt(msg.node.Conn)
 		return nil
 	}
 	if m.userPrompt(msg.err) != nil {
@@ -986,6 +995,16 @@ func (m *Model) childrenLoaded(msg childrenLoadedMsg) tea.Cmd {
 		return m.continueReveal(msg)
 	}
 	return tea.Batch(m.ensureMeta(msg.node.Conn, msg.node.NS.Database), m.continueReveal(msg))
+}
+
+// passwordPrompt asks for conn's password, without the keychain when it
+// cannot be used.
+func (m *Model) passwordPrompt(conn string) *overlay.Password {
+	p := overlay.NewPassword(conn)
+	if m.backend.KeychainError() != nil {
+		p.WithoutKeychain(secret.EnvVar(conn))
+	}
+	return p
 }
 
 func (m *Model) passwordSubmitted(msg overlay.PasswordSubmittedMsg) tea.Cmd {
@@ -1074,7 +1093,7 @@ func (m *Model) askPassword(msg tea.Msg, conn string, err error) {
 	default:
 		return
 	}
-	m.overlay = overlay.NewPassword(conn)
+	m.overlay = m.passwordPrompt(conn)
 }
 
 func (m *Model) runCommand(text string) tea.Cmd {
@@ -1118,6 +1137,10 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		return m.requestClose(false)
 	case "q!":
 		return m.requestClose(true)
+	case "only", "tabonly", "only!", "tabonly!":
+		return m.requestCloseTabs(true, strings.HasSuffix(cmd, "!"))
+	case "closeall", "closeall!":
+		return m.requestCloseTabs(false, strings.HasSuffix(cmd, "!"))
 	case "qa", "quit":
 		return m.requestQuit(false)
 	case "qa!":
@@ -1180,10 +1203,67 @@ func (m *Model) requestClose(force bool) tea.Cmd {
 	return m.closeTab(m.active)
 }
 
+// requestCloseTabs closes every tab (only the others when others), asking
+// first when one holds an open transaction or unsaved changes (unless
+// force).
+func (m *Model) requestCloseTabs(others, force bool) tea.Cmd {
+	var closing []tab
+	for i, t := range m.tabs {
+		if !others || i != m.active {
+			closing = append(closing, t)
+		}
+	}
+	if len(closing) == 0 {
+		m.setStatus("no other tab to close", false)
+		return nil
+	}
+	ids := make([]int, len(closing))
+	for i, t := range closing {
+		ids[i] = t.ID()
+	}
+	open, edits := openTransactions(closing), unsavedTables(closing)
+	if force || len(open)+len(edits) == 0 {
+		return m.closeTabs(ids)
+	}
+	var lines []string
+	if len(edits) > 0 {
+		lines = append(lines, "Unsaved changes in: "+strings.Join(edits, ", ")+".")
+	}
+	if len(open) > 0 {
+		lines = append(lines, "Uncommitted transactions in: "+strings.Join(open, ", ")+".")
+	}
+	title := "Open transactions"
+	if len(edits) > 0 {
+		title = "Unsaved changes"
+	}
+	lines = append(lines, "Closing "+plural(len(ids), "tab")+" discards them (transactions roll back).")
+	m.overlay = overlay.NewConfirm(title, lines, "", closeTabsConfirmedMsg{tabIDs: ids})
+	return nil
+}
+
+// closeTabs closes the tabs with ids that are still open, keeping the
+// active tab when it stays.
+func (m *Model) closeTabs(ids []int) tea.Cmd {
+	active := -1
+	if t := m.activeTab(); t != nil {
+		active = t.ID()
+	}
+	var cmds []tea.Cmd
+	for i := len(m.tabs) - 1; i >= 0; i-- {
+		if slices.Contains(ids, m.tabs[i].ID()) {
+			cmds = append(cmds, m.closeTab(i))
+		}
+	}
+	if i := slices.IndexFunc(m.tabs, func(t tab) bool { return t.ID() == active }); i >= 0 {
+		m.active = i
+	}
+	return tea.Batch(cmds...)
+}
+
 // requestQuit quits, asking first when consoles hold open transactions
 // (unless force).
 func (m *Model) requestQuit(force bool) tea.Cmd {
-	open, edits := m.openTransactions(), m.unsavedTables()
+	open, edits := openTransactions(m.tabs), unsavedTables(m.tabs)
 	if force || len(open)+len(edits) == 0 {
 		return m.quit()
 	}
@@ -1204,9 +1284,9 @@ func (m *Model) requestQuit(force bool) tea.Cmd {
 
 // unsavedTables names the tabs with staged changes ("users (3)") and the
 // unsaved files.
-func (m *Model) unsavedTables() []string {
+func unsavedTables(tabs []tab) []string {
 	var out []string
-	for _, t := range m.tabs {
+	for _, t := range tabs {
 		if d, ok := t.(stager); ok && d.changes() > 0 {
 			out = append(out, fmt.Sprintf("%s (%d)", d.Title(), d.changes()))
 		}
@@ -1223,9 +1303,9 @@ func openTxNote(conn string, t txHolder) string {
 }
 
 // openTransactions names the consoles with an uncommitted transaction.
-func (m *Model) openTransactions() []string {
+func openTransactions(tabs []tab) []string {
 	var out []string
-	for _, t := range m.tabs {
+	for _, t := range tabs {
 		if c, ok := t.(txHolder); ok && c.openTx() {
 			out = append(out, c.Title())
 		}

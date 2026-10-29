@@ -134,3 +134,22 @@ func TestLegacyEnvVarStillWorks(t *testing.T) {
 		t.Fatalf("Get = %q, %v", got, err)
 	}
 }
+
+func TestKeyringUnavailable(t *testing.T) {
+	keyring.MockInitWithError(errors.New(`exec: "dbus-launch": executable file not found in $PATH`))
+	t.Cleanup(keyring.MockInit)
+	k := Keyring{Getenv: func(string) string { return "" }}
+	if _, err := k.Get("local"); !errors.Is(err, ErrUnavailable) || errors.Is(err, ErrNotFound) {
+		t.Fatalf("Get: %v", err)
+	}
+	if err := k.Set("local", "pw"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Set: %v", err)
+	}
+	if err := k.Delete("local"); !errors.Is(err, ErrUnavailable) {
+		t.Fatalf("Delete: %v", err)
+	}
+	env := Keyring{Getenv: func(string) string { return "from-env" }}
+	if pw, err := env.Get("local"); err != nil || pw != "from-env" {
+		t.Fatalf("the env var still wins: %q, %v", pw, err)
+	}
+}

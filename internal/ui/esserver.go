@@ -381,11 +381,12 @@ func (t *esServerTab) sectionShown(s eserverSection) bool {
 }
 
 // step is the next shown section from t.section in direction dir (±1),
-// or t.section at either end.
+// wrapping around at either end.
 func (t *esServerTab) step(dir int) eserverSection {
-	for s := int(t.section) + dir; s >= 0 && s < int(eserverSections); s += dir {
-		if t.sectionShown(eserverSection(s)) {
-			return eserverSection(s)
+	s := t.section
+	for range eserverSections - 1 {
+		if s = textutil.Cycle(s, dir, eserverSections); t.sectionShown(s) {
+			return s
 		}
 	}
 	return t.section

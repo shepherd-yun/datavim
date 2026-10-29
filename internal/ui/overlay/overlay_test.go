@@ -141,6 +141,18 @@ func TestPasswordSaveCheckbox(t *testing.T) {
 	}
 }
 
+func TestPasswordWithoutKeychain(t *testing.T) {
+	p := NewPassword("prod").WithoutKeychain("DATAVIM_PASSWORD_PROD")
+	v := ansi.Strip(p.View(70, 20))
+	if strings.Contains(v, "save to Keychain") || !strings.Contains(v, "keychain unavailable") || !strings.Contains(v, "DATAVIM_PASSWORD_PROD") {
+		t.Fatalf("view:\n%s", v)
+	}
+	_, msg := send(t, p, "x", "tab", "enter")
+	if got := msg.(PasswordSubmittedMsg); got.Save || got.Password != "x" {
+		t.Fatalf("tab cannot turn saving on: %+v", got)
+	}
+}
+
 func TestPasswordCancel(t *testing.T) {
 	if o, msg := send(t, NewPassword("p"), "a", "esc"); o != nil || msg != nil {
 		t.Fatalf("esc: o=%v msg=%v", o, msg)

@@ -160,3 +160,17 @@ func TestKafkaServerHiddenDuringLoad(t *testing.T) {
 		t.Fatalf("shown again: loaded (loading=%v loaded=%v)", s.loading, s.loaded)
 	}
 }
+
+func TestKafkaServerSectionsWrap(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders", 1, 0, 1)
+	s := openKafkaServer(t, m)
+	pressAll(t, m, "[")
+	if s.section != secKUnder {
+		t.Fatalf("[ on the first section: %d", s.section)
+	}
+	pressAll(t, m, "]")
+	if s.section != secKStatus {
+		t.Fatalf("] on the last section: %d", s.section)
+	}
+}

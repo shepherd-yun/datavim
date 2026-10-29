@@ -43,6 +43,9 @@ type Backend interface {
 	// ESInfo is what the cluster said about itself when ES opened it.
 	ESInfo(name string) (es.Info, bool)
 	SetPassword(name, password string, save bool) error
+	// KeychainError is why passwords cannot be saved to the keychain
+	// (no Secret Service on Linux / WSL), nil while it works.
+	KeychainError() error
 	// SetSecret remembers and saves a secret other than the password
 	// (session.SecretOAuth, session.SecretSchemaRegistry, session.SecretConnect).
 	SetSecret(conn, kind, value string) error

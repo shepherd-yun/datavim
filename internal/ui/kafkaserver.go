@@ -13,6 +13,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/kafka"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
@@ -108,10 +109,13 @@ func (t *kafkaServerTab) Title() string                 { return t.conn + " · c
 func (t *kafkaServerTab) Key() string                   { return kafkaServerTabKey(t.conn) }
 func (t *kafkaServerTab) Context() keymap.Context       { return keymap.KafkaServer }
 func (t *kafkaServerTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
-func (t *kafkaServerTab) SetSize(w, h int)              { t.width, t.height = max(w, 0), max(h, 0) }
-func (t *kafkaServerTab) Init() tea.Cmd                 { return t.load() }
-func (t *kafkaServerTab) retryAfterPassword() tea.Cmd   { return t.load() }
-func (t *kafkaServerTab) activeGrid() *grid.Model       { return t.grids[t.section] }
+func (t *kafkaServerTab) treeNodes() []nodeMatch {
+	return []nodeMatch{matchNode(tree.KindKafkaSection, secBrokers)}
+}
+func (t *kafkaServerTab) SetSize(w, h int)            { t.width, t.height = max(w, 0), max(h, 0) }
+func (t *kafkaServerTab) Init() tea.Cmd               { return t.load() }
+func (t *kafkaServerTab) retryAfterPassword() tea.Cmd { return t.load() }
+func (t *kafkaServerTab) activeGrid() *grid.Model     { return t.grids[t.section] }
 
 func (t *kafkaServerTab) Find(q string, forward bool) bool { return t.activeGrid().Find(q, forward) }
 
@@ -272,10 +276,10 @@ func (t *kafkaServerTab) apply(m kserverLoadedMsg) {
 func (t *kafkaServerTab) Handle(a keymap.Action) tea.Cmd {
 	switch a {
 	case keymap.NextSection:
-		t.section = min(t.section+1, kserverSections-1)
+		t.section = textutil.Cycle(t.section, 1, kserverSections)
 		return nil
 	case keymap.PrevSection:
-		t.section = max(t.section-1, 0)
+		t.section = textutil.Cycle(t.section, -1, kserverSections)
 		return nil
 	case keymap.Refresh:
 		if !t.loading {

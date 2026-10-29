@@ -75,8 +75,12 @@ func TestESSecurityHidden(t *testing.T) {
 		t.Fatal("users shown without security")
 	}
 	pressAll(t, m, "]")
+	if tab.section != secESOverview {
+		t.Errorf("] went to %v, want it to skip Users and Roles and wrap", tab.section)
+	}
+	pressAll(t, m, "[")
 	if tab.section != secESSettings {
-		t.Errorf("] went to %v", tab.section)
+		t.Errorf("[ went to %v", tab.section)
 	}
 	if strings.Contains(screen(m), "Users") {
 		t.Errorf("screen:\n%s", screen(m))

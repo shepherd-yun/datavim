@@ -18,7 +18,6 @@ import (
 	"github.com/shepherd-yun/datavim/internal/rdb"
 	"github.com/shepherd-yun/datavim/internal/session"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
-	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 )
 
@@ -412,7 +411,7 @@ func (m *Model) scanned(msg redisScanMsg) tea.Cmd {
 		if errors.Is(msg.err, session.ErrPasswordRequired) {
 			if m.overlay == nil {
 				m.retryNode = n
-				m.overlay = overlay.NewPassword(msg.key.conn)
+				m.overlay = m.passwordPrompt(msg.key.conn)
 			}
 			return nil
 		}

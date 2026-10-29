@@ -16,6 +16,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/kmsgx"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
@@ -149,7 +150,10 @@ func (t *topicTab) Context() keymap.Context {
 	return keymap.KafkaTopic
 }
 func (t *topicTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
-func (t *topicTab) SetSize(w, h int)              { t.width, t.height = max(w, 0), max(h, 0) }
+func (t *topicTab) treeNodes() []nodeMatch {
+	return []nodeMatch{matchNode(tree.KindTopic, t.topic)}
+}
+func (t *topicTab) SetSize(w, h int) { t.width, t.height = max(w, 0), max(h, 0) }
 func (t *topicTab) Init() tea.Cmd {
 	return tea.Batch(t.loadDetail(), t.loadMsgs(0, t.msgs.pos, nil))
 }
@@ -317,9 +321,9 @@ func (t *topicTab) Handle(a keymap.Action) tea.Cmd {
 	}
 	switch a {
 	case keymap.NextSection:
-		return t.setSection(min(t.section+1, topicSections-1))
+		return t.setSection(textutil.Cycle(t.section, 1, topicSections))
 	case keymap.PrevSection:
-		return t.setSection(max(t.section-1, 0))
+		return t.setSection(textutil.Cycle(t.section, -1, topicSections))
 	case keymap.Refresh:
 		switch t.section {
 		case secConsumers:

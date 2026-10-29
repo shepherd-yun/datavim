@@ -404,6 +404,7 @@ type fakeBackend struct {
 	conns         []config.Connection
 	conn          *fakeConn
 	needPassword  bool
+	keychainErr   error // KeychainError
 	connErr       error
 	passwords     []string
 	resets        []string
@@ -519,6 +520,12 @@ func (f *fakeBackend) SetPassword(name, password string, save bool) error {
 	f.passwords = append(f.passwords, fmt.Sprintf("%s:%s:%v", name, password, save))
 	f.needPassword = false
 	return nil
+}
+
+func (f *fakeBackend) KeychainError() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.keychainErr
 }
 
 func (f *fakeBackend) setConnErr(err error) {

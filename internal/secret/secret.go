@@ -3,6 +3,7 @@ package secret
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"strings"
 
@@ -18,6 +19,18 @@ const legacyService = "sqlvim"
 // ErrNotFound means no password is stored for the connection.
 var ErrNotFound = errors.New("secret not found")
 
+// ErrUnavailable means the keychain itself cannot be used: on Linux and
+// WSL, no Secret Service (gnome-keyring, KWallet …) on the session D-Bus.
+var ErrUnavailable = errors.New("keychain unavailable")
+
+// unavailable marks an error of the keychain other than a missing entry.
+func unavailable(err error) error {
+	if err == nil || errors.Is(err, keyring.ErrNotFound) {
+		return err
+	}
+	return fmt.Errorf("%w: %w", ErrUnavailable, err)
+}
+
 // Store reads and writes connection passwords.
 type Store interface {
 	Get(name string) (string, error)
@@ -26,7 +39,9 @@ type Store interface {
 	Delete(name string) error
 }
 
-// Keyring is a Store backed by the macOS Keychain (or the platform equivalent).
+// Keyring is a Store backed by the macOS Keychain (or the platform
+// equivalent: the Secret Service on Linux). Its errors other than
+// ErrNotFound are ErrUnavailable.
 // The environment variable EnvVar(name) takes precedence, which is handy on CI.
 type Keyring struct {
 	// Getenv defaults to os.Getenv.
@@ -52,7 +67,7 @@ func (k Keyring) Get(name string) (string, error) {
 	if errors.Is(err, keyring.ErrNotFound) {
 		return k.getLegacy(name)
 	}
-	return pw, err
+	return pw, unavailable(err)
 }
 
 // getLegacy reads the password from the legacy service and moves it to the
@@ -63,7 +78,7 @@ func (k Keyring) getLegacy(name string) (string, error) {
 		return "", ErrNotFound
 	}
 	if err != nil {
-		return "", err
+		return "", unavailable(err)
 	}
 	if keyring.Set(service, k.Prefix+name, pw) == nil {
 		_ = keyring.Delete(legacyService, k.Prefix+name)
@@ -73,14 +88,14 @@ func (k Keyring) getLegacy(name string) (string, error) {
 
 // Set stores the password for the named connection.
 func (k Keyring) Set(name, password string) error {
-	return keyring.Set(service, k.Prefix+name, password)
+	return unavailable(keyring.Set(service, k.Prefix+name, password))
 }
 
 // Delete removes the stored password for the named connection.
 func (k Keyring) Delete(name string) error {
 	for _, svc := range []string{service, legacyService} {
 		if err := keyring.Delete(svc, k.Prefix+name); err != nil && !errors.Is(err, keyring.ErrNotFound) {
-			return err
+			return unavailable(err)
 		}
 	}
 	return nil

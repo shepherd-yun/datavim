@@ -242,6 +242,32 @@ func TestReveal(t *testing.T) {
 	}
 }
 
+func TestRevealWhere(t *testing.T) {
+	m := New([]*Node{{Kind: KindConn, Name: "events", Conn: "events"}, {Kind: KindConn, Name: "other", Conn: "other"}})
+	events, other := m.Roots()[0], m.Roots()[1]
+	if m.RevealWhere("events", func(*Node) bool { return true }) {
+		t.Fatal("found a node under an unloaded connection")
+	}
+	sec := &Node{Kind: KindKafkaSection, Name: "Topics (2)", Conn: "events", Section: "topics", Key: "topics"}
+	m.SetChildren(events, []*Node{sec}, nil)
+	folder := &Node{Kind: KindTopicFolder, Name: "orders", Conn: "events", Key: "orders"}
+	topic := &Node{Kind: KindTopic, Name: "orders.v1", Conn: "events", Key: "orders.v1"}
+	Adopt(folder, []*Node{topic})
+	m.SetChildren(sec, []*Node{folder}, nil)
+	sec.Expanded, folder.Expanded = false, false
+	m.SetChildren(other, []*Node{{Kind: KindTopic, Name: "orders.v1", Conn: "other", Key: "orders.v1"}}, nil)
+
+	if !m.RevealWhere("events", func(n *Node) bool { return n.Kind == KindTopic && n.Key == "orders.v1" }) {
+		t.Fatal("not found")
+	}
+	if m.Selected() != topic || !sec.Expanded || !folder.Expanded || !events.Expanded {
+		t.Fatalf("selected %q, expanded %v %v %v", m.Selected().Name, events.Expanded, sec.Expanded, folder.Expanded)
+	}
+	if m.RevealWhere("events", func(n *Node) bool { return n.Key == "nope" }) || m.Selected() != topic {
+		t.Fatal("a miss changed the selection")
+	}
+}
+
 func TestNamespaceFindsTheNodeListingTables(t *testing.T) {
 	m := New([]*Node{
 		{Kind: KindConn, Name: "my", Conn: "my"},

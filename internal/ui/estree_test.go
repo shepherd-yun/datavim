@@ -11,6 +11,8 @@ import (
 	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 	"github.com/shepherd-yun/datavim/internal/ui/uitest"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // newESModel is a model whose only connection is the elasticsearch "search".
@@ -234,5 +236,36 @@ func TestESHasNoSQLCatalog(t *testing.T) {
 	_, b, _ := newESModel(t, config.Connection{})
 	if _, ok := metaKeyFor(b, "search", ""); ok {
 		t.Error("an elasticsearch connection gets a SQL catalog")
+	}
+}
+
+func TestLocateESTabs(t *testing.T) {
+	m, _, f := newESModel(t, config.Connection{})
+	twelveIndices(f)
+	f.pipelines = map[string]string{"p": `{"processors":[]}`}
+	fakeSnapshots(f)
+	m.setFocus(focusTree)
+	pressAll(t, m, "l")
+	locateFrom(t, m, m.openIndex("search", "orders", targetIndex), func(n *tree.Node) bool {
+		return n.Kind == tree.KindESIndex && n.Key == "orders"
+	})
+	locateFrom(t, m, m.openIndex("search", "orders-alias", targetAlias), func(n *tree.Node) bool {
+		return n.Kind == tree.KindESAlias && n.Key == "orders-alias"
+	})
+	locateFrom(t, m, m.openIndex("search", "logs-app-*", targetPattern), func(n *tree.Node) bool {
+		return n.Kind == tree.KindIndexFolder && n.Key == "logs-app-"
+	})
+	locateFrom(t, m, func() tea.Msg { return esOpenObjectMsg{conn: "search", key: objKey(objPipeline, "p")} }, func(n *tree.Node) bool {
+		return n.Kind == tree.KindESPipeline && n.Key == "pipeline/p"
+	})
+
+	m.setFocus(focusTree)
+	openSnapshotTab(t, m, "repo1", "s1")
+	locateFrom(t, m, nil, func(n *tree.Node) bool { return n.Kind == tree.KindESSnapshot && n.Key == "repo1/s1" })
+	repo := m.tree.Selected().Parent()
+	repo.Children, repo.Loaded = nil, false // its snapshots not read yet
+	locateFrom(t, m, nil, func(n *tree.Node) bool { return n == repo })
+	if !strings.Contains(m.status, "not loaded") {
+		t.Errorf("status %q", m.status)
 	}
 }

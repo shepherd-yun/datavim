@@ -13,6 +13,8 @@ import (
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
+
+	tea "charm.land/bubbletea/v2"
 )
 
 // newKafkaModel is a model whose only connection is the kafka "events".
@@ -396,5 +398,33 @@ func TestTreeSchemaFilter(t *testing.T) {
 	pressAll(t, m, "enter")
 	if got := names(section(t, m, "events", secSchemas).Children); !slices.Equal(got, []string{"orders-value"}) {
 		t.Fatalf("subjects = %v", got)
+	}
+}
+
+func TestLocateKafkaTabs(t *testing.T) {
+	m, _, k := newKafkaModel(t, config.Connection{})
+	k.addTopic("orders.created", 1, 0, 1)
+	k.addTopic("orders.paid", 1, 0, 1)
+	k.addGroup(kafka.GroupDetail{Group: kafka.Group{Name: "billing"}})
+	m.setFocus(focusTree)
+	pressAll(t, m, "l")
+	locateFrom(t, m, m.openTopic("events", "orders.paid"), func(n *tree.Node) bool {
+		return n.Kind == tree.KindTopic && n.Key == "orders.paid" && n.Parent().Kind == tree.KindTopicFolder && n.Parent().Expanded
+	})
+	locateFrom(t, m, m.openGroup("events", "billing"), func(n *tree.Node) bool { return n.Kind == tree.KindKafkaGroup && n.Key == "billing" })
+	locateFrom(t, m, m.openACLs("events"), func(n *tree.Node) bool { return n.Kind == tree.KindKafkaACLs })
+}
+
+// locateFrom runs open, collapses the tree and presses <leader>l on the
+// tab: the tree must get the focus with want selected.
+func locateFrom(t *testing.T, m *Model, open tea.Cmd, want func(*tree.Node) bool) {
+	t.Helper()
+	drainAll(t, m, open)
+	m.setFocus(focusTree)
+	pressAll(t, m, "Z", "g", "g") // collapse everything, cursor on the first connection
+	m.setFocus(focusTabs)
+	pressAll(t, m, "space", "l")
+	if n := m.tree.Selected(); m.focus != focusTree || n == nil || !want(n) {
+		t.Fatalf("focus %v, selected %+v (%s)", m.focus, n, m.status)
 	}
 }

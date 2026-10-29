@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/config"
 	"github.com/shepherd-yun/datavim/internal/db"
 	"github.com/shepherd-yun/datavim/internal/history"
+	"github.com/shepherd-yun/datavim/internal/secret"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
@@ -219,6 +221,20 @@ func TestPasswordFlow(t *testing.T) {
 	}
 	if !strings.Contains(screen(m), "app") {
 		t.Fatalf("load must resume after the password:\n%s", screen(m))
+	}
+}
+
+func TestPasswordWithoutKeychain(t *testing.T) {
+	m, b := newTestModel(t)
+	b.needPassword = true
+	b.keychainErr = fmt.Errorf("%w: no dbus", secret.ErrUnavailable)
+	press(t, m, "l")
+	if s := screen(m); !strings.Contains(s, "keychain unavailable") || !strings.Contains(s, "DATAVIM_PASSWORD_LOCAL") {
+		t.Fatalf("prompt:\n%s", s)
+	}
+	press(t, m, "s", "e", "c", "enter")
+	if !slices.Equal(b.passwords, []string{"local:sec:false"}) {
+		t.Fatalf("passwords = %v", b.passwords)
 	}
 }
 
@@ -787,6 +803,75 @@ func TestCloseTabAsksWithOpenTransaction(t *testing.T) {
 	command(t, forced, "q!")
 	if len(forced.tabs) != 0 {
 		t.Fatal(":q! closes without asking")
+	}
+}
+
+func TestCloseOtherTabs(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	users := m.activeTab()
+	openLocalConsole(t, m)
+	openLocalConsole(t, m)
+	m.gotoTab(0)
+	command(t, m, "only")
+	if len(m.tabs) != 1 || m.activeTab() != users {
+		t.Fatalf("tabs %d, active %v", len(m.tabs), m.activeTab())
+	}
+
+	keys, _ := newTestModel(t)
+	openUsers(t, keys)
+	openLocalConsole(t, keys)
+	console := keys.activeTab()
+	press(t, keys, "space", "q", "o")
+	if len(keys.tabs) != 1 || keys.activeTab() != console {
+		t.Fatalf("<leader>qo: tabs %d", len(keys.tabs))
+	}
+}
+
+func TestCloseAllTabs(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	openLocalConsole(t, m)
+	if command(t, m, "closeall") {
+		t.Fatal(":closeall does not quit")
+	}
+	if len(m.tabs) != 0 || m.focus != focusTree || !m.showTree {
+		t.Fatalf("tabs %d, focus %v", len(m.tabs), m.focus)
+	}
+
+	keys, _ := newTestModel(t)
+	openUsers(t, keys)
+	openLocalConsole(t, keys)
+	if press(t, keys, "space", "q", "a") || len(keys.tabs) != 0 {
+		t.Fatalf("<leader>qa: tabs %d", len(keys.tabs))
+	}
+}
+
+func TestCloseOthersAsksWithOpenTransaction(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	openTxConsole(t, m)
+	m.gotoTab(0)
+	command(t, m, "only")
+	if len(m.tabs) != 2 || !strings.Contains(screen(m), "Open transaction") {
+		t.Fatalf("tabs=%d screen:\n%s", len(m.tabs), screen(m))
+	}
+	press(t, m, "n")
+	if len(m.tabs) != 2 {
+		t.Fatal("n keeps the tabs")
+	}
+	command(t, m, "only")
+	press(t, m, "y")
+	if len(m.tabs) != 1 || m.activeTab().Title() != "users" {
+		t.Fatalf("y closes the others: %d tabs", len(m.tabs))
+	}
+
+	forced, _ := newTestModel(t)
+	openUsers(t, forced)
+	openTxConsole(t, forced)
+	command(t, forced, "closeall!")
+	if len(forced.tabs) != 0 {
+		t.Fatal(":closeall! closes without asking")
 	}
 }
 

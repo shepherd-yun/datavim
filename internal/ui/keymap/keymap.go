@@ -159,6 +159,8 @@ const (
 	GlobalSearch       Action = "search.global"
 	Recent             Action = "recent.open"
 	Locate             Action = "tree.locate"
+	CloseOtherTabs     Action = "tab.closeothers"
+	CloseAllTabs       Action = "tab.closeall"
 	OpenKey            Action = "redis.openkey"
 	ValueFormat        Action = "redis.format"
 	OpenCellKey        Action = "redis.open_cell_key"

@@ -19,6 +19,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/esx"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/grid"
+	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
 	"github.com/shepherd-yun/datavim/internal/ui/textutil"
 	"github.com/shepherd-yun/datavim/internal/ui/theme"
 )
@@ -255,11 +256,22 @@ func (m *Model) openESObject(msg esOpenObjectMsg) tea.Cmd {
 	})
 }
 
-func (t *esObjectTab) ID() int                        { return t.id }
-func (t *esObjectTab) Title() string                  { return t.name + " · " + t.kind.label() }
-func (t *esObjectTab) Key() string                    { return esObjectTabKey(t.conn, t.key) }
-func (t *esObjectTab) Context() keymap.Context        { return keymap.ESObject }
-func (t *esObjectTab) Target() (string, db.TableRef)  { return t.conn, db.TableRef{} }
+func (t *esObjectTab) ID() int                       { return t.id }
+func (t *esObjectTab) Title() string                 { return t.name + " · " + t.kind.label() }
+func (t *esObjectTab) Key() string                   { return esObjectTabKey(t.conn, t.key) }
+func (t *esObjectTab) Context() keymap.Context       { return keymap.ESObject }
+func (t *esObjectTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
+func (t *esObjectTab) treeNodes() []nodeMatch {
+	switch t.kind {
+	case objPolicy:
+		return []nodeMatch{matchNode(tree.KindESPolicy, t.key)}
+	case objPipeline:
+		return []nodeMatch{matchNode(tree.KindESPipeline, t.key)}
+	case objRole:
+		return nil // roles are not in the tree
+	}
+	return []nodeMatch{matchNode(tree.KindESTemplate, t.key)}
+}
 func (t *esObjectTab) SetSize(w, h int)               { t.width, t.height = max(w, 0), max(h, 0) }
 func (t *esObjectTab) Init() tea.Cmd                  { return t.load() }
 func (t *esObjectTab) retryAfterPassword() tea.Cmd    { return t.load() }

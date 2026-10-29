@@ -6,6 +6,28 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- Linux and WSL: the clipboard uses the Windows clipboard in WSL (through `powershell.exe`), and
+  `wl-copy` / `wl-paste` or `xclip` / `xsel` on a Linux desktop, before falling back to OSC 52.
+- `:only` (also `:tabonly`, `<Space>q o`) closes every tab but the current one, and `:closeall`
+  (`<Space>q a`) closes every tab without quitting; both ask first about open transactions and
+  unsaved changes, and `!` skips the question.
+
+### Changed
+- `[` / `]` wrap around: past the last section they go back to the first, and before the first to
+  the last (Kafka topic, group, schema, connector and cluster tabs, Elasticsearch index and cluster
+  tabs).
+- `<Space>l` selects the tab's own node in the tree instead of only the connection (or, for a Redis
+  key, its db): the Kafka topic (inside its folder), group, subject, connector, ACLs or Brokers; the
+  Elasticsearch index, alias, data stream, index folder, template, ILM policy, pipeline or snapshot
+  (its repository while its snapshots are not read); the Redis key, once its db is scanned.
+
+### Fixed
+- Without a usable keychain (Linux or WSL with no Secret Service on D-Bus), connecting failed with
+  `read password for …` instead of asking for the password. datavim now asks, keeps the password for
+  the run and says the keychain is unavailable (`DATAVIM_PASSWORD_<NAME>` still works); removing a
+  connection no longer reports a keychain error there.
+
 ## [3.4.0] - 2026-10-23
 
 ### Changed

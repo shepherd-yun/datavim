@@ -156,10 +156,13 @@ func (t *producerTab) UseRegisters(r vimedit.Registers) { t.editor.UseRegisters(
 func (t *producerTab) Key() string                      { return producerTabKey(t.conn, t.topic) }
 func (t *producerTab) Title() string                    { return "produce:" + t.topic }
 func (t *producerTab) Target() (string, db.TableRef)    { return t.conn, db.TableRef{} }
-func (t *producerTab) CapturesInput() bool              { return !t.onResults && t.editor.Insert() }
-func (t *producerTab) activeGrid() *grid.Model          { return t.grid }
-func (t *producerTab) setStatus(s string, isErr bool)   { t.status, t.statusErr = s, isErr }
-func (t *producerTab) retryAfterPassword() tea.Cmd      { return nil }
+func (t *producerTab) treeNodes() []nodeMatch {
+	return []nodeMatch{matchNode(tree.KindTopic, t.topic)}
+}
+func (t *producerTab) CapturesInput() bool            { return !t.onResults && t.editor.Insert() }
+func (t *producerTab) activeGrid() *grid.Model        { return t.grid }
+func (t *producerTab) setStatus(s string, isErr bool) { t.status, t.statusErr = s, isErr }
+func (t *producerTab) retryAfterPassword() tea.Cmd    { return nil }
 
 func (t *producerTab) Context() keymap.Context {
 	if t.onResults {

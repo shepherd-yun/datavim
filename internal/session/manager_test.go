@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"slices"
 	"sync"
@@ -15,9 +16,15 @@ import (
 	"github.com/shepherd-yun/datavim/internal/secret"
 )
 
-type fakeSecrets struct{ m map[string]string }
+type fakeSecrets struct {
+	m    map[string]string
+	down error // every call fails with it: no Secret Service
+}
 
 func (f *fakeSecrets) Get(name string) (string, error) {
+	if f.down != nil {
+		return "", f.down
+	}
 	pw, ok := f.m[name]
 	if !ok {
 		return "", secret.ErrNotFound
@@ -25,9 +32,21 @@ func (f *fakeSecrets) Get(name string) (string, error) {
 	return pw, nil
 }
 
-func (f *fakeSecrets) Set(name, pw string) error { f.m[name] = pw; return nil }
+func (f *fakeSecrets) Set(name, pw string) error {
+	if f.down != nil {
+		return f.down
+	}
+	f.m[name] = pw
+	return nil
+}
 
-func (f *fakeSecrets) Delete(name string) error { delete(f.m, name); return nil }
+func (f *fakeSecrets) Delete(name string) error {
+	if f.down != nil {
+		return f.down
+	}
+	delete(f.m, name)
+	return nil
+}
 
 // fakeConn closes like a pgx pool: Close returns only once release (if
 // set) is closed, standing in for sessions still borrowed from the pool.
@@ -126,6 +145,30 @@ func TestPasswordRequiredThenSet(t *testing.T) {
 	_ = m.SetPassword("local", "saved", true)
 	if sec.m["local"] != "saved" {
 		t.Error("save=true must write the keychain")
+	}
+}
+
+func TestKeychainUnavailableAsksForThePassword(t *testing.T) {
+	m, drv, sec := setup(true)
+	sec.down = fmt.Errorf("%w: no dbus", secret.ErrUnavailable)
+	ctx := context.Background()
+	if m.KeychainError() != nil {
+		t.Fatal("no keychain error before the keychain is used")
+	}
+	if _, err := m.Conn(ctx, "local", ""); !errors.Is(err, ErrPasswordRequired) {
+		t.Fatalf("err = %v, want ErrPasswordRequired", err)
+	}
+	if err := m.KeychainError(); !errors.Is(err, secret.ErrUnavailable) {
+		t.Fatalf("KeychainError = %v", err)
+	}
+	if err := m.SetPassword("local", "typed", true); !errors.Is(err, secret.ErrUnavailable) {
+		t.Fatalf("saving reports the keychain: %v", err)
+	}
+	if _, err := m.Conn(ctx, "local", ""); err != nil || drv.opens[0].Password != "typed" {
+		t.Fatalf("the typed password is kept for the run: %v %+v", err, drv.opens)
+	}
+	if err := m.RemoveConnection("local"); err != nil {
+		t.Fatalf("nothing can be saved in a keychain that is not there: %v", err)
 	}
 }
 

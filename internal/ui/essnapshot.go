@@ -167,11 +167,14 @@ func (t *esSnapshotTab) Title() string                 { return t.name + " · sn
 func (t *esSnapshotTab) Key() string                   { return esSnapshotTabKey(t.conn, t.repo, t.name) }
 func (t *esSnapshotTab) Context() keymap.Context       { return keymap.ESSnapshot }
 func (t *esSnapshotTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
-func (t *esSnapshotTab) SetSize(w, h int)              { t.width, t.height = max(w, 0), max(h, 0) }
-func (t *esSnapshotTab) Init() tea.Cmd                 { return t.load() }
-func (t *esSnapshotTab) retryAfterPassword() tea.Cmd   { return t.load() }
-func (t *esSnapshotTab) activeGrid() *grid.Model       { return t.grid }
-func (t *esSnapshotTab) Find(q string, fwd bool) bool  { return t.grid.Find(q, fwd) }
+func (t *esSnapshotTab) treeNodes() []nodeMatch {
+	return []nodeMatch{matchNode(tree.KindESSnapshot, snapshotKey(t.repo, t.name)), matchNode(tree.KindESRepo, t.repo)}
+}
+func (t *esSnapshotTab) SetSize(w, h int)             { t.width, t.height = max(w, 0), max(h, 0) }
+func (t *esSnapshotTab) Init() tea.Cmd                { return t.load() }
+func (t *esSnapshotTab) retryAfterPassword() tea.Cmd  { return t.load() }
+func (t *esSnapshotTab) activeGrid() *grid.Model      { return t.grid }
+func (t *esSnapshotTab) Find(q string, fwd bool) bool { return t.grid.Find(q, fwd) }
 
 func (t *esSnapshotTab) exportSource() exportSrc {
 	return exportSrc{rs: t.grid.Result(), name: t.conn + "-" + t.repo + "-" + t.name, conn: t.conn}

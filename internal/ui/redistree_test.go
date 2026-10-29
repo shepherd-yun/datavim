@@ -479,3 +479,16 @@ func TestRefreshKeepsFolderSelection(t *testing.T) {
 		t.Fatalf("after refresh the cursor is on %v %q, want the folder", n.Kind, n.Key)
 	}
 }
+
+func TestLocateRedisKey(t *testing.T) {
+	m, _, r := newRedisModel(t, config.Connection{})
+	r.fill(0, "user:", 3)
+	r.put(0, "config", fakeValue{typ: "string", str: "v"})
+	expandDB0(t, m)
+	locateFrom(t, m, m.openKey("cache", 0, "user:1"), func(n *tree.Node) bool {
+		return n.Kind == tree.KindRedisKey && n.Key == "user:1" && n.Parent().Kind == tree.KindKeyFolder
+	})
+
+	m.tree.ResetConn("cache") // the db is not scanned: locate stops on it
+	locateFrom(t, m, nil, func(n *tree.Node) bool { return n.Kind == tree.KindRedisDB && n.Name == "db0" })
+}

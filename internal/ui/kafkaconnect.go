@@ -256,10 +256,13 @@ func (t *connectorTab) Title() string                 { return t.cluster + "/" +
 func (t *connectorTab) Key() string                   { return connectorTabKey(t.conn, t.cluster, t.name) }
 func (t *connectorTab) Context() keymap.Context       { return keymap.KafkaConnect }
 func (t *connectorTab) Target() (string, db.TableRef) { return t.conn, db.TableRef{} }
-func (t *connectorTab) SetSize(w, h int)              { t.width, t.height = max(w, 0), max(h, 0) }
-func (t *connectorTab) Init() tea.Cmd                 { return t.load() }
-func (t *connectorTab) retryAfterPassword() tea.Cmd   { return t.load() }
-func (t *connectorTab) activeGrid() *grid.Model       { return t.grids[t.section] }
+func (t *connectorTab) treeNodes() []nodeMatch {
+	return []nodeMatch{matchNode(tree.KindConnector, connectorKey(t.cluster, t.name))}
+}
+func (t *connectorTab) SetSize(w, h int)            { t.width, t.height = max(w, 0), max(h, 0) }
+func (t *connectorTab) Init() tea.Cmd               { return t.load() }
+func (t *connectorTab) retryAfterPassword() tea.Cmd { return t.load() }
+func (t *connectorTab) activeGrid() *grid.Model     { return t.grids[t.section] }
 func (t *connectorTab) setStatus(s string, isErr bool) {
 	t.status, t.statusE = s, isErr
 }
@@ -391,10 +394,10 @@ func (t *connectorTab) Handle(a keymap.Action) tea.Cmd {
 	t.status = ""
 	switch a {
 	case keymap.NextSection:
-		t.section = min(t.section+1, connectorSections-1)
+		t.section = textutil.Cycle(t.section, 1, connectorSections)
 		return nil
 	case keymap.PrevSection:
-		t.section = max(t.section-1, 0)
+		t.section = textutil.Cycle(t.section, -1, connectorSections)
 		return nil
 	case keymap.Refresh:
 		if !t.loading {
