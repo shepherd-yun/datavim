@@ -46,7 +46,7 @@ Take the `linux_amd64` archive (`linux_arm64` on ARM) and put `datavim` on your 
 static binary with no dependencies:
 
 ```sh
-VERSION=3.5.0   # the latest release
+VERSION=3.6.0   # the latest release
 curl -fsSLO https://github.com/shepherd-yun/datavim/releases/download/v$VERSION/datavim_${VERSION}_linux_amd64.tar.gz
 tar xzf datavim_${VERSION}_linux_amd64.tar.gz datavim && sudo install datavim /usr/local/bin/
 ```
