@@ -868,6 +868,9 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 		t.tabs.cur = 0 // COMMIT / ROLLBACK: the statements on screen stay
 	default:
 		meta = t.newResults(m)
+		if last.Err == nil && t.dataShown() && !t.editor.Insert() {
+			t.onResults = true // rows to look at; INSERT means typing on
+		}
 	}
 	switch {
 	case last.Err != nil:

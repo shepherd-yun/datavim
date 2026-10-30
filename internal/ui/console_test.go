@@ -222,6 +222,7 @@ func TestConsoleReusesAndReopensSession(t *testing.T) {
 	c := newConsole(t, b, "local")
 	c.editor.SetValue("select 1")
 	runTab(t, c, c.Handle(keymap.RunStatement))
+	c.Handle(keymap.FocusEditor) // rows focus the results
 	runTab(t, c, c.Handle(keymap.RunStatement))
 	if n := b.conn.sessionCount(); n != 1 {
 		t.Fatalf("sessions = %d, want 1", n)
@@ -229,6 +230,7 @@ func TestConsoleReusesAndReopensSession(t *testing.T) {
 	b.conn.mu.Lock()
 	b.conn.pingErr = fmt.Errorf("read: %w", io.EOF)
 	b.conn.mu.Unlock()
+	c.Handle(keymap.FocusEditor)
 	runTab(t, c, c.Handle(keymap.RunStatement))
 	if n := b.conn.sessionCount(); n != 2 {
 		t.Fatalf("sessions = %d, want a new one after a failed ping", n)
@@ -428,6 +430,7 @@ func TestConsoleProdWritesNeedConfirmation(t *testing.T) {
 		t.Fatalf("reads run without asking: %q", got)
 	}
 	c.editor.SetValue("insert into t values (1)")
+	c.Handle(keymap.FocusEditor) // rows focus the results
 	other := runTab(t, c, c.Handle(keymap.RunStatement))
 	if len(other) != 1 {
 		t.Fatalf("messages = %#v", other)
@@ -455,6 +458,7 @@ func TestConsoleReopensSessionWhenReadOnlyChanges(t *testing.T) {
 	if err := b.SetReadOnly("local", true); err != nil {
 		t.Fatal(err)
 	}
+	c.Handle(keymap.FocusEditor) // rows focus the results
 	runTab(t, c, c.Handle(keymap.RunStatement))
 	b.conn.mu.Lock()
 	closed := first.closed
@@ -725,6 +729,7 @@ func TestConsoleFramesFollowFocus(t *testing.T) {
 	c := newConsole(t, newFakeBackend(), "local")
 	c.editor.SetValue("select * from users")
 	runTab(t, c, c.Handle(keymap.RunStatement))
+	c.Handle(keymap.FocusEditor) // rows focus the results
 	lit := lipgloss.NewStyle().Foreground(theme.ColorFocus).Render("┌")
 	plain := lipgloss.NewStyle().Foreground(theme.ColorBorder).Render("┌")
 	frames := func() []string { // the editor's and the results' top-left corners
@@ -801,5 +806,27 @@ func TestConsoleHintsRunFromCursor(t *testing.T) {
 	c.SetSize(200, 20)
 	if !strings.Contains(c.statusLine(), "run from here") {
 		t.Fatalf("hints: %s", c.statusLine())
+	}
+}
+
+func TestConsoleFocusesResultsAfterQuery(t *testing.T) {
+	c := newConsole(t, newFakeBackend(), "local")
+	c.editor.SetValue("select 1")
+	runTab(t, c, c.Handle(keymap.RunStatement))
+	if !c.dataShown() || !c.onResults {
+		t.Fatalf("rows shown %v, onResults %v", c.dataShown(), c.onResults)
+	}
+	c.Handle(keymap.FocusEditor)
+	c.editor.SetValue("create table t (id int)")
+	runTab(t, c, c.Handle(keymap.RunStatement))
+	if c.onResults {
+		t.Error("a statement without rows keeps the editor focused")
+	}
+	c.editor.SetValue("select 1")
+	cmd := c.Handle(keymap.RunStatement)
+	c.Input(uitest.Key("i")) // typing again while the query runs
+	runTab(t, c, cmd)
+	if c.onResults {
+		t.Error("INSERT mode keeps the editor focused")
 	}
 }

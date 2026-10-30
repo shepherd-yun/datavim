@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Console: when a run ends on a result with rows, the focus moves to the results, so the grid keys
+  work right away; a failed statement, a statement without rows, or typing in INSERT mode while it
+  runs keeps the editor focused.
+
 ## [3.5.0] - 2026-10-29
 
 ### Added
