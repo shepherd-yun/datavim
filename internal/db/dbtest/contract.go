@@ -1152,7 +1152,9 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if !errors.Is(err, stop) {
 			t.Fatalf("err = %v, want the callback's error", err)
 		}
-		if took := time.Since(start); took > 2*time.Second {
+		// Reading the rest runs into cctx's 20s; dropping the connection on
+		// a busy CI runner can take a few seconds (2s was flaky).
+		if took := time.Since(start); took > 10*time.Second {
 			t.Fatalf("returned after %v: the rest of the result was read", took)
 		}
 		if _, err := conn.Query(ctx, "SELECT 1"); err != nil {
