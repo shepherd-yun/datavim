@@ -478,6 +478,7 @@ func TestConsoleReopensSessionWhenReadOnlyChanges(t *testing.T) {
 
 func runSQL(t *testing.T, c *consoleTab, sql string) {
 	t.Helper()
+	c.Handle(keymap.FocusEditor) // a successful run focuses the results
 	c.editor.SetValue(sql)
 	runTab(t, c, c.Handle(keymap.RunStatement))
 }
@@ -817,16 +818,37 @@ func TestConsoleFocusesResultsAfterQuery(t *testing.T) {
 		t.Fatalf("rows shown %v, onResults %v", c.dataShown(), c.onResults)
 	}
 	c.Handle(keymap.FocusEditor)
-	c.editor.SetValue("create table t (id int)")
-	runTab(t, c, c.Handle(keymap.RunStatement))
-	if c.onResults {
-		t.Error("a statement without rows keeps the editor focused")
-	}
 	c.editor.SetValue("select 1")
 	cmd := c.Handle(keymap.RunStatement)
 	c.Input(uitest.Key("i")) // typing again while the query runs
 	runTab(t, c, cmd)
 	if c.onResults {
 		t.Error("INSERT mode keeps the editor focused")
+	}
+}
+
+func TestConsoleFocusesResultsAfterWrites(t *testing.T) {
+	b := newFakeBackend()
+	b.conn.setFail("alter table bad", errors.New("no such table"))
+	c := newConsole(t, b, "local")
+
+	c.editor.SetValue("create table t (id int)")
+	runTab(t, c, c.Handle(keymap.RunAll))
+	if !c.onResults || c.resultsTitle() != "Message" {
+		t.Errorf("one write: onResults %v on %q", c.onResults, c.resultsTitle())
+	}
+
+	c.Handle(keymap.FocusEditor)
+	c.editor.SetValue("alter table a add x int; alter table b add y int")
+	runTab(t, c, c.Handle(keymap.RunAll))
+	if !c.onResults || c.resultsTitle() != "Summary" {
+		t.Errorf("several writes: onResults %v on %q", c.onResults, c.resultsTitle())
+	}
+
+	c.Handle(keymap.FocusEditor)
+	c.editor.SetValue("alter table a add z int; alter table bad")
+	runTab(t, c, c.Handle(keymap.RunAll))
+	if c.onResults {
+		t.Error("a failed statement keeps the editor focused, to fix it")
 	}
 }

@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Console: a run that succeeds now always moves the focus to the results, also for statements
+  without rows such as `ALTER TABLE`; a failed statement, or typing in INSERT mode while it runs,
+  keeps the editor focused.
+- Console: the Summary tab scrolls and can be searched, and it follows the latest message.
+
 ## [3.6.0] - 2026-10-30
 
 ### Changed

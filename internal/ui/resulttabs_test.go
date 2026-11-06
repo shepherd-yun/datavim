@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -54,6 +55,40 @@ func TestConsoleSeveralWritesShowSummary(t *testing.T) {
 	c.Handle(keymap.ResultView)
 	if c.dataShown() || !strings.Contains(c.status, "no rows") {
 		t.Fatalf("a write has only its message: %q", c.status)
+	}
+}
+
+func TestConsoleSummaryScrolls(t *testing.T) {
+	c := newConsole(t, newFakeBackend(), "local")
+	c.SetSize(80, 12)
+	for i := range 20 {
+		c.log(fmt.Sprintf("line %02d", i))
+	}
+	if v := consoleView(c); !strings.Contains(v, "line 19") || strings.Contains(v, "line 00") {
+		t.Fatalf("Summary shows the latest lines:\n%s", v)
+	}
+	c.Handle(keymap.FocusResults)
+	c.Handle(keymap.Top)
+	if v := consoleView(c); !strings.Contains(v, "line 00") || strings.Contains(v, "line 19") {
+		t.Fatalf("scrolled to the top:\n%s", v)
+	}
+	if !c.Find("line 07", true) || !strings.Contains(consoleView(c), "line 07") {
+		t.Fatalf("search:\n%s", consoleView(c))
+	}
+	c.log("line 20")
+	if v := consoleView(c); !strings.Contains(v, "line 20") {
+		t.Fatalf("a new line brings the latest back:\n%s", v)
+	}
+}
+
+func TestConsoleMessageTabsKeepTheirHints(t *testing.T) {
+	c := newConsole(t, newFakeBackend(), "local")
+	c.SetSize(200, 20)
+	c.editor.SetValue("alter table a add x int; alter table b add y int")
+	runTab(t, c, c.Handle(keymap.RunAll))
+	c.setStatus("", false)
+	if v := c.statusLine(); strings.Contains(v, "i edit") || strings.Contains(v, "filter") || !strings.Contains(v, "scroll") {
+		t.Fatalf("Summary has no grid keys: %s", v)
 	}
 }
 

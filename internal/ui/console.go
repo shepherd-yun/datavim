@@ -130,6 +130,7 @@ type consoleTab struct {
 	editor    *editor.Model
 	grid      *grid.Model
 	msgView   *textview.Model // a statement tab's message
+	logView   *textview.Model // Summary: the session's messages
 	onResults bool
 	messages  []string
 	stmts     []stmtResult // the statements of the latest run, a result tab each
@@ -174,7 +175,7 @@ func newConsoleTab(id int, b Backend, st Store, catalogs *meta.Cache, conn strin
 		id: id, backend: b, store: st, conn: conn, ns: ns, dialect: d,
 		maxRows: s.MaxRows, timings: tm, editorCmd: s.EditorCommand(os.Getenv),
 		catalogs: catalogs, metaKey: key, defNS: defaultNamespace(cfg, key, ns),
-		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), msgView: textview.New(), keys: keymap.Default(),
+		editor: editor.New(), grid: grid.New(nil, s.MaxColumnWidth), msgView: textview.New(), logView: textview.New(), keys: keymap.Default(),
 		loaded: -1,
 	}
 	t.editor.SetHighlighter(highlight.NewHighlighter(d).Spans)
@@ -285,6 +286,8 @@ func (t *consoleTab) Find(q string, forward bool) bool {
 		found = t.grid.Find(q, forward)
 	case t.curStmt() != nil:
 		found = t.msgView.Find(q, forward)
+	default:
+		found = t.logView.Find(q, forward)
 	}
 	if found {
 		t.onResults = true
@@ -314,6 +317,8 @@ func (t *consoleTab) fit() {
 	t.editor.SetSize(t.width, t.editorH)
 	t.grid.SetSize(t.width, max(t.resultsH-1, 0)) // the result tabs take a row
 	t.msgView.SetSize(t.width, max(t.resultsH-1, 0))
+	t.logView.SetSize(t.width, max(t.resultsH-1, 0))
+	t.logView.Bottom()
 }
 
 // splitHeights divides the height h inside a console's frame between the
@@ -351,6 +356,8 @@ func (t *consoleTab) log(line string) {
 	if over := len(t.messages) - maxMessages; over > 0 {
 		t.messages = t.messages[over:]
 	}
+	t.logView.SetLines(t.messages)
+	t.logView.Bottom()
 }
 
 // ---- input ----
@@ -476,7 +483,11 @@ func (t *consoleTab) Handle(a keymap.Action) tea.Cmd {
 		return t.editorAction(a)
 	}
 	if !t.dataShown() {
-		msgViewAction(t.msgView, a)
+		v := t.msgView
+		if t.curStmt() == nil {
+			v = t.logView
+		}
+		msgViewAction(v, a)
 		return nil
 	}
 	if cmd, ok := gridAction(t.grid, a); ok {
@@ -868,8 +879,8 @@ func (t *consoleTab) done(m runDoneMsg) tea.Cmd {
 		t.tabs.cur = 0 // COMMIT / ROLLBACK: the statements on screen stay
 	default:
 		meta = t.newResults(m)
-		if last.Err == nil && t.dataShown() && !t.editor.Insert() {
-			t.onResults = true // rows to look at; INSERT means typing on
+		if last.Err == nil && !t.editor.Insert() {
+			t.onResults = true // a failure is fixed in the editor; INSERT means typing on
 		}
 	}
 	switch {
@@ -1369,7 +1380,7 @@ func (t *consoleTab) resultsBody(focused bool, h int) string {
 	s := t.curStmt()
 	switch {
 	case s == nil:
-		return t.messagesView(h)
+		return textutil.PadLines(t.logView.View(focused), h)
 	case t.dataShown():
 		return textutil.PadLines(t.grid.View(focused), h)
 	}
@@ -1419,15 +1430,6 @@ func (t *consoleTab) resultsTitle() string {
 	return label
 }
 
-func (t *consoleTab) messagesView(h int) string {
-	start := max(len(t.messages)-h, 0)
-	lines := make([]string, 0, h)
-	for _, m := range t.messages[start:] {
-		lines = append(lines, textutil.Fit(textutil.Sanitize(m), t.width))
-	}
-	return textutil.PadLines(strings.Join(lines, "\n"), h)
-}
-
 func (t *consoleTab) statusLine() string {
 	switch {
 	case t.running:
@@ -1453,14 +1455,20 @@ func (t *consoleTab) statusLine() string {
 		keyHint(t.keys, keymap.Console, keymap.RunFromCursor, "run from here"),
 		"i insert · v select · u undo", // vim basics last: cut first when narrow
 	)
-	if t.onResults {
+	switch {
+	case t.onResults && !t.dataShown():
+		hint = joinHints(
+			resultTabHints(t.keys, keymap.Results),
+			keyHint(t.keys, keymap.Results, keymap.FocusEditor, "editor"),
+			"jk scroll · yy copy · / search")
+	case t.onResults:
 		hint = joinHints(
 			keyHint(t.keys, keymap.Results, keymap.EditCell, "edit"),
 			keyHint(t.keys, keymap.Results, keymap.FilterPrompt, "filter"),
 			resultTabHints(t.keys, keymap.Results),
 			keyHint(t.keys, keymap.Results, keymap.FocusEditor, "editor"),
 			"hjkl move · yy copy row · K show cell · / search") // grid basics last: cut first when narrow
-	} else if t.editor.Visual() {
+	case t.editor.Visual():
 		hint = "enter runs the selection · y d c > < · esc cancel"
 	}
 	if t.manualTx {
