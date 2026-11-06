@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.7.0] - 2026-11-06
+
 ### Changed
 - Console: a run that succeeds now always moves the focus to the results, also for statements
   without rows such as `ALTER TABLE`; a failed statement, or typing in INSERT mode while it runs,
@@ -700,7 +702,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.6.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.7.0...HEAD
+[3.7.0]: https://github.com/shepherd-yun/datavim/compare/v3.6.0...v3.7.0
 [3.6.0]: https://github.com/shepherd-yun/datavim/compare/v3.5.0...v3.6.0
 [3.5.0]: https://github.com/shepherd-yun/datavim/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/shepherd-yun/datavim/compare/v3.3.0...v3.4.0
