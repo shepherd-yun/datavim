@@ -123,10 +123,11 @@ func localStream(ctx context.Context, r sqlRunner, stmt string, onColumns func([
 	}
 	if dated && rereadable(stmt) {
 		_ = rows.Close()
-		if rows, err = r.QueryContext(ctx, withoutDeclTypes(stmt, len(cols))); err != nil {
+		again, err := r.QueryContext(ctx, withoutDeclTypes(stmt, len(cols)))
+		if err != nil {
 			return err
 		}
-		defer func() { _ = rows.Close() }()
+		rows = again // the deferred Close follows the variable
 	}
 	onColumns(cols)
 	dest := make([]any, len(cols))
@@ -167,14 +168,19 @@ func rereadable(stmt string) bool {
 // to switch it off, which would rewrite the cell ('2026-01-02' into
 // '2026-01-02 00:00:00 +0000 UTC'). Unary + makes each column an expression,
 // without changing its value or type. The newline keeps a trailing -- comment
-// from swallowing the parenthesis.
+// from swallowing the parenthesis. The CTE's name must not occur in stmt, or
+// stmt would read the CTE instead of its table.
 func withoutDeclTypes(stmt string, n int) string {
 	names, exprs := make([]string, n), make([]string, n)
 	for i := range n {
 		names[i] = "c" + strconv.Itoa(i)
 		exprs[i] = "+" + names[i]
 	}
-	return "WITH _dv(" + strings.Join(names, ",") + ") AS (" + stmt + "\n) SELECT " + strings.Join(exprs, ",") + " FROM _dv"
+	cte := "_dv"
+	for i, lower := 1, strings.ToLower(stmt); strings.Contains(lower, cte); i++ {
+		cte = "_dv" + strconv.Itoa(i)
+	}
+	return "WITH " + cte + "(" + strings.Join(names, ",") + ") AS (" + stmt + "\n) SELECT " + strings.Join(exprs, ",") + " FROM " + cte
 }
 
 // cell is a scanned value as a db.Value.
