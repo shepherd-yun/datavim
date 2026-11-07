@@ -52,19 +52,34 @@ func unquote(s string) string {
 func isExpression(entry string) bool { return strings.ContainsRune(entry, '(') }
 
 // nameWords is entries' column names, for making up an index name.
-func nameWords(entries []string) []string {
+func nameWords(entries []string, isColumn func(string) bool) []string {
 	var out []string
 	for _, e := range entries {
-		if isExpression(e) {
+		if isExpression(e) && !isColumn(unquote(e)) {
 			continue
 		}
-		w := strings.Map(func(r rune) rune {
-			if r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r) {
-				return unicode.ToLower(r)
-			}
-			return '_'
-		}, unquote(e))
-		out = append(out, w)
+		if w := nameWord(unquote(e)); w != "" {
+			out = append(out, w)
+		}
 	}
 	return out
+}
+
+// nameWord is a column name in lower case, with an underscore where symbols
+// stood between its words.
+func nameWord(name string) string {
+	var b strings.Builder
+	gap := false
+	for _, r := range name {
+		if r != '_' && !unicode.IsLetter(r) && !unicode.IsDigit(r) {
+			gap = true
+			continue
+		}
+		if gap && b.Len() > 0 {
+			b.WriteByte('_')
+		}
+		gap = false
+		b.WriteRune(unicode.ToLower(r))
+	}
+	return b.String()
 }

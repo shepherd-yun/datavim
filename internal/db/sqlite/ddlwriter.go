@@ -2,6 +2,7 @@ package sqlite
 
 import (
 	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/shepherd-yun/datavim/internal/db"
@@ -71,7 +72,7 @@ func defaultValue(d string) string {
 func (w ddlWriter) indexColumns(ix db.Index) string {
 	parts := make([]string, len(ix.Columns))
 	for i, c := range ix.Columns {
-		if strings.ContainsRune(c, '(') {
+		if ix.IsExpression(c) {
 			parts[i] = c
 		} else {
 			parts[i] = w.d.QuoteIdent(c)
@@ -98,23 +99,56 @@ func (w ddlWriter) createIndex(t db.TableRef, ix db.Index) string {
 // internalName reports a name only SQLite may give.
 func internalName(name string) bool { return strings.HasPrefix(strings.ToLower(name), "sqlite_") }
 
+// primaryConstraint is "CONSTRAINT name " for a primary key that has a name.
+func (w ddlWriter) primaryConstraint(ix db.Index) string {
+	if ix.Name != "" && ix.Name != primaryName && !internalName(ix.Name) {
+		return "CONSTRAINT " + w.d.QuoteIdent(ix.Name) + " "
+	}
+	return ""
+}
+
+// descendingKey returns the primary key that must be written with its column:
+// INTEGER PRIMARY KEY DESC is no rowid alias there, but PRIMARY KEY (x DESC)
+// would be one.
+func descendingKey(s db.TableSchema, withoutRowid bool) (db.Index, string, bool) {
+	if withoutRowid {
+		return db.Index{}, "", false
+	}
+	for _, ix := range s.Indexes {
+		if !ix.Primary || len(ix.Columns) != 1 || !slices.Equal(ix.Suffixes, []string{"DESC"}) {
+			continue
+		}
+		for _, c := range s.Columns {
+			if c.Name == ix.Columns[0] && strings.EqualFold(c.Type, "INTEGER") {
+				return ix, c.Name, true
+			}
+		}
+	}
+	return db.Index{}, "", false
+}
+
 func (w ddlWriter) CreateTable(s db.TableSchema) ([]string, []db.SchemaChange) {
 	lines := make([]string, 0, len(s.Columns)+1)
+	options := s.Options[tableOptions]
+	key, keyColumn, inline := descendingKey(s, strings.Contains(options, "WITHOUT ROWID"))
 	auto := false
 	for _, c := range s.Columns {
 		auto = auto || c.AutoIncrement
-		lines = append(lines, w.columnDef(c))
+		if c.Type == "any" && strings.Contains(options, "STRICT") {
+			c.Type = anyType // columnDef leaves out normalized "any", which STRICT requires
+		}
+		def := w.columnDef(c)
+		if inline && c.Name == keyColumn {
+			def += " " + w.primaryConstraint(key) + "PRIMARY KEY DESC"
+		}
+		lines = append(lines, def)
 	}
 	var indexes []string
 	for _, ix := range s.Indexes {
 		switch {
-		case ix.Primary && auto: // written with its column
+		case ix.Primary && (auto || inline): // written with its column
 		case ix.Primary:
-			def := "PRIMARY KEY " + w.indexColumns(ix)
-			if ix.Name != "" && ix.Name != primaryName && !internalName(ix.Name) {
-				def = "CONSTRAINT " + w.d.QuoteIdent(ix.Name) + " " + def
-			}
-			lines = append(lines, def)
+			lines = append(lines, w.primaryConstraint(ix)+"PRIMARY KEY "+w.indexColumns(ix))
 		case internalName(ix.Name): // a UNIQUE constraint's own index
 			lines = append(lines, "UNIQUE "+w.indexColumns(ix))
 		default:
@@ -122,12 +156,15 @@ func (w ddlWriter) CreateTable(s db.TableSchema) ([]string, []db.SchemaChange) {
 		}
 	}
 	create := "CREATE TABLE " + w.d.QualifiedName(s.Ref) + " (\n  " + strings.Join(lines, ",\n  ") + "\n)"
+	if options != "" {
+		create += " " + options
+	}
 	return append([]string{create}, indexes...), nil
 }
 
 // AlterTable writes one statement per column or index change. Anything else
 // (a column's type, default, NOT NULL; primary keys, constraints' own indexes,
-// foreign keys, comments) needs a rebuild, which datavim does not do.
+// foreign keys, comments, table options) needs a rebuild, which datavim does not do.
 func (w ddlWriter) AlterTable(t db.TableRef, changes []db.SchemaChange) ([]string, []db.SchemaChange) {
 	q := w.d.QuoteIdent
 	table := "ALTER TABLE " + w.d.QualifiedName(t) + " "

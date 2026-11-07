@@ -3,6 +3,7 @@ package schemaedit
 import (
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/shepherd-yun/datavim/internal/db"
@@ -242,5 +243,57 @@ func TestSetIndexColumnsForgetsTheSuffixes(t *testing.T) {
 	must(t, e.SetIndexColumns(0, "b, a"))
 	if got := e.Indexes()[0].Index.Suffixes; got != nil {
 		t.Fatalf("suffixes = %v", got)
+	}
+}
+
+func parenTable() db.TableSchema {
+	return db.TableSchema{
+		Columns: []db.Column{{Name: "price(usd)", Type: "text"}, {Name: "v", Type: "text"}},
+		Indexes: []db.Index{{Name: "i", Columns: []string{"price(usd)"}}},
+	}
+}
+
+func TestDroppingAColumnWithParenthesesChecksItsIndexes(t *testing.T) {
+	e := New(parenTable(), sqlx.SQLite)
+	must(t, e.DeleteColumn(0))
+	if _, err := e.Plan(func(s string) string { return s }); err == nil {
+		t.Fatal("the index uses the dropped column")
+	}
+}
+
+func TestRenamingAColumnWithParenthesesMovesItsIndexes(t *testing.T) {
+	e := New(parenTable(), sqlx.SQLite)
+	must(t, e.SetColumn(0, ColName, "cost(usd)"))
+	if got := e.Indexes()[0].Index.Columns[0]; got != "cost(usd)" {
+		t.Fatalf("entry = %q", got)
+	}
+}
+
+func TestNewIndexIsNamedAfterAColumnWithParentheses(t *testing.T) {
+	e := New(parenTable(), sqlx.SQLite)
+	at := e.AddIndex(0)
+	must(t, e.SetIndexColumns(at, "price(usd)"))
+	if got := e.Indexes()[at].Index.Name; !strings.Contains(got, "price") {
+		t.Fatalf("name = %q", got)
+	}
+}
+
+func TestIndexNameHasNoStrayUnderscores(t *testing.T) {
+	cases := map[string]string{
+		"price(usd)": "t_price_usd_idx",
+		"a b":        "t_a_b_idx",
+		"snake_case": "t_snake_case_idx",
+		"_private":   "t__private_idx",
+		"(x)":        "t_x_idx",
+		"()":         "t_idx",
+	}
+	for col, want := range cases {
+		s := db.TableSchema{Ref: db.TableRef{Name: "t"}, Columns: []db.Column{{Name: col, Type: "text"}}}
+		e := New(s, sqlx.SQLite)
+		at := e.AddIndex(-1)
+		must(t, e.SetIndexColumns(at, col))
+		if got := e.Indexes()[at].Index.Name; got != want {
+			t.Errorf("%s: name = %q, want %q", col, got, want)
+		}
 	}
 }

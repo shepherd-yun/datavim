@@ -198,6 +198,7 @@ type SQLiteTable struct {
 	Columns     map[string]SQLiteColumn // by lower-case name
 	PrimaryName string                  // CONSTRAINT name of the primary key
 	ForeignKeys map[string]string       // constraint names by their lower-case columns, joined by commas
+	Options     string                  // what follows the columns: "WITHOUT ROWID, STRICT"
 }
 
 // ParseSQLiteTable reads a CREATE TABLE as sqlite_master holds it; the text
@@ -218,7 +219,36 @@ func ParseSQLiteTable(src string) SQLiteTable {
 			parseTableConstraint(item, &out)
 		}
 	}
+	out.Options = tableOptionsAfter(toks)
 	return out
+}
+
+// tableOptionsAfter is what follows the first parenthesis, in upper case and
+// evenly spaced.
+func tableOptionsAfter(toks []token) string {
+	depth, opened := 0, false
+	for i, t := range toks {
+		depth += depthDelta(t)
+		opened = opened || depth > 0
+		if !opened || depth > 0 {
+			continue
+		}
+		var b strings.Builder
+		for _, o := range toks[i+1:] {
+			switch {
+			case isPunct(o, ";"):
+			case isPunct(o, ","):
+				b.WriteString(",")
+			default:
+				if b.Len() > 0 {
+					b.WriteString(" ")
+				}
+				b.WriteString(upper(o))
+			}
+		}
+		return b.String()
+	}
+	return ""
 }
 
 func tableConstraintWord(t token) bool {

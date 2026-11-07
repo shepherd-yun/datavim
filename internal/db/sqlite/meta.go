@@ -9,6 +9,11 @@ import (
 	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
 
+// tableOptions is the key of TableSchema.Options for what follows the columns
+// in CREATE TABLE. It is always set, so that schema compare notices a table
+// that lacks them too.
+const tableOptions = "table options"
+
 // primaryName names a primary key that has no name: a rowid alias has no
 // index at all, and an unnamed constraint's index is SQLite's business.
 const primaryName = "primary"
@@ -127,7 +132,7 @@ func (m meta) Indexes(ctx context.Context, t db.TableRef) ([]db.Index, error) {
 	}
 	var out []db.Index
 	if len(pk) > 0 {
-		out = append(out, db.Index{Name: primaryName, Columns: pk, Unique: true, Primary: true, Method: "btree"})
+		out = append(out, db.Index{Name: primaryName, Columns: pk, Unique: true, Primary: true, Method: "btree", ParenColumns: parenNames(pk)})
 	}
 	rs, err := m.c.Query(ctx, `SELECT l.name, l."unique", l.origin, s.sql FROM pragma_index_list(?) l
 		LEFT JOIN sqlite_master s ON s.type = 'index' AND s.name = l.name ORDER BY l.name`, t.Name)
@@ -135,7 +140,10 @@ func (m meta) Indexes(ctx context.Context, t db.TableRef) ([]db.Index, error) {
 		return nil, err
 	}
 	for _, r := range rs.Rows {
-		if r[2].Text == "pk" {
+		if r[2].Text == "pk" { // a rowid alias has no such index, and no options
+			if out[0].Suffixes, err = m.keySuffixes(ctx, t.Name, r[0].Text); err != nil {
+				return nil, err
+			}
 			continue
 		}
 		ix := db.Index{Name: r[0].Text, Unique: r[1].Text != "0", Method: "btree", Constraint: r[2].Text == "u"}
@@ -151,14 +159,67 @@ func (m meta) Indexes(ctx context.Context, t db.TableRef) ([]db.Index, error) {
 			switch {
 			case !c[0].Null:
 				ix.Columns = append(ix.Columns, c[0].Text)
+				ix.ParenColumns = append(ix.ParenColumns, parenNames([]string{c[0].Text})...)
 			case i < len(entries):
 				ix.Columns = append(ix.Columns, expressionEntry(entries[i]))
 			}
 		}
-		if len(suffixes) == len(ix.Columns) && strings.Join(suffixes, "") != "" {
+		switch {
+		case r[3].Null: // a constraint has no CREATE INDEX to read them from
+			if ix.Suffixes, err = m.keySuffixes(ctx, t.Name, ix.Name); err != nil {
+				return nil, err
+			}
+		case len(suffixes) == len(ix.Columns) && strings.Join(suffixes, "") != "":
 			ix.Suffixes = suffixes
 		}
 		out = append(out, ix)
+	}
+	return out, nil
+}
+
+// parenNames are the column names among names that would read as expressions.
+func parenNames(names []string) []string {
+	var out []string
+	for _, n := range names {
+		if strings.ContainsRune(n, '(') {
+			out = append(out, n)
+		}
+	}
+	return out
+}
+
+// keySuffixes rebuilds what follows each key of an index that SQLite made for a
+// constraint; nil when nothing does. A collation only counts if it differs from
+// the one the column declares, which the index inherits.
+func (m meta) keySuffixes(ctx context.Context, table, index string) ([]string, error) {
+	rs, err := m.c.Query(ctx, `SELECT name, "desc", coll FROM pragma_index_xinfo(?) WHERE key = 1 ORDER BY seqno`, index)
+	if err != nil {
+		return nil, err
+	}
+	text, err := m.tableSQL(ctx, table)
+	if err != nil {
+		return nil, err
+	}
+	declared := sqlx.ParseSQLiteTable(text).Columns
+	out := make([]string, len(rs.Rows))
+	found := false
+	for i, r := range rs.Rows {
+		collation := declared[strings.ToLower(r[0].Text)].Collation
+		if collation == "" {
+			collation = "BINARY"
+		}
+		var parts []string
+		if !strings.EqualFold(r[2].Text, collation) {
+			parts = append(parts, "COLLATE "+r[2].Text)
+		}
+		if r[1].Text != "0" {
+			parts = append(parts, "DESC")
+		}
+		out[i] = strings.Join(parts, " ")
+		found = found || out[i] != ""
+	}
+	if !found {
+		return nil, nil
 	}
 	return out, nil
 }
@@ -240,6 +301,7 @@ func (m meta) TableSchema(ctx context.Context, t db.TableRef) (db.TableSchema, e
 		return db.TableSchema{}, err
 	}
 	parsed := sqlx.ParseSQLiteTable(text)
+	s.Options = map[string]string{tableOptions: parsed.Options}
 	for i := range s.Columns {
 		c := &s.Columns[i]
 		c.Type = normalizeType(strings.ToLower(c.Type))

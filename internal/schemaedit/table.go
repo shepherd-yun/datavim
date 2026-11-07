@@ -395,7 +395,7 @@ func (t *Table) syncIndexes() {
 		r.base = make([]string, len(r.Orig.Columns))
 		for j, e := range r.Orig.Columns {
 			r.base[j] = e
-			if to, ok := renames[unquote(e)]; ok && !isExpression(e) {
+			if to, ok := renames[unquote(e)]; ok { // an old column name, whatever it looks like
 				r.base[j] = t.quote(to)
 			}
 		}
@@ -481,7 +481,7 @@ func (t *Table) rename(r *IndexRow) {
 	if !r.autoName {
 		return
 	}
-	words := append([]string{t.before.Ref.Name}, nameWords(r.Index.Columns)...)
+	words := append([]string{t.before.Ref.Name}, nameWords(r.Index.Columns, t.isColumn)...)
 	switch {
 	case r.Index.Primary:
 		words = []string{t.before.Ref.Name, "pkey"}

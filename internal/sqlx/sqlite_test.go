@@ -317,6 +317,7 @@ func TestParseSQLiteTable(t *testing.T) {
 		},
 		PrimaryName: "pk_t",
 		ForeignKeys: map[string]string{"parent": "fk_parent", "a,b": "fk_ab"},
+		Options:     "WITHOUT ROWID",
 	}
 	if diff := cmp.Diff(want, ParseSQLiteTable(src)); diff != "" {
 		t.Errorf("(-want +got):\n%s", diff)
@@ -375,6 +376,22 @@ func TestTerminatorLine(t *testing.T) {
 	for _, s := range misses {
 		if TerminatorLine(s, SQLite) {
 			t.Errorf("%q: a terminator line found", s)
+		}
+	}
+}
+
+func TestParseSQLiteTableOptions(t *testing.T) {
+	cases := map[string]string{
+		`CREATE TABLE t (a INT)`:                                         "",
+		`CREATE TABLE t (a INT, CHECK (a > (0)))`:                        "",
+		`CREATE TABLE t (a INT PRIMARY KEY) without  rowid`:              "WITHOUT ROWID",
+		`CREATE TABLE t (a INT PRIMARY KEY) STRICT, WITHOUT ROWID;`:      "STRICT, WITHOUT ROWID",
+		`CREATE TABLE "x (y)" (a INT DEFAULT (1)) /* c */ STRICT -- end`: "STRICT",
+		`CREATE TABLE t AS SELECT 1 AS a`:                                "",
+	}
+	for src, want := range cases {
+		if got := ParseSQLiteTable(src).Options; got != want {
+			t.Errorf("%s: got %q, want %q", src, got, want)
 		}
 	}
 }

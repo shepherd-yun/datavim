@@ -1,5 +1,10 @@
 package db
 
+import (
+	"slices"
+	"strings"
+)
+
 // Namespace locates tables. MySQL leaves Schema empty.
 type Namespace struct {
 	Database string
@@ -58,6 +63,15 @@ type Index struct {
 	// Suffixes is what follows each of Columns in the definition, such as
 	// "COLLATE NOCASE DESC"; nil when nothing does. SQLite only.
 	Suffixes []string
+	// ParenColumns lists those of Columns that are column names although they
+	// hold a parenthesis, which otherwise marks an expression. SQLite only.
+	ParenColumns []string
+}
+
+// IsExpression reports whether entry, one of Columns, is an expression rather
+// than a column name.
+func (ix Index) IsExpression(entry string) bool {
+	return strings.ContainsRune(entry, '(') && !slices.Contains(ix.ParenColumns, entry)
 }
 
 // Entries is Columns with their suffixes: what an index is defined over.

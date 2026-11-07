@@ -57,9 +57,10 @@ func (t *Table) check() error {
 		for _, e := range ix.Columns {
 			n := unquote(e)
 			switch {
-			case isExpression(e), live[n]:
+			case live[n]:
 			case t.dropped(n):
 				return fmt.Errorf("index %s uses column %s, which is marked for deletion · delete or change the index too", ix.Name, n)
+			case isExpression(e):
 			default:
 				return fmt.Errorf("index %s: no column %s", ix.Name, n)
 			}
@@ -69,6 +70,11 @@ func (t *Table) check() error {
 		return fmt.Errorf("a table has one primary key")
 	}
 	return nil
+}
+
+// isColumn reports a column of the table as edited, called name.
+func (t *Table) isColumn(name string) bool {
+	return slices.ContainsFunc(t.cols, func(r ColumnRow) bool { return !r.Deleted && r.Col.Name == name })
 }
 
 // dropped reports whether the column read as name is marked for deletion.
@@ -118,7 +124,14 @@ func (t *Table) Plan(normType func(string) string) ([]db.SchemaChange, error) {
 			base[r.origin].Columns = r.base
 		}
 		if !r.Deleted {
-			edited = append(edited, r.Index)
+			ix := r.Index
+			ix.ParenColumns = nil
+			for _, e := range ix.Columns {
+				if isExpression(e) && t.isColumn(unquote(e)) {
+					ix.ParenColumns = append(ix.ParenColumns, e)
+				}
+			}
+			edited = append(edited, ix)
 			origin = append(origin, r.origin)
 		}
 	}
