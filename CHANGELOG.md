@@ -6,6 +6,19 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- SQLite: a recreated table keeps the collation and sort order of its `UNIQUE` and primary key
+  constraints.
+- SQLite: a recreated table keeps `WITHOUT ROWID` and `STRICT`, and `INTEGER PRIMARY KEY DESC` does
+  not turn into a rowid alias. Schema compare reports a difference in these options for you to
+  handle, since changing them needs a rebuild.
+- SQLite: the console completes tables and columns after `main.`.
+- SQLite: importing an empty cell into a column whose default is a bare word (`DEFAULT abc`) no
+  longer fails.
+- Modify Table: a column whose name holds a parenthesis, such as `price(usd)`, is no longer taken
+  for an expression: indexes follow its renames, its deletion is checked, SQLite quotes it, and a
+  new index's name has no stray underscores.
+
 ## [3.8.0] - 2026-11-07
 
 ### Added
