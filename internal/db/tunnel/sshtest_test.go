@@ -11,6 +11,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strconv"
@@ -37,6 +38,9 @@ type testServer struct {
 	accepted int
 	conns    []*ssh.ServerConn
 	dials    []string
+	commands []string
+
+	refuseSessions bool
 }
 
 func newSigner(t *testing.T) ssh.Signer {
@@ -115,6 +119,10 @@ func (s *testServer) handle(nc net.Conn, cfg *ssh.ServerConfig) {
 	s.mu.Unlock()
 	go ssh.DiscardRequests(reqs) // answers keepalives with "not understood", like OpenSSH
 	for nch := range chans {
+		if nch.ChannelType() == "session" {
+			go s.session(nch)
+			continue
+		}
 		if nch.ChannelType() != "direct-tcpip" {
 			_ = nch.Reject(ssh.UnknownChannelType, "only direct-tcpip")
 			continue
@@ -147,6 +155,70 @@ func (s *testServer) handle(nc net.Conn, cfg *ssh.ServerConfig) {
 		go func() { defer func() { _ = ch.Close() }(); _, _ = io.Copy(ch, out) }()
 		go func() { defer func() { _ = out.Close() }(); _, _ = io.Copy(out, ch) }()
 	}
+}
+
+// session runs exec requests with the local sh, the way sshd does without a
+// PTY: closing the channel only ends the command's stdin.
+func (s *testServer) session(nch ssh.NewChannel) {
+	s.mu.Lock()
+	refuse := s.refuseSessions
+	s.mu.Unlock()
+	if refuse {
+		_ = nch.Reject(ssh.Prohibited, "too many sessions")
+		return
+	}
+	ch, reqs, err := nch.Accept()
+	if err != nil {
+		return
+	}
+	for req := range reqs {
+		if req.Type != "exec" {
+			_ = req.Reply(false, nil)
+			continue
+		}
+		var p struct{ Command string }
+		if err := ssh.Unmarshal(req.Payload, &p); err != nil {
+			_ = req.Reply(false, nil)
+			continue
+		}
+		_ = req.Reply(true, nil)
+		s.mu.Lock()
+		s.commands = append(s.commands, p.Command)
+		s.mu.Unlock()
+		go runExec(ch, p.Command)
+	}
+}
+
+func runExec(ch ssh.Channel, command string) {
+	defer func() { _ = ch.Close() }()
+	cmd := exec.Command("/bin/sh", "-c", command)
+	cmd.Stdout, cmd.Stderr = ch, ch.Stderr()
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return
+	}
+	if err := cmd.Start(); err != nil {
+		return
+	}
+	go func() {
+		_, _ = io.Copy(stdin, ch)
+		_ = stdin.Close()
+	}()
+	status := uint32(0)
+	if err := cmd.Wait(); err != nil {
+		status = 1
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			status = uint32(ee.ExitCode())
+		}
+	}
+	_, _ = ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{status}))
+}
+
+func (s *testServer) refuse(on bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuseSessions = on
 }
 
 // dropClients disconnects every client, as a restarted server would.

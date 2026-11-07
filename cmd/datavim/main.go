@@ -18,6 +18,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/db/mysql"
 	"github.com/shepherd-yun/datavim/internal/db/oracle"
 	"github.com/shepherd-yun/datavim/internal/db/postgres"
+	"github.com/shepherd-yun/datavim/internal/db/sqlite"
 	"github.com/shepherd-yun/datavim/internal/db/sqlserver"
 	"github.com/shepherd-yun/datavim/internal/db/tunnel"
 	"github.com/shepherd-yun/datavim/internal/es"
@@ -189,7 +190,7 @@ func auditTo(st *history.Store) func(history.AuditEntry) {
 func newManager(cfg *config.Config, ws config.Workspace, tunnels session.Tunneler) *session.Manager {
 	dir := ws.ConfigDir
 	mgr := session.NewManager(cfg.Connections, secret.Keyring{Prefix: keychainPrefix(ws)},
-		mysql.Driver{}, postgres.Driver{}, sqlserver.Driver{}, oracle.Driver{})
+		mysql.Driver{}, postgres.Driver{}, sqlserver.Driver{}, oracle.Driver{}, sqlite.Driver{})
 	mgr.Persist = func(c config.Connection) error {
 		_, err := config.AppendConnection(dir, c)
 		return err

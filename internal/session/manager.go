@@ -29,6 +29,8 @@ var ErrKeychain = errors.New("keychain not updated")
 // Tunneler opens SSH tunnels; *tunnel.Pool implements it.
 type Tunneler interface {
 	Connect(ctx context.Context, alias string) (db.DialFunc, error)
+	// Exec runs commands on the alias's host, for files that live there.
+	Exec(ctx context.Context, alias string) (db.ExecFunc, error)
 	SetPassphrase(path, passphrase string)
 	TrustHost(e *tunnel.UnknownHostError) error
 }
@@ -373,18 +375,11 @@ func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, err
 		return c, nil
 	}
 
-	pw, err := m.password(name)
+	cc, err := m.connConfig(ctx, cfg, drv, database)
 	if err != nil {
 		return nil, err
 	}
-	dial, err := m.dial(ctx, cfg)
-	if err != nil {
-		return nil, err
-	}
-	raw, err := drv.Open(ctx, db.ConnConfig{
-		Host: cfg.Host, Port: cfg.Port, User: cfg.User, Password: pw,
-		Database: database, Params: cfg.Params, ReadOnly: cfg.IsReadOnly(), Dial: dial,
-	})
+	raw, err := drv.Open(ctx, cc)
 	if err != nil {
 		return nil, fmt.Errorf("connect %s: %w", name, err)
 	}
@@ -398,6 +393,38 @@ func (m *Manager) Conn(ctx context.Context, name, database string) (db.Conn, err
 	}
 	m.open[key] = c
 	return c, nil
+}
+
+// connConfig is what drv needs to open cfg. A file takes no password, and over
+// SSH it runs a process next to the file rather than a tunnel to a port.
+func (m *Manager) connConfig(ctx context.Context, cfg config.Connection, drv db.Driver, database string) (db.ConnConfig, error) {
+	if _, file := drv.(db.FileDriver); file {
+		cc := db.ConnConfig{Database: database, Params: cfg.Params, ReadOnly: cfg.IsReadOnly()}
+		if cfg.SSH == "" {
+			return cc, nil
+		}
+		if m.Tunnels == nil {
+			return cc, fmt.Errorf("connection %q: ssh tunnels are not available", cfg.Name)
+		}
+		exec, err := m.Tunnels.Exec(ctx, cfg.SSH)
+		if err != nil {
+			return cc, fmt.Errorf("connect %s via ssh %s: %w", cfg.Name, cfg.SSH, err)
+		}
+		cc.Exec, cc.ExecHost = exec, cfg.SSH
+		return cc, nil
+	}
+	pw, err := m.password(cfg.Name)
+	if err != nil {
+		return db.ConnConfig{}, err
+	}
+	dial, err := m.dial(ctx, cfg)
+	if err != nil {
+		return db.ConnConfig{}, err
+	}
+	return db.ConnConfig{
+		Host: cfg.Host, Port: cfg.Port, User: cfg.User, Password: pw,
+		Database: database, Params: cfg.Params, ReadOnly: cfg.IsReadOnly(), Dial: dial,
+	}, nil
 }
 
 // Redis returns an open client for db number n (n < 0 means the configured

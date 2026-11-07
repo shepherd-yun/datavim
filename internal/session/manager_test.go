@@ -306,6 +306,16 @@ type fakeTunnels struct {
 	trusted []string
 }
 
+func (f *fakeTunnels) Exec(_ context.Context, alias string) (db.ExecFunc, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.aliases = append(f.aliases, alias)
+	if f.err != nil {
+		return nil, f.err
+	}
+	return func(context.Context, string) (db.Process, error) { return nil, errors.New("fake") }, nil
+}
+
 func (f *fakeTunnels) Connect(_ context.Context, alias string) (db.DialFunc, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

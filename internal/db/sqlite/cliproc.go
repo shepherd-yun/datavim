@@ -64,10 +64,13 @@ func startProc(ctx context.Context, e *cliEngine) (*cliProc, error) {
 		return nil, err
 	}
 	c := &cliProc{exec: e.execFn, p: p, in: p.Stdin(), out: newFrameReader(p.Stdout()), marker: "DV_" + id}
-	done := make(chan error, 1)
-	go func() { done <- c.handshake(e) }()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		err = c.handshake(e)
+	}()
 	select {
-	case err = <-done:
+	case <-done:
 	case <-ctx.Done():
 		c.close()
 		<-done
@@ -298,10 +301,14 @@ func (c *cliProc) run(ctx context.Context, batch string, read func() error) erro
 	c.busy.Store(true)
 	defer c.busy.Store(false)
 	c.send(batch)
-	done := make(chan error, 1)
-	go func() { done <- read() }()
+	done := make(chan struct{})
+	var err error
+	go func() {
+		defer close(done)
+		err = read()
+	}()
 	select {
-	case err := <-done:
+	case <-done:
 		return err
 	case <-ctx.Done():
 		c.interrupt(done)
@@ -310,7 +317,7 @@ func (c *cliProc) run(ctx context.Context, batch string, read func() error) erro
 }
 
 // interrupt ends the process and waits for read to see the end of its output.
-func (c *cliProc) interrupt(done <-chan error) {
+func (c *cliProc) interrupt(done <-chan struct{}) {
 	c.signal("INT")
 	select {
 	case <-done:
@@ -356,20 +363,20 @@ func (c *cliProc) kill() { c.signal("KILL") }
 // terminate ends a process nobody reads any more: its statement may be blocked
 // writing output, so what is left is drained until it exits.
 func (c *cliProc) terminate() {
-	done := make(chan error, 1)
+	done := make(chan struct{})
 	go func() {
-		_, err := io.Copy(io.Discard, c.out.r)
-		done <- err
+		defer close(done)
+		_, _ = io.Copy(io.Discard, c.out.r)
 	}()
 	c.interrupt(done)
 	c.close()
 }
 
-// close ends the channel. With stdin closed sqlite3 exits as soon as it is
-// idle, rolling back an open transaction.
+// close ends the channel, which ends the process's stdin: sqlite3 exits as soon
+// as it is idle, rolling back an open transaction. Stdin itself is not closed
+// here, as that may not overlap a write still in progress.
 func (c *cliProc) close() {
 	c.once.Do(func() {
-		_ = c.in.Close()
 		_ = c.p.Close()
 		go func() { _ = c.p.Wait() }()
 	})

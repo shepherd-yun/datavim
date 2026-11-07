@@ -143,10 +143,10 @@ sh -c 'echo PID=$$; exec sqlite3 -batch [-readonly] [-safe] "file:<路径>?mode=
 
 用户主动取消后临时表和 `PRAGMA` 状态会丢失，这是 `Session` 约定的唯一放宽。契约的 “Session keeps state, survives cancel and early stop” 通过 `Fixture` 开关，只对命令行引擎的取消放宽。
 
-**连接断开**：`ErrConnLost` 向上传递。没有 PTY 时进程收不到 SIGHUP，`kill -INT` 也发不出去（这是推理，未在真实 SSH 上测过，实现时要验证）。所以正在执行的语句可能继续跑完：
+**连接断开**：`ErrConnLost` 向上传递。没有 PTY 时进程收不到 SIGHUP，`kill -INT` 也发不出去。2026-11-07 在本机 OpenSSH sshd 上用 150 万行的 `UPDATE` 实测确认：断开 SSH 后 `sqlite3` 被 init 接管并继续运行，所以正在执行的语句可能继续跑完：
 
-- 事务中：语句结束后 `sqlite3` 读到 stdin EOF 并退出，事务回滚；
-- 事务外：长 `UPDATE` 可能跑完并提交，其间一直占着写锁。
+- 事务中：语句结束后 `sqlite3` 读到 stdin EOF 并退出，事务回滚（实测数据未变）；
+- 事务外：长 `UPDATE` 可能跑完并提交，其间一直占着写锁（实测修改已提交）。
 
 错误提示不能写“已回滚”或“未执行”，要写成：`connection lost; the running statement may still finish on the server`，事务中再说明未提交的修改不会保留。README 写明。第一版不做看门狗。
 
