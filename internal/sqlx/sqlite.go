@@ -369,3 +369,31 @@ func ParseSQLiteIndex(src string) (entries []string, where string) {
 	}
 	return entries, where
 }
+
+// LeadingWords are the first n tokens of stmt in upper case, comments aside.
+func LeadingWords(stmt string, d Dialect, n int) []string {
+	toks := codeTokens(stmt, d)
+	out := make([]string, 0, n)
+	for i := 0; i < n && i < len(toks); i++ {
+		out = append(out, upper(toks[i]))
+	}
+	return out
+}
+
+// TerminatorLine reports a line of stmt holding only "/" or "go", comments
+// aside: for the sqlite3 shell such a line ends a complete statement, so what
+// follows it starts afresh and may be taken for a dot command.
+func TerminatorLine(stmt string, d Dialect) bool {
+	toks := codeTokens(stmt, d)
+	for i, t := range toks {
+		if !isPunct(t, "/") && !isWord(t, "go") {
+			continue
+		}
+		before := i == 0 || strings.Contains(stmt[toks[i-1].end:t.pos], "\n")
+		after := i == len(toks)-1 || strings.Contains(stmt[t.end:toks[i+1].pos], "\n")
+		if before && after {
+			return true
+		}
+	}
+	return false
+}

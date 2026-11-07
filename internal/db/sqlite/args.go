@@ -71,14 +71,17 @@ func stringLiteral(s string) string {
 // blobText is how a BLOB cell reads and is written back, on both engines.
 func blobText(b []byte) string { return "x'" + strings.ToUpper(hex.EncodeToString(b)) + "'" }
 
+// realInf is an infinite REAL as SQL can write it.
+const realInf = "9.0e+999"
+
 // realText writes a REAL the way the sqlite3 shell does: with a decimal point
 // or an exponent, so it stays a REAL when written back.
 func realText(f float64) string {
 	switch {
 	case math.IsInf(f, 1):
-		return "9.0e+999"
+		return realInf
 	case math.IsInf(f, -1):
-		return "-9.0e+999"
+		return "-" + realInf
 	case math.IsNaN(f):
 		return "NULL"
 	}

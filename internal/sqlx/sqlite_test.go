@@ -340,3 +340,28 @@ func TestParseSQLiteIndex(t *testing.T) {
 		t.Errorf("where = %q", where)
 	}
 }
+
+func TestLeadingWords(t *testing.T) {
+	got := LeadingWords("/* c */ create -- d\n virtual table t", SQLite, 2)
+	if diff := cmp.Diff([]string{"CREATE", "VIRTUAL"}, got); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
+	if got := LeadingWords("select", SQLite, 2); len(got) != 1 {
+		t.Errorf("got %v", got)
+	}
+}
+
+func TestTerminatorLine(t *testing.T) {
+	hits := []string{"select 1\ngo\nselect 2", "select 1\n/\n", "select 1\n  GO  \n", "select 1\ngo -- c\n", "go"}
+	for _, s := range hits {
+		if !TerminatorLine(s, SQLite) {
+			t.Errorf("%q: no terminator line found", s)
+		}
+	}
+	misses := []string{"select 1 as go", "select 4\n/ 2", "select '\ngo\n'", "select /*\n/\n*/ 1", "select go from t", "select\ngo from t"}
+	for _, s := range misses {
+		if TerminatorLine(s, SQLite) {
+			t.Errorf("%q: a terminator line found", s)
+		}
+	}
+}

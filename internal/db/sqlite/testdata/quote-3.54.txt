@@ -1,0 +1,3 @@
+'a','a','c','d','e','f','g','h','i','j','k','l m','n','o'
+1,-2.5,1.0e+20,NULL,'it''s',x'00ff',x'',9007199254740993,unistr('a\u000ab'),unistr('a\u000d\u000ab'),'back\slash\n','',unistr('b\\\u000a''q'),'x''00ff'''
+2,3.0,-Inf,'NULL','李雷',x'','x',0,'',unistr('\u000d'),unistr('\u000a'),1.0e-07,',',')'
