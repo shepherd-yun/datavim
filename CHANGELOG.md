@@ -6,6 +6,12 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Added
+- SQLite: a connection opens one database file, local or on an SSH server (`driver = "sqlite"`,
+  `database` the path, `ssh` a `Host` alias), with browsing, cell edits, console transactions,
+  completion, export, and Modify Table's native operations. A remote file is reached through the
+  server's own `sqlite3` (3.26 or newer), so locking stays correct and nothing is uploaded.
+
 ## [3.7.0] - 2026-11-06
 
 ### Changed

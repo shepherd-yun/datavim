@@ -205,6 +205,9 @@ func execAll(ctx context.Context, r runner, p prepared) (db.ExecResult, error) {
 		if res, err = r.exec(ctx, st.Text); err != nil {
 			return db.ExecResult{}, p.fail(ctx, err, st)
 		}
+		if sqlx.Analyze(st.Text, sqlx.SQLite).Kind != sqlx.Write {
+			res.RowsAffected = 0 // changes() still holds the last write's count
+		}
 	}
 	return res, nil
 }

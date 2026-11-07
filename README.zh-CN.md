@@ -1,6 +1,6 @@
 # datavim
 
-一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server 和 Oracle，也能浏览和查询 Redis、Kafka 和 Elasticsearch。
+一个带 vim 键位、DataGrip 式工作流的终端 SQL 客户端，支持 MySQL、PostgreSQL、SQL Server、Oracle 和 SQLite，也能浏览和查询 Redis、Kafka 和 Elasticsearch。
 
 [English](README.md)
 
@@ -272,7 +272,7 @@ Stats 里 `gd` 打开这个索引的分片。树上的 Index Templates 列出 co
 改动会先暂存：改过的单元格变黄，新增行变绿，标记删除的行变红。
 `<Space>w`（或 `:w`）显示将执行的语句；`y` 在一个事务里执行它们，任何一条失败或没有恰好改动一行都会整体回滚。
 行按主键定位，没有主键时用全部列 NOT NULL 的唯一索引；两者都没有的表按所有列的值匹配
-（MySQL 加 `LIMIT 1`，SQL Server 加 `TOP (1)`）或按 `ctid`（PostgreSQL）、`ROWID`（Oracle），预览里会注明。
+（MySQL 加 `LIMIT 1`，SQL Server 加 `TOP (1)`）或按 `ctid`（PostgreSQL）、`ROWID`（Oracle）、`_rowid_`（SQLite），预览里会注明。
 只读连接拒绝改动，PROD 连接在预览中显示 `PROD ·`；有暂存改动时，翻页、刷新、过滤、排序、关闭 tab 或退出都会询问或拒绝。
 控制台里单表 SELECT 的结果也能用同样的按键过滤和编辑。
 
@@ -313,6 +313,36 @@ ssh      = "bastion"
 datavim 读取 `HostName`、`Port`、`User`、`IdentityFile`、`ProxyJump`（任意跳数）和 `UserKnownHostsFile`。
 先尝试 ssh-agent，再尝试你的密钥文件，都不行时才询问密钥口令（口令只保存在内存里）。
 未知主机会显示指纹，输入 `yes` 后加入 `known_hosts`；主机密钥变化视为错误。不支持 `ProxyCommand`。
+
+## SQLite
+
+一个 SQLite 连接打开一个已有的文件；路径写错会报错，绝不会生成新的空库。不设 `ssh` 时是本地文件（会展开 `~/`），设了 `ssh` 时文件在那台服务器上。
+
+```toml
+[[connection]]
+name     = "app-local"
+driver   = "sqlite"
+database = "~/dev/app/app.db"
+
+[[connection]]
+name     = "app-prod"
+driver   = "sqlite"
+database = "/var/lib/app/app.db"
+ssh      = "prod-box"   # ~/.ssh/config 里的 Host 别名，可走 ProxyJump
+env      = "prod"
+```
+
+SQLite 连接没有 host、port、user 和密码。树从连接直接展开到表和视图，也没有服务器状态页。控制台里可以 `ATTACH`，但附加的库不会出现在树上。
+
+**远程文件**由服务器上已有的 `sqlite3` 在文件所在的机器上读写：datavim 不会复制、挂载或传回文件，所以正在使用它的应用的文件锁不受影响。服务器需要是 Unix 系统，并装有 3.26 或更新的 `sqlite3`，否则连接时会说明原因。`DROP COLUMN` 需要 3.35，`RENAME COLUMN` 需要 3.25；版本更旧时直接显示服务器的报错。
+
+在远程连接上，控制台拒绝点命令（`.shell`、`.read` 等）以及 `edit()`、`load_extension()` 这两个能在服务器上运行程序的函数。只读远程连接还拒绝 `writefile()`、`readfile()`、`fsdir()`、`ATTACH`、`VACUUM` 和 `CREATE VIRTUAL TABLE`。可写连接仍可调用 `writefile()`：你本来就有这台服务器的 SSH 权限。
+
+- **取消语句**：在远程连接上取消语句会结束它的 `sqlite3` 进程，因为没有别的办法能停下它。事务外，控制台换一个新进程继续，临时表和 `PRAGMA` 设置会丢失。事务中，事务会回滚，控制台会明确提示，不会静默重连。
+- **连接断开**不会停止服务器上的进程，正在执行的语句可能继续跑完：事务外，长 `UPDATE` 可能执行完并提交，其间一直占着写锁；事务中，未提交的修改不会保留。
+- **Modify Table** 支持加列、改列名、删列、改表名、增删索引。需要重建表的修改（列的类型、默认值、NOT NULL，主键，外键）不会执行，只会列出来，可以在控制台手写。视图不能改名。
+- **BLOB 单元格**显示为 `x'00FF'`，在表格里只读：请在控制台用 `x'…'` 修改。同一行的其他列仍可编辑，整行也可以删除。导出、行定位和数据比较都会保持 BLOB 类型。
+- **无类型列里的数字文本**：无类型列里的文本 `'5'` 经导出或数据同步会变成整数 `5`。行定位不受影响：匹配不到时，“编辑必须恰好影响一行”的规则会拒绝这次修改。
 
 ## 工作空间
 

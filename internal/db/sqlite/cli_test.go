@@ -745,3 +745,36 @@ func TestCleanError(t *testing.T) {
 		}
 	}
 }
+
+func TestRowsAffectedOnlyForChanges(t *testing.T) {
+	ctx := context.Background()
+	path := makeFile(t)
+	for name, c := range map[string]db.Conn{"local": open(t, db.ConnConfig{Database: path}), "cli": openCLIConn(t, path, false)} {
+		t.Run(name, func(t *testing.T) {
+			s, err := c.Session(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = s.Close() }()
+			for _, tt := range []struct {
+				q    string
+				want int64
+			}{
+				{"BEGIN", 0},
+				{"UPDATE users SET note = 'x' WHERE id < 3", 2},
+				{"CREATE TEMP TABLE r_" + name + " (a)", 0},
+				{"SAVEPOINT p", 0},
+				{"SELECT 1", 0},
+				{"ROLLBACK", 0},
+			} {
+				res, err := s.Exec(ctx, tt.q)
+				if err != nil {
+					t.Fatalf("%s: %v", tt.q, err)
+				}
+				if res.RowsAffected != tt.want {
+					t.Errorf("%s: %d rows affected, want %d", tt.q, res.RowsAffected, tt.want)
+				}
+			}
+		})
+	}
+}

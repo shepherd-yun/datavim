@@ -1,6 +1,6 @@
 # datavim
 
-A terminal SQL client for MySQL, PostgreSQL, SQL Server and Oracle with vim keys and DataGrip-style workflows. It also browses and queries Redis, Kafka and Elasticsearch.
+A terminal SQL client for MySQL, PostgreSQL, SQL Server, Oracle and SQLite with vim keys and DataGrip-style workflows. It also browses and queries Redis, Kafka and Elasticsearch.
 
 [中文说明](README.zh-CN.md)
 
@@ -355,8 +355,8 @@ Changes are staged: edited cells turn yellow, new rows green and rows marked for
 `<Space>w` (or `:w`) shows the statements; `y` runs them in one transaction, which is rolled
 back if any statement fails or does not change exactly one row. Rows are located by their
 primary key, else a unique index over NOT NULL columns; tables without one are matched by all
-their values with `LIMIT 1` (MySQL) or `TOP (1)` (SQL Server), or by `ctid` (PostgreSQL) or
-`ROWID` (Oracle), and the preview says so.
+their values with `LIMIT 1` (MySQL) or `TOP (1)` (SQL Server), or by `ctid` (PostgreSQL),
+`ROWID` (Oracle) or `_rowid_` (SQLite), and the preview says so.
 Read-only connections refuse changes, PROD connections show `PROD ·` in the preview, and
 paging, refreshing, filtering, sorting, closing the tab or quitting ask or refuse while
 changes are staged. The same filter and edit keys work on console results of a single-table SELECT.
@@ -407,6 +407,58 @@ and `UserKnownHostsFile`. It tries ssh-agent first, then your identity files, an
 for a key's passphrase only when nothing else works (passphrases are kept in memory).
 Unknown hosts show their fingerprint and are added to `known_hosts` once you type `yes`;
 a changed host key is an error. `ProxyCommand` is not supported.
+
+## SQLite
+
+A SQLite connection opens one existing file; a mistyped path is an error, never a new empty
+database. Without `ssh` the file is local (`~/` is expanded); with `ssh` it lives on that server.
+
+```toml
+[[connection]]
+name     = "app-local"
+driver   = "sqlite"
+database = "~/dev/app/app.db"
+
+[[connection]]
+name     = "app-prod"
+driver   = "sqlite"
+database = "/var/lib/app/app.db"
+ssh      = "prod-box"   # a Host alias from ~/.ssh/config; ProxyJump works
+env      = "prod"
+```
+
+There is no host, port, user or password. The tree goes straight from the connection to its
+tables and views, and there is no server status page. `ATTACH` works in the console, but
+attached databases do not appear in the tree.
+
+**Remote files** are read and written by the `sqlite3` already on the server, next to the file:
+datavim never copies, mounts or re-uploads it, so the application using it keeps its locks. The
+server needs `sqlite3` 3.26 or newer on a Unix system; otherwise the connection says why it cannot
+open. `DROP COLUMN` needs 3.35 and `RENAME COLUMN` 3.25; on older versions the server's message is
+shown.
+
+On remote connections the console refuses dot commands (`.shell`, `.read`, …) and the functions
+`edit()` and `load_extension()`, which could run programs on the server. Read-only remote
+connections also refuse `writefile()`, `readfile()`, `fsdir()`, `ATTACH`, `VACUUM` and
+`CREATE VIRTUAL TABLE`. A writable connection can still call `writefile()`: you have SSH access to
+that server anyway.
+
+- **Cancelling** a statement on a remote connection ends its `sqlite3` process, as nothing else
+  stops it. Outside a transaction the console carries on with a new process, and temporary tables
+  and `PRAGMA` settings are gone. Inside a transaction the transaction is rolled back, and the
+  console says so instead of reconnecting silently.
+- **A lost connection** does not stop the server's process. The running statement may still finish
+  there: outside a transaction a long `UPDATE` can complete and commit, holding the write lock
+  meanwhile; inside a transaction the uncommitted changes are not kept.
+- **Modify Table** adds, renames and drops columns, renames tables, and adds and drops indexes.
+  Anything needing a table rebuild (a column's type, default or NOT NULL, primary keys, foreign
+  keys) is not done: it is reported, and you can write it in the console. Views cannot be renamed.
+- **BLOB cells** show as `x'00FF'` and are read-only in the grid: change them in the console with
+  `x'…'`. The row's other columns can still be edited, and the row deleted. Exports, row location
+  and data compare keep them BLOBs.
+- **Numbers in columns without a type:** text `'5'` in an untyped column turns into the integer `5`
+  through an export or a data sync. Locating a row is not affected: if nothing matches, the rule
+  that an edit must change exactly one row refuses it.
 
 ## Workspaces
 

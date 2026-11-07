@@ -12,6 +12,11 @@ user     = "root"
 database = "app"
 
 [[connection]]
+name     = "local-sqlite"
+driver   = "sqlite"
+database = "~/dev/app/app.db" # a file on this machine; with ssh = "alias", a file on that server
+
+[[connection]]
 name     = "local-pg"
 driver   = "postgres"
 host     = "127.0.0.1"

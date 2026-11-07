@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-datavim is a terminal SQL client (TUI) for MySQL and PostgreSQL with vim keys and DataGrip-style workflows. It is written in Go and uses Bubble Tea v2 (`charm.land/bubbletea/v2`) and Lip Gloss v2.
+datavim is a terminal SQL client (TUI) for MySQL, PostgreSQL, SQL Server, Oracle and SQLite, with vim keys and DataGrip-style workflows; it also browses Redis, Kafka and Elasticsearch. It is written in Go and uses Bubble Tea v2 (`charm.land/bubbletea/v2`) and Lip Gloss v2.
 
 ## Commands
 
@@ -29,8 +29,9 @@ The design spec is `docs/superpowers/specs/2026-10-13-datavim-design.md` (in Chi
 
 Dependencies only point downward: `ui` → `session`/`meta`/`edit`/`export`/`history`/`sqlx` → `db` → drivers. Everything lives under `internal/`, and there is no public API.
 
-- **`internal/db`** is the only connection to database servers; the UI never deals with dialect differences. `driver.go` defines `Driver`, `Conn` (pooled, safe for concurrent use), `Session` (a dedicated server connection used for console transactions), `Querier` (`Query`/`Exec`/`Stream`), `MetaReader` and `Dialect`. `db/mysql` and `db/postgres` implement them: catalog/meta queries, DDL, and error positions via `errpos.go`. A database is called a `Namespace{Database, Schema}`, and MySQL leaves `Schema` empty. `Driver.DatabaseScoped()` is true for PostgreSQL, so it needs one `Conn` per database.
+- **`internal/db`** is the only connection to database servers; the UI never deals with dialect differences. `driver.go` defines `Driver`, `Conn` (pooled, safe for concurrent use), `Session` (a dedicated server connection used for console transactions), `Querier` (`Query`/`Exec`/`Stream`), `MetaReader` and `Dialect`. `db/mysql`, `db/postgres`, `db/sqlserver`, `db/oracle` and `db/sqlite` implement them: catalog/meta queries, DDL, and error positions via `errpos.go`. A database is called a `Namespace{Database, Schema}`, and MySQL leaves `Schema` empty. `Driver.DatabaseScoped()` is true for PostgreSQL, so it needs one `Conn` per database.
 - **`internal/db/dbtest/contract.go`** is the contract that every driver must pass. The integration tests for each driver start MySQL 8 or PG 16 with testcontainers and call `dbtest.RunContract`. Driver behaviour changes belong in this contract, so both engines get tested.
+- **`internal/db/sqlite`** has one layer over an `engine` interface: `modernc.org/sqlite` for local files, and for files on an SSH server a `sqlite3` process next to the file, started through `db.ExecFunc` (`ConnConfig.Exec`, from `tunnel.Pool.Exec`). `quote.go` parses `.mode quote`, `guard.go` refuses what must not reach the shell. Its contract runs on both engines without Docker (needs `sqlite3`).
 - **`internal/db/tunnel`** implements SSH tunnels with `x/crypto/ssh`. They are injected as `ConnConfig.Dial` and never listen on a local port. Tests run an in-memory SSH server.
 - **`internal/session`** (`Manager`) owns connections, passwords (keychain via `internal/secret`), tunnels and read-only toggles. The UI uses it through the `ui.Backend` interface (`internal/ui/backend.go`), and `ui.Store` (`store.go`) is backed by `internal/history`, which uses SQLite at `~/.local/state/datavim/state.db`.
 - **Pure, terminal-free packages:** `sqlx` (lexing, statement splitting, statement classification for readonly/prod guards, completion context, tx detection), `edit` (staged cell/row changes → DML plan, row location by PK / unique NOT NULL index / all values / `ctid`), `export`, `meta` (in-memory catalog cache used by search and completion), `config` (TOML: `connections.toml`, `config.toml`, `keymap.toml`), and `ui/vimedit` (the built-in vim editor state machine).
