@@ -161,3 +161,211 @@ func analyzePragma(toks []token) Info {
 	}
 	return Info{Kind: Write, ReturnsRows: true}
 }
+
+// Placeholders are the byte offsets of the ? parameters of stmt, outside
+// strings, names and comments.
+func Placeholders(stmt string, d Dialect) []int {
+	var out []int
+	for _, t := range codeTokens(stmt, d) {
+		if isPunct(t, "?") {
+			out = append(out, t.pos)
+		}
+	}
+	return out
+}
+
+// FindToken is the offset of the first token of stmt spelled text: how a
+// message like near "x" is placed, as the engine names the token but not
+// where it is.
+func FindToken(stmt string, d Dialect, text string) (int, bool) {
+	for _, t := range codeTokens(stmt, d) {
+		if stmt[t.pos:t.end] == text {
+			return t.pos, true
+		}
+	}
+	return 0, false
+}
+
+// SQLiteColumn is what a column definition says beyond PRAGMA table_xinfo.
+type SQLiteColumn struct {
+	Collation     string // upper case
+	Generated     string
+	AutoIncrement bool
+}
+
+// SQLiteTable is what a CREATE TABLE says beyond the pragmas.
+type SQLiteTable struct {
+	Columns     map[string]SQLiteColumn // by lower-case name
+	PrimaryName string                  // CONSTRAINT name of the primary key
+	ForeignKeys map[string]string       // constraint names by their lower-case columns, joined by commas
+}
+
+// ParseSQLiteTable reads a CREATE TABLE as sqlite_master holds it; the text
+// is known to be valid. CREATE TABLE … AS has no column definitions.
+func ParseSQLiteTable(src string) SQLiteTable {
+	out := SQLiteTable{}
+	toks := codeTokens(src, SQLite)
+	if depth0Word(toks, 0, "AS") {
+		return out
+	}
+	for _, item := range parenItems(toks) {
+		if len(item) == 0 {
+			continue
+		}
+		if name := item[0]; name.kind == tokIdent || !tableConstraintWord(name) {
+			parseColumnDef(src, item, &out)
+		} else {
+			parseTableConstraint(item, &out)
+		}
+	}
+	return out
+}
+
+func tableConstraintWord(t token) bool {
+	switch upper(t) {
+	case "CONSTRAINT", "PRIMARY", "UNIQUE", "CHECK", "FOREIGN":
+		return true
+	}
+	return false
+}
+
+// parenItems are the comma-separated items of the first parenthesis.
+func parenItems(toks []token) [][]token {
+	open := -1
+	for i, t := range toks {
+		if isPunct(t, "(") {
+			open = i
+			break
+		}
+	}
+	if open < 0 {
+		return nil
+	}
+	var out [][]token
+	var cur []token
+	depth := 1
+	for _, t := range toks[open+1:] {
+		depth += depthDelta(t)
+		if depth == 0 {
+			break
+		}
+		if depth == 1 && isPunct(t, ",") {
+			out = append(out, cur)
+			cur = nil
+			continue
+		}
+		cur = append(cur, t)
+	}
+	return append(out, cur)
+}
+
+func parseColumnDef(src string, item []token, out *SQLiteTable) {
+	key := strings.ToLower(item[0].text)
+	var c SQLiteColumn
+	constraint := ""
+	depth := 0
+	for i := 1; i < len(item); i++ {
+		t := item[i]
+		depth += depthDelta(t)
+		if depth != 0 || t.kind != tokWord && !isPunct(t, "(") {
+			continue
+		}
+		next := func() string {
+			if i+1 < len(item) {
+				return item[i+1].text
+			}
+			return ""
+		}
+		switch upper(t) {
+		case "CONSTRAINT":
+			constraint = next()
+			i++
+		case "COLLATE":
+			c.Collation = strings.ToUpper(next())
+			i++
+		case "AUTOINCREMENT":
+			c.AutoIncrement = true
+		case "PRIMARY":
+			if constraint != "" {
+				out.PrimaryName = constraint
+			}
+		case "REFERENCES":
+			if constraint != "" {
+				if out.ForeignKeys == nil {
+					out.ForeignKeys = map[string]string{}
+				}
+				out.ForeignKeys[key] = constraint
+			}
+		case "AS":
+			if i+1 < len(item) && isPunct(item[i+1], "(") {
+				c.Generated = parenText(src, item[i+1:])
+			}
+		}
+	}
+	if out.Columns == nil {
+		out.Columns = map[string]SQLiteColumn{}
+	}
+	out.Columns[key] = c
+}
+
+func parseTableConstraint(item []token, out *SQLiteTable) {
+	constraint := ""
+	if isWord(item[0], "CONSTRAINT") && len(item) > 2 {
+		constraint = item[1].text
+		item = item[2:]
+	}
+	switch {
+	case constraint == "":
+	case isWord(item[0], "PRIMARY"):
+		out.PrimaryName = constraint
+	case isWord(item[0], "FOREIGN"):
+		var cols []string
+		for _, t := range item[1:] {
+			if isPunct(t, ")") {
+				break
+			}
+			if isName(t) && !isWord(t, "KEY") {
+				cols = append(cols, strings.ToLower(t.text))
+			}
+		}
+		if out.ForeignKeys == nil {
+			out.ForeignKeys = map[string]string{}
+		}
+		out.ForeignKeys[strings.Join(cols, ",")] = constraint
+	}
+}
+
+// parenText is the source between the parenthesis at toks[0] and its partner.
+func parenText(src string, toks []token) string {
+	depth := 0
+	for _, t := range toks {
+		depth += depthDelta(t)
+		if depth == 0 {
+			return strings.TrimSpace(src[toks[0].end:t.pos])
+		}
+	}
+	return ""
+}
+
+// ParseSQLiteIndex reads a CREATE INDEX as sqlite_master holds it: the text
+// of its key entries without ASC or DESC, and its WHERE condition.
+func ParseSQLiteIndex(src string) (entries []string, where string) {
+	toks := codeTokens(src, SQLite)
+	depth := 0
+	for i, t := range toks {
+		depth += depthDelta(t)
+		if depth == 0 && isWord(t, "WHERE") && i+1 < len(toks) {
+			where = strings.TrimSpace(src[toks[i+1].pos:])
+			break
+		}
+	}
+	for _, item := range parenItems(toks) {
+		if n := len(item); n > 1 && (isWord(item[n-1], "ASC") || isWord(item[n-1], "DESC")) {
+			item = item[:n-1]
+		}
+		if len(item) > 0 {
+			entries = append(entries, src[item[0].pos:item[len(item)-1].end])
+		}
+	}
+	return entries, where
+}

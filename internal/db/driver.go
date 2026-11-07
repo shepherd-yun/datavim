@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"errors"
+	"io"
 	"net"
 )
 
@@ -13,6 +14,28 @@ var ErrNotFound = errors.New("not found")
 // DialFunc opens the network connection to a server. SSH tunnels provide
 // one; nil dials directly.
 type DialFunc func(ctx context.Context, network, addr string) (net.Conn, error)
+
+// Process is a command running where a database file lives.
+type Process interface {
+	Stdin() io.WriteCloser
+	Stdout() io.Reader // the command merges stderr into stdout itself (2>&1)
+	// Wait returns once the command has exited.
+	Wait() error
+	// Close ends the channel to the command. The command may keep running
+	// until it reads end-of-file on stdin.
+	Close() error
+}
+
+// ExecFunc runs command with sh semantics on the machine a database file
+// lives on. The context only limits starting it.
+type ExecFunc func(ctx context.Context, command string) (Process, error)
+
+// FileDriver is a Driver whose connections open a file rather than a server:
+// they take no password, and over SSH they use ConnConfig.Exec, not Dial.
+type FileDriver interface {
+	Driver
+	FileBased()
+}
 
 // ConnConfig is what a driver needs to open a connection.
 type ConnConfig struct {
@@ -27,6 +50,9 @@ type ConnConfig struct {
 	// Dial, if set, opens every network connection (including PostgreSQL
 	// cancel requests and MySQL KILL QUERY connections).
 	Dial DialFunc
+	// Exec, if set, makes a FileDriver work through a sqlite3 process on
+	// the machine that holds the file.
+	Exec ExecFunc
 }
 
 // Driver opens connections for one database engine.

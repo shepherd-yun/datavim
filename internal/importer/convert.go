@@ -42,6 +42,9 @@ type Target struct {
 	Length            int // char and varchar: the limit in characters
 	TZ                bool
 	MySQL             bool // booleans are written as 1 and 0
+	// DefaultSQL stands in for the DEFAULT keyword on SQLite, whose VALUES
+	// has none: the column's default expression, NULL for a rowid.
+	DefaultSQL string
 }
 
 var typeRe = regexp.MustCompile(`^([a-z][a-z0-9 ]*?)\s*(?:\(\s*(\d+)\s*(?:,\s*(\d+)\s*)?\))?(\s+unsigned)?(?:\s+zerofill)?$`)
@@ -50,7 +53,13 @@ var typeRe = regexp.MustCompile(`^([a-z][a-z0-9 ]*?)\s*(?:\(\s*(\d+)\s*(?:,\s*(\
 func TargetOf(driver string, c db.Column) Target {
 	t := Target{
 		Name: c.Name, Type: c.Type, Nullable: c.Nullable,
-		Default: c.Default != nil || c.AutoIncrement, MySQL: driver == "mysql",
+		Default: c.Default != nil || c.AutoIncrement, MySQL: driver == "mysql" || driver == "sqlite",
+	}
+	if driver == "sqlite" {
+		t.DefaultSQL = "NULL"
+		if c.Default != nil {
+			t.DefaultSQL = *c.Default
+		}
 	}
 	typ := strings.ToLower(strings.TrimSpace(c.Type))
 	if strings.HasSuffix(typ, " with time zone") {
@@ -71,7 +80,7 @@ func TargetOf(driver string, c db.Column) Target {
 	t.Unsigned = m[4] != ""
 	switch base {
 	case "tinyint":
-		if t.MySQL && m[2] == "1" {
+		if driver == "mysql" && m[2] == "1" {
 			t.Kind, t.Precision = KindBool, 0
 			return t
 		}

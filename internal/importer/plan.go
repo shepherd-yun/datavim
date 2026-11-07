@@ -101,7 +101,11 @@ func (p Plan) Insert(rows [][]Cell) (string, []any) {
 			case v.Null:
 				b.WriteString("NULL")
 			case v.Default:
-				b.WriteString("DEFAULT")
+				if s := p.Columns[j].Target.DefaultSQL; s != "" {
+					b.WriteString(s)
+				} else {
+					b.WriteString("DEFAULT")
+				}
 			default:
 				args = append(args, v.Text)
 				if d == sqlx.Postgres {

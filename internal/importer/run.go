@@ -207,7 +207,7 @@ func Run(ctx context.Context, s db.Querier, job Job, done *atomic.Int64) (n int,
 }
 
 func insertAll(ctx context.Context, s db.Querier, d sqlx.Dialect, job Job, done *atomic.Int64) (int, error) {
-	if d == sqlx.Postgres {
+	if d == sqlx.Postgres || d == sqlx.SQLite {
 		for _, q := range job.Create {
 			if _, err := s.Exec(ctx, q); err != nil {
 				return 0, err
@@ -282,11 +282,13 @@ func firstID(ctx context.Context, s db.Querier, d sqlx.Dialect, p Plan, gen, row
 	c := p.Columns[gen].Target
 	table := sqlx.QualifiedName(d, p.Table)
 	q := "SELECT COALESCE(MAX(" + sqlx.QuoteIdent(d, c.Name) + "), 0) FROM " + table
-	if d == sqlx.Postgres {
+	switch d {
+	case sqlx.Postgres:
 		if _, err := s.Exec(ctx, "LOCK TABLE "+table+" IN SHARE ROW EXCLUSIVE MODE"); err != nil {
 			return nil, err
 		}
-	} else {
+	case sqlx.SQLite: // the read lock held by the transaction keeps writers out of its commit
+	default:
 		q += " FOR UPDATE"
 	}
 	rs, err := s.Query(ctx, q)

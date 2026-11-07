@@ -270,3 +270,73 @@ func TestClosedSQLiteTokens(t *testing.T) {
 		}
 	}
 }
+
+func TestPlaceholders(t *testing.T) {
+	got := Placeholders("select ?, '?', \"?\", /* ? */ ? -- ?\n, ?", SQLite)
+	if diff := cmp.Diff([]int{7, 28, 37}, got); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
+}
+
+func TestFindToken(t *testing.T) {
+	src := "select 'FORM', /* FORM */ a\nFORM b"
+	off, ok := FindToken(src, SQLite, "FORM")
+	if !ok || src[off:off+6] != "FORM b" {
+		t.Errorf("offset %d, %v", off, ok)
+	}
+	if _, ok := FindToken(src, SQLite, "nope"); ok {
+		t.Error("found a token that is not there")
+	}
+}
+
+func TestParseSQLiteTable(t *testing.T) {
+	src := `CREATE TABLE "t" (
+		id INTEGER CONSTRAINT pk_t PRIMARY KEY AUTOINCREMENT, -- the key, with a comma
+		"Na Me" TEXT COLLATE NoCase DEFAULT 'a,b',
+		parent INT CONSTRAINT fk_parent REFERENCES t(id),
+		other INT REFERENCES t,
+		a INT,
+		b INT,
+		twice INT GENERATED ALWAYS AS (a * (b + 1)) STORED,
+		short INT AS (a + 1),
+		CONSTRAINT fk_ab FOREIGN KEY (a, b) REFERENCES u(x, y),
+		FOREIGN KEY (b) REFERENCES u(y),
+		UNIQUE (a),
+		CHECK (a > 0)
+	) WITHOUT ROWID`
+	want := SQLiteTable{
+		Columns: map[string]SQLiteColumn{
+			"id":     {AutoIncrement: true},
+			"na me":  {Collation: "NOCASE"},
+			"twice":  {Generated: "a * (b + 1)"},
+			"short":  {Generated: "a + 1"},
+			"parent": {},
+			"other":  {},
+			"a":      {},
+			"b":      {},
+		},
+		PrimaryName: "pk_t",
+		ForeignKeys: map[string]string{"parent": "fk_parent", "a,b": "fk_ab"},
+	}
+	if diff := cmp.Diff(want, ParseSQLiteTable(src)); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
+	ctas := ParseSQLiteTable("CREATE TABLE t AS SELECT 1 AS a")
+	if len(ctas.Columns) != 0 {
+		t.Errorf("CREATE TABLE AS: %+v", ctas)
+	}
+	named := ParseSQLiteTable("CREATE TABLE t (a INT, b INT, CONSTRAINT pk PRIMARY KEY (a, b))")
+	if named.PrimaryName != "pk" {
+		t.Errorf("table constraint: %+v", named)
+	}
+}
+
+func TestParseSQLiteIndex(t *testing.T) {
+	entries, where := ParseSQLiteIndex(`CREATE UNIQUE INDEX "i" ON "t" (a, lower(b), c DESC) WHERE a > 0 AND b IS NOT NULL`)
+	if diff := cmp.Diff([]string{"a", "lower(b)", "c"}, entries); diff != "" {
+		t.Errorf("(-want +got):\n%s", diff)
+	}
+	if where != "a > 0 AND b IS NOT NULL" {
+		t.Errorf("where = %q", where)
+	}
+}

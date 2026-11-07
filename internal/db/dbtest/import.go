@@ -95,7 +95,11 @@ func runImportContract(t *testing.T, conn db.Conn, f Fixture) {
 		if diff := cmp.Diff(want, rs.Rows); diff != "" {
 			t.Fatalf("rows (-want +got):\n%s", diff)
 		}
-		if got := count(t, "SELECT COUNT(*) FROM "+name+" WHERE (id = 1 AND born = DATE '2026-01-02') OR (id = 2 AND born = DATE '2026-01-03')"); got != "2" {
+		date := f.DateSQL
+		if date == nil {
+			date = func(s string) string { return "DATE '" + s + "'" }
+		}
+		if got := count(t, "SELECT COUNT(*) FROM "+name+" WHERE (id = 1 AND born = "+date("2026-01-02")+") OR (id = 2 AND born = "+date("2026-01-03")+")"); got != "2" {
 			t.Fatalf("dates: %s rows match", got)
 		}
 

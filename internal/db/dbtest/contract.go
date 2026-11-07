@@ -70,6 +70,20 @@ type Fixture struct {
 	// dat_dst; 3 has name it's and note back\slash in dat_src, name its and
 	// another seen_at in dat_dst; 4 is only in dat_dst; 5 only in dat_src.
 	DataCompareSQL []string
+	// NoComments is set when the engine has no table or column comments.
+	NoComments bool
+	// NoRoutines is set when the engine has no stored routines.
+	NoRoutines bool
+	// PartialAlter is set when AlterTable only writes some changes (SQLite):
+	// what is left must be exactly what came back in manual.
+	PartialAlter bool
+	// CancelLosesState is set when cancelling a session's statement costs its
+	// temporary tables (the sqlite3 process is replaced).
+	CancelLosesState bool
+	// NoViewRename is set when views cannot be renamed.
+	NoViewRename bool
+	// DateSQL writes a date literal; nil means DATE '2026-01-02'.
+	DateSQL func(date string) string
 }
 
 // RunContract checks conn against the standard fixture created in f.NS.
@@ -260,7 +274,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if id.Name != col("id") || !id.PrimaryKey || id.Nullable {
 			t.Errorf("id = %+v", id)
 		}
-		if name.Name != col("name") || name.Nullable || name.Comment != "display name" || name.PrimaryKey {
+		if name.Name != col("name") || name.Nullable || !f.NoComments && name.Comment != "display name" || name.PrimaryKey {
 			t.Errorf("name = %+v", name)
 		}
 		if email.Name != col("email") || !email.Nullable {
@@ -346,7 +360,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if diff := cmp.Diff([]string{"id", "name", "email", "note"}, names); diff != "" {
 			t.Fatalf("columns (-want +got):\n%s", diff)
 		}
-		if c := s.Columns[1]; c.Comment != "display name" || c.Nullable {
+		if c := s.Columns[1]; !f.NoComments && c.Comment != "display name" || c.Nullable {
 			t.Errorf("name = %+v", c)
 		}
 		if d := s.Columns[3].Default; d == nil || *d != "'hi'" {
@@ -406,7 +420,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 				t.Errorf("%s collation = %q, want %q", name, c.Collation, want)
 			}
 		}
-		if n.Comment != "normalized" {
+		if !f.NoComments && n.Comment != "normalized" {
 			t.Errorf("table comment = %q", n.Comment)
 		}
 	})
@@ -452,6 +466,12 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		if diff := cmp.Diff(cols("id", "name", "email", "note"), userCols); diff != "" {
 			t.Errorf("users columns (-want +got):\n%s", diff)
+		}
+		if f.NoRoutines {
+			if len(c.Routines) != 0 {
+				t.Errorf("routines = %+v, want none", c.Routines)
+			}
+			return
 		}
 		var fn *db.Routine
 		for i, r := range c.Routines {
@@ -535,6 +555,14 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		}
 		if el := time.Since(start); el > 10*time.Second {
 			t.Fatalf("cancel took %v", el)
+		}
+		if f.CancelLosesState {
+			// the process was replaced: make the table again
+			for _, q := range []string{createTmp, "INSERT INTO " + tmp + " VALUES (1), (2)"} {
+				if _, err := s.Exec(ctx, q); err != nil {
+					t.Fatalf("%s after cancel: %v", q, err)
+				}
+			}
 		}
 		if n := countTmp(); n != 2 {
 			t.Fatalf("after cancel rows = %d", n)
@@ -875,10 +903,13 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		exec("CREATE VIEW " + d.QualifiedName(view) + " AS SELECT 1 AS one")
 
 		exec(w.RenameTable(table, "Ops Tmp2", false))
-		exec(w.RenameTable(view, "ops_view2", true))
-		table, view = ref("Ops Tmp2"), ref("ops_view2")
+		table = ref("Ops Tmp2")
+		if !f.NoViewRename {
+			exec(w.RenameTable(view, "ops_view2", true))
+			view = ref("ops_view2")
+		}
 		got := kinds()
-		if _, old := got["Ops Tmp"]; old || got["Ops Tmp2"] != db.TableKindTable || got["ops_view2"] != db.TableKindView {
+		if _, old := got["Ops Tmp"]; old || got["Ops Tmp2"] != db.TableKindTable || got[view.Name] != db.TableKindView {
 			t.Fatalf("after rename: %v", got)
 		}
 
@@ -897,7 +928,7 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		if _, ok := got["Ops Tmp2"]; ok {
 			t.Fatalf("table still there: %v", got)
 		}
-		if _, ok := got["ops_view2"]; ok {
+		if _, ok := got[view.Name]; ok {
 			t.Fatalf("view still there: %v", got)
 		}
 	})
@@ -929,12 +960,28 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			t.Fatalf("the fixture yields only %d changes: %+v", len(changes), changes)
 		}
 		stmts, manual := w.AlterTable(ref("cmp_dst"), changes)
-		if len(manual) != 0 {
+		if len(manual) != 0 && !f.PartialAlter {
 			t.Fatalf("manual: %+v", manual)
 		}
 		exec(stmts)
-		if left := schemadiff.DiffTable(schema("cmp_dst"), src, nil); len(left) != 0 {
+		left := schemadiff.DiffTable(schema("cmp_dst"), src, nil)
+		if !f.PartialAlter && len(left) != 0 {
 			t.Fatalf("after\n%s\nstill differ: %+v", strings.Join(stmts, ";\n"), left)
+		}
+		if f.PartialAlter {
+			if len(stmts) == 0 {
+				t.Fatal("AlterTable wrote nothing")
+			}
+			describe := func(cs []db.SchemaChange) []string {
+				var out []string
+				for _, c := range cs {
+					out = append(out, schemadiff.Describe(c))
+				}
+				return out
+			}
+			if diff := cmp.Diff(describe(manual), describe(left)); diff != "" {
+				t.Fatalf("after\n%s\nwhat is left is not what came back in manual (-manual +left):\n%s", strings.Join(stmts, ";\n"), diff)
+			}
 		}
 
 		created := src
@@ -1066,7 +1113,9 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			return -1
 		}
 		must(ed.SetColumn(col("name"), schemaedit.ColName, "full_name"))
-		must(ed.SetColumn(col("full_name"), schemaedit.ColType, "VARCHAR(100)"))
+		if !f.PartialAlter {
+			must(ed.SetColumn(col("full_name"), schemaedit.ColType, "VARCHAR(100)"))
+		}
 		at := ed.AddColumn(col("full_name")) // AFTER the renamed column, in the same ALTER
 		must(ed.SetColumn(at, schemaedit.ColName, "email"))
 		must(ed.SetColumn(at, schemaedit.ColType, "varchar(80)"))
@@ -1074,9 +1123,11 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 		must(ed.SetColumn(at, schemaedit.ColName, "phone"))
 		must(ed.SetColumn(at, schemaedit.ColType, "varchar(20)"))
 		must(ed.DeleteColumn(col("legacy")))
-		must(ed.ToggleNullable(col("qty")))
-		must(ed.SetColumn(col("qty"), schemaedit.ColDefault, "0"))
-		must(ed.SetColumn(col("qty"), schemaedit.ColComment, "how many"))
+		if !f.PartialAlter {
+			must(ed.ToggleNullable(col("qty")))
+			must(ed.SetColumn(col("qty"), schemaedit.ColDefault, "0"))
+			must(ed.SetColumn(col("qty"), schemaedit.ColComment, "how many"))
+		}
 		must(ed.SetIndexName(ix("mod_t_qty"), "mod_t_quantity"))
 		at = ed.AddIndex(len(ed.Indexes()) - 1)
 		must(ed.SetIndexColumns(at, "email"))
@@ -1101,13 +1152,16 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 			names = append(names, c.Name)
 		}
 		want := []string{"id", "full_name", "email", "phone", "qty"}
-		if sd == sqlx.Postgres {
+		if sd == sqlx.Postgres || sd == sqlx.SQLite {
 			want = []string{"id", "full_name", "qty", "email", "phone"} // PostgreSQL adds columns at the end
 		}
 		if !slices.Equal(names, want) {
 			t.Fatalf("columns = %q, want %q", names, want)
 		}
 		for _, c := range after.Columns {
+			if f.PartialAlter {
+				break
+			}
 			switch c.Name {
 			case "full_name":
 				if c.Type != "varchar(100)" {
