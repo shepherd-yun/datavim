@@ -58,7 +58,7 @@ func TargetOf(driver string, c db.Column) Target {
 	if driver == "sqlite" {
 		t.DefaultSQL = "NULL"
 		if c.Default != nil {
-			t.DefaultSQL = *c.Default
+			t.DefaultSQL = sqliteDefaultSQL(*c.Default)
 		}
 	}
 	typ := strings.ToLower(strings.TrimSpace(c.Type))
@@ -122,6 +122,27 @@ func TargetOf(driver string, c db.Column) Target {
 		}
 	}
 	return t
+}
+
+var (
+	sqliteWord       = regexp.MustCompile(`^[\p{L}_][\p{L}\p{N}_$]*$`)
+	sqliteDQString   = regexp.MustCompile(`^"(?:[^"]|"")*"$`)
+	sqliteDefaultKey = map[string]bool{
+		"NULL": true, "TRUE": true, "FALSE": true, "CURRENT_TIME": true, "CURRENT_DATE": true, "CURRENT_TIMESTAMP": true,
+	}
+)
+
+// sqliteDefaultSQL is a column's default as it reads inside VALUES. DEFAULT abc
+// and DEFAULT "abc" store the text abc, but there they would name a column.
+func sqliteDefaultSQL(d string) string {
+	text := d
+	switch {
+	case sqliteDQString.MatchString(d):
+		text = strings.ReplaceAll(d[1:len(d)-1], `""`, `"`)
+	case !sqliteWord.MatchString(d) || sqliteDefaultKey[strings.ToUpper(d)]:
+		return d
+	}
+	return "'" + strings.ReplaceAll(text, "'", "''") + "'"
 }
 
 // Cell is a converted value: text sent as a parameter, NULL or DEFAULT.
