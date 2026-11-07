@@ -438,7 +438,7 @@ func (t *Table) SetIndexColumns(i int, text string) error {
 	}
 	t.push(Pos{Indexes: true, Row: i})
 	r := &t.idx[i]
-	r.Index.Columns, r.touched = entries, true
+	r.Index.Columns, r.Index.Suffixes, r.touched = entries, nil, true
 	t.rename(r)
 	return nil
 }

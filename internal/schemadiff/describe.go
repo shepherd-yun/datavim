@@ -127,7 +127,7 @@ func nullText(nullable bool) string {
 }
 
 func indexText(ix db.Index) string {
-	cols := "(" + strings.Join(ix.Columns, ", ") + ")"
+	cols := "(" + strings.Join(ix.Entries(), ", ") + ")"
 	if ix.Primary {
 		return "primary key " + cols
 	}

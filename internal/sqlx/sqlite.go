@@ -348,8 +348,9 @@ func parenText(src string, toks []token) string {
 }
 
 // ParseSQLiteIndex reads a CREATE INDEX as sqlite_master holds it: the text
-// of its key entries without ASC or DESC, and its WHERE condition.
-func ParseSQLiteIndex(src string) (entries []string, where string) {
+// of its key entries, what follows each of them (COLLATE, ASC, DESC), and its
+// WHERE condition.
+func ParseSQLiteIndex(src string) (entries, suffixes []string, where string) {
 	toks := codeTokens(src, SQLite)
 	depth := 0
 	for i, t := range toks {
@@ -360,14 +361,23 @@ func ParseSQLiteIndex(src string) (entries []string, where string) {
 		}
 	}
 	for _, item := range parenItems(toks) {
-		if n := len(item); n > 1 && (isWord(item[n-1], "ASC") || isWord(item[n-1], "DESC")) {
-			item = item[:n-1]
+		if len(item) == 0 {
+			continue
 		}
-		if len(item) > 0 {
-			entries = append(entries, src[item[0].pos:item[len(item)-1].end])
+		last, suffix := len(item), ""
+		nested := 0
+		for k, t := range item {
+			nested += depthDelta(t)
+			if k > 0 && nested == 0 && (isWord(t, "COLLATE") || isWord(t, "ASC") || isWord(t, "DESC")) {
+				last = k
+				suffix = src[t.pos:item[len(item)-1].end]
+				break
+			}
 		}
+		entries = append(entries, src[item[0].pos:item[last-1].end])
+		suffixes = append(suffixes, suffix)
 	}
-	return entries, where
+	return entries, suffixes, where
 }
 
 // LeadingWords are the first n tokens of stmt in upper case, comments aside.

@@ -332,12 +332,25 @@ func TestParseSQLiteTable(t *testing.T) {
 }
 
 func TestParseSQLiteIndex(t *testing.T) {
-	entries, where := ParseSQLiteIndex(`CREATE UNIQUE INDEX "i" ON "t" (a, lower(b), c DESC) WHERE a > 0 AND b IS NOT NULL`)
+	entries, suffixes, where := ParseSQLiteIndex(`CREATE UNIQUE INDEX "i" ON "t" (a, lower(b), c DESC) WHERE a > 0 AND b IS NOT NULL`)
 	if diff := cmp.Diff([]string{"a", "lower(b)", "c"}, entries); diff != "" {
 		t.Errorf("(-want +got):\n%s", diff)
 	}
+	if diff := cmp.Diff([]string{"", "", "DESC"}, suffixes); diff != "" {
+		t.Errorf("suffixes (-want +got):\n%s", diff)
+	}
 	if where != "a > 0 AND b IS NOT NULL" {
 		t.Errorf("where = %q", where)
+	}
+}
+
+func TestParseSQLiteIndexSuffixes(t *testing.T) {
+	entries, suffixes, _ := ParseSQLiteIndex(`CREATE INDEX i ON t (c COLLATE NOCASE DESC, a+b ASC, (d COLLATE RTRIM), "desc", e collate binary)`)
+	if diff := cmp.Diff([]string{"c", "a+b", "(d COLLATE RTRIM)", `"desc"`, "e"}, entries); diff != "" {
+		t.Errorf("entries (-want +got):\n%s", diff)
+	}
+	if diff := cmp.Diff([]string{"COLLATE NOCASE DESC", "ASC", "", "", "collate binary"}, suffixes); diff != "" {
+		t.Errorf("suffixes (-want +got):\n%s", diff)
 	}
 }
 

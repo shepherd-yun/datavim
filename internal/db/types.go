@@ -55,6 +55,21 @@ type Index struct {
 	Method     string // btree, hash, gin, fulltext, … in lower case
 	Where      string // the predicate of a PostgreSQL partial index
 	Constraint bool   // PostgreSQL: the index backs a PRIMARY KEY or UNIQUE constraint
+	// Suffixes is what follows each of Columns in the definition, such as
+	// "COLLATE NOCASE DESC"; nil when nothing does. SQLite only.
+	Suffixes []string
+}
+
+// Entries is Columns with their suffixes: what an index is defined over.
+func (ix Index) Entries() []string {
+	out := make([]string, len(ix.Columns))
+	for i, c := range ix.Columns {
+		out[i] = c
+		if i < len(ix.Suffixes) && ix.Suffixes[i] != "" {
+			out[i] += " " + ix.Suffixes[i]
+		}
+	}
+	return out
 }
 
 // ForeignKey describes one foreign-key constraint.

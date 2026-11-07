@@ -1,6 +1,7 @@
 package sqlite
 
 import (
+	"regexp"
 	"strings"
 
 	"github.com/shepherd-yun/datavim/internal/db"
@@ -47,12 +48,26 @@ func (w ddlWriter) columnDef(c db.Column) string {
 		s += " NOT NULL"
 	}
 	if c.Default != nil && c.Generated == "" {
-		s += " DEFAULT " + *c.Default
+		s += " DEFAULT " + defaultValue(*c.Default)
 	}
 	return s
 }
 
-// indexColumns quotes plain names and keeps expressions as they are.
+// bareDefault is what DEFAULT takes without parentheses: a number, a string, a
+// blob, or a word (NULL, TRUE, CURRENT_TIMESTAMP, or an identifier read as text).
+var bareDefault = regexp.MustCompile(`^(?:[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?|[+-]?0[xX][0-9a-fA-F]+|'(?:[^']|'')*'|"(?:[^"]|"")*"|[xX]'[0-9a-fA-F]*'|[\p{L}_][\p{L}\p{N}_$]*)$`)
+
+// defaultValue is a default as DEFAULT writes it. PRAGMA table_info reports an
+// expression without the parentheses it needs.
+func defaultValue(d string) string {
+	if bareDefault.MatchString(d) {
+		return d
+	}
+	return "(" + d + ")"
+}
+
+// indexColumns quotes plain names, keeps expressions as they are, and adds what
+// follows each entry.
 func (w ddlWriter) indexColumns(ix db.Index) string {
 	parts := make([]string, len(ix.Columns))
 	for i, c := range ix.Columns {
@@ -60,6 +75,9 @@ func (w ddlWriter) indexColumns(ix db.Index) string {
 			parts[i] = c
 		} else {
 			parts[i] = w.d.QuoteIdent(c)
+		}
+		if i < len(ix.Suffixes) && ix.Suffixes[i] != "" {
+			parts[i] += " " + ix.Suffixes[i]
 		}
 	}
 	return "(" + strings.Join(parts, ", ") + ")"

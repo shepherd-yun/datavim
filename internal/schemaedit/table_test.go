@@ -232,3 +232,15 @@ func TestSplitList(t *testing.T) {
 		}
 	}
 }
+
+// A column's options belong to the entries they were read with.
+func TestSetIndexColumnsForgetsTheSuffixes(t *testing.T) {
+	e := New(db.TableSchema{
+		Columns: []db.Column{{Name: "a", Type: "text"}, {Name: "b", Type: "text"}},
+		Indexes: []db.Index{{Name: "i", Columns: []string{"a"}, Suffixes: []string{"DESC"}}},
+	}, sqlx.SQLite)
+	must(t, e.SetIndexColumns(0, "b, a"))
+	if got := e.Indexes()[0].Index.Suffixes; got != nil {
+		t.Fatalf("suffixes = %v", got)
+	}
+}

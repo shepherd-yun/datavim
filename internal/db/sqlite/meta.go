@@ -52,10 +52,24 @@ func (m meta) Columns(ctx context.Context, t db.TableRef) ([]db.Column, error) {
 	}
 	for i, c := range cols {
 		if c.PrimaryKey && strings.EqualFold(c.Type, "INTEGER") && pkColumns(cols) == 1 {
-			cols[i].AutoIncrement = true
+			alias, err := m.pkHasNoIndex(ctx, t.Name)
+			if err != nil {
+				return nil, err
+			}
+			cols[i].AutoIncrement = alias
 		}
 	}
 	return cols, nil
+}
+
+// pkHasNoIndex tells a rowid alias from an INTEGER PRIMARY KEY that is not one
+// (WITHOUT ROWID, or declared DESC): only those have an index of their own.
+func (m meta) pkHasNoIndex(ctx context.Context, table string) (bool, error) {
+	rs, err := m.c.Query(ctx, "SELECT 1 FROM pragma_index_list(?) WHERE origin = 'pk'", table)
+	if err != nil {
+		return false, err
+	}
+	return len(rs.Rows) == 0, nil
 }
 
 func pkColumns(cols []db.Column) int {
@@ -125,9 +139,9 @@ func (m meta) Indexes(ctx context.Context, t db.TableRef) ([]db.Index, error) {
 			continue
 		}
 		ix := db.Index{Name: r[0].Text, Unique: r[1].Text != "0", Method: "btree", Constraint: r[2].Text == "u"}
-		var entries []string
+		var entries, suffixes []string
 		if !r[3].Null {
-			entries, ix.Where = sqlx.ParseSQLiteIndex(r[3].Text)
+			entries, suffixes, ix.Where = sqlx.ParseSQLiteIndex(r[3].Text)
 		}
 		cols, err := m.c.Query(ctx, "SELECT name FROM pragma_index_info(?) ORDER BY seqno", ix.Name)
 		if err != nil {
@@ -138,12 +152,24 @@ func (m meta) Indexes(ctx context.Context, t db.TableRef) ([]db.Index, error) {
 			case !c[0].Null:
 				ix.Columns = append(ix.Columns, c[0].Text)
 			case i < len(entries):
-				ix.Columns = append(ix.Columns, entries[i])
+				ix.Columns = append(ix.Columns, expressionEntry(entries[i]))
 			}
+		}
+		if len(suffixes) == len(ix.Columns) && strings.Join(suffixes, "") != "" {
+			ix.Suffixes = suffixes
 		}
 		out = append(out, ix)
 	}
 	return out, nil
+}
+
+// expressionEntry spells an index expression so that it reads as one: an entry
+// with a parenthesis is an expression everywhere else, and a+b has none.
+func expressionEntry(e string) string {
+	if strings.ContainsRune(e, '(') {
+		return e
+	}
+	return "(" + e + ")"
 }
 
 // ForeignKeys reads the keys in the order they were declared. The pragma has

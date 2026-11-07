@@ -3,6 +3,7 @@ package schemadiff
 import (
 	"fmt"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -229,5 +230,23 @@ func TestDiffTableOnUpdate(t *testing.T) {
 	}
 	if d := Describe(got[0]); d != "~ column updated  no default → no default ON UPDATE CURRENT_TIMESTAMP" {
 		t.Errorf("Describe = %q", d)
+	}
+}
+
+// DESC or a collation changes the index, though its columns are the same.
+func TestDiffTableSeesIndexOptions(t *testing.T) {
+	cols := []db.Column{{Name: "a", Type: "text"}}
+	target := table("t", cols, db.Index{Name: "i", Columns: []string{"a"}})
+	source := table("t", cols, db.Index{Name: "i", Columns: []string{"a"}, Suffixes: []string{"COLLATE NOCASE"}})
+	got := DiffTable(target, source, nil)
+	if len(got) != 2 || got[0].Kind != db.DropIndex || got[1].Kind != db.AddIndex {
+		t.Fatalf("got %v", summary(got))
+	}
+	if !strings.Contains(indexText(*got[1].NewIndex), "a COLLATE NOCASE") {
+		t.Fatalf("the description hides the difference: %s", indexText(*got[1].NewIndex))
+	}
+	same := table("t", cols, db.Index{Name: "i", Columns: []string{"a"}, Suffixes: []string{""}})
+	if got := DiffTable(target, same, nil); len(got) != 0 {
+		t.Fatalf("no options either way: %v", summary(got))
 	}
 }

@@ -103,7 +103,7 @@ func alterRisk(old, nw db.Column, a db.ColumnAttr) db.Risk {
 }
 
 func sameIndex(a, b db.Index) bool {
-	return slices.Equal(a.Columns, b.Columns) && a.Unique == b.Unique && a.Primary == b.Primary &&
+	return slices.Equal(a.Entries(), b.Entries()) && a.Unique == b.Unique && a.Primary == b.Primary &&
 		a.Method == b.Method && a.Where == b.Where
 }
 
