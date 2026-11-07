@@ -217,7 +217,7 @@ func TestSQLiteDialectBasics(t *testing.T) {
 	if DialectOf("sqlite") != SQLite || SQLite.Driver() != "sqlite" {
 		t.Error("driver name round trip")
 	}
-	want := Features{ServerReadOnly: true, TxDDL: true, SchemaTools: true, RowLocator: LocateRowID}
+	want := Features{ServerReadOnly: true, TxDDL: true, SchemaTools: true, RowLocator: LocateRowID, MainNamespace: "main"}
 	if got := SQLite.Features(); got != want {
 		t.Errorf("Features = %+v", got)
 	}

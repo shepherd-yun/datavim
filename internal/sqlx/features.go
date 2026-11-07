@@ -28,6 +28,9 @@ type Features struct {
 	// FallbackDatabase is the database a database-scoped connection without
 	// one configured opens.
 	FallbackDatabase string
+	// MainNamespace is how SQL can name the only namespace of an engine that
+	// has neither databases nor schemas.
+	MainNamespace string
 }
 
 var features = [...]Features{
@@ -49,7 +52,7 @@ var features = [...]Features{
 		Schemas: true, DDLCommits: true, ServerStatus: true, RowLocator: LocateRowID,
 	},
 	SQLite: {
-		ServerReadOnly: true, TxDDL: true, SchemaTools: true, RowLocator: LocateRowID,
+		ServerReadOnly: true, TxDDL: true, SchemaTools: true, RowLocator: LocateRowID, MainNamespace: "main",
 	},
 }
 

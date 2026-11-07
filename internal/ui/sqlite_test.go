@@ -292,3 +292,24 @@ func TestSQLiteAutomaticRollbackDuringEdits(t *testing.T) {
 		t.Fatal("the transaction is gone")
 	}
 }
+
+func TestSQLiteCompletesAfterMain(t *testing.T) {
+	c := sqliteConsole(t)
+	typeIn(t, c, "select * from MAIN.us")
+	if c.popup == nil || c.popup.Chosen().Label != "users" {
+		t.Fatalf("table popup = %+v", c.popup)
+	}
+	c = sqliteConsole(t)
+	c.editor.SetValue(" from main.users u")
+	c.editor.Top()
+	typeIn(t, c, "select u.")
+	if c.popup == nil || c.popup.Chosen().Label != "id" {
+		t.Fatalf("column popup = %+v", c.popup)
+	}
+	// any other qualifier is not this file
+	c = sqliteConsole(t)
+	typeIn(t, c, "select * from other.us")
+	if c.popup != nil {
+		t.Fatalf("popup = %+v", c.popup)
+	}
+}

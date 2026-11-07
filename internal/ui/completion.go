@@ -157,7 +157,7 @@ func wordCandidates(words []string, lower bool) []complete.Candidate {
 // qualified resolves the qualifier written before a table name.
 func (t *consoleTab) qualified(q string) db.Namespace {
 	switch {
-	case q == "":
+	case q == "", strings.EqualFold(q, t.dialect.Features().MainNamespace):
 		return t.defNS
 	case t.dialect.Features().Schemas:
 		return db.Namespace{Database: t.defNS.Database, Schema: q}
