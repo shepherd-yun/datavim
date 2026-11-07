@@ -1,6 +1,9 @@
 package edit
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/shepherd-yun/datavim/internal/db"
 	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
@@ -25,8 +28,9 @@ type Key struct {
 // ChooseKey picks how rows of a table are located: its primary key, else a
 // unique index over NOT NULL columns, else the engine's fallback
 // (sqlx.Features.RowLocator): the row id of a table (PostgreSQL ctid,
-// Oracle ROWID) or every column (MySQL, SQL Server). A view without a key
-// on a row-id engine has none.
+// Oracle ROWID, SQLite _rowid_) or every column (MySQL, SQL Server). A view
+// without a key on a row-id engine has none, nor has a SQLite table with a
+// column named _rowid_, which hides the row id.
 func ChooseKey(d sqlx.Dialect, cols []db.Column, idx []db.Index, view bool) Key {
 	nullable := make(map[string]bool, len(cols))
 	var pk []string
@@ -51,7 +55,10 @@ func ChooseKey(d sqlx.Dialect, cols []db.Column, idx []db.Index, view bool) Key 
 	}
 	switch d.Features().RowLocator {
 	case sqlx.LocateRowID:
-		if !view {
+		shadowed := d == sqlx.SQLite && slices.ContainsFunc(cols, func(c db.Column) bool {
+			return strings.EqualFold(c.Name, "_rowid_")
+		})
+		if !view && !shadowed {
 			return Key{Kind: RowID}
 		}
 	case sqlx.LocateAllColumns:

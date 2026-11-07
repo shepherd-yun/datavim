@@ -40,7 +40,7 @@ func IsBinaryType(t string) bool { return binaryTypes[NormType(t)] }
 func IsNumber(s string) bool { return numberRe.MatchString(s) }
 
 // QuoteIdent quotes an identifier: `name` (MySQL), [name] (SQL Server) or
-// "name" (PostgreSQL, Oracle).
+// "name" (PostgreSQL, Oracle, SQLite).
 func QuoteIdent(d Dialect, s string) string {
 	//exhaustive:enforce
 	switch d {
@@ -48,16 +48,20 @@ func QuoteIdent(d Dialect, s string) string {
 		return db.Quote(s, '`')
 	case SQLServer:
 		return "[" + strings.ReplaceAll(s, "]", "]]") + "]"
-	case Postgres, Oracle:
+	case Postgres, Oracle, SQLite:
 	}
 	return db.Quote(s, '"')
 }
 
 // QualifiedName names a table in SQL text: database.table (MySQL),
 // schema.table (PostgreSQL, Oracle) or database.schema.table (SQL Server),
-// just the table without a namespace.
+// just the table without a namespace or on SQLite, where a connection is one
+// file.
 func QualifiedName(d Dialect, ref db.TableRef) string {
 	name := QuoteIdent(d, ref.Name)
+	if d == SQLite {
+		return name
+	}
 	if d == SQLServer && ref.Database != "" {
 		// [db]..[t] is the table in the user's default schema of db
 		schema := ""
@@ -79,12 +83,17 @@ func QualifiedName(d Dialect, ref db.TableRef) string {
 // Literal writes v as a SQL literal for a column of type dbType: NULL, a
 // bare number for numeric columns, MySQL 0x… hex for binary columns, and
 // otherwise a quoted string with ' doubled (and \ doubled on MySQL; N'…' on
-// SQL Server).
+// SQL Server). A SQLite BLOB is written as read (x'00FF'), and a number is
+// bare under an expression column's type ANY too.
 func Literal(d Dialect, dbType string, v db.Value) string {
 	switch {
 	case v.Null:
 		return "NULL"
+	case d == SQLite && v.Blob:
+		return v.Text
 	case IsNumericType(dbType) && IsNumber(v.Text):
+		return v.Text
+	case d == SQLite && NormType(dbType) == "ANY" && IsNumber(v.Text):
 		return v.Text
 	case (d == MySQL || d == SQLServer) && IsBinaryType(dbType) && strings.HasPrefix(v.Text, "0x"):
 		return v.Text
@@ -110,7 +119,7 @@ func Literal(d Dialect, dbType string, v db.Value) string {
 func BeginSQL(d Dialect) string {
 	//exhaustive:enforce
 	switch d {
-	case Postgres:
+	case Postgres, SQLite:
 		return "BEGIN"
 	case SQLServer:
 		return "BEGIN TRANSACTION"

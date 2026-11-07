@@ -183,7 +183,7 @@ func (tg Target) insert(name string, cols []db.ColumnInfo, r *Row) string {
 		if len(cols) > 0 {
 			return "INSERT INTO " + name + " (" + sqlx.QuoteIdent(d, tg.column(cols, 0).Name) + ") VALUES (DEFAULT)"
 		}
-	case sqlx.Postgres, sqlx.SQLServer:
+	case sqlx.Postgres, sqlx.SQLServer, sqlx.SQLite:
 	}
 	return "INSERT INTO " + name + " DEFAULT VALUES"
 }

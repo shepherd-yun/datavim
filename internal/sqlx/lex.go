@@ -15,12 +15,13 @@ const (
 	Postgres
 	SQLServer
 	Oracle
+	SQLite
 )
 
-var driverNames = [...]string{MySQL: "mysql", Postgres: "postgres", SQLServer: "sqlserver", Oracle: "oracle"}
+var driverNames = [...]string{MySQL: "mysql", Postgres: "postgres", SQLServer: "sqlserver", Oracle: "oracle", SQLite: "sqlite"}
 
-// DialectOf maps a driver name ("mysql", "postgres", "sqlserver", "oracle")
-// to its dialect. Unknown names map to MySQL; config validation rejects them
+// DialectOf maps a driver name ("mysql", "postgres", "sqlserver", "oracle",
+// "sqlite") to its dialect. Unknown names map to MySQL; config validation rejects them
 // before they get here.
 func DialectOf(driver string) Dialect {
 	for d, name := range driverNames {
@@ -83,8 +84,19 @@ func lex(src string, i int, d Dialect) token {
 		t := quoted(src, i+1, '\'', tokString, false)
 		t.pos, t.text = i, src[i:t.end]
 		return t
+	case (c == 'x' || c == 'X') && d == SQLite && i+1 < len(src) && src[i+1] == '\'':
+		t := quoted(src, i+1, '\'', tokString, false)
+		t.pos, t.text = i, src[i:t.end]
+		return t
 	case c == '[' && d == SQLServer:
 		return quoted(src, i, ']', tokIdent, false)
+	case c == '[' && d == SQLite:
+		// unlike T-SQL there is no ]] escape: the first ] closes the name
+		end := strings.IndexByte(src[i:], ']')
+		if end < 0 {
+			return token{kind: tokIdent, text: src[i+1:], pos: i, end: len(src)}
+		}
+		return token{kind: tokIdent, text: src[i+1 : i+end], pos: i, end: i + end + 1}
 	case (c == '@' || c == '#') && d == SQLServer:
 		// @variables, #temp and ##global tables are names
 		j := i
@@ -101,7 +113,7 @@ func lex(src string, i int, d Dialect) token {
 		return quoted(src, i, '"', tokString, true)
 	case c == '"':
 		return quoted(src, i, '"', tokIdent, false)
-	case c == '`' && d == MySQL:
+	case c == '`' && (d == MySQL || d == SQLite):
 		return quoted(src, i, '`', tokIdent, false)
 	case c == '$' && d == Postgres:
 		if t, ok := dollar(src, i); ok {

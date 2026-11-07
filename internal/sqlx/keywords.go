@@ -40,17 +40,23 @@ var (
 		"NVL", "NVL2", "OFFSET", "ONLY", "PRIOR", "ROWID", "ROWNUM", "ROWS", "START", "SYSDATE",
 		"SYSTIMESTAMP", "TO_CHAR", "TO_DATE", "TO_NUMBER", "VARCHAR2", "NUMBER",
 	}
+	sqliteKeywords = []string{
+		"ATTACH", "AUTOINCREMENT", "CONFLICT", "DETACH", "GLOB", "IFNULL", "IGNORE", "ISNULL", "NOTNULL",
+		"PRAGMA", "RAISE", "REGEXP", "REINDEX", "REPLACE", "RETURNING", "ROWID", "STRICT", "VACUUM", "WITHOUT",
+	}
 	keywordLists = map[Dialect][]string{
 		MySQL:     sortedUnique(commonKeywords, mysqlKeywords),
 		Postgres:  sortedUnique(commonKeywords, postgresKeywords),
 		SQLServer: without(sortedUnique(commonKeywords, sqlserverKeywords), "LIMIT"),
 		Oracle:    without(sortedUnique(commonKeywords, oracleKeywords), "LIMIT"),
+		SQLite:    without(sortedUnique(commonKeywords, sqliteKeywords), "FUNCTION", "GRANT", "PROCEDURE", "REVOKE", "SCHEMA", "TRUNCATE"),
 	}
 	keywordSets = map[Dialect]map[string]bool{
 		MySQL:     wordSet(keywordLists[MySQL]...),
 		Postgres:  wordSet(keywordLists[Postgres]...),
 		SQLServer: wordSet(keywordLists[SQLServer]...),
 		Oracle:    wordSet(keywordLists[Oracle]...),
+		SQLite:    wordSet(keywordLists[SQLite]...),
 	}
 	// reserved holds the words each dialect does not accept as bare
 	// identifiers: MySQL 8.0's reserved words and PostgreSQL's reserved ones
@@ -143,6 +149,16 @@ var (
 			"ROWS", "SELECT", "SESSION", "SET", "SHARE", "SIZE", "SMALLINT", "START", "SUCCESSFUL",
 			"SYNONYM", "SYSDATE", "TABLE", "THEN", "TO", "TRIGGER", "UID", "UNION", "UNIQUE", "UPDATE",
 			"USER", "VALIDATE", "VALUES", "VARCHAR", "VARCHAR2", "VIEW", "WHENEVER", "WHERE", "WITH",
+		),
+		// SQLite's keywords without a fallback to identifier, plus the join
+		// words, which only work bare in some positions.
+		SQLite: wordSet(
+			"ADD", "ALL", "ALTER", "AND", "AS", "AUTOINCREMENT", "BETWEEN", "CASE", "CHECK", "COLLATE", "COMMIT",
+			"CONSTRAINT", "CREATE", "CROSS", "DEFAULT", "DEFERRABLE", "DELETE", "DISTINCT", "DROP", "ELSE", "ESCAPE",
+			"EXCEPT", "EXISTS", "FOREIGN", "FROM", "FULL", "GROUP", "HAVING", "IF", "IN", "INDEX", "INNER", "INSERT",
+			"INTERSECT", "INTO", "IS", "ISNULL", "JOIN", "LEFT", "LIMIT", "NATURAL", "NOT", "NOTHING", "NOTNULL", "NULL",
+			"ON", "OR", "ORDER", "OUTER", "PRIMARY", "REFERENCES", "RETURNING", "RIGHT", "SELECT", "SET", "TABLE", "THEN",
+			"TO", "TRANSACTION", "UNION", "UNIQUE", "UPDATE", "USING", "VALUES", "WHEN", "WHERE",
 		),
 	}
 )

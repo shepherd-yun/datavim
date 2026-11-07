@@ -1205,6 +1205,7 @@ func scopeSQL(d sqlx.Dialect, q db.Dialect, ns db.Namespace) string {
 		if ns.Schema != "" {
 			return "ALTER SESSION SET CURRENT_SCHEMA = " + q.QuoteIdent(ns.Schema)
 		}
+	case sqlx.SQLite: // a connection is one file
 	}
 	return ""
 }
@@ -1221,6 +1222,8 @@ func engineName(d sqlx.Dialect) string {
 		return "SQL Server"
 	case sqlx.Oracle:
 		return "Oracle"
+	case sqlx.SQLite:
+		return "SQLite"
 	}
 	return d.Driver()
 }

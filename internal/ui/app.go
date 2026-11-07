@@ -20,6 +20,7 @@ import (
 	"github.com/shepherd-yun/datavim/internal/meta"
 	"github.com/shepherd-yun/datavim/internal/secret"
 	"github.com/shepherd-yun/datavim/internal/session"
+	"github.com/shepherd-yun/datavim/internal/sqlx"
 	"github.com/shepherd-yun/datavim/internal/ui/keymap"
 	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
@@ -787,6 +788,10 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 			return m.openKafkaServer(conn)
 		case isES(m.backend, conn):
 			return m.openESServer(conn)
+		}
+		if cfg, ok := m.backend.Connection(conn); ok && !sqlx.DialectOf(cfg.Driver).Features().ServerStatus {
+			m.setStatus(engineName(sqlx.DialectOf(cfg.Driver))+" has no server status", true)
+			return nil
 		}
 		return m.openSQLServer(conn)
 	case keymap.Refresh:

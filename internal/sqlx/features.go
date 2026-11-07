@@ -22,6 +22,7 @@ type Features struct {
 	DDLCommits     bool       // DDL implicitly commits the open transaction
 	SchemaTools    bool       // Modify Table, schema/data compare and import
 	ILike          bool       // ILIKE is available
+	ServerStatus   bool       // there is a server to show status for
 	RowLocator     RowLocator // how to find a row without a key
 	DefaultSchema  string     // schema used when none is given; "" is the current user
 	// FallbackDatabase is the database a database-scoped connection without
@@ -32,20 +33,23 @@ type Features struct {
 var features = [...]Features{
 	MySQL: {
 		Databases: true, ServerReadOnly: true, DDLCommits: true, SchemaTools: true,
-		RowLocator: LocateAllColumns,
+		ServerStatus: true, RowLocator: LocateAllColumns,
 	},
 	Postgres: {
 		Databases: true, Schemas: true, ServerReadOnly: true, TxDDL: true, AbortedTx: true,
-		SchemaTools: true, ILike: true, RowLocator: LocateRowID, DefaultSchema: "public",
+		SchemaTools: true, ILike: true, ServerStatus: true, RowLocator: LocateRowID, DefaultSchema: "public",
 		FallbackDatabase: "postgres",
 	},
 	SQLServer: {
-		Databases: true, Schemas: true, TxDDL: true,
+		Databases: true, Schemas: true, TxDDL: true, ServerStatus: true,
 		RowLocator: LocateAllColumns, DefaultSchema: "dbo",
 		FallbackDatabase: "master",
 	},
 	Oracle: {
-		Schemas: true, DDLCommits: true, RowLocator: LocateRowID,
+		Schemas: true, DDLCommits: true, ServerStatus: true, RowLocator: LocateRowID,
+	},
+	SQLite: {
+		ServerReadOnly: true, TxDDL: true, SchemaTools: true, RowLocator: LocateRowID,
 	},
 }
 
@@ -54,10 +58,14 @@ func (d Dialect) Features() Features { return features[d] }
 
 // RowIDSelect selects every row of the table named name (quoted) with its
 // row id as text ahead of its columns, on an engine that locates rows by
-// row id: ctid on PostgreSQL, ROWID on Oracle (which wants an alias).
+// row id: ctid on PostgreSQL, ROWID on Oracle (which wants an alias), _rowid_
+// on SQLite.
 func RowIDSelect(d Dialect, name string) string {
 	if d == Oracle {
 		return "SELECT ROWIDTOCHAR(t.ROWID), t.* FROM " + name + " t"
+	}
+	if d == SQLite {
+		return "SELECT CAST(_rowid_ AS TEXT), * FROM " + name
 	}
 	return "SELECT ctid::text, * FROM " + name
 }
@@ -68,6 +76,9 @@ func RowIDMatch(d Dialect, id string) string {
 	if d == Oracle {
 		return "ROWID = CHARTOROWID(" + lit + ")"
 	}
+	if d == SQLite {
+		return "_rowid_ = " + lit
+	}
 	return "ctid = " + lit
 }
 
@@ -75,6 +86,9 @@ func RowIDMatch(d Dialect, id string) string {
 func RowIDName(d Dialect) string {
 	if d == Oracle {
 		return "ROWID"
+	}
+	if d == SQLite {
+		return "rowid"
 	}
 	return "ctid"
 }

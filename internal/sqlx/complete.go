@@ -122,7 +122,9 @@ func closed(raw string) bool {
 	case strings.HasPrefix(raw, "$"):
 		tag := raw[:strings.IndexByte(raw[1:], '$')+2]
 		return len(raw) >= 2*len(tag) && strings.HasSuffix(raw, tag)
-	case raw[0] == 'E' || raw[0] == 'e':
+	case strings.HasPrefix(raw, "["):
+		return strings.HasSuffix(raw, "]")
+	case raw[0] == 'E' || raw[0] == 'e', len(raw) > 1 && (raw[0] == 'x' || raw[0] == 'X') && raw[1] == '\'':
 		raw = raw[1:]
 	}
 	return len(raw) >= 2 && raw[len(raw)-1] == raw[0]

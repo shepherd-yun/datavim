@@ -14,7 +14,8 @@ type Statement struct {
 
 // Split cuts src into statements. Delimiters inside strings, quoted
 // identifiers and comments are ignored; MySQL DELIMITER lines change the
-// delimiter, and a T-SQL GO line ends a statement too. Statements that contain only comments are dropped.
+// delimiter, a T-SQL GO line ends a statement too, and a SQLite CREATE TRIGGER
+// runs to its "; END ;". Statements that contain only comments are dropped.
 func Split(src string, d Dialect) []Statement {
 	var out []Statement
 	delim := ";"
@@ -47,6 +48,14 @@ func Split(src string, d Dialect) []Statement {
 		}
 		if d == Oracle && start < 0 {
 			if end, next, ok := plsqlBlock(src, i); ok {
+				start, hasCode = i, true
+				flush(end)
+				i = next
+				continue
+			}
+		}
+		if d == SQLite && start < 0 {
+			if end, next, ok := triggerBlock(src, i); ok {
 				start, hasCode = i, true
 				flush(end)
 				i = next

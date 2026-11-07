@@ -7,10 +7,10 @@ func TestFeatures(t *testing.T) {
 		d    Dialect
 		want Features
 	}{
-		{MySQL, Features{Databases: true, ServerReadOnly: true, DDLCommits: true, SchemaTools: true, RowLocator: LocateAllColumns}},
-		{Postgres, Features{Databases: true, Schemas: true, ServerReadOnly: true, TxDDL: true, AbortedTx: true, SchemaTools: true, ILike: true, RowLocator: LocateRowID, DefaultSchema: "public", FallbackDatabase: "postgres"}},
-		{SQLServer, Features{Databases: true, Schemas: true, TxDDL: true, RowLocator: LocateAllColumns, DefaultSchema: "dbo", FallbackDatabase: "master"}},
-		{Oracle, Features{Schemas: true, DDLCommits: true, RowLocator: LocateRowID}},
+		{MySQL, Features{Databases: true, ServerReadOnly: true, DDLCommits: true, SchemaTools: true, ServerStatus: true, RowLocator: LocateAllColumns}},
+		{Postgres, Features{Databases: true, Schemas: true, ServerReadOnly: true, TxDDL: true, AbortedTx: true, SchemaTools: true, ILike: true, ServerStatus: true, RowLocator: LocateRowID, DefaultSchema: "public", FallbackDatabase: "postgres"}},
+		{SQLServer, Features{Databases: true, Schemas: true, TxDDL: true, ServerStatus: true, RowLocator: LocateAllColumns, DefaultSchema: "dbo", FallbackDatabase: "master"}},
+		{Oracle, Features{Schemas: true, DDLCommits: true, ServerStatus: true, RowLocator: LocateRowID}},
 	}
 	for _, tt := range tests {
 		if got := tt.d.Features(); got != tt.want {

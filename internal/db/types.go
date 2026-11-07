@@ -85,10 +85,13 @@ type ColumnInfo struct {
 }
 
 // Value is one cell. Text is the server's text representation; Null
-// distinguishes SQL NULL from the empty string.
+// distinguishes SQL NULL from the empty string. Only the SQLite driver sets
+// Blob: its columns can hold any type, so the cell itself says that Text is a
+// BLOB literal (x'00FF') rather than text that looks like one.
 type Value struct {
 	Text string
 	Null bool
+	Blob bool
 }
 
 // ResultSet is a fully read query result.

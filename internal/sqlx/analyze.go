@@ -64,6 +64,14 @@ func Analyze(stmt string, d Dialect) Info {
 			return Info{Kind: DDL} // dynamic SQL may do anything
 		}
 	}
+	if d == SQLite && len(toks) > 0 {
+		switch {
+		case isWord(toks[0], "PRAGMA"):
+			return analyzePragma(toks)
+		case isWord(toks[0], "ATTACH"), isWord(toks[0], "DETACH"), isWord(toks[0], "ANALYZE"):
+			return Info{Kind: Write}
+		}
+	}
 	i := 0
 	for i < len(toks) && isPunct(toks[i], "(") {
 		i++
@@ -118,7 +126,11 @@ func dml(toks []token, i int, kw string) Info {
 		}
 		info.Target = identAfter(toks, k)
 	case "UPDATE":
-		info.Target = identAfter(toks, i)
+		k := i
+		if i+2 < len(toks) && isWord(toks[i+1], "OR") { // SQLite: UPDATE OR REPLACE t
+			k = i + 2
+		}
+		info.Target = identAfter(toks, k)
 		info.MissingWhere = missingWhere(toks, i)
 	case "DELETE":
 		if k := depth0Index(toks, i, "FROM"); k >= 0 {
@@ -363,7 +375,7 @@ var tsqlSafeProcs = wordSet("SP_HELP", "SP_HELPTEXT", "SP_HELPINDEX", "SP_COLUMN
 
 // SafeOther reports a statement of Kind Other that cannot write: the
 // dialect's allowlist for engines without a server-side read-only mode.
-// MySQL and PostgreSQL have none.
+// MySQL, PostgreSQL and SQLite have none.
 func SafeOther(stmt string, d Dialect) bool {
 	toks := codeTokens(stmt, d)
 	if len(toks) == 0 {
@@ -385,7 +397,7 @@ func SafeOther(stmt string, d Dialect) bool {
 		}
 	case Oracle:
 		return oracleSafe(toks)
-	case MySQL, Postgres:
+	case MySQL, Postgres, SQLite:
 	}
 	return false
 }

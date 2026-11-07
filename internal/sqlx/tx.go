@@ -11,7 +11,8 @@ const (
 )
 
 // TransactionEffect classifies transaction-control statements; every other
-// statement is TxNone. SAVEPOINT and RELEASE leave the transaction as it is.
+// statement is TxNone. SAVEPOINT and RELEASE leave the transaction as it is,
+// except that SAVEPOINT on SQLite may open one.
 func TransactionEffect(stmt string, d Dialect) TxEffect {
 	toks := codeTokens(stmt, d)
 	if len(toks) == 0 || toks[0].kind != tokWord {
@@ -22,6 +23,9 @@ func TransactionEffect(stmt string, d Dialect) TxEffect {
 	}
 	if d == Oracle {
 		return oracleTransactionEffect(toks)
+	}
+	if d == SQLite && isWord(toks[0], "SAVEPOINT") {
+		return TxBegin // outside a transaction a SAVEPOINT opens one
 	}
 	switch upper(toks[0]) {
 	case "BEGIN":

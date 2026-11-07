@@ -121,7 +121,9 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 				{a: keymap.SortGroups, desc: "Sort consumer groups: by lag / by name"},
 			}, entries[1:]...)
 		default:
-			entries = append(entries[:1], append([]entry{{a: keymap.ServerInfo, desc: "Server status"}}, entries[1:]...)...)
+			if cfg, ok := m.backend.Connection(n.Conn); !ok || sqlx.DialectOf(cfg.Driver).Features().ServerStatus {
+				entries = append(entries[:1], append([]entry{{a: keymap.ServerInfo, desc: "Server status"}}, entries[1:]...)...)
+			}
 		}
 	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker,
 		tree.KindSchemaSubject, tree.KindSchemaVersion, tree.KindKafkaACLs, tree.KindConnectCluster, tree.KindConnector:
