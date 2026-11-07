@@ -3,6 +3,7 @@ package edit
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -182,5 +183,18 @@ func TestApplyInTxSavepointSyntax(t *testing.T) {
 		if diff := cmp.Diff(tc.failed, f.execs); diff != "" {
 			t.Errorf("%s failed (-want +got):\n%s", tc.d.Driver(), diff)
 		}
+	}
+}
+
+// The message must not promise a transaction the failure took with it.
+func TestApplyInTxTransactionGone(t *testing.T) {
+	f := &fakeQuerier{fail: map[string]error{"a": fmt.Errorf("full: %w", db.ErrTxRolledBack)}}
+	err := ApplyInTx(context.Background(), f, sqlx.SQLite, []string{"a"})
+	var se *StatementError
+	if !errors.As(err, &se) || se.InTx || !errors.Is(err, db.ErrTxRolledBack) {
+		t.Fatalf("err = %#v", err)
+	}
+	if strings.Contains(err.Error(), "still open") {
+		t.Fatalf("message: %v", err)
 	}
 }

@@ -305,6 +305,7 @@ type cliSession struct {
 	e    *cliEngine
 	mu   sync.Mutex
 	p    *cliProc
+	tx   sqlx.TxTracker
 	inTx bool
 	lost error
 }
@@ -326,11 +327,27 @@ func (s *cliSession) proc(ctx context.Context) (*cliProc, error) {
 	return s.p, nil
 }
 
-// after deals with the outcome of a statement on p.
+// txGone reports that the open transaction no longer exists, which BEGIN only
+// succeeds on.
+func txGone(ctx context.Context, p *cliProc) bool {
+	if _, err := p.runExec(ctx, "BEGIN"); err != nil {
+		return false
+	}
+	_, _ = p.runExec(ctx, "ROLLBACK")
+	return true
+}
+
+// after deals with the outcome of a statement on p. A statement that failed
+// may have taken the transaction along, as under OR ROLLBACK; the check runs
+// unlocked, so that close can still reach a process that hangs.
 func (s *cliSession) after(ctx context.Context, p *cliProc, stmt string, err error) error {
+	rolledBack := err != nil && s.inTx && ctx.Err() == nil && !isStreamEnd(err) && txGone(ctx, p)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	switch {
+	case rolledBack:
+		s.inTx = false
+		return fmt.Errorf("%w: %w", err, db.ErrTxRolledBack)
 	case ctx.Err() != nil:
 		p.close()
 		s.p = nil
@@ -348,7 +365,7 @@ func (s *cliSession) after(ctx context.Context, p *cliProc, stmt string, err err
 		}
 		return lost
 	case err == nil:
-		switch sqlx.TransactionEffect(stmt, sqlx.SQLite) {
+		switch s.tx.Effect(stmt, sqlx.SQLite, s.inTx) {
 		case sqlx.TxBegin:
 			s.inTx = true
 		case sqlx.TxEnd:

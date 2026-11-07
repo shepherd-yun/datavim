@@ -291,6 +291,9 @@ func (t *consoleTab) editsDone(m consoleEditsMsg) tea.Cmd {
 	if m.began {
 		t.inTx, t.txWrites, t.txAborted = true, 0, false
 	}
+	if errors.Is(m.err, db.ErrTxRolledBack) {
+		t.clearTx()
+	}
 	if m.session == nil && t.inTx && m.err != nil && !errors.Is(m.err, errTxLost) {
 		t.log("✗ " + errTxLost.Error())
 		t.clearTx()

@@ -124,6 +124,7 @@ type consoleTab struct {
 	catalogs   *meta.Cache // shared with the root model; UI goroutine only
 	metaKey    meta.Key
 	defNS      db.Namespace    // where unqualified table names resolve
+	savepoints sqlx.TxTracker  // tells what a SQLite SAVEPOINT or RELEASE did
 	popup      *complete.Model // completion popup; nil when closed
 	popStart   int             // byte offset the popup's word starts at
 
@@ -584,20 +585,27 @@ type txHolder interface {
 	endTxHint() string // what ends it, for "… first" messages
 }
 
-func (t *consoleTab) clearTx() { t.inTx, t.txWrites, t.txAborted = false, 0, false }
+func (t *consoleTab) clearTx() {
+	t.inTx, t.txWrites, t.txAborted = false, 0, false
+	t.savepoints = sqlx.TxTracker{}
+}
 
 // trackTx follows the transaction through the statements that ran.
 // sessionLost means the session died during the run.
 func (t *consoleTab) trackTx(results []runner.Result, sessionLost bool) {
 	for _, r := range results {
 		if r.Err != nil {
+			if errors.Is(r.Err, db.ErrTxRolledBack) {
+				t.clearTx()
+				continue
+			}
 			// PostgreSQL refuses everything but ROLLBACK after an error in a transaction.
 			if t.inTx && t.dialect.Features().AbortedTx && !db.IsConnLost(r.Err) {
 				t.txAborted = true
 			}
 			continue
 		}
-		switch sqlx.TransactionEffect(r.SQL, t.dialect) {
+		switch t.savepoints.Effect(r.SQL, t.dialect, t.inTx) {
 		case sqlx.TxBegin:
 			t.inTx, t.txWrites, t.txAborted = true, 0, false
 			continue

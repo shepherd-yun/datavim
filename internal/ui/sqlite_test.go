@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/shepherd-yun/datavim/internal/config"
 	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/edit"
 	"github.com/shepherd-yun/datavim/internal/meta"
 	"github.com/shepherd-yun/datavim/internal/sqlx"
 	"github.com/shepherd-yun/datavim/internal/ui/overlay"
@@ -235,5 +237,58 @@ func TestSQLiteOffersNoEmptyNamespace(t *testing.T) {
 	typeIn(t, c, "select * from ", "ctrl+n")
 	if c.popup == nil || c.popup.Len() != 1 || c.popup.Chosen().Label != "users" {
 		t.Fatalf("popup = %+v", c.popup)
+	}
+}
+
+func TestSQLiteReleaseCommitsWhatASavepointOpened(t *testing.T) {
+	b := sqliteBackend()
+	c := newConsole(t, b, "local")
+	runSQL(t, c, "savepoint a")
+	if !c.openTx() {
+		t.Fatal("a savepoint opens a transaction")
+	}
+	runSQL(t, c, "insert into t values (1)")
+	runSQL(t, c, "savepoint b")
+	runSQL(t, c, "release b")
+	if !c.openTx() {
+		t.Fatal("releasing the inner savepoint commits nothing")
+	}
+	runSQL(t, c, "release a")
+	if c.openTx() || c.TxStatus() != "" {
+		t.Fatalf("still open after the commit: %q", c.TxStatus())
+	}
+}
+
+func TestSQLiteSavepointKeepsTheWriteCount(t *testing.T) {
+	b := sqliteBackend()
+	c := newConsole(t, b, "local")
+	runSQL(t, c, "begin")
+	runSQL(t, c, "insert into t values (1)")
+	runSQL(t, c, "insert into t values (2)")
+	runSQL(t, c, "savepoint s")
+	if got := c.TxStatus(); got != "TX 2" {
+		t.Fatalf("status = %q, want TX 2", got)
+	}
+}
+
+func TestSQLiteAutomaticRollbackClosesTheTransaction(t *testing.T) {
+	b := sqliteBackend()
+	c := newConsole(t, b, "local")
+	runSQL(t, c, "begin")
+	runSQL(t, c, "insert into t values (2)")
+	b.conn.setFail("insert or rollback into t values (1)", fmt.Errorf("UNIQUE constraint failed: %w", db.ErrTxRolledBack))
+	runSQL(t, c, "insert or rollback into t values (1)")
+	if c.openTx() || c.TxStatus() != "" {
+		t.Fatalf("status = %q: the transaction is gone", c.TxStatus())
+	}
+}
+
+func TestSQLiteAutomaticRollbackDuringEdits(t *testing.T) {
+	c := newConsole(t, sqliteBackend(), "local")
+	runSQL(t, c, "begin")
+	err := &edit.StatementError{SQL: "update t", Err: fmt.Errorf("x: %w", db.ErrTxRolledBack), InTx: true}
+	c.editsDone(consoleEditsMsg{err: err, session: c.session})
+	if c.openTx() {
+		t.Fatal("the transaction is gone")
 	}
 }

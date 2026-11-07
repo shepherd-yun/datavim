@@ -13,6 +13,10 @@ import (
 // ErrConnLost marks errors caused by a connection that is no longer usable.
 var ErrConnLost = errors.New("connection lost")
 
+// ErrTxRolledBack marks the error of a statement that took the open transaction
+// with it: the session is fine, but no transaction is open any more.
+var ErrTxRolledBack = errors.New("the transaction was rolled back")
+
 // IsConnLost reports whether err means the server connection is gone, so
 // reconnecting may help. Cancellation and timeouts of the caller's own
 // context are not connection losses.

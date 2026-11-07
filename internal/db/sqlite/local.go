@@ -205,6 +205,7 @@ func cell(v any) db.Value {
 // localSession is one reserved connection.
 type localSession struct {
 	c    *sql.Conn
+	tx   sqlx.TxTracker
 	inTx bool
 	lost error
 }
@@ -224,12 +225,13 @@ func (s *localSession) stream(ctx context.Context, stmt string, onColumns func([
 	return s.after(ctx, stmt, localStream(ctx, s.c, stmt, onColumns, onRow))
 }
 
-// after follows the transaction, and notices that a cancelled write took it
-// along: sqlite3_interrupt rolls back the transaction of an interrupted
-// INSERT, UPDATE or DELETE, while the user still thinks it is open.
+// after follows the transaction, and notices that a failed statement took it
+// along, while the user still thinks it is open: sqlite3_interrupt rolls back
+// the transaction of an interrupted INSERT, UPDATE or DELETE, and so does a
+// conflict under OR ROLLBACK or a full disk.
 func (s *localSession) after(ctx context.Context, stmt string, err error) error {
 	if err == nil {
-		switch sqlx.TransactionEffect(stmt, sqlx.SQLite) {
+		switch s.tx.Effect(stmt, sqlx.SQLite, s.inTx) {
 		case sqlx.TxBegin:
 			s.inTx = true
 		case sqlx.TxEnd:
@@ -238,16 +240,23 @@ func (s *localSession) after(ctx context.Context, stmt string, err error) error 
 		}
 		return nil
 	}
-	if ctx.Err() == nil || !s.inTx {
+	if !s.inTx {
 		return err
 	}
 	bg := context.WithoutCancel(ctx)
-	if _, berr := s.c.ExecContext(bg, "BEGIN"); berr == nil {
-		_, _ = s.c.ExecContext(bg, "ROLLBACK")
+	if _, berr := s.c.ExecContext(bg, "BEGIN"); berr != nil { // it is still open
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return err
+	}
+	_, _ = s.c.ExecContext(bg, "ROLLBACK")
+	s.inTx = false
+	if ctx.Err() != nil {
 		s.lost = fmt.Errorf("%w: the cancelled statement rolled the transaction back", db.ErrConnLost)
 		return s.lost
 	}
-	return ctx.Err()
+	return fmt.Errorf("%w: %w", err, db.ErrTxRolledBack)
 }
 
 func (s *localSession) ping(ctx context.Context) error {

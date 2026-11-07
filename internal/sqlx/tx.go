@@ -1,5 +1,7 @@
 package sqlx
 
+import "strings"
+
 // TxEffect is what a statement does to the session's transaction.
 type TxEffect int
 
@@ -12,7 +14,8 @@ const (
 
 // TransactionEffect classifies transaction-control statements; every other
 // statement is TxNone. SAVEPOINT and RELEASE leave the transaction as it is,
-// except that SAVEPOINT on SQLite may open one.
+// except on SQLite, where SAVEPOINT counts as opening one and only TxTracker
+// can tell what it and RELEASE really do.
 func TransactionEffect(stmt string, d Dialect) TxEffect {
 	toks := codeTokens(stmt, d)
 	if len(toks) == 0 || toks[0].kind != tokWord {
@@ -47,6 +50,66 @@ func TransactionEffect(stmt string, d Dialect) TxEffect {
 		return endEffect(toks)
 	}
 	return TxNone
+}
+
+// TxTracker follows what TransactionEffect cannot see from one statement. On
+// SQLite a SAVEPOINT outside a transaction opens one, which releasing that
+// savepoint commits. The zero value is ready; other dialects need no state.
+type TxTracker struct {
+	savepoints []string
+	implicit   bool // the first of savepoints opened the transaction
+}
+
+// Effect is what stmt, which has just succeeded, did to the transaction;
+// inTx says whether one was open before it.
+func (tr *TxTracker) Effect(stmt string, d Dialect, inTx bool) TxEffect {
+	effect := TransactionEffect(stmt, d)
+	if d != SQLite {
+		return effect
+	}
+	toks := codeTokens(stmt, d)
+	if n := len(toks); n > 0 && isPunct(toks[n-1], ";") {
+		toks = toks[:n-1]
+	}
+	if len(toks) == 0 {
+		return effect
+	}
+	name := strings.Trim(toks[len(toks)-1].text, "'")
+	switch {
+	case isWord(toks[0], "SAVEPOINT"):
+		if inTx {
+			tr.savepoints = append(tr.savepoints, name)
+			return TxNone
+		}
+		tr.savepoints, tr.implicit = []string{name}, true
+	case isWord(toks[0], "RELEASE"):
+		i := tr.find(name)
+		if i < 0 {
+			return effect
+		}
+		tr.savepoints = tr.savepoints[:i]
+		if i == 0 && tr.implicit {
+			*tr = TxTracker{}
+			return TxEnd
+		}
+	case effect == TxResume:
+		if i := tr.find(name); i >= 0 {
+			tr.savepoints = tr.savepoints[:i+1]
+		}
+	case effect == TxBegin, effect == TxEnd:
+		*tr = TxTracker{}
+	}
+	return effect
+}
+
+// find is the newest savepoint called name, or -1.
+func (tr *TxTracker) find(name string) int {
+	for i := len(tr.savepoints) - 1; i >= 0; i-- {
+		if strings.EqualFold(tr.savepoints[i], name) {
+			return i
+		}
+	}
+	return -1
 }
 
 func endEffect(toks []token) TxEffect {

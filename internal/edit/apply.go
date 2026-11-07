@@ -2,6 +2,7 @@ package edit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -135,7 +136,7 @@ func ApplyInTx(ctx context.Context, s db.Querier, d sqlx.Dialect, stmts []string
 		}
 		if err != nil {
 			rollbackTo(s, d)
-			return &StatementError{Index: i, SQL: q, Err: err, InTx: true}
+			return &StatementError{Index: i, SQL: q, Err: err, InTx: !errors.Is(err, db.ErrTxRolledBack)}
 		}
 	}
 	if release := sqlx.ReleaseSQL(d, Savepoint); release != "" {
