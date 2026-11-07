@@ -118,3 +118,80 @@ func TestServerStatusHiddenForSQLite(t *testing.T) {
 		t.Fatalf("status %q", m.status)
 	}
 }
+
+var blobCols = []db.ColumnInfo{
+	{Name: "id", DatabaseType: "INTEGER"}, {Name: "name", DatabaseType: "TEXT"}, {Name: "data", DatabaseType: "BLOB"},
+}
+
+// openBlobTab is the users table with a BLOB cell in column 2 of its first row,
+// on a sqlite connection.
+func openBlobTab(t *testing.T) (*Model, *fakeBackend, *dataTab) {
+	t.Helper()
+	b := sqliteBackend()
+	b.conn.noDBs = true
+	b.conn.setData("users", blobCols,
+		[]db.Value{{Text: "1"}, {Text: "a"}, {Text: "x'00FF'", Blob: true}},
+		[]db.Value{{Text: "2"}, {Text: "b"}, {Text: "x'00ff'"}},
+	)
+	m := newTestModelWith(t, b)
+	selectNode(t, m, "local", "users")
+	press(t, m, "enter")
+	d, ok := m.activeTab().(*dataTab)
+	if !ok || d.table == nil {
+		t.Fatalf("users not loaded:\n%s", screen(m))
+	}
+	return m, b, d
+}
+
+func TestEditBlobCellRefused(t *testing.T) {
+	m, _, d := openBlobTab(t)
+	press(t, m, "l", "l", "i")
+	if _, open := m.overlay.(*overlay.CellEditor); open {
+		t.Fatal("the editor opened on a BLOB cell")
+	}
+	if s := ansi.Strip(screen(m)); !strings.Contains(s, "BLOB") || !strings.Contains(s, "console") {
+		t.Fatalf("no explanation:\n%s", s)
+	}
+	if d.changes() != 0 {
+		t.Fatalf("changes = %d", d.changes())
+	}
+	// text that merely looks like a BLOB can be edited
+	press(t, m, "j", "i")
+	if _, open := m.overlay.(*overlay.CellEditor); !open {
+		t.Fatalf("no editor on text; overlay %T", m.overlay)
+	}
+}
+
+func TestEditOtherColumnInBlobRow(t *testing.T) {
+	m, _, d := openBlobTab(t)
+	press(t, m, "l", "i")
+	if _, open := m.overlay.(*overlay.CellEditor); !open {
+		t.Fatalf("no editor; overlay %T", m.overlay)
+	}
+	d.Update(cellEditedMsg{tabID: d.id, table: d.table, row: 0, col: 1, value: db.Value{Text: "new"}})
+	if d.changes() != 1 {
+		t.Fatalf("changes = %d", d.changes())
+	}
+}
+
+func TestDeleteBlobRow(t *testing.T) {
+	m, _, d := openBlobTab(t)
+	press(t, m, "l", "l", "d", "d")
+	if d.changes() != 1 {
+		t.Fatalf("changes = %d", d.changes())
+	}
+}
+
+func TestBlobCellsSurviveFilter(t *testing.T) {
+	// the grid gives out the value it holds, Blob included
+	m, _, d := openBlobTab(t)
+	press(t, m, "l", "l")
+	_, v, ok := d.grid.Cell()
+	if !ok || !v.Blob || v.Text != "x'00FF'" {
+		t.Fatalf("cell %+v", v)
+	}
+	got := compareFilter(sqlx.SQLite, blobCols[2], "=", v)
+	if got != `"data" = x'00FF'` {
+		t.Fatalf("filter %s", got)
+	}
+}

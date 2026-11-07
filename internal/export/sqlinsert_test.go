@@ -47,3 +47,14 @@ func TestInsertDefaultTable(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+func TestExportInsertBlob(t *testing.T) {
+	rs := &db.ResultSet{
+		Columns: []db.ColumnInfo{{Name: "a", DatabaseType: "BLOB"}, {Name: "b", DatabaseType: "BLOB"}},
+		Rows:    [][]db.Value{{{Text: "x'00FF'", Blob: true}, {Text: "x'00ff'"}}},
+	}
+	want := `INSERT INTO "t" ("a", "b") VALUES (x'00FF', 'x''00ff''');` + "\n"
+	if got := encode(t, SQL, rs, Options{Driver: "sqlite", Table: []string{"t"}}); got != want {
+		t.Fatalf("got:\n%s\nwant:\n%s", got, want)
+	}
+}

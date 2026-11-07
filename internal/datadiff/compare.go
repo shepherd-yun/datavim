@@ -164,13 +164,17 @@ func SwapRows(rows []Row) []Row {
 }
 
 // keyString encodes the key's values so that different keys never encode
-// alike: each value is N; for NULL, else its length, a colon and its text.
+// alike: each value is N; for NULL, else its length, a colon and its text,
+// with B in front for a BLOB, whose text is a literal any text could equal.
 func keyString(row []db.Value, key []int) string {
 	var b strings.Builder
 	for _, i := range key {
 		if row[i].Null {
 			b.WriteString("N;")
 			continue
+		}
+		if row[i].Blob {
+			b.WriteByte('B')
 		}
 		b.WriteString(strconv.Itoa(len(row[i].Text)))
 		b.WriteByte(':')

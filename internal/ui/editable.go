@@ -135,6 +135,10 @@ func (r *editableResult) editCell() tea.Cmd {
 		r.host.setStatus(edit.ErrDeleted.Error(), true)
 		return nil
 	}
+	if rw.Values[col].Blob {
+		r.host.setStatus("BLOB cells cannot be edited here · change them in the console with x'…'", true)
+		return nil
+	}
 	c := r.table.Columns()[col]
 	id, table := r.id, r.table
 	return openOverlay(overlay.NewCellEditor(r.columnTitle(c), rw.Values[col], func(v db.Value) tea.Msg {

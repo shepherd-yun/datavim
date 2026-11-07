@@ -96,7 +96,7 @@ func (c *fakeConn) setStreamDrop(n int) {
 // holds mu.
 func (c *fakeConn) tableData(q string) *db.ResultSet {
 	for name, rs := range c.data {
-		if strings.Contains(q, " FROM `app`.`"+name+"`") {
+		if strings.Contains(q, " FROM `app`.`"+name+"`") || strings.Contains(q, ` FROM "`+name+`"`) {
 			return rs
 		}
 	}

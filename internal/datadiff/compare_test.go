@@ -176,3 +176,21 @@ func TestSwapRows(t *testing.T) {
 		t.Fatal("SwapRows changed its input")
 	}
 }
+
+func TestBlobIsNotItsLiteral(t *testing.T) {
+	blob := db.Value{Text: "x'00'", Blob: true}
+	text := db.Value{Text: "x'00'"}
+	rows, err := compare(users, 10, [][]db.Value{r(v("1"), blob)}, [][]db.Value{r(v("1"), text)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 || rows[0].Status != Changed || !rows[0].Differs(1) {
+		t.Fatalf("a value of another type is a change: %+v", rows)
+	}
+	// keys too: the two rows are different rows
+	byBlob := Spec{Columns: []string{"k"}, Key: []string{"k"}}
+	rows, err = compare(byBlob, 10, [][]db.Value{r(blob), r(text)}, [][]db.Value{r(blob), r(text)})
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("rows %+v err %v", rows, err)
+	}
+}
