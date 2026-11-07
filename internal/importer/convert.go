@@ -116,7 +116,10 @@ func TargetOf(driver string, c db.Column) Target {
 		t.Kind = KindOther
 	}
 	if t.Kind == KindInteger {
-		t.Precision = 0 // int(11) is a display width
+		t.Precision = 0         // int(11) is a display width
+		if driver == "sqlite" { // the declared type says nothing about the range
+			t.Bits, t.Unsigned = 64, false
+		}
 	}
 	return t
 }

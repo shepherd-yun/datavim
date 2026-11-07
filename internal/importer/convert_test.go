@@ -130,3 +130,24 @@ func TestRowError(t *testing.T) {
 		t.Fatalf("long values are not clipped: %s", long.Error())
 	}
 }
+
+// SQLite stores every integer in up to 64 bits, whatever width the column
+// declares.
+func TestSQLiteIntegersAreSixtyFourBits(t *testing.T) {
+	for _, typ := range []string{"INTEGER", "INT", "tinyint", "SMALLINT", "mediumint", "BIGINT", "int unsigned"} {
+		tg := TargetOf("sqlite", db.Column{Name: "c", Type: typ})
+		if got, err := Convert(tg, "1730000000000", ""); err != nil || got.Text != "1730000000000" {
+			t.Errorf("%s: got %+v, err %v", typ, got, err)
+		}
+		if got, err := Convert(tg, "-5", ""); err != nil || got.Text != "-5" {
+			t.Errorf("%s: negative: got %+v, err %v", typ, got, err)
+		}
+		if _, err := Convert(tg, "9223372036854775808", ""); err == nil {
+			t.Errorf("%s: past 64 bits should be refused", typ)
+		}
+	}
+	// elsewhere the declared width still holds
+	if _, err := Convert(TargetOf("mysql", db.Column{Name: "c", Type: "int"}), "1730000000000", ""); err == nil {
+		t.Error("mysql int should refuse it")
+	}
+}
