@@ -4,11 +4,13 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/shepherd-yun/datavim/internal/config"
 	"github.com/shepherd-yun/datavim/internal/db"
+	"github.com/shepherd-yun/datavim/internal/meta"
 	"github.com/shepherd-yun/datavim/internal/sqlx"
 	"github.com/shepherd-yun/datavim/internal/ui/overlay"
 	"github.com/shepherd-yun/datavim/internal/ui/panes/tree"
@@ -193,5 +195,45 @@ func TestBlobCellsSurviveFilter(t *testing.T) {
 	got := compareFilter(sqlx.SQLite, blobCols[2], "=", v)
 	if got != `"data" = x'00FF'` {
 		t.Fatalf("filter %s", got)
+	}
+}
+
+// sqliteConsole is a console on a file with one table in its catalog, in INSERT
+// mode.
+func sqliteConsole(t *testing.T) *consoleTab {
+	t.Helper()
+	cat := db.Catalog{
+		Namespaces: []db.Namespace{{}},
+		Tables:     []db.CatalogTable{{Name: "users", Kind: db.TableKindTable}},
+		Columns:    []db.CatalogColumn{{Table: db.TableRef{Name: "users"}, Name: "id", Type: "INTEGER"}},
+	}
+	cache := meta.NewCache()
+	c := newConsoleTab(1, sqliteBackend(), newFakeStore(), cache, "local", db.Namespace{},
+		config.Settings{MaxRows: 2, MaxColumnWidth: 40}, timings{})
+	gen, _ := cache.Start(c.metaKey)
+	cache.Finish(c.metaKey, gen, meta.NewSnapshot(c.metaKey, cat, time.Now()), nil)
+	c.SetSize(80, 24)
+	c.editor.EnterInsert()
+	return c
+}
+
+func TestSQLiteCompletesTablesAndColumns(t *testing.T) {
+	c := sqliteConsole(t)
+	typeIn(t, c, "select * from us")
+	if c.popup == nil || c.popup.Chosen().Label != "users" {
+		t.Fatalf("table popup = %+v", c.popup)
+	}
+	typeIn(t, c, "enter", " where i")
+	if c.popup == nil || c.popup.Chosen().Label != "id" {
+		t.Fatalf("column popup = %+v", c.popup)
+	}
+}
+
+// A file's one namespace has no name, so it offers nothing to complete.
+func TestSQLiteOffersNoEmptyNamespace(t *testing.T) {
+	c := sqliteConsole(t)
+	typeIn(t, c, "select * from ", "ctrl+n")
+	if c.popup == nil || c.popup.Len() != 1 || c.popup.Chosen().Label != "users" {
+		t.Fatalf("popup = %+v", c.popup)
 	}
 }

@@ -23,6 +23,7 @@ func TestDefaultNamespace(t *testing.T) {
 		{"sqlserver", meta.Key{Conn: "c", Database: "crm"}, db.Namespace{Database: "crm", Schema: "sales"}, db.Namespace{Database: "crm", Schema: "sales"}},
 		{"oracle", meta.Key{Conn: "c"}, db.Namespace{}, db.Namespace{}},
 		{"oracle", meta.Key{Conn: "c"}, db.Namespace{Schema: "HR"}, db.Namespace{Schema: "HR"}},
+		{"sqlite", meta.Key{Conn: "c"}, db.Namespace{}, db.Namespace{}}, // Database is the file's path
 	}
 	for _, tt := range tests {
 		cfg := config.Connection{Driver: tt.driver, Database: "cfgdb"}

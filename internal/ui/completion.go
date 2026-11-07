@@ -22,14 +22,18 @@ const maxCandidates = 50
 // defaultNamespace is where a console resolves unqualified table names:
 // its database (MySQL; the configured one when the console has none), or
 // its schema, else the engine's default schema (public, dbo; Oracle's ""
-// is the current user).
+// is the current user). SQLite has neither: its one namespace is empty.
 func defaultNamespace(cfg config.Connection, key meta.Key, ns db.Namespace) db.Namespace {
-	if f := sqlx.DialectOf(cfg.Driver).Features(); f.Schemas {
+	f := sqlx.DialectOf(cfg.Driver).Features()
+	if f.Schemas {
 		schema := ns.Schema
 		if schema == "" {
 			schema = f.DefaultSchema
 		}
 		return db.Namespace{Database: key.Database, Schema: schema}
+	}
+	if !f.Databases {
+		return db.Namespace{}
 	}
 	database := ns.Database
 	if database == "" {
@@ -180,6 +184,9 @@ func (t *consoleTab) tableCandidates(snap *meta.Snapshot, qualifier string) []co
 		name := ns.Database
 		if t.dialect.Features().Schemas {
 			name = ns.Schema
+		}
+		if name == "" { // a SQLite file's only namespace
+			continue
 		}
 		out = append(out, complete.Candidate{Text: sqlx.QuoteIfNeeded(name, t.dialect), Label: name, Kind: complete.Namespace})
 	}
