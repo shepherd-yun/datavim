@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -121,8 +122,16 @@ func (m *Model) nodeMenu(n *tree.Node) []menuItem {
 				{a: keymap.SortGroups, desc: "Sort consumer groups: by lag / by name"},
 			}, entries[1:]...)
 		default:
-			if cfg, ok := m.backend.Connection(n.Conn); !ok || sqlx.DialectOf(cfg.Driver).Features().ServerStatus {
+			cfg, ok := m.backend.Connection(n.Conn)
+			if !ok || sqlx.DialectOf(cfg.Driver).Features().ServerStatus {
 				entries = append(entries[:1], append([]entry{{a: keymap.ServerInfo, desc: "Server status"}}, entries[1:]...)...)
+			}
+			if ok && flatNamespaces(cfg.Driver) { // the connection is the namespace, and takes no password
+				entries = slices.DeleteFunc(entries, func(e entry) bool { return e.a == keymap.Password })
+				entries = append(entries, entry{a: keymap.ImportData, desc: "Create table from file…"})
+				if _, problem := m.compareSideOf(n); problem == "" {
+					entries = append(entries, entry{a: keymap.MarkCompare, desc: "Mark for compare"}, entry{a: keymap.Compare, desc: "Compare with the marked one"})
+				}
 			}
 		}
 	case tree.KindKafkaSection, tree.KindTopicFolder, tree.KindTopic, tree.KindKafkaGroup, tree.KindBroker,

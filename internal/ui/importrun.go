@@ -61,6 +61,8 @@ func (m *Model) importFromNode() tea.Cmd {
 		ref = n.TableRef()
 	case n.Kind == tree.KindSchema, n.Kind == tree.KindDatabase && !sqlx.DialectOf(cfg.Driver).Features().Schemas:
 		ref, create = db.TableRef{Namespace: n.NS}, true
+	case n.Kind == tree.KindConn && flatNamespaces(cfg.Driver):
+		ref, create = db.TableRef{}, true
 	case n.Kind == tree.KindDatabase:
 		m.setStatus("PostgreSQL creates tables in a schema · select a schema", true)
 		return nil
@@ -74,6 +76,9 @@ func (m *Model) importFromNode() tea.Cmd {
 	}
 	// A namespace-only ref joins as "app.", hence the TrimSuffix.
 	where := strings.TrimSuffix(strings.Join(tableParts(sqlx.DialectOf(cfg.Driver), ref), "."), ".")
+	if where == "" {
+		where = n.Conn // a file has no namespace to name
+	}
 	title := "Import into " + where
 	if create {
 		title = "Create a table in " + where

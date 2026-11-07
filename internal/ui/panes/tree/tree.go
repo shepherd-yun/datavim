@@ -575,6 +575,8 @@ func nerdGlyph(n *Node) string {
 			return "\ue72e" // dev-apachekafka
 		case "elasticsearch":
 			return "\U000f0349" // md-magnify
+		case "sqlite":
+			return "\ue7c4" // dev-sqlite
 		}
 		return "\U000f01bc" // md-database
 	case KindDatabase, KindRedisDB:

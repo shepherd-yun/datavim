@@ -87,7 +87,7 @@ func TestLoadErrors(t *testing.T) {
 	}{
 		{"missing name", "[[connection]]\ndriver = \"mysql\"\n", "name is required"},
 		{"duplicate", "[[connection]]\nname=\"a\"\ndriver=\"mysql\"\n[[connection]]\nname=\"a\"\ndriver=\"mysql\"\n", "duplicate"},
-		{"unknown driver", "[[connection]]\nname=\"a\"\ndriver=\"sqlite\"\n", "unknown driver"},
+		{"unknown driver", "[[connection]]\nname=\"a\"\ndriver=\"nosuch\"\n", "unknown driver"},
 		{"bad env", "[[connection]]\nname=\"a\"\ndriver=\"mysql\"\nenv=\"qa\"\n", "unknown env"},
 		{"unknown key", "[[connection]]\nname=\"a\"\ndriver=\"mysql\"\nhostt=\"x\"\n", "hostt"},
 		{"syntax", "[[connection]]\nname = \n", "connections.toml:2:"},
@@ -565,7 +565,7 @@ func TestNormalizeRedis(t *testing.T) {
 			t.Errorf("Database %q: err = %v", bad, err)
 		}
 	}
-	if _, err := Normalize(Connection{Name: "x", Driver: "sqlite"}); err == nil || !strings.Contains(err.Error(), "redis, kafka or elasticsearch") {
+	if _, err := Normalize(Connection{Name: "x", Driver: "nosuch"}); err == nil || !strings.Contains(err.Error(), "redis, kafka or elasticsearch") {
 		t.Errorf("unknown driver err = %v", err)
 	}
 }
@@ -875,5 +875,36 @@ func TestNormalizeES(t *testing.T) {
 				t.Errorf("ESURLs = %v, %v; want %v", urls, err, tc.urls)
 			}
 		})
+	}
+}
+
+func TestNormalizeSQLite(t *testing.T) {
+	bad := []struct {
+		name string
+		c    Connection
+		want string
+	}{
+		{"no file", Connection{Name: "a", Driver: "sqlite"}, "file path is required"},
+		{"host", Connection{Name: "a", Driver: "sqlite", Database: "/a.db", Host: "x"}, "does not use"},
+		{"port", Connection{Name: "a", Driver: "sqlite", Database: "/a.db", Port: 1}, "does not use"},
+		{"ssh with spaces", Connection{Name: "a", Driver: "sqlite", Database: "/a.db", SSH: "a b"}, "one Host alias"},
+	}
+	for _, tt := range bad {
+		if _, err := Normalize(tt.c); err == nil || !strings.Contains(err.Error(), tt.want) {
+			t.Errorf("%s: err = %v", tt.name, err)
+		}
+	}
+	got, err := Normalize(Connection{Name: "a", Driver: "sqlite", Database: "~/a.db", SSH: " box ", Env: EnvProd})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Host != "" || got.Port != 0 || got.SSH != "box" || got.Database != "~/a.db" {
+		t.Fatalf("%+v", got)
+	}
+	if !got.IsReadOnly() {
+		t.Fatal("prod is read-only by default")
+	}
+	if _, err := Normalize(Connection{Name: "a", Driver: "nope"}); err == nil || !strings.Contains(err.Error(), "sqlite") {
+		t.Fatalf("unknown driver: %v", err)
 	}
 }

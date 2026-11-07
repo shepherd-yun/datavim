@@ -62,8 +62,13 @@ func fetchChildren(ctx context.Context, c db.Conn, kind tree.Kind, connName stri
 			return nil, err
 		}
 		if len(names) == 0 {
-			// no database level (Oracle): the schemas come right under the connection
-			return schemaNodes(ctx, meta, connName, "")
+			// no database level (Oracle): the schemas come right under the
+			// connection; with no schemas either (SQLite) so do the tables
+			nodes, err := schemaNodes(ctx, meta, connName, "")
+			if err == nil && len(nodes) == 0 {
+				return tableNodes(ctx, meta, connName, db.Namespace{})
+			}
+			return nodes, err
 		}
 		nodes := make([]*tree.Node, len(names))
 		for i, name := range names {

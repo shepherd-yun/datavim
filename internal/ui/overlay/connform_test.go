@@ -218,7 +218,7 @@ func TestConnFormReadOnly(t *testing.T) {
 
 func TestConnFormOracleServiceLabel(t *testing.T) {
 	f := NewConnForm(keymap.Default())
-	o, msg := send(t, f, "o", "tab", "left", "left", "left", "left", "tab") // driver: mysql -> oracle (before redis, kafka, elasticsearch)
+	o, msg := send(t, f, "o", "tab", "left", "left", "left", "left", "left", "tab") // driver: mysql -> oracle (before sqlite, redis, kafka, elasticsearch)
 	if o == nil || msg != nil {
 		t.Fatal("form closed")
 	}
@@ -423,5 +423,102 @@ func TestEditConnFormKeepsOAuthSASL(t *testing.T) {
 	_, msg := send(t, NewEditConnForm(keymap.Default(), orig), "ctrl+s")
 	if p := msg.(ConnFormMsg).Conn.Params; !maps.Equal(p, orig.Params) {
 		t.Fatalf("params = %v", p)
+	}
+}
+
+// sqliteForm is a new form with the driver set to sqlite.
+func sqliteForm(t *testing.T) *ConnForm {
+	t.Helper()
+	f := NewConnForm(keymap.Default())
+	f.cur = ffDriver
+	for range f.fields[ffDriver].choices {
+		if f.value(ffDriver) == "sqlite" {
+			return f
+		}
+		if _, msg := send(t, f, "space"); msg != nil {
+			t.Fatalf("msg %v", msg)
+		}
+	}
+	t.Fatal("no sqlite driver in the form")
+	return nil
+}
+
+func TestConnFormSQLite(t *testing.T) {
+	f := sqliteForm(t)
+	view := ansi.Strip(f.View(80, 30))
+	for _, want := range []string{"Name", "Driver", "File", "SSH host", "Env", "Read-only"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("missing %q:\n%s", want, view)
+		}
+	}
+	for _, no := range []string{"│Host", "Port", "User", "Password", "Save password", "Add param", "Database", "Params"} {
+		if strings.Contains(view, no) {
+			t.Errorf("%q is shown:\n%s", no, view)
+		}
+	}
+	if !strings.Contains(view, "File: the database file") {
+		t.Errorf("no hint about the file:\n%s", view)
+	}
+	set := func(i int, v string) { f.fields[i].input = newField(v) }
+	set(ffName, "app")
+	set(ffDatabase, "/data/app.db")
+	set(ffSSH, "box")
+	f.cur = ffSSH
+	o, msg := send(t, f, "ctrl+s")
+	if o != nil {
+		t.Fatalf("still open: %s", f.err)
+	}
+	m, ok := msg.(ConnFormMsg)
+	if !ok {
+		t.Fatalf("msg %T", msg)
+	}
+	c := m.Conn
+	if c.Driver != "sqlite" || c.Host != "" || c.Port != 0 || c.User != "" || c.Database != "/data/app.db" || c.SSH != "box" {
+		t.Fatalf("%+v", c)
+	}
+	if m.Password != "" || m.Save {
+		t.Fatalf("password %q save %v", m.Password, m.Save)
+	}
+}
+
+func TestConnFormSQLiteNeedsAFile(t *testing.T) {
+	f := sqliteForm(t)
+	f.fields[ffName].input = newField("app")
+	f.cur = ffName
+	o, _ := send(t, f, "ctrl+s")
+	if o == nil || !strings.Contains(f.err, "file path is required") {
+		t.Fatalf("open %v err %q", o != nil, f.err)
+	}
+}
+
+func TestConnFormSQLiteSkipsHiddenFields(t *testing.T) {
+	f := sqliteForm(t)
+	for range len(f.fields) * 2 {
+		f.step(1)
+		if !f.shown(f.cur) {
+			t.Fatalf("stopped on hidden field %d", f.cur)
+		}
+		if f.cur == ffHost || f.cur == ffPassword || f.cur == ffSave || f.cur == ffAddParam {
+			t.Fatalf("stopped on field %d", f.cur)
+		}
+	}
+}
+
+func TestConnFormEditSQLite(t *testing.T) {
+	on := true
+	f := NewEditConnForm(keymap.Default(), config.Connection{
+		Name: "app", Driver: "sqlite", Database: "/data/app.db", SSH: "box", Env: config.EnvProd, ReadOnly: &on,
+	})
+	view := ansi.Strip(f.View(80, 30))
+	for _, want := range []string{"/data/app.db", "box", "prod"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("missing %q:\n%s", want, view)
+		}
+	}
+	f.cur = ffName
+	if o, msg := send(t, f, "ctrl+s"); o != nil {
+		t.Fatalf("still open: %s", f.err)
+	} else if m := msg.(ConnFormMsg); m.Original != "app" || m.Conn.Database != "/data/app.db" {
+		t.Fatalf("%+v", m)
 	}
 }

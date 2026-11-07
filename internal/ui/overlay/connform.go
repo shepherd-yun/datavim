@@ -88,7 +88,7 @@ var readOnlyChoices = []string{"auto", "yes", "no"}
 func NewConnForm(keys *keymap.Keymap) *ConnForm {
 	return &ConnForm{keys: keys, fields: []formField{
 		ffName:     {label: "Name"},
-		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver", "oracle", "redis", "kafka", "elasticsearch"}},
+		ffDriver:   {label: "Driver", choices: []string{"mysql", "postgres", "sqlserver", "oracle", "sqlite", "redis", "kafka", "elasticsearch"}},
 		ffHost:     {label: "Host", input: newField("localhost")},
 		ffPort:     {label: "Port"},
 		ffUser:     {label: "User"},
@@ -204,6 +204,12 @@ func (f *ConnForm) order() []int {
 
 // shown reports whether field i applies to the chosen driver.
 func (f *ConnForm) shown(i int) bool {
+	if f.value(ffDriver) == "sqlite" {
+		switch {
+		case i == ffHost, i == ffPort, i == ffUser, i == ffPassword, i == ffSave, i >= ffAddParam:
+			return false
+		}
+	}
 	switch i {
 	case ffEncrypt, ffTrust:
 		return f.value(ffDriver) == "sqlserver"
@@ -310,7 +316,7 @@ func (f *ConnForm) submit() (Overlay, tea.Cmd) {
 		return f, nil
 	}
 	port := 0
-	if p := f.text(ffPort); p != "" {
+	if p := f.text(ffPort); p != "" && f.shown(ffPort) {
 		n, err := strconv.Atoi(p)
 		if err != nil || n < 1 || n > 65535 {
 			f.err = fmt.Sprintf("port must be a number between 1 and 65535, got %q", p)
@@ -322,9 +328,13 @@ func (f *ConnForm) submit() (Overlay, tea.Cmd) {
 	if !f.shown(ffDatabase) {
 		database = ""
 	}
+	host, user := f.text(ffHost), f.text(ffUser)
+	if !f.shown(ffHost) {
+		host, user = "", "" // sqlite: the form starts with Host filled in
+	}
 	c, err := config.Normalize(config.Connection{
-		Name: f.text(ffName), Driver: f.value(ffDriver), Host: f.text(ffHost), Port: port,
-		User: f.text(ffUser), Database: database, SSH: f.text(ffSSH), Env: config.Env(f.value(ffEnv)),
+		Name: f.text(ffName), Driver: f.value(ffDriver), Host: host, Port: port,
+		User: user, Database: database, SSH: f.text(ffSSH), Env: config.Env(f.value(ffEnv)),
 		ReadOnly: f.submitReadOnly(), Params: f.submitParams(),
 	})
 	if err != nil {
@@ -332,7 +342,7 @@ func (f *ConnForm) submit() (Overlay, tea.Cmd) {
 		return f, nil
 	}
 	return nil, emit(ConnFormMsg{
-		Conn: c, Password: f.fields[ffPassword].input.String(), Save: f.value(ffSave) == "yes", Original: f.original,
+		Conn: c, Password: f.fields[ffPassword].input.String(), Save: f.shown(ffSave) && f.value(ffSave) == "yes", Original: f.original,
 	})
 }
 
@@ -416,6 +426,9 @@ func (f *ConnForm) View(width, _ int) string {
 		if oracleService {
 			name = "Service" // Oracle connects to a service; the field keeps the name
 		}
+		if i == ffDatabase && f.value(ffDriver) == "sqlite" {
+			name = "File" // the field keeps the name, as in connections.toml
+		}
 		if i == ffDatabase && f.value(ffDriver) == "redis" {
 			name = "DB" // a db number; empty is 0
 		}
@@ -460,11 +473,18 @@ func (f *ConnForm) View(width, _ int) string {
 	title := "New connection"
 	if f.original != "" {
 		title = "Edit connection"
-		lines = append(lines, theme.Muted.Render("Password: empty keeps the current one"))
+		if f.shown(ffPassword) {
+			lines = append(lines, theme.Muted.Render("Password: empty keeps the current one"))
+		}
+	}
+	if f.value(ffDriver) == "sqlite" {
+		lines = append(lines, theme.Muted.Render("File: the database file; with SSH host, its path there"))
 	}
 	lines = append(lines, theme.Muted.Render("SSH host: a Host alias from ~/.ssh/config (optional)"))
 	lines = append(lines, theme.Muted.Render("Read-only: auto is on for prod"))
-	lines = append(lines, theme.Muted.Render("Params: enter adds key=value · an empty value removes it"))
+	if f.shown(ffAddParam) {
+		lines = append(lines, theme.Muted.Render("Params: enter adds key=value · an empty value removes it"))
+	}
 	lines = append(lines, theme.Muted.Render(footer("tab next · enter next/save", popupHint(f.keys, keymap.SaveForm, "save"), "esc cancel")))
 	return theme.Box(title, strings.Join(lines, "\n"), w, len(lines)+2, true)
 }

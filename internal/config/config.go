@@ -113,7 +113,7 @@ type settingsFile struct {
 	Mask  []MaskRule        `toml:"mask"`
 }
 
-var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432, "sqlserver": 1433, "oracle": 1521, "redis": 6379, "kafka": 9092, "elasticsearch": 9200}
+var defaultPorts = map[string]int{"mysql": 3306, "postgres": 5432, "sqlserver": 1433, "oracle": 1521, "redis": 6379, "kafka": 9092, "elasticsearch": 9200, "sqlite": 0}
 
 type connectionsFile struct {
 	Connections []Connection `toml:"connection"`
@@ -200,13 +200,23 @@ func Normalize(c Connection) (Connection, error) {
 	}
 	port, ok := defaultPorts[c.Driver]
 	if !ok {
-		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql, postgres, sqlserver, oracle, redis, kafka or elasticsearch)", c.Name, c.Driver)
+		return c, fmt.Errorf("connection %q: unknown driver %q (want mysql, postgres, sqlserver, oracle, sqlite, redis, kafka or elasticsearch)", c.Name, c.Driver)
 	}
-	if c.Port == 0 {
-		c.Port = port
-	}
-	if c.Host == "" {
-		c.Host = "localhost"
+	if c.Driver == "sqlite" {
+		// a file: nothing to dial, so no host or port defaults
+		if c.Database == "" {
+			return c, fmt.Errorf("connection %q: sqlite: a file path is required (database = \"/path/to/app.db\")", c.Name)
+		}
+		if c.Host != "" || c.Port != 0 {
+			return c, fmt.Errorf("connection %q: sqlite does not use host or port: set database to the file's path, and ssh for a file on a server", c.Name)
+		}
+	} else {
+		if c.Port == 0 {
+			c.Port = port
+		}
+		if c.Host == "" {
+			c.Host = "localhost"
+		}
 	}
 	if c.Driver == "redis" && c.Database != "" {
 		if n, err := strconv.Atoi(c.Database); err != nil || n < 0 {

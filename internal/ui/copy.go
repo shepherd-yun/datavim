@@ -47,6 +47,9 @@ func (m *Model) qualifiedName(n *tree.Node) string {
 			ns = n.NS.Database
 		}
 		parts = []string{ns, n.Name}
+		if ns == "" { // SQLite: a table has no namespace
+			parts = parts[1:]
+		}
 	}
 	for i, p := range parts {
 		parts[i] = sqlx.QuoteIfNeeded(p, d)

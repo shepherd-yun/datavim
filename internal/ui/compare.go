@@ -28,12 +28,21 @@ func (m *Model) compareSideOf(n *tree.Node) (compareSide, string) {
 		return s, "views are not compared"
 	case n.Kind == tree.KindSchema, n.Kind == tree.KindDatabase && !sqlx.DialectOf(cfg.Driver).Features().Schemas:
 		s.ref = db.TableRef{Namespace: n.NS}
+	case n.Kind == tree.KindConn && flatNamespaces(cfg.Driver):
+		s.ref = db.TableRef{}
 	case n.Kind == tree.KindDatabase:
 		return s, "PostgreSQL compares schemas · select a schema"
 	default:
 		return s, "select a table, a schema or a database to compare"
 	}
 	return s, ""
+}
+
+// flatNamespaces reports an engine with neither databases nor schemas: the
+// connection itself is the namespace (SQLite).
+func flatNamespaces(driver string) bool {
+	f := sqlx.DialectOf(driver).Features()
+	return !f.Databases && !f.Schemas
 }
 
 // compareProblem says why src cannot be compared with tgt ("" when it can).
