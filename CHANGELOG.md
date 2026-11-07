@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.8.1] - 2026-11-07
+
 ### Fixed
 - SQLite: a recreated table keeps the collation and sort order of its `UNIQUE` and primary key
   constraints.
@@ -727,7 +729,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.8.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.8.1...HEAD
+[3.8.1]: https://github.com/shepherd-yun/datavim/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/shepherd-yun/datavim/compare/v3.7.0...v3.8.0
 [3.7.0]: https://github.com/shepherd-yun/datavim/compare/v3.6.0...v3.7.0
 [3.6.0]: https://github.com/shepherd-yun/datavim/compare/v3.5.0...v3.6.0
