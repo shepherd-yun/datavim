@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	tea "charm.land/bubbletea/v2"
 
@@ -111,6 +112,20 @@ func (c *fakeConn) keyless() bool {
 
 // slowQuery blocks until its context is cancelled.
 const slowQuery = "select sleep"
+
+// waitForQuery blocks until q has reached the connection.
+func (c *fakeConn) waitForQuery(t *testing.T, q string) {
+	t.Helper()
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		c.mu.Lock()
+		seen := slices.Contains(c.queries, q)
+		c.mu.Unlock()
+		if seen {
+			return
+		}
+	}
+	t.Fatalf("%q never ran", q)
+}
 
 func (c *fakeConn) Query(ctx context.Context, q string, _ ...any) (*db.ResultSet, error) {
 	c.mu.Lock()

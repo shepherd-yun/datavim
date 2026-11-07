@@ -202,6 +202,8 @@ func TestConsoleCancel(t *testing.T) {
 	if cmd := c.Handle(keymap.RunStatement); cmd != nil {
 		t.Fatal("only one query runs at a time")
 	}
+	// Cancelling earlier would stop the session from opening at all.
+	b.conn.waitForQuery(t, slowQuery)
 	c.Handle(keymap.Cancel)
 	select {
 	case msg := <-done:
