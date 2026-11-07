@@ -26,7 +26,7 @@ type Key struct {
 }
 
 // ChooseKey picks how rows of a table are located: its primary key, else a
-// unique index over NOT NULL columns, else the engine's fallback
+// full unique index over NOT NULL columns, else the engine's fallback
 // (sqlx.Features.RowLocator): the row id of a table (PostgreSQL ctid,
 // Oracle ROWID, SQLite _rowid_) or every column (MySQL, SQL Server). A view
 // without a key on a row-id engine has none, nor has a SQLite table with a
@@ -49,7 +49,7 @@ func ChooseKey(d sqlx.Dialect, cols []db.Column, idx []db.Index, view bool) Key 
 		return Key{Kind: PrimaryKey, Columns: pk}
 	}
 	for _, ix := range idx {
-		if ix.Unique && notNull(ix.Columns, nullable) {
+		if ix.Unique && ix.Where == "" && notNull(ix.Columns, nullable) { // a partial index leaves rows out
 			return Key{Kind: UniqueKey, Columns: ix.Columns}
 		}
 	}

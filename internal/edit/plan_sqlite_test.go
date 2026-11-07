@@ -63,3 +63,17 @@ func TestPlanSQLiteRowID(t *testing.T) {
 		t.Fatalf("warnings (-want +got):\n%s", diff)
 	}
 }
+
+// A partial index says nothing about the rows it leaves out, so two rows can
+// share the value.
+func TestPartialUniqueIndexIsNoKey(t *testing.T) {
+	cols := []db.Column{{Name: "a"}, {Name: "active", Nullable: true}}
+	partial := db.Index{Name: "u", Columns: []string{"a"}, Unique: true, Where: "active = 1"}
+	if got := ChooseKey(sqlx.SQLite, cols, []db.Index{partial}, false); got.Kind != RowID {
+		t.Fatalf("got %+v, want the row id", got)
+	}
+	full := db.Index{Name: "v", Columns: []string{"a"}, Unique: true}
+	if got := ChooseKey(sqlx.SQLite, cols, []db.Index{partial, full}, false); got.Kind != UniqueKey {
+		t.Fatalf("got %+v, want the full unique index", got)
+	}
+}

@@ -12,6 +12,10 @@ All notable changes to this project are documented here. The format follows
   completion, export, and Modify Table's native operations. A remote file is reached through the
   server's own `sqlite3` (3.26 or newer), so locking stays correct and nothing is uploaded.
 
+### Fixed
+- Cell edits no longer locate rows by a partial unique index, which does not guarantee one row per
+  value; they fall back to the next way of finding the row, such as PostgreSQL's `ctid`.
+
 ## [3.7.0] - 2026-11-06
 
 ### Changed
