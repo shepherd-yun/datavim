@@ -80,6 +80,9 @@ type Fixture struct {
 	// CancelLosesState is set when cancelling a session's statement costs its
 	// temporary tables (the sqlite3 process is replaced).
 	CancelLosesState bool
+	// NoDropColumn is set when the engine's version cannot drop columns (sqlite3
+	// before 3.35): the tests that sync a schema are skipped.
+	NoDropColumn bool
 	// NoViewRename is set when views cannot be renamed.
 	NoViewRename bool
 	// DateSQL writes a date literal; nil means DATE '2026-01-02'.
@@ -935,6 +938,9 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 
 	t.Run("schema sync round-trips through DiffTable, AlterTable and CreateTable", func(t *testing.T) {
 		needSchemaTools(t)
+		if f.NoDropColumn {
+			t.Skip("this version cannot drop columns")
+		}
 		exec := func(stmts []string) {
 			t.Helper()
 			for _, q := range stmts {
@@ -1052,6 +1058,9 @@ func RunContract(t *testing.T, conn db.Conn, f Fixture) {
 
 	t.Run("Modify Table edits round-trip through schemaedit and AlterTable", func(t *testing.T) {
 		needSchemaTools(t)
+		if f.NoDropColumn {
+			t.Skip("this version cannot drop columns")
+		}
 		w := d.DDL()
 		dialect := sd
 		tbl := ref("mod_t")

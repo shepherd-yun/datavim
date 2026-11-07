@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strings"
 
 	"github.com/shepherd-yun/datavim/internal/sqlx"
 )
@@ -62,4 +63,19 @@ func checkStmt(stmt string, readOnly bool) error {
 		}
 	}
 	return nil
+}
+
+// protectCRLF keeps \r\n in string literals intact: the shell reads its input
+// by lines and drops a \r before a line's end, which would silently change the
+// text. Such a string is sent as an expression instead.
+func protectCRLF(stmt string) string {
+	if !strings.Contains(stmt, "\r\n") {
+		return stmt
+	}
+	return sqlx.RewriteStrings(stmt, sqlx.SQLite, func(raw string) string {
+		if !strings.Contains(raw, "\r\n") {
+			return raw
+		}
+		return "(" + strings.ReplaceAll(raw, "\r\n", "'||char(13)||char(10)||'") + ")"
+	})
 }

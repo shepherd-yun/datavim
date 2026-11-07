@@ -77,3 +77,18 @@ func TestCheckStmt(t *testing.T) {
 		}
 	}
 }
+
+func TestProtectCRLF(t *testing.T) {
+	tests := []struct{ in, want string }{
+		{"select 1", "select 1"},
+		{"select 1\r\nfrom t", "select 1\r\nfrom t"},
+		{"select 'a\r\nb'", "select ('a'||char(13)||char(10)||'b')"},
+		{"select 'it''s\r\n', 'c' -- '\r\n", "select ('it''s'||char(13)||char(10)||''), 'c' -- '\r\n"},
+		{"select 'a\nb\rc'", "select 'a\nb\rc'"},
+	}
+	for _, tt := range tests {
+		if got := protectCRLF(tt.in); got != tt.want {
+			t.Errorf("protectCRLF(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}

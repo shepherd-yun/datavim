@@ -397,3 +397,18 @@ func TerminatorLine(stmt string, d Dialect) bool {
 	}
 	return false
 }
+
+// RewriteStrings replaces the string literals of stmt with what fn makes of them.
+func RewriteStrings(stmt string, d Dialect, fn func(raw string) string) string {
+	var b strings.Builder
+	last := 0
+	for _, t := range codeTokens(stmt, d) {
+		if t.kind == tokString {
+			b.WriteString(stmt[last:t.pos])
+			b.WriteString(fn(stmt[t.pos:t.end]))
+			last = t.end
+		}
+	}
+	b.WriteString(stmt[last:])
+	return b.String()
+}

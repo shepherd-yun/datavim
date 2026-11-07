@@ -53,6 +53,8 @@ type ConnConfig struct {
 	// Exec, if set, makes a FileDriver work through a sqlite3 process on
 	// the machine that holds the file.
 	Exec ExecFunc
+	// ExecHost names the machine Exec runs on, for messages.
+	ExecHost string
 }
 
 // Driver opens connections for one database engine.
