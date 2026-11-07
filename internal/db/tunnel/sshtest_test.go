@@ -41,6 +41,7 @@ type testServer struct {
 	commands []string
 
 	refuseSessions bool
+	refuseExec     bool
 }
 
 func newSigner(t *testing.T) ssh.Signer {
@@ -177,7 +178,10 @@ func (s *testServer) session(nch ssh.NewChannel) {
 			continue
 		}
 		var p struct{ Command string }
-		if err := ssh.Unmarshal(req.Payload, &p); err != nil {
+		s.mu.Lock()
+		refused := s.refuseExec
+		s.mu.Unlock()
+		if err := ssh.Unmarshal(req.Payload, &p); err != nil || refused {
 			_ = req.Reply(false, nil)
 			continue
 		}
@@ -213,6 +217,14 @@ func runExec(ch ssh.Channel, command string) {
 		}
 	}
 	_, _ = ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{status}))
+}
+
+// noExec makes the server open sessions but refuse commands, as a bastion that
+// only forwards ports does.
+func (s *testServer) noExec(on bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.refuseExec = on
 }
 
 func (s *testServer) refuse(on bool) {

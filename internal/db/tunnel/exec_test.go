@@ -160,6 +160,32 @@ func TestPoolExecRefusedKeepsTunnel(t *testing.T) {
 	}
 }
 
+// The same tunnel may carry MySQL and PostgreSQL connections: a server that
+// allows forwarding but not commands must not cost them their tunnel.
+func TestPoolExecRefusedCommandKeepsTunnel(t *testing.T) {
+	s, h, _ := direct(t)
+	exec, err := h.pool("").Exec(context.Background(), "bastion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.noExec(true)
+	if _, err = exec(context.Background(), "true"); err == nil {
+		t.Fatal("the refused command reported success")
+	}
+	s.noExec(false)
+	p, err := exec(context.Background(), "echo ok")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = p.Close() }()
+	if got, err := runToEnd(t, p, ""); err != nil || got != "ok\n" {
+		t.Fatalf("got %q, err %v", got, err)
+	}
+	if n := s.acceptedCount(); n != 1 {
+		t.Fatalf("%d connections: a refused command must not drop the tunnel", n)
+	}
+}
+
 func TestPoolExecCancelledContext(t *testing.T) {
 	_, h, _ := direct(t)
 	exec, err := h.pool("").Exec(context.Background(), "bastion")

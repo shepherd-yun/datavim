@@ -27,9 +27,11 @@ func (p *Pool) Exec(ctx context.Context, alias string) (db.ExecFunc, error) {
 		if err == nil {
 			return proc, nil
 		}
-		// A refused channel (sshd's MaxSessions) says nothing about the tunnel.
+		// A refused channel (sshd's MaxSessions) or command (a server that only
+		// forwards ports) says nothing about the tunnel, which others may be
+		// using: only drop it if it no longer answers.
 		var refused *ssh.OpenChannelError
-		if !errors.As(err, &refused) && ctx.Err() == nil {
+		if !errors.As(err, &refused) && ctx.Err() == nil && ping(ch.last(), p.opts.DialTimeout) != nil {
 			p.drop(alias, ch)
 		}
 		return nil, fmt.Errorf("ssh %s: %w", alias, err)
