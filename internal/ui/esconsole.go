@@ -955,3 +955,5 @@ func (t *esConsoleTab) statusLine() string {
 	}
 	return theme.Muted.Render(textutil.Fit(hint, t.width))
 }
+
+func (t *esConsoleTab) resultsFocused() bool { return t.onResults }

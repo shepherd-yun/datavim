@@ -499,7 +499,8 @@ picks the workspace by directory.
 | `zO` `zC` | Expand everything loaded / collapse everything under the cursor |
 | `zR` `zM` (or `Z`) `zx` | Expand everything loaded / collapse everything / collapse all but the path to the cursor |
 | `h` | Collapse / go to parent |
-| `Tab`, `Ctrl-h` `Ctrl-l` | Switch pane |
+| `Tab` | Switch between the tree and the tabs |
+| `Ctrl-h` `Ctrl-l` | Previous / next pane: tree, editor, results (wraps) |
 | `1`–`9` | Go to tab (in the console editor digits are counts: use `gt` / `gT` / `{n}gt`) |
 | `H` `L`, `gT` `gt` | Previous / next tab, wrapping around (from any pane or tab) |
 | `/` `n` `N` | Search in the tree or a result grid |

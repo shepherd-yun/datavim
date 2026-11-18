@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- `Ctrl-h` / `Ctrl-l` step through every pane in turn, the console's editor and results included
+  (tree → editor → results → tree), wrapping at either end.
+
 ## [3.8.1] - 2026-11-07
 
 ### Fixed

@@ -320,6 +320,33 @@ func TestFocusAndTabs(t *testing.T) {
 	}
 }
 
+func TestCtrlHLCycleThroughEveryPane(t *testing.T) {
+	m, _ := newTestModel(t)
+	press(t, m, "l", "j", "space", "c", "esc")
+	c := m.activeTab().(*consoleTab)
+	at := func() string {
+		switch {
+		case m.focus == focusTree:
+			return "tree"
+		case c.onResults:
+			return "results"
+		}
+		return "editor"
+	}
+	for i, want := range []string{"results", "tree", "editor", "results"} {
+		press(t, m, "ctrl+l")
+		if got := at(); got != want {
+			t.Fatalf("ctrl+l #%d: on %s, want %s", i+1, got, want)
+		}
+	}
+	for i, want := range []string{"editor", "tree", "results", "editor"} {
+		press(t, m, "ctrl+h")
+		if got := at(); got != want {
+			t.Fatalf("ctrl+h #%d: on %s, want %s", i+1, got, want)
+		}
+	}
+}
+
 func TestToggleTree(t *testing.T) {
 	m, _ := newTestModel(t)
 	press(t, m, "space", "e")
@@ -976,7 +1003,7 @@ func TestDeleteConnectionNeedsItsName(t *testing.T) {
 func TestEditAndDeleteBlockedByOpenTransaction(t *testing.T) {
 	m, b := newTestModel(t)
 	openTxConsole(t, m)
-	press(t, m, "ctrl+h", "g", "g", "e")
+	press(t, m, "ctrl+h", "ctrl+h", "g", "g", "e") // results → editor → tree
 	if strings.Contains(screen(m), "Edit connection") || !strings.Contains(statusLine(m), "open transaction") {
 		t.Fatalf("screen:\n%s", screen(m))
 	}

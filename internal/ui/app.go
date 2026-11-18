@@ -738,7 +738,9 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 			entries = withEditorHelp(entries)
 		}
 		m.overlay = overlay.NewHelp(entries)
-	case keymap.FocusNext, keymap.FocusPrev, keymap.FocusLeft, keymap.FocusRight:
+	case keymap.FocusLeft, keymap.FocusRight:
+		m.cycleFocus(a == keymap.FocusRight)
+	case keymap.FocusNext, keymap.FocusPrev:
 		// Two panes, so moving either way past the edge wraps to the other one.
 		if m.focus == focusTree {
 			m.setFocus(focusTabs)
@@ -1381,6 +1383,36 @@ func (m *Model) setFocus(f focus) {
 		if len(m.tabs) > 0 {
 			m.focus = focusTabs
 		}
+	}
+}
+
+// splitTab is a tab with an editor above its results, each a pane of its own.
+type splitTab interface{ resultsFocused() bool }
+
+// cycleFocus steps round every pane, tree → editor → results → tree, forward
+// or back; a tab without an editor is a single pane.
+func (m *Model) cycleFocus(forward bool) {
+	t := m.activeTab()
+	st, split := t.(splitTab)
+	switch {
+	case m.focus == focusTree:
+		if t == nil {
+			return
+		}
+		m.setFocus(focusTabs)
+		if split {
+			if forward {
+				t.Handle(keymap.FocusEditor)
+			} else {
+				t.Handle(keymap.FocusResults)
+			}
+		}
+	case split && forward && !st.resultsFocused():
+		t.Handle(keymap.FocusResults)
+	case split && !forward && st.resultsFocused():
+		t.Handle(keymap.FocusEditor)
+	default:
+		m.setFocus(focusTree)
 	}
 }
 

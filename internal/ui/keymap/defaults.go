@@ -9,8 +9,8 @@ func DefaultBindings() []Binding {
 	b := []Binding{
 		{Global, keys("tab"), FocusNext, "Next pane"},
 		{Global, keys("shift+tab"), FocusPrev, "Previous pane"},
-		{Global, keys("ctrl+h"), FocusLeft, "Focus left pane (wraps)"},
-		{Global, keys("ctrl+l"), FocusRight, "Focus right pane (wraps)"},
+		{Global, keys("ctrl+h"), FocusLeft, "Previous pane: tree, editor, results (wraps)"},
+		{Global, keys("ctrl+l"), FocusRight, "Next pane: tree, editor, results (wraps)"},
 		{Global, keys("?"), Help, "Help"},
 		{Global, keys(":"), CommandLine, "Command line"},
 		{Global, keys("ctrl+c"), Cancel, "Cancel query"},

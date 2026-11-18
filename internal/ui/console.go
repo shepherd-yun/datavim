@@ -1534,3 +1534,5 @@ func (t *consoleTab) retryAfterPassword() tea.Cmd {
 	t.runText, t.runFilter, t.runNote = a.text, a.filter, a.note
 	return t.execute(a.stmts, a.limit, a.more)
 }
+
+func (t *consoleTab) resultsFocused() bool { return t.onResults }

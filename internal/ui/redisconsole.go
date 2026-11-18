@@ -1065,3 +1065,5 @@ func (m redisDBSizeMsg) TabID() int  { return m.tabID }
 
 // TxStatus is the status bar badge for a MULTI or WATCH.
 func (t *redisConsoleTab) TxStatus() string { return t.tx.Badge() }
+
+func (t *redisConsoleTab) resultsFocused() bool { return t.onResults }

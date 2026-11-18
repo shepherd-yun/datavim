@@ -684,3 +684,5 @@ func (t *producerTab) statusLine() string {
 	}
 	return theme.Muted.Render(textutil.Fit(hint, t.width))
 }
+
+func (t *producerTab) resultsFocused() bool { return t.onResults }
