@@ -64,10 +64,10 @@
 #   filter.null            Filter: is NULL
 #   filter.prompt          Edit the filter (WHERE)
 #   form.save              Save the form
-#   focus.left             Focus tree
-#   focus.next             Next pane
-#   focus.prev             Previous pane
-#   focus.right            Focus tabs
+#   focus.left             Previous pane: tree, editor, results (wraps)
+#   focus.next             Switch between the tree and the tabs
+#   focus.prev             Switch between the tree and the tabs
+#   focus.right            Next pane: tree, editor, results (wraps)
 #   history.open           SQL history
 #   move.bottom            Go to bottom
 #   move.down              Move down

@@ -7,8 +7,8 @@ func keys(k ...string) []string { return k }
 // DefaultBindings is the built-in keymap. See spec §6.
 func DefaultBindings() []Binding {
 	b := []Binding{
-		{Global, keys("tab"), FocusNext, "Next pane"},
-		{Global, keys("shift+tab"), FocusPrev, "Previous pane"},
+		{Global, keys("tab"), FocusNext, "Switch between the tree and the tabs"},
+		{Global, keys("shift+tab"), FocusPrev, "Switch between the tree and the tabs"},
 		{Global, keys("ctrl+h"), FocusLeft, "Previous pane: tree, editor, results (wraps)"},
 		{Global, keys("ctrl+l"), FocusRight, "Next pane: tree, editor, results (wraps)"},
 		{Global, keys("?"), Help, "Help"},

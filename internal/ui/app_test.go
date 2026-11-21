@@ -320,29 +320,112 @@ func TestFocusAndTabs(t *testing.T) {
 	}
 }
 
+// splitTabs opens each kind of tab with an editor above its results, on the
+// editor with the tabs focused.
+var splitTabs = []struct {
+	name string
+	open func(t *testing.T) (*Model, tab)
+}{
+	{"sql console", func(t *testing.T) (*Model, tab) {
+		m, _ := newTestModel(t)
+		press(t, m, "l", "j", "space", "c", "esc")
+		return m, m.activeTab()
+	}},
+	{"redis console", func(t *testing.T) (*Model, tab) {
+		m, _, _ := newRedisModel(t, config.Connection{})
+		return m, openRConsole(t, m, 0)
+	}},
+	{"es console", func(t *testing.T) (*Model, tab) {
+		m, _, _ := newESModel(t, config.Connection{})
+		return m, openESConsoleWith(t, m, "GET /_cat/indices", 0)
+	}},
+	{"kafka producer", func(t *testing.T) (*Model, tab) {
+		m, _, k := newKafkaModel(t, config.Connection{})
+		k.addTopic("orders", 1, 0, 0)
+		return m, openProducer(t, m, "{}", 0)
+	}},
+}
+
+// paneAt names the focused pane: tree, editor or results.
+func paneAt(m *Model, c tab) string {
+	switch {
+	case m.focus == focusTree:
+		return "tree"
+	case c.(splitTab).resultsFocused():
+		return "results"
+	}
+	return "editor"
+}
+
 func TestCtrlHLCycleThroughEveryPane(t *testing.T) {
-	m, _ := newTestModel(t)
-	press(t, m, "l", "j", "space", "c", "esc")
-	c := m.activeTab().(*consoleTab)
-	at := func() string {
-		switch {
-		case m.focus == focusTree:
-			return "tree"
-		case c.onResults:
-			return "results"
-		}
-		return "editor"
+	for _, tc := range splitTabs {
+		t.Run(tc.name, func(t *testing.T) {
+			m, c := tc.open(t)
+			if _, ok := c.(splitTab); !ok {
+				t.Fatalf("%T has no results pane of its own", c)
+			}
+			if got := paneAt(m, c); got != "editor" {
+				t.Fatalf("opens on %s", got)
+			}
+			for i, want := range []string{"results", "tree", "editor", "results"} {
+				press(t, m, "ctrl+l")
+				if got := paneAt(m, c); got != want {
+					t.Fatalf("ctrl+l #%d: on %s, want %s", i+1, got, want)
+				}
+			}
+			for i, want := range []string{"editor", "tree", "results", "editor"} {
+				press(t, m, "ctrl+h")
+				if got := paneAt(m, c); got != want {
+					t.Fatalf("ctrl+h #%d: on %s, want %s", i+1, got, want)
+				}
+			}
+		})
 	}
-	for i, want := range []string{"results", "tree", "editor", "results"} {
+}
+
+func TestCtrlHLSkipTheHiddenTree(t *testing.T) {
+	m, c := splitTabs[0].open(t)
+	press(t, m, "space", "e")
+	if m.showTree {
+		t.Fatal("tree hidden")
+	}
+	for i, want := range []string{"results", "editor", "results"} {
 		press(t, m, "ctrl+l")
-		if got := at(); got != want {
-			t.Fatalf("ctrl+l #%d: on %s, want %s", i+1, got, want)
+		if got := paneAt(m, c); got != want || m.showTree {
+			t.Fatalf("ctrl+l #%d: on %s, want %s; tree shown=%v", i+1, got, want, m.showTree)
 		}
 	}
-	for i, want := range []string{"editor", "tree", "results", "editor"} {
+	for i, want := range []string{"editor", "results", "editor"} {
 		press(t, m, "ctrl+h")
-		if got := at(); got != want {
-			t.Fatalf("ctrl+h #%d: on %s, want %s", i+1, got, want)
+		if got := paneAt(m, c); got != want || m.showTree {
+			t.Fatalf("ctrl+h #%d: on %s, want %s; tree shown=%v", i+1, got, want, m.showTree)
+		}
+	}
+}
+
+func TestCtrlHLOnASinglePaneTab(t *testing.T) {
+	m, _ := newTestModel(t)
+	openUsers(t, m)
+	for i, want := range []focus{focusTree, focusTabs, focusTree} {
+		press(t, m, "ctrl+l")
+		if m.focus != want {
+			t.Fatalf("ctrl+l #%d: focus=%v, want %v", i+1, m.focus, want)
+		}
+	}
+	for i, want := range []focus{focusTabs, focusTree, focusTabs} {
+		press(t, m, "ctrl+h")
+		if m.focus != want {
+			t.Fatalf("ctrl+h #%d: focus=%v, want %v", i+1, m.focus, want)
+		}
+	}
+}
+
+func TestCtrlHLWithoutTabs(t *testing.T) {
+	m, _ := newTestModel(t)
+	for _, k := range []string{"ctrl+l", "ctrl+h"} {
+		press(t, m, k)
+		if m.focus != focusTree || m.activeTab() != nil {
+			t.Fatalf("%s with no tab open leaves focus on the tree; focus=%v", k, m.focus)
 		}
 	}
 }

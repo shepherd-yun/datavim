@@ -6,6 +6,11 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Fixed
+- `Ctrl-h` / `Ctrl-l` no longer bring back a tree hidden with `<leader>e`: in a console they move
+  between the editor and the results only.
+- Help lists `Tab` / `Shift-Tab` as switching between the tree and the tabs, not as "Next pane".
+
 ## [3.9.0] - 2026-11-18
 
 ### Changed

@@ -741,7 +741,9 @@ func (m *Model) dispatch(a keymap.Action) tea.Cmd {
 	case keymap.FocusLeft, keymap.FocusRight:
 		m.cycleFocus(a == keymap.FocusRight)
 	case keymap.FocusNext, keymap.FocusPrev:
-		// Two panes, so moving either way past the edge wraps to the other one.
+		// Tab only switches between the tree and the tab area, so either way
+		// goes to the other one; Ctrl-h/l (cycleFocus) also visit the
+		// editor and results inside a tab.
 		if m.focus == focusTree {
 			m.setFocus(focusTabs)
 		} else {
@@ -1390,11 +1392,19 @@ func (m *Model) setFocus(f focus) {
 type splitTab interface{ resultsFocused() bool }
 
 // cycleFocus steps round every pane, tree → editor → results → tree, forward
-// or back; a tab without an editor is a single pane.
+// or back; a tab without an editor is a single pane. A hidden tree is left
+// out and stays hidden, unless the tab is a single pane and there is nowhere
+// else to go.
 func (m *Model) cycleFocus(forward bool) {
 	t := m.activeTab()
 	st, split := t.(splitTab)
 	switch {
+	case split && !m.showTree && m.focus == focusTabs:
+		if st.resultsFocused() {
+			t.Handle(keymap.FocusEditor)
+		} else {
+			t.Handle(keymap.FocusResults)
+		}
 	case m.focus == focusTree:
 		if t == nil {
 			return
