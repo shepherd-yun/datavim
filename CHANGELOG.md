@@ -6,6 +6,8 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+## [3.9.1] - 2026-11-21
+
 ### Fixed
 - `Ctrl-h` / `Ctrl-l` no longer bring back a tree hidden with `<leader>e`: in a console they move
   between the editor and the results only.
@@ -740,7 +742,8 @@ All notable changes to this project are documented here. The format follows
 ### Added
 - Connection tree, paged table data, structure view, help and which-key hints.
 
-[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.9.0...HEAD
+[Unreleased]: https://github.com/shepherd-yun/datavim/compare/v3.9.1...HEAD
+[3.9.1]: https://github.com/shepherd-yun/datavim/compare/v3.9.0...v3.9.1
 [3.9.0]: https://github.com/shepherd-yun/datavim/compare/v3.8.1...v3.9.0
 [3.8.1]: https://github.com/shepherd-yun/datavim/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/shepherd-yun/datavim/compare/v3.7.0...v3.8.0
