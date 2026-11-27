@@ -153,6 +153,7 @@ func newESConsoleTab(id int, b Backend, st Store, conn string, s config.Settings
 func (t *esConsoleTab) ID() int                          { return t.id }
 func (t *esConsoleTab) UseRegisters(r vimedit.Registers) { t.editor.UseRegisters(r) }
 func (t *esConsoleTab) Key() string                      { return esConsoleTabKey(t.conn) }
+func (t *esConsoleTab) console()                         {}
 func (t *esConsoleTab) Title() string                    { return "es:" + t.conn }
 func (t *esConsoleTab) Target() (string, db.TableRef)    { return t.conn, db.TableRef{} }
 func (t *esConsoleTab) CapturesInput() bool              { return !t.onResults && t.editor.Insert() }

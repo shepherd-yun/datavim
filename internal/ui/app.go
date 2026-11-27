@@ -2063,7 +2063,11 @@ func (m *Model) renderTabs(width, height int) string {
 func (m *Model) tabBar() string {
 	labels := make([]string, len(m.tabs))
 	for i, t := range m.tabs {
-		label := fmt.Sprintf("[%d]%s", i+1, textutil.Sanitize(t.Title()))
+		mark := ""
+		if _, ok := t.(consoler); ok {
+			mark = "✎"
+		}
+		label := fmt.Sprintf("[%d]%s%s", i+1, mark, textutil.Sanitize(t.Title()))
 		if i == m.active {
 			labels[i] = theme.ActiveTab.Render(label)
 		} else {

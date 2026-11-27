@@ -6,6 +6,10 @@ All notable changes to this project are documented here. The format follows
 
 ## [Unreleased]
 
+### Changed
+- Console tabs (SQL, Elasticsearch, Redis) are marked with `✎` in the tab bar, to tell them from
+  table and info tabs.
+
 ## [3.9.1] - 2026-11-21
 
 ### Fixed

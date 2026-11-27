@@ -51,6 +51,10 @@ type framer interface {
 	Framed(title string, focused, danger bool) string
 }
 
+// consoler is a tab where queries are written (an SQL, Elasticsearch or
+// Redis console): the tab bar marks it so it stands apart from the views.
+type consoler interface{ console() }
+
 // tabMsg is an async result addressed to one tab.
 type tabMsg interface{ TabID() int }
 

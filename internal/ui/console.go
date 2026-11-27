@@ -201,6 +201,8 @@ func (t *consoleTab) Key() string {
 	return consoleTabKey(t.conn, t.ns)
 }
 
+func (t *consoleTab) console() {}
+
 func (t *consoleTab) Title() string {
 	if t.file != nil {
 		switch {

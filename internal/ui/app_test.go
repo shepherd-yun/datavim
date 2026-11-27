@@ -490,7 +490,7 @@ func TestOpenConsoleTypeAndRun(t *testing.T) {
 	m, b := newTestModel(t)
 	press(t, m, "l", "j") // cursor on database "app"
 	press(t, m, "space", "c")
-	if s := screen(m); !strings.Contains(s, "[1]console:app") {
+	if s := screen(m); !strings.Contains(s, "[1]✎console:app") {
 		t.Fatalf("console tab:\n%s", s)
 	}
 	if !strings.Contains(screen(m), " NORMAL ") {
@@ -1194,5 +1194,25 @@ func TestHintsFollowConnectionKind(t *testing.T) {
 	press(t, r, "?")
 	if s := screen(r); strings.Contains(s, "Truncate table") || !strings.Contains(s, "Help") {
 		t.Fatalf("redis help:\n%s", s)
+	}
+}
+
+func TestTabBarMarksConsoles(t *testing.T) {
+	m, b := newTestModel(t)
+	st, s := newFakeStore(), config.Settings{MaxRows: 2, MaxColumnWidth: 40}
+	m.tabs = []tab{
+		newConsoleTab(1, b, st, readyCatalogs(), "local", db.Namespace{Database: "app"}, s, timings{}),
+		newESConsoleTab(2, b, st, "es", s, timings{}),
+		newRedisConsoleTab(3, b, st, "redis", 0, s, timings{}),
+		newDataTab(4, b, st, "local", db.TableRef{Name: "users"}, s),
+	}
+	bar := ansi.Strip(m.tabBar())
+	for _, want := range []string{"[1]✎", "[2]✎", "[3]✎", "[4]users"} {
+		if !strings.Contains(bar, want) {
+			t.Errorf("tab bar %q lacks %q", bar, want)
+		}
+	}
+	if strings.Count(bar, "✎") != 3 {
+		t.Errorf("tab bar %q: want exactly the 3 consoles marked", bar)
 	}
 }
